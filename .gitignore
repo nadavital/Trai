@@ -1,0 +1,7 @@
+
+# API Secrets
+Plates/Core/Services/Secrets.swift
+
+# Xcode user data
+*.xcuserstate
+xcuserdata/
