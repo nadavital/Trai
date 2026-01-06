@@ -335,7 +335,7 @@ struct ProfileView: View {
 
                     if memories.count > 5 {
                         NavigationLink {
-                            AllMemoriesView(memories: memories, onDelete: deleteMemory)
+                            AllMemoriesView()
                         } label: {
                             Text("See all \(memories.count) memories")
                                 .font(.subheadline)

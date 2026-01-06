@@ -23,6 +23,7 @@ struct ChatContentList: View {
     let onAcceptPlan: (PlanUpdateSuggestionEntry, ChatMessage) -> Void
     let onEditPlan: (ChatMessage, PlanUpdateSuggestionEntry) -> Void
     let onDismissPlan: (ChatMessage) -> Void
+    let onRetry: (ChatMessage) -> Void
 
     var body: some View {
         LazyVStack(spacing: 12) {
@@ -58,6 +59,9 @@ struct ChatContentList: View {
                                 },
                                 onDismissPlan: {
                                     onDismissPlan(message)
+                                },
+                                onRetry: {
+                                    onRetry(message)
                                 }
                             )
                         }

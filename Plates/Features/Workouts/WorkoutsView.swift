@@ -112,6 +112,10 @@ struct WorkoutsView: View {
             .refreshable {
                 await syncHealthKit()
             }
+            .task {
+                // Auto-sync HealthKit workouts on app launch
+                await syncHealthKit()
+            }
         }
     }
 
@@ -119,6 +123,7 @@ struct WorkoutsView: View {
         for index in offsets {
             modelContext.delete(workouts[index])
         }
+        try? modelContext.save()
     }
 
     private func syncHealthKit() async {
@@ -134,6 +139,10 @@ struct WorkoutsView: View {
 
             for workout in newWorkouts {
                 modelContext.insert(workout)
+            }
+
+            if !newWorkouts.isEmpty {
+                try? modelContext.save()
             }
         } catch {
             // Handle error silently for now

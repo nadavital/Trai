@@ -41,11 +41,13 @@ enum MemoryCategory: String, Codable, CaseIterable {
 }
 
 /// Topic area for coach memories
-enum MemoryTopic: String, Codable, CaseIterable {
+enum MemoryTopic: String, Codable, CaseIterable, Identifiable {
     case food = "food"
     case workout = "workout"
     case schedule = "schedule"
     case general = "general"
+
+    var id: String { rawValue }
 
     var displayName: String {
         switch self {

@@ -96,15 +96,14 @@ struct ChatBubble: View {
     var onAcceptPlan: ((PlanUpdateSuggestionEntry) -> Void)?
     var onEditPlan: ((PlanUpdateSuggestionEntry) -> Void)?
     var onDismissPlan: (() -> Void)?
+    var onRetry: (() -> Void)?
 
     var body: some View {
         HStack {
             if message.isFromUser { Spacer() }
 
             if let error = message.errorMessage {
-                Text(error)
-                    .foregroundStyle(.red)
-                    .padding()
+                ErrorBubble(error: error, onRetry: onRetry)
             } else if message.isFromUser {
                 // User messages in a bubble
                 VStack(alignment: .trailing, spacing: 8) {
@@ -226,6 +225,46 @@ struct ChatBubble: View {
             return line
         }
         return processed.joined(separator: "\n")
+    }
+}
+
+// MARK: - Error Bubble
+
+struct ErrorBubble: View {
+    let error: String
+    var onRetry: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+
+                Text("Something went wrong")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+            }
+
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let onRetry {
+                Button {
+                    onRetry()
+                } label: {
+                    Label("Try again", systemImage: "arrow.clockwise")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(.rect(cornerRadius: 16))
     }
 }
 

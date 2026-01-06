@@ -355,11 +355,13 @@ extension GeminiService {
                     previousContents: contents,
                     originalParts: accumulatedParts,
                     executor: executor,
+                    previousText: textResponse,
                     onTextChunk: onTextChunk
                 )
-                // Only update text if follow-up has content (don't lose streamed text)
+                // Append follow-up text (don't replace - preserves streamed text)
                 if !followUp.text.isEmpty {
-                    textResponse = followUp.text
+                    textResponse += followUp.text
+                    onTextChunk?(textResponse)
                 }
                 // Capture any suggestions from chained function calls
                 if let food = followUp.suggestedFood {
@@ -392,9 +394,10 @@ extension GeminiService {
                 previousContents: contents,
                 originalParts: accumulatedParts,
                 executor: executor,
-                onTextChunk: onTextChunk
+                onTextChunk: nil  // Don't stream during follow-up
             )
             textResponse = followUp.text
+            onTextChunk?(textResponse)  // Stream combined result
         }
 
         // If we got a plan update suggestion, send result back for conversational response
@@ -415,9 +418,10 @@ extension GeminiService {
                 previousContents: contents,
                 originalParts: accumulatedParts,
                 executor: executor,
-                onTextChunk: onTextChunk
+                onTextChunk: nil  // Don't stream during follow-up
             )
             textResponse = followUp.text
+            onTextChunk?(textResponse)  // Stream combined result
         }
 
         return ChatFunctionResult(
@@ -444,10 +448,12 @@ extension GeminiService {
         previousContents: [[String: Any]],
         originalParts: [[String: Any]],
         executor: GeminiFunctionExecutor,
+        previousText: String = "",
         onTextChunk: ((String) -> Void)?
     ) async throws -> FunctionFollowUpResult {
         var contents = previousContents
         var result = FunctionFollowUpResult()
+        let accumulatedPreviousText = previousText
 
         // Add model's function call parts
         contents.append([
@@ -518,11 +524,10 @@ extension GeminiService {
             for part in parts {
                 result.accumulatedParts.append(part)
 
-                // Handle text
+                // Handle text - accumulate but don't stream (caller will handle combined text)
                 if let text = part["text"] as? String {
                     result.text += text
                     log("📨 Follow-up text chunk: +\(text.count) chars", type: .debug)
-                    onTextChunk?(result.text)
                 }
 
                 // Handle any chained function calls
@@ -567,10 +572,12 @@ extension GeminiService {
                 previousContents: contents,
                 originalParts: result.accumulatedParts,
                 executor: executor,
+                previousText: accumulatedPreviousText + result.text,
                 onTextChunk: onTextChunk
             )
+            // Append chained text (don't replace)
             if !chainedResult.text.isEmpty {
-                result.text = chainedResult.text
+                result.text += chainedResult.text
             }
             if let food = chainedResult.suggestedFood {
                 result.suggestedFood = food
@@ -667,11 +674,10 @@ extension GeminiService {
                 for part in parts {
                     currentParts.append(part)
 
-                    // Handle text
+                    // Handle text - accumulate but don't stream (caller handles combined text)
                     if let text = part["text"] as? String {
                         result.text += text
                         log("📨 Follow-up text chunk: +\(text.count) chars", type: .debug)
-                        onTextChunk?(result.text)
                     }
 
                     // Handle function calls

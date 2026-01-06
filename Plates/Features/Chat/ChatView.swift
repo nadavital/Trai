@@ -127,7 +127,8 @@ struct ChatView: View {
                         onEditPlan: { message, plan in
                             editingPlanSuggestion = (message, plan)
                         },
-                        onDismissPlan: dismissPlanSuggestion
+                        onDismissPlan: dismissPlanSuggestion,
+                        onRetry: retryMessage
                     )
                 }
                 .onTapGesture {
@@ -362,6 +363,96 @@ extension ChatView {
             currentWeight: profile?.currentWeightKg,
             targetWeight: profile?.targetWeightKg
         )
+    }
+
+    private func retryMessage(_ aiMessage: ChatMessage) {
+        // Find the user message that preceded this AI message
+        guard let messageIndex = currentSessionMessages.firstIndex(where: { $0.id == aiMessage.id }),
+              messageIndex > 0 else { return }
+
+        let userMessage = currentSessionMessages[messageIndex - 1]
+        guard userMessage.isFromUser else { return }
+
+        // Clear the error and retry
+        aiMessage.errorMessage = nil
+        aiMessage.content = ""
+
+        let capturedImage = userMessage.imageData.flatMap { UIImage(data: $0) }
+        let text = userMessage.content
+
+        // Capture conversation history BEFORE this failed message
+        let previousMessages = Array(currentSessionMessages.prefix(messageIndex - 1).suffix(10))
+
+        Task {
+            isLoading = true
+
+            do {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "EEEE, MMMM d 'at' h:mm a"
+                let currentDateTime = dateFormatter.string(from: Date())
+
+                let historyString = previousMessages.suffix(6)
+                    .map { ($0.isFromUser ? "User" : "Coach") + ": " + $0.content }
+                    .joined(separator: "\n")
+
+                let memoriesContext = activeMemories.formatForPrompt()
+
+                let functionContext = GeminiService.ChatFunctionContext(
+                    profile: profile,
+                    todaysFoodEntries: todaysFoodEntries,
+                    currentDateTime: currentDateTime,
+                    conversationHistory: historyString,
+                    memoriesContext: memoriesContext,
+                    pendingSuggestion: pendingMealSuggestion?.meal
+                )
+
+                let result = try await geminiService.chatWithFunctions(
+                    message: text,
+                    imageData: capturedImage?.jpegData(compressionQuality: 0.8),
+                    context: functionContext,
+                    conversationHistory: Array(previousMessages),
+                    modelContext: modelContext,
+                    onTextChunk: { chunk in
+                        aiMessage.content = chunk
+                    }
+                )
+
+                if let foodData = result.suggestedFood {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        aiMessage.setSuggestedMeal(foodData)
+                    }
+                    HapticManager.lightTap()
+                }
+
+                if let planData = result.planUpdate {
+                    let suggestion = PlanUpdateSuggestionEntry(
+                        calories: planData.calories,
+                        proteinGrams: planData.proteinGrams,
+                        carbsGrams: planData.carbsGrams,
+                        fatGrams: planData.fatGrams,
+                        goal: planData.goal,
+                        rationale: planData.rationale
+                    )
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        aiMessage.setSuggestedPlan(suggestion)
+                    }
+                    HapticManager.lightTap()
+                }
+
+                for memory in result.savedMemories {
+                    aiMessage.addSavedMemory(memory)
+                }
+
+                if !result.message.isEmpty {
+                    aiMessage.content = result.message
+                }
+            } catch {
+                aiMessage.content = ""
+                aiMessage.errorMessage = error.localizedDescription
+            }
+
+            isLoading = false
+        }
     }
 }
 

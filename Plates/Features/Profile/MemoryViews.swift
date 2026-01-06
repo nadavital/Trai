@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 // MARK: - Memory Row
 
@@ -87,33 +88,46 @@ struct MemoryRow: View {
 // MARK: - All Memories View
 
 struct AllMemoriesView: View {
-    let memories: [CoachMemory]
-    let onDelete: (CoachMemory) -> Void
-
-    private var groupedMemories: [(topic: MemoryTopic, memories: [CoachMemory])] {
-        let grouped = Dictionary(grouping: memories) { $0.topic }
-        return MemoryTopic.allCases.compactMap { topic in
-            guard let topicMemories = grouped[topic], !topicMemories.isEmpty else { return nil }
-            return (topic: topic, memories: topicMemories.sorted { $0.createdAt > $1.createdAt })
-        }
-    }
+    @Environment(\.modelContext) private var modelContext
+    @State private var memories: [CoachMemory] = []
 
     var body: some View {
         List {
-            ForEach(groupedMemories, id: \.topic) { group in
-                Section {
-                    ForEach(group.memories) { memory in
-                        MemoryListRow(memory: memory, onDelete: {
-                            onDelete(memory)
-                        })
+            ForEach(MemoryTopic.allCases) { topic in
+                let topicMemories = memories.filter { $0.topic == topic }
+                if !topicMemories.isEmpty {
+                    Section {
+                        ForEach(topicMemories) { memory in
+                            MemoryListRow(memory: memory, onDelete: {
+                                deleteMemory(memory)
+                            })
+                        }
+                    } header: {
+                        Label(topic.displayName, systemImage: topicIcon(topic))
                     }
-                } header: {
-                    Label(group.topic.displayName, systemImage: topicIcon(group.topic))
                 }
             }
         }
         .navigationTitle("All Memories")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            fetchMemories()
+        }
+    }
+
+    private func fetchMemories() {
+        let descriptor = FetchDescriptor<CoachMemory>(
+            predicate: #Predicate { $0.isActive },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        memories = (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    private func deleteMemory(_ memory: CoachMemory) {
+        memory.isActive = false
+        HapticManager.lightTap()
+        // Refresh the list
+        fetchMemories()
     }
 
     private func topicIcon(_ topic: MemoryTopic) -> String {

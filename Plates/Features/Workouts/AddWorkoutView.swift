@@ -233,6 +233,7 @@ struct AddWorkoutView: View {
         workout.notes = notes.isEmpty ? nil : notes
 
         modelContext.insert(workout)
+        try? modelContext.save()
         dismiss()
     }
 }
