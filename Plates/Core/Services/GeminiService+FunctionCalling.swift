@@ -20,6 +20,23 @@ extension GeminiService {
         let currentDateTime: String
         let conversationHistory: String
         let memoriesContext: String  // Formatted memories for system prompt
+        let pendingSuggestion: SuggestedFoodEntry?  // Current unconfirmed meal suggestion
+
+        init(
+            profile: UserProfile?,
+            todaysFoodEntries: [FoodEntry],
+            currentDateTime: String,
+            conversationHistory: String,
+            memoriesContext: String,
+            pendingSuggestion: SuggestedFoodEntry? = nil
+        ) {
+            self.profile = profile
+            self.todaysFoodEntries = todaysFoodEntries
+            self.currentDateTime = currentDateTime
+            self.conversationHistory = conversationHistory
+            self.memoriesContext = memoriesContext
+            self.pendingSuggestion = pendingSuggestion
+        }
     }
 
     /// Result from function calling chat
@@ -195,6 +212,21 @@ extension GeminiService {
             \(context.memoriesContext)
 
             Use this knowledge to personalize your responses. For example, don't suggest fish if they don't like it.
+
+            """
+        }
+
+        // Add pending meal suggestion context for corrections
+        if let pending = context.pendingSuggestion {
+            prompt += """
+
+            PENDING MEAL SUGGESTION (not yet logged):
+            - Name: \(pending.name)
+            - Calories: \(pending.calories) kcal
+            - Protein: \(Int(pending.proteinGrams))g, Carbs: \(Int(pending.carbsGrams))g, Fat: \(Int(pending.fatGrams))g
+            \(pending.servingSize.map { "- Serving: \($0)" } ?? "")
+
+            If the user says this is wrong or wants corrections (e.g., "that's actually a wrap", "it's closer to 400 calories", "add the sauce"), provide an UPDATED suggest_food_log with the corrected values. Acknowledge their correction naturally.
 
             """
         }

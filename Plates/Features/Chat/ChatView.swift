@@ -293,7 +293,8 @@ extension ChatView {
                     todaysFoodEntries: todaysFoodEntries,
                     currentDateTime: currentDateTime,
                     conversationHistory: historyString,
-                    memoriesContext: memoriesContext
+                    memoriesContext: memoriesContext,
+                    pendingSuggestion: pendingMealSuggestion?.meal
                 )
 
                 let result = try await geminiService.chatWithFunctions(

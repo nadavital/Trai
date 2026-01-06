@@ -102,6 +102,121 @@ extension GeminiService {
         return try parseChatFoodAnalysis(from: responseText)
     }
 
+    // MARK: - Food Refinement
+
+    /// Refine a food analysis based on user correction
+    func refineFoodAnalysis(
+        correction: String,
+        currentSuggestion: SuggestedFoodEntry,
+        imageData: Data?
+    ) async throws -> SuggestedFoodEntry {
+        isLoading = true
+        lastError = nil
+        defer { isLoading = false }
+
+        var parts: [[String: Any]] = []
+
+        let prompt = """
+        The user is correcting a food analysis. Here's the current estimate:
+        - Name: \(currentSuggestion.name)
+        - Calories: \(currentSuggestion.calories) kcal
+        - Protein: \(Int(currentSuggestion.proteinGrams))g
+        - Carbs: \(Int(currentSuggestion.carbsGrams))g
+        - Fat: \(Int(currentSuggestion.fatGrams))g
+        \(currentSuggestion.servingSize.map { "- Serving: \($0)" } ?? "")
+
+        User's correction: "\(correction)"
+
+        Please provide an UPDATED food analysis based on their correction. If they say it's a different food, update all values accordingly. If they mention adjusting a specific value, update just that. Keep unmentioned values reasonable for the (potentially new) food.
+        """
+
+        parts.append(["text": prompt])
+
+        if let imageData {
+            let base64Image = imageData.base64EncodedString()
+            parts.append([
+                "inline_data": [
+                    "mime_type": "image/jpeg",
+                    "data": base64Image
+                ]
+            ])
+        }
+
+        let schema: [String: Any] = [
+            "type": "object",
+            "properties": [
+                "name": ["type": "string", "description": "Updated name of the food"],
+                "calories": ["type": "integer", "description": "Updated calories"],
+                "proteinGrams": ["type": "number", "description": "Updated protein in grams"],
+                "carbsGrams": ["type": "number", "description": "Updated carbs in grams"],
+                "fatGrams": ["type": "number", "description": "Updated fat in grams"],
+                "servingSize": ["type": "string", "description": "Updated serving size", "nullable": true],
+                "emoji": ["type": "string", "description": "Updated emoji for this food"]
+            ],
+            "required": ["name", "calories", "proteinGrams", "carbsGrams", "fatGrams", "emoji"]
+        ]
+
+        var config = buildGenerationConfig(
+            thinkingLevel: .low,
+            maxTokens: 1024,
+            jsonSchema: schema
+        )
+        if imageData != nil {
+            config["mediaResolution"] = "MEDIA_RESOLUTION_HIGH"
+        }
+
+        let requestBody: [String: Any] = [
+            "contents": [["parts": parts]],
+            "generationConfig": config
+        ]
+
+        let responseText = try await makeRequest(body: requestBody)
+        return try parseRefinedFoodAnalysis(from: responseText)
+    }
+
+    private func parseRefinedFoodAnalysis(from text: String) throws -> SuggestedFoodEntry {
+        var cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleanText.hasPrefix("```json") {
+            cleanText = String(cleanText.dropFirst(7))
+        } else if cleanText.hasPrefix("```") {
+            cleanText = String(cleanText.dropFirst(3))
+        }
+        if cleanText.hasSuffix("```") {
+            cleanText = String(cleanText.dropLast(3))
+        }
+        cleanText = cleanText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let jsonPattern = #"\{[\s\S]*\}"#
+        if let range = cleanText.range(of: jsonPattern, options: .regularExpression) {
+            cleanText = String(cleanText[range])
+        }
+
+        guard let data = cleanText.data(using: .utf8) else {
+            throw GeminiError.parsingError
+        }
+
+        struct RefinedFood: Codable {
+            let name: String
+            let calories: Int
+            let proteinGrams: Double
+            let carbsGrams: Double
+            let fatGrams: Double
+            let servingSize: String?
+            let emoji: String?
+        }
+
+        let decoded = try JSONDecoder().decode(RefinedFood.self, from: data)
+        return SuggestedFoodEntry(
+            name: decoded.name,
+            calories: decoded.calories,
+            proteinGrams: decoded.proteinGrams,
+            carbsGrams: decoded.carbsGrams,
+            fatGrams: decoded.fatGrams,
+            servingSize: decoded.servingSize,
+            emoji: decoded.emoji
+        )
+    }
+
     func parseChatFoodAnalysis(from text: String) throws -> ChatFoodAnalysisResult {
         log("📝 Raw chat response (\(text.count) chars): \(text.prefix(300))...", type: .info)
 

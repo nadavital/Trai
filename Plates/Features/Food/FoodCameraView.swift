@@ -57,7 +57,8 @@ struct FoodCameraView: View {
                         analysisResult: analysisResult,
                         errorMessage: errorMessage,
                         onAnalyze: analyzeFood,
-                        onSave: saveEntry
+                        onSave: saveEntry,
+                        onSaveRefined: saveRefinedEntry
                     )
                 }
             }
@@ -170,6 +171,34 @@ struct FoodCameraView: View {
         if let sessionId {
             entry.sessionId = sessionId
             // Get next order number in session
+            let existingCount = try? modelContext.fetchCount(
+                FetchDescriptor<FoodEntry>(predicate: #Predicate { $0.sessionId == sessionId })
+            )
+            entry.sessionOrder = existingCount ?? 0
+        }
+
+        modelContext.insert(entry)
+        HapticManager.success()
+        dismiss()
+    }
+
+    private func saveRefinedEntry(_ suggestion: SuggestedFoodEntry) {
+        let entry = FoodEntry()
+        entry.name = suggestion.name
+        entry.calories = suggestion.calories
+        entry.proteinGrams = suggestion.proteinGrams
+        entry.carbsGrams = suggestion.carbsGrams
+        entry.fatGrams = suggestion.fatGrams
+        entry.servingSize = suggestion.servingSize
+        entry.emoji = suggestion.emoji
+        entry.imageData = capturedImage?.jpegData(compressionQuality: 0.8)
+        entry.userDescription = foodDescription
+        entry.aiAnalysis = "Refined from initial analysis"
+        entry.inputMethod = capturedImage != nil ? "camera" : "description"
+
+        // Assign session if adding to existing session
+        if let sessionId {
+            entry.sessionId = sessionId
             let existingCount = try? modelContext.fetchCount(
                 FetchDescriptor<FoodEntry>(predicate: #Predicate { $0.sessionId == sessionId })
             )
@@ -320,9 +349,33 @@ private struct ReviewCaptureView: View {
     let errorMessage: String?
     let onAnalyze: () -> Void
     let onSave: () -> Void
+    let onSaveRefined: (SuggestedFoodEntry) -> Void
+
+    @State private var isRefining = false
+    @State private var refinementText = ""
+    @State private var refinedSuggestion: SuggestedFoodEntry?
+    @State private var isLoadingRefinement = false
+    @State private var geminiService = GeminiService()
+    @FocusState private var isRefinementFocused: Bool
 
     private var isTextOnly: Bool {
         image == nil
+    }
+
+    private var currentSuggestion: SuggestedFoodEntry? {
+        if let refined = refinedSuggestion {
+            return refined
+        }
+        guard let result = analysisResult else { return nil }
+        return SuggestedFoodEntry(
+            name: result.name,
+            calories: result.calories,
+            proteinGrams: result.proteinGrams,
+            carbsGrams: result.carbsGrams,
+            fatGrams: result.fatGrams,
+            servingSize: result.servingSize,
+            emoji: result.emoji
+        )
     }
 
     var body: some View {
@@ -366,46 +419,277 @@ private struct ReviewCaptureView: View {
                         .disabled(isTextOnly && analysisResult != nil) // Lock after analysis in text mode
                 }
 
-                // Analysis section
-                if let result = analysisResult {
-                    AnalysisResultCard(result: result)
+                // Analysis section - show meal card or error
+                if let suggestion = currentSuggestion {
+                    FoodSuggestionCard(
+                        suggestion: suggestion,
+                        isRefining: isRefining,
+                        onSave: {
+                            if refinedSuggestion != nil {
+                                onSaveRefined(suggestion)
+                            } else {
+                                onSave()
+                            }
+                        },
+                        onStartRefine: {
+                            withAnimation(.spring(response: 0.3)) {
+                                isRefining = true
+                            }
+                            isRefinementFocused = true
+                        }
+                    )
                 } else if let error = errorMessage {
                     ErrorCard(message: error, onRetry: onAnalyze)
                 }
 
-                // Action buttons
-                VStack(spacing: 12) {
-                    if analysisResult != nil {
-                        Button(action: onSave) {
-                            Label("Save Entry", systemImage: "checkmark.circle.fill")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    } else {
-                        Button(action: onAnalyze) {
-                            if isAnalyzing {
-                                HStack {
-                                    ProgressView()
-                                        .tint(.white)
-                                    Text("Analyzing...")
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                            } else {
-                                Label("Analyze with AI", systemImage: "sparkles")
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
+                // Refinement chat interface
+                if isRefining {
+                    RefinementInputView(
+                        text: $refinementText,
+                        isLoading: isLoadingRefinement,
+                        isFocused: $isRefinementFocused,
+                        onSend: sendRefinement,
+                        onCancel: {
+                            withAnimation(.spring(response: 0.3)) {
+                                isRefining = false
+                                refinementText = ""
                             }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isAnalyzing)
+                    )
+                }
+
+                // Initial analyze button (before first analysis)
+                if analysisResult == nil && errorMessage == nil {
+                    Button(action: onAnalyze) {
+                        if isAnalyzing {
+                            HStack {
+                                ProgressView()
+                                    .tint(.white)
+                                Text("Analyzing...")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                        } else {
+                            Label("Analyze with AI", systemImage: "sparkles")
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                        }
                     }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isAnalyzing)
                 }
             }
             .padding()
         }
         .background(Color(.systemBackground))
+    }
+
+    private func sendRefinement() {
+        guard !refinementText.trimmingCharacters(in: .whitespaces).isEmpty,
+              let current = currentSuggestion else { return }
+
+        isLoadingRefinement = true
+        let correction = refinementText
+        refinementText = ""
+
+        Task {
+            do {
+                let imageData = image?.jpegData(compressionQuality: 0.8)
+                let result = try await geminiService.refineFoodAnalysis(
+                    correction: correction,
+                    currentSuggestion: current,
+                    imageData: imageData
+                )
+
+                withAnimation(.spring(response: 0.3)) {
+                    refinedSuggestion = result
+                    isRefining = false
+                }
+                HapticManager.success()
+            } catch {
+                HapticManager.error()
+            }
+            isLoadingRefinement = false
+        }
+    }
+}
+
+// MARK: - Food Suggestion Card
+
+private struct FoodSuggestionCard: View {
+    let suggestion: SuggestedFoodEntry
+    let isRefining: Bool
+    let onSave: () -> Void
+    let onStartRefine: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            // Header
+            HStack {
+                HStack(spacing: 6) {
+                    Text(suggestion.displayEmoji)
+                    Text("Log this?")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(.green)
+
+                Spacer()
+            }
+
+            // Meal name and calories
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(suggestion.name)
+                        .font(.headline)
+
+                    if let servingSize = suggestion.servingSize {
+                        Text(servingSize)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(suggestion.calories)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    Text("kcal")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Macros
+            HStack(spacing: 16) {
+                MacroPillView(label: "Protein", value: Int(suggestion.proteinGrams), color: .blue)
+                MacroPillView(label: "Carbs", value: Int(suggestion.carbsGrams), color: .green)
+                MacroPillView(label: "Fat", value: Int(suggestion.fatGrams), color: .yellow)
+            }
+
+            // Action buttons
+            if !isRefining {
+                HStack(spacing: 10) {
+                    Button(action: onStartRefine) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "bubble.left.and.text.bubble.right")
+                                .font(.subheadline)
+                            Text("Refine")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button(action: onSave) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.subheadline)
+                            Text("Save")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+                }
+            }
+        }
+        .padding(14)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(.rect(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.green.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Macro Pill View
+
+private struct MacroPillView: View {
+    let label: String
+    let value: Int
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 2) {
+                Text("\(value)")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Text("g")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(color.opacity(0.1))
+        .clipShape(.rect(cornerRadius: 8))
+    }
+}
+
+// MARK: - Refinement Input View
+
+private struct RefinementInputView: View {
+    @Binding var text: String
+    let isLoading: Bool
+    var isFocused: FocusState<Bool>.Binding
+    let onSend: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("What should I change?")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button("Cancel", action: onCancel)
+                    .font(.subheadline)
+            }
+
+            HStack(spacing: 10) {
+                TextField("e.g., \"It's actually a wrap\" or \"Add 100 more calories\"", text: $text, axis: .vertical)
+                    .lineLimit(1...3)
+                    .padding(12)
+                    .background(Color(.tertiarySystemBackground))
+                    .clipShape(.rect(cornerRadius: 12))
+                    .focused(isFocused)
+
+                Button {
+                    onSend()
+                } label: {
+                    if isLoading {
+                        ProgressView()
+                            .frame(width: 44, height: 44)
+                    } else {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.title)
+                            .foregroundStyle(text.trimmingCharacters(in: .whitespaces).isEmpty ? Color.secondary : Color.accentColor)
+                    }
+                }
+                .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty || isLoading)
+            }
+        }
+        .padding(14)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(.rect(cornerRadius: 16))
     }
 }
 
