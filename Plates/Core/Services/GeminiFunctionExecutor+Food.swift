@@ -62,37 +62,78 @@ extension GeminiFunctionExecutor {
             ))
         }
 
-        // Apply updates
-        var changes: [String] = []
+        // Collect proposed changes WITHOUT applying them
+        var fieldChanges: [SuggestedFoodEdit.FieldChange] = []
 
-        if let newName = args["name"] as? String {
-            entry.name = newName
-            changes.append("name")
+        if let newCalories = args["calories"] as? Int, newCalories != entry.calories {
+            fieldChanges.append(SuggestedFoodEdit.FieldChange(
+                field: "Calories",
+                fieldKey: "calories",
+                oldValue: "\(entry.calories)",
+                newValue: "\(newCalories)",
+                newNumericValue: Double(newCalories)
+            ))
         }
-        if let newCalories = args["calories"] as? Int {
-            entry.calories = newCalories
-            changes.append("calories")
+        if let newProtein = args["protein_grams"] as? Double ?? (args["protein_grams"] as? Int).map(Double.init),
+           Int(newProtein) != Int(entry.proteinGrams) {
+            fieldChanges.append(SuggestedFoodEdit.FieldChange(
+                field: "Protein",
+                fieldKey: "proteinGrams",
+                oldValue: "\(Int(entry.proteinGrams))g",
+                newValue: "\(Int(newProtein))g",
+                newNumericValue: newProtein
+            ))
         }
-        if let newProtein = args["protein_grams"] as? Double ?? (args["protein_grams"] as? Int).map(Double.init) {
-            entry.proteinGrams = newProtein
-            changes.append("protein")
+        if let newCarbs = args["carbs_grams"] as? Double ?? (args["carbs_grams"] as? Int).map(Double.init),
+           Int(newCarbs) != Int(entry.carbsGrams) {
+            fieldChanges.append(SuggestedFoodEdit.FieldChange(
+                field: "Carbs",
+                fieldKey: "carbsGrams",
+                oldValue: "\(Int(entry.carbsGrams))g",
+                newValue: "\(Int(newCarbs))g",
+                newNumericValue: newCarbs
+            ))
         }
-        if let newCarbs = args["carbs_grams"] as? Double ?? (args["carbs_grams"] as? Int).map(Double.init) {
-            entry.carbsGrams = newCarbs
-            changes.append("carbs")
+        if let newFat = args["fat_grams"] as? Double ?? (args["fat_grams"] as? Int).map(Double.init),
+           Int(newFat) != Int(entry.fatGrams) {
+            fieldChanges.append(SuggestedFoodEdit.FieldChange(
+                field: "Fat",
+                fieldKey: "fatGrams",
+                oldValue: "\(Int(entry.fatGrams))g",
+                newValue: "\(Int(newFat))g",
+                newNumericValue: newFat
+            ))
         }
-        if let newFat = args["fat_grams"] as? Double ?? (args["fat_grams"] as? Int).map(Double.init) {
-            entry.fatGrams = newFat
-            changes.append("fat")
+        if let newFiber = args["fiber_grams"] as? Double ?? (args["fiber_grams"] as? Int).map(Double.init) {
+            let oldFiber = entry.fiberGrams ?? 0
+            if Int(newFiber) != Int(oldFiber) {
+                fieldChanges.append(SuggestedFoodEdit.FieldChange(
+                    field: "Fiber",
+                    fieldKey: "fiberGrams",
+                    oldValue: "\(Int(oldFiber))g",
+                    newValue: "\(Int(newFiber))g",
+                    newNumericValue: newFiber
+                ))
+            }
         }
 
-        try? modelContext.save()
+        // If there are changes, return a suggestion for user to confirm
+        if !fieldChanges.isEmpty {
+            let suggestion = SuggestedFoodEdit(
+                entryId: entry.id,
+                name: entry.name,
+                emoji: entry.emoji,
+                changes: fieldChanges
+            )
+            return .suggestedFoodEdit(suggestion)
+        }
 
+        // No actual changes needed
         return .dataResponse(FunctionResult(
             name: "edit_food_entry",
             response: [
                 "success": true,
-                "updated_fields": changes,
+                "message": "No changes needed - values already match",
                 "entry": [
                     "id": entry.id.uuidString,
                     "name": entry.name,
@@ -109,12 +150,18 @@ extension GeminiFunctionExecutor {
         let calendar = Calendar.current
         let today = Date()
 
+        // Log the args for debugging
+        let argsDescription = args.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
+        print("📊 get_food_log args: [\(argsDescription)]")
+
         // Determine date range based on parameters
         let (startDate, endDate, dateDescription) = determineDateRange(
             args: args,
             calendar: calendar,
             today: today
         )
+
+        print("📊 Date range: \(startDate) to \(endDate) (\(dateDescription))")
 
         // Fetch entries for the date range
         let descriptor = FetchDescriptor<FoodEntry>(
@@ -123,6 +170,7 @@ extension GeminiFunctionExecutor {
         )
 
         let entries = (try? modelContext.fetch(descriptor)) ?? []
+        print("📊 Found \(entries.count) entries")
 
         // Calculate totals
         let totalCalories = entries.reduce(0) { $0 + $1.calories }

@@ -34,6 +34,7 @@ struct ChatView: View {
     @State private var geminiService = GeminiService()
     @State private var messageText = ""
     @State private var isLoading = false
+    @State private var currentActivity: String?
     @State private var selectedImage: UIImage?
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showingCamera = false
@@ -110,6 +111,7 @@ struct ChatView: View {
                         messages: currentSessionMessages,
                         isLoading: isLoading,
                         isStreamingResponse: isStreamingResponse,
+                        currentActivity: currentActivity,
                         currentCalories: profile?.dailyCalorieGoal,
                         currentProtein: profile?.dailyProteinGoal,
                         currentCarbs: profile?.dailyCarbsGoal,
@@ -128,6 +130,8 @@ struct ChatView: View {
                             editingPlanSuggestion = (message, plan)
                         },
                         onDismissPlan: dismissPlanSuggestion,
+                        onAcceptFoodEdit: acceptFoodEditSuggestion,
+                        onDismissFoodEdit: dismissFoodEditSuggestion,
                         onRetry: retryMessage
                     )
                 }
@@ -246,6 +250,33 @@ extension ChatView {
 // MARK: - Messaging
 
 extension ChatView {
+    private func friendlyFunctionName(_ name: String) -> String {
+        switch name {
+        case "suggest_food_log":
+            return "Analyzing food..."
+        case "edit_food_entry":
+            return "Preparing edit..."
+        case "get_todays_food_log":
+            return "Getting food log..."
+        case "get_user_plan":
+            return "Checking your plan..."
+        case "update_user_plan":
+            return "Updating plan..."
+        case "get_recent_workouts":
+            return "Getting workouts..."
+        case "log_workout":
+            return "Logging workout..."
+        case "get_weight_history":
+            return "Getting weight history..."
+        case "save_memory":
+            return "Remembering..."
+        case "delete_memory":
+            return "Updating memory..."
+        default:
+            return "Working..."
+        }
+    }
+
     private func sendMessage(_ text: String) {
         let hasText = !text.trimmingCharacters(in: .whitespaces).isEmpty
         let hasImage = selectedImage != nil
@@ -280,7 +311,7 @@ extension ChatView {
 
             do {
                 let dateFormatter = DateFormatter()
-                dateFormatter.dateFormat = "EEEE, MMMM d 'at' h:mm a"
+                dateFormatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
                 let currentDateTime = dateFormatter.string(from: Date())
 
                 let historyString = previousMessages.suffix(6)
@@ -306,6 +337,9 @@ extension ChatView {
                     modelContext: modelContext,
                     onTextChunk: { chunk in
                         aiMessage.content = chunk
+                    },
+                    onFunctionCall: { functionName in
+                        currentActivity = friendlyFunctionName(functionName)
                     }
                 )
 
@@ -331,6 +365,13 @@ extension ChatView {
                     HapticManager.lightTap()
                 }
 
+                if let editData = result.suggestedFoodEdit {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        aiMessage.setSuggestedFoodEdit(editData)
+                    }
+                    HapticManager.lightTap()
+                }
+
                 // Capture saved memories
                 for memory in result.savedMemories {
                     aiMessage.addSavedMemory(memory)
@@ -345,6 +386,7 @@ extension ChatView {
             }
 
             isLoading = false
+            currentActivity = nil
         }
     }
 
@@ -388,7 +430,7 @@ extension ChatView {
 
             do {
                 let dateFormatter = DateFormatter()
-                dateFormatter.dateFormat = "EEEE, MMMM d 'at' h:mm a"
+                dateFormatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
                 let currentDateTime = dateFormatter.string(from: Date())
 
                 let historyString = previousMessages.suffix(6)
@@ -414,6 +456,9 @@ extension ChatView {
                     modelContext: modelContext,
                     onTextChunk: { chunk in
                         aiMessage.content = chunk
+                    },
+                    onFunctionCall: { functionName in
+                        currentActivity = friendlyFunctionName(functionName)
                     }
                 )
 
@@ -439,6 +484,13 @@ extension ChatView {
                     HapticManager.lightTap()
                 }
 
+                if let editData = result.suggestedFoodEdit {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        aiMessage.setSuggestedFoodEdit(editData)
+                    }
+                    HapticManager.lightTap()
+                }
+
                 for memory in result.savedMemories {
                     aiMessage.addSavedMemory(memory)
                 }
@@ -452,6 +504,7 @@ extension ChatView {
             }
 
             isLoading = false
+            currentActivity = nil
         }
     }
 }
@@ -527,6 +580,52 @@ extension ChatView {
     private func dismissPlanSuggestion(for message: ChatMessage) {
         withAnimation(.easeOut(duration: 0.2)) {
             message.suggestedPlanDismissed = true
+        }
+        HapticManager.lightTap()
+    }
+}
+
+// MARK: - Food Edit Suggestion Actions
+
+extension ChatView {
+    private func acceptFoodEditSuggestion(_ edit: SuggestedFoodEdit, for message: ChatMessage) {
+        // Find the food entry to update
+        let descriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate { $0.id == edit.entryId }
+        )
+
+        guard let entry = try? modelContext.fetch(descriptor).first else { return }
+
+        // Apply each change
+        for change in edit.changes {
+            switch change.fieldKey {
+            case "calories":
+                entry.calories = Int(change.newNumericValue)
+            case "proteinGrams":
+                entry.proteinGrams = change.newNumericValue
+            case "carbsGrams":
+                entry.carbsGrams = change.newNumericValue
+            case "fatGrams":
+                entry.fatGrams = change.newNumericValue
+            case "fiberGrams":
+                entry.fiberGrams = change.newNumericValue
+            default:
+                break
+            }
+        }
+
+        try? modelContext.save()
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            message.foodEditApplied = true
+        }
+
+        HapticManager.success()
+    }
+
+    private func dismissFoodEditSuggestion(for message: ChatMessage) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            message.suggestedFoodEditDismissed = true
         }
         HapticManager.lightTap()
     }

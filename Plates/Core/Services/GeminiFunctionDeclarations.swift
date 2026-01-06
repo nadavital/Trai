@@ -22,6 +22,7 @@ enum GeminiFunctionDeclarations {
             updateUserPlan,
             getRecentWorkouts,
             logWorkout,
+            getWeightHistory,
             saveMemory,
             deleteMemory
         ]
@@ -110,6 +111,10 @@ enum GeminiFunctionDeclarations {
                     "fat_grams": [
                         "type": "number",
                         "description": "New fat in grams (optional)"
+                    ],
+                    "fiber_grams": [
+                        "type": "number",
+                        "description": "New fiber in grams (optional)"
                     ]
                 ],
                 "required": ["entry_id"]
@@ -127,7 +132,7 @@ enum GeminiFunctionDeclarations {
                 "properties": [
                     "date": [
                         "type": "string",
-                        "description": "Specific date in YYYY-MM-DD format (e.g., '2025-01-15'). Defaults to today if not provided."
+                        "description": "Specific date in YYYY-MM-DD format. Only provide if user asks about a specific date. Omit for today's log."
                     ],
                     "days_back": [
                         "type": "integer",
@@ -199,17 +204,29 @@ enum GeminiFunctionDeclarations {
 
     // MARK: - Workout Functions
 
-    /// Get recent workout history
+    /// Get recent workout history with optional date range
     static var getRecentWorkouts: [String: Any] {
         [
             "name": "get_recent_workouts",
-            "description": "Get the user's recent workout history. Use when the user asks about their workout history, exercise patterns, or training frequency.",
+            "description": "Get the user's workout history for a specific date or date range. Defaults to recent workouts if no date specified. Use when the user asks about their workout history, exercise patterns, training frequency, or past workouts like 'what workouts did I do last week'.",
             "parameters": [
                 "type": "object",
                 "properties": [
                     "limit": [
                         "type": "integer",
-                        "description": "Maximum number of workouts to return (default: 5)"
+                        "description": "Maximum number of workouts to return (default: 10, ignored when date range is specified)"
+                    ],
+                    "date": [
+                        "type": "string",
+                        "description": "Specific date in YYYY-MM-DD format (e.g., '2025-01-15'). When provided, returns workouts from this date."
+                    ],
+                    "days_back": [
+                        "type": "integer",
+                        "description": "Number of days back from today (e.g., 1 for yesterday, 7 for last week). Alternative to specifying a date."
+                    ],
+                    "range_days": [
+                        "type": "integer",
+                        "description": "Number of days to include in the range (default: 1 for single day, use 7 for a week summary)"
                     ]
                 ],
                 "required": []
@@ -253,6 +270,38 @@ enum GeminiFunctionDeclarations {
                     ]
                 ],
                 "required": ["type"]
+            ]
+        ]
+    }
+
+    // MARK: - Weight Functions
+
+    /// Get weight history with optional date range
+    static var getWeightHistory: [String: Any] {
+        [
+            "name": "get_weight_history",
+            "description": "Get the user's weight history and trends. Defaults to recent entries if no date specified. Use when the user asks about their weight, weight progress, weight trends, or how much they've lost/gained.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "limit": [
+                        "type": "integer",
+                        "description": "Maximum number of weight entries to return (default: 10, ignored when date range is specified)"
+                    ],
+                    "date": [
+                        "type": "string",
+                        "description": "Specific date in YYYY-MM-DD format (e.g., '2025-01-15'). When provided, returns weight entries from this date."
+                    ],
+                    "days_back": [
+                        "type": "integer",
+                        "description": "Number of days back from today (e.g., 1 for yesterday, 30 for last month). Alternative to specifying a date."
+                    ],
+                    "range_days": [
+                        "type": "integer",
+                        "description": "Number of days to include in the range (default: 1 for single day, use 30 for monthly trend)"
+                    ]
+                ],
+                "required": []
             ]
         ]
     }

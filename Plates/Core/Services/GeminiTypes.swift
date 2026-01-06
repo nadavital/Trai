@@ -111,6 +111,37 @@ struct FitnessContext: Sendable {
     }
 }
 
+// MARK: - Suggested Food Edit
+
+/// Represents a proposed edit to an existing food entry (needs user confirmation)
+struct SuggestedFoodEdit: Codable, Sendable, Identifiable {
+    let entryId: UUID
+    let name: String
+    let emoji: String?
+    let changes: [FieldChange]
+
+    var id: UUID { entryId }
+
+    struct FieldChange: Codable, Sendable, Identifiable {
+        var id: String { field }
+        let field: String
+        let fieldKey: String  // Internal key for applying (e.g., "calories", "proteinGrams")
+        let oldValue: String
+        let newValue: String
+        let newNumericValue: Double  // For applying the change
+    }
+
+    /// Display emoji or default
+    var displayEmoji: String {
+        emoji ?? "🍽️"
+    }
+
+    /// Summary of changes for display
+    var changesSummary: String {
+        changes.map { "\($0.field): \($0.oldValue) → \($0.newValue)" }.joined(separator: ", ")
+    }
+}
+
 // MARK: - Plan Update Suggestion
 
 /// Plan update suggested by AI for user confirmation

@@ -10,13 +10,16 @@ import SwiftUI
 // MARK: - Thinking Indicator
 
 struct ThinkingIndicator: View {
+    var activity: String?
+
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             TraiLensView(size: 36, state: .thinking, palette: .energy)
 
-            Text("Thinking...")
+            Text(activity ?? "Thinking...")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .animation(.easeInOut(duration: 0.2), value: activity)
 
             Spacer()
         }
@@ -96,6 +99,8 @@ struct ChatBubble: View {
     var onAcceptPlan: ((PlanUpdateSuggestionEntry) -> Void)?
     var onEditPlan: ((PlanUpdateSuggestionEntry) -> Void)?
     var onDismissPlan: (() -> Void)?
+    var onAcceptFoodEdit: ((SuggestedFoodEdit) -> Void)?
+    var onDismissFoodEdit: (() -> Void)?
     var onRetry: (() -> Void)?
 
     var body: some View {
@@ -175,6 +180,25 @@ struct ChatBubble: View {
                         .transition(.scale.combined(with: .opacity))
                     }
 
+                    // Show food edit suggestion card if pending
+                    if message.hasPendingFoodEdit, let edit = message.suggestedFoodEdit {
+                        SuggestedEditCard(
+                            edit: edit,
+                            onAccept: { onAcceptFoodEdit?(edit) },
+                            onDismiss: { onDismissFoodEdit?() }
+                        )
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: 0.9).combined(with: .opacity),
+                            removal: .scale(scale: 0.95).combined(with: .opacity)
+                        ))
+                    }
+
+                    // Show applied edit badge
+                    if message.hasAppliedFoodEdit, let edit = message.suggestedFoodEdit {
+                        AppliedEditBadge(edit: edit)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+
                     // Show plan update applied indicator
                     if message.planUpdateApplied {
                         PlanUpdateAppliedBadge()
@@ -192,6 +216,8 @@ struct ChatBubble: View {
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.loggedFoodEntryId)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.planUpdateApplied)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasSavedMemories)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasPendingFoodEdit)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasAppliedFoodEdit)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 

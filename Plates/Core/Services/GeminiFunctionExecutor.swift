@@ -37,6 +37,8 @@ final class GeminiFunctionExecutor {
         case suggestedFood(SuggestedFoodEntry)
         /// Plan update suggestion (needs confirmation)
         case suggestedPlanUpdate(PlanUpdateSuggestion)
+        /// Food edit suggestion to show user (needs confirmation before applying)
+        case suggestedFoodEdit(SuggestedFoodEdit)
         /// No special action needed
         case noAction
     }
@@ -85,6 +87,9 @@ final class GeminiFunctionExecutor {
 
         case "log_workout":
             return executeLogWorkout(call.arguments)
+
+        case "get_weight_history":
+            return executeGetWeightHistory(call.arguments)
 
         case "save_memory":
             return executeSaveMemory(call.arguments)

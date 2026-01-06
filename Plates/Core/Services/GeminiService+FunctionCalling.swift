@@ -44,6 +44,7 @@ extension GeminiService {
         let message: String
         let suggestedFood: SuggestedFoodEntry?
         let planUpdate: GeminiFunctionExecutor.PlanUpdateSuggestion?
+        let suggestedFoodEdit: SuggestedFoodEdit?
         let functionsCalled: [String]
         let savedMemories: [String]  // Memory contents that were saved during this response
     }
@@ -57,12 +58,11 @@ extension GeminiService {
         context: ChatFunctionContext,
         conversationHistory: [ChatMessage],
         modelContext: ModelContext,
-        onTextChunk: ((String) -> Void)? = nil
+        onTextChunk: ((String) -> Void)? = nil,
+        onFunctionCall: ((String) -> Void)? = nil
     ) async throws -> ChatFunctionResult {
         isLoading = true
         defer { isLoading = false }
-
-        log("🔧 Starting function calling chat", type: .info)
 
         let systemPrompt = buildFunctionCallingSystemPrompt(context: context)
         var contents: [[String: Any]] = []
@@ -142,7 +142,8 @@ extension GeminiService {
             context: context,
             modelContext: modelContext,
             contents: contents,
-            onTextChunk: onTextChunk
+            onTextChunk: onTextChunk,
+            onFunctionCall: onFunctionCall
         )
     }
 
@@ -264,12 +265,14 @@ extension GeminiService {
         context: ChatFunctionContext,
         modelContext: ModelContext,
         contents: [[String: Any]],
-        onTextChunk: ((String) -> Void)?
+        onTextChunk: ((String) -> Void)?,
+        onFunctionCall: ((String) -> Void)?
     ) async throws -> ChatFunctionResult {
         var functionsCalled: [String] = []
         var textResponse = ""
         var suggestedFood: SuggestedFoodEntry?
         var planUpdate: GeminiFunctionExecutor.PlanUpdateSuggestion?
+        var suggestedFoodEdit: SuggestedFoodEdit?
         var savedMemories: [String] = []
         var accumulatedParts: [[String: Any]] = []
 
@@ -305,12 +308,14 @@ extension GeminiService {
                 // Collect function calls (don't process yet)
                 if let functionCall = part["functionCall"] as? [String: Any],
                    let functionName = functionCall["name"] as? String {
-                    let elapsed = Date().timeIntervalSince(startTime)
-                    log("⏱️ Function call received in \(String(format: "%.2f", elapsed))s", type: .info)
-                    log("🔧 Function called: \(functionName)", type: .info)
+                    let args = functionCall["args"] as? [String: Any] ?? [:]
+                    let argsPreview = args.keys.joined(separator: ", ")
+                    log("🔧 \(functionName)(\(argsPreview))", type: .info)
                     functionsCalled.append(functionName)
 
-                    let args = functionCall["args"] as? [String: Any] ?? [:]
+                    // Notify UI about the function being called
+                    onFunctionCall?(functionName)
+
                     pendingFunctionCalls.append((name: functionName, args: args))
                 }
             }
@@ -318,8 +323,6 @@ extension GeminiService {
 
         // Now process all collected function calls
         if !pendingFunctionCalls.isEmpty {
-            log("📦 Processing \(pendingFunctionCalls.count) function call(s) in parallel", type: .info)
-
             for (functionName, args) in pendingFunctionCalls {
                 let call = GeminiFunctionExecutor.FunctionCall(name: functionName, arguments: args)
                 let result = executor.execute(call)
@@ -327,20 +330,25 @@ extension GeminiService {
                 // Capture saved memory content
                 if functionName == "save_memory", let content = args["content"] as? String {
                     savedMemories.append(content)
-                    log("🧠 Memory saved: \(content)", type: .info)
+                    log("🧠 Saved: \(content.prefix(50))...", type: .info)
                 }
 
                 switch result {
                 case .suggestedFood(let food):
                     suggestedFood = food
-                    log("🍽️ Food suggestion: \(food.name) - \(food.calories) kcal", type: .info)
+                    log("🍽️ Suggest: \(food.name) (\(food.calories) kcal)", type: .info)
 
                 case .suggestedPlanUpdate(let update):
                     planUpdate = update
                     log("📊 Plan update suggested", type: .info)
 
+                case .suggestedFoodEdit(let edit):
+                    suggestedFoodEdit = edit
+                    log("✏️ Edit: \(edit.name) - \(edit.changes.count) changes", type: .info)
+
                 case .dataResponse(let functionResult):
                     pendingFunctionResults.append(functionResult)
+                    log("📊 Data: \(functionResult.name)", type: .debug)
 
                 case .noAction:
                     break
@@ -349,7 +357,7 @@ extension GeminiService {
 
             // Send all function results back together
             if !pendingFunctionResults.isEmpty {
-                log("📤 Sending \(pendingFunctionResults.count) function result(s) back to Gemini", type: .info)
+                log("📤 Sending \(pendingFunctionResults.count) result(s) to model", type: .debug)
                 let followUp = try await sendParallelFunctionResults(
                     functionResults: pendingFunctionResults,
                     previousContents: contents,
@@ -370,23 +378,23 @@ extension GeminiService {
                 if let plan = followUp.planUpdate {
                     planUpdate = plan
                 }
+                if let edit = followUp.suggestedFoodEdit {
+                    suggestedFoodEdit = edit
+                }
                 savedMemories.append(contentsOf: followUp.savedMemories)
             }
         }
-
-        let elapsed = Date().timeIntervalSince(startTime)
-        log("⏱️ Streaming complete in \(String(format: "%.2f", elapsed))s", type: .info)
 
         // If we got a food suggestion, send result back for conversational response
         if let food = suggestedFood, textResponse.isEmpty {
             let foodResult = GeminiFunctionExecutor.FunctionResult(
                 name: "suggest_food_log",
                 response: [
-                    "status": "suggestion_shown",
+                    "status": "suggestion_ready",
                     "food_name": food.name,
                     "calories": food.calories,
                     "protein": food.proteinGrams,
-                    "note": "User will see a card to confirm or edit this suggestion"
+                    "instruction": "The user will see a card with this food suggestion. Please write a brief, friendly message acknowledging what they ate. Be conversational and encouraging."
                 ]
             )
             let followUp = try await sendFunctionResult(
@@ -405,12 +413,12 @@ extension GeminiService {
             let planResult = GeminiFunctionExecutor.FunctionResult(
                 name: "update_user_plan",
                 response: [
-                    "status": "suggestion_shown",
+                    "status": "suggestion_ready",
                     "calories": plan.calories as Any,
                     "protein": plan.proteinGrams as Any,
                     "carbs": plan.carbsGrams as Any,
                     "fat": plan.fatGrams as Any,
-                    "note": "User will see a card to review and confirm these plan changes"
+                    "instruction": "The user will see a card with these plan changes. Please write a brief message explaining why you're suggesting these adjustments. Be conversational and explain your reasoning."
                 ]
             )
             let followUp = try await sendFunctionResult(
@@ -424,10 +432,36 @@ extension GeminiService {
             onTextChunk?(textResponse)  // Stream combined result
         }
 
+        // If we got a food edit suggestion, send result back for conversational response
+        if let edit = suggestedFoodEdit, textResponse.isEmpty {
+            let changesDescription = edit.changes.map { "\($0.field): \($0.oldValue) → \($0.newValue)" }.joined(separator: ", ")
+            let editResult = GeminiFunctionExecutor.FunctionResult(
+                name: "edit_food_entry",
+                response: [
+                    "status": "suggestion_ready",
+                    "entry_name": edit.name,
+                    "changes": changesDescription,
+                    "instruction": "The user will see a card with these proposed changes. Please write a brief, friendly message explaining what you're suggesting to update and why. Be conversational."
+                ]
+            )
+            let followUp = try await sendFunctionResult(
+                functionResult: editResult,
+                previousContents: contents,
+                originalParts: accumulatedParts,
+                executor: executor,
+                onTextChunk: nil
+            )
+            textResponse = followUp.text
+            onTextChunk?(textResponse)
+        }
+
+        log("✅ Complete: \(textResponse.count) chars, functions: \(functionsCalled.joined(separator: ", "))", type: .info)
+
         return ChatFunctionResult(
             message: textResponse,
             suggestedFood: suggestedFood,
             planUpdate: planUpdate,
+            suggestedFoodEdit: suggestedFoodEdit,
             functionsCalled: functionsCalled,
             savedMemories: savedMemories
         )
@@ -438,6 +472,7 @@ extension GeminiService {
         var text: String = ""
         var suggestedFood: SuggestedFoodEntry?
         var planUpdate: GeminiFunctionExecutor.PlanUpdateSuggestion?
+        var suggestedFoodEdit: SuggestedFoodEdit?
         var savedMemories: [String] = []
         var accumulatedParts: [[String: Any]] = []
     }
@@ -449,8 +484,15 @@ extension GeminiService {
         originalParts: [[String: Any]],
         executor: GeminiFunctionExecutor,
         previousText: String = "",
-        onTextChunk: ((String) -> Void)?
+        onTextChunk: ((String) -> Void)?,
+        depth: Int = 0
     ) async throws -> FunctionFollowUpResult {
+        // Prevent infinite recursion - max 5 levels of chained function calls
+        guard depth < 5 else {
+            log("⚠️ Max function call depth reached, stopping chain", type: .info)
+            return FunctionFollowUpResult()
+        }
+
         var contents = previousContents
         var result = FunctionFollowUpResult()
         let accumulatedPreviousText = previousText
@@ -512,10 +554,6 @@ extension GeminiService {
                 continue
             }
 
-            if let finishReason = firstCandidate["finishReason"] as? String {
-                log("📋 Finish reason: \(finishReason)", type: .debug)
-            }
-
             guard let content = firstCandidate["content"] as? [String: Any],
                   let parts = content["parts"] as? [[String: Any]] else {
                 continue
@@ -524,35 +562,48 @@ extension GeminiService {
             for part in parts {
                 result.accumulatedParts.append(part)
 
-                // Handle text - accumulate but don't stream (caller will handle combined text)
+                // Handle text - stream it immediately
                 if let text = part["text"] as? String {
                     result.text += text
-                    log("📨 Follow-up text chunk: +\(text.count) chars", type: .debug)
+                    // Stream to UI: combine previous text with new text
+                    if let onTextChunk {
+                        onTextChunk(accumulatedPreviousText + result.text)
+                    }
                 }
 
-                // Handle any chained function calls
+                // Handle chained function calls
                 if let functionCall = part["functionCall"] as? [String: Any],
                    let functionName = functionCall["name"] as? String {
-                    log("🔧 Chained function called: \(functionName)", type: .info)
+                    // If we already have a suggestion, skip further function calls
+                    if result.suggestedFood != nil || result.planUpdate != nil || result.suggestedFoodEdit != nil {
+                        log("⏭️ Skipping \(functionName) - already have suggestion", type: .info)
+                        continue
+                    }
 
                     let args = functionCall["args"] as? [String: Any] ?? [:]
+                    let argsPreview = args.keys.joined(separator: ", ")
+                    log("🔗 Chain[\(depth)]: \(functionName)(\(argsPreview))", type: .info)
+
                     let call = GeminiFunctionExecutor.FunctionCall(name: functionName, arguments: args)
                     let execResult = executor.execute(call)
 
                     // Capture saved memory content
                     if functionName == "save_memory", let content = args["content"] as? String {
                         result.savedMemories.append(content)
-                        log("🧠 Memory saved in follow-up: \(content)", type: .info)
                     }
 
                     switch execResult {
                     case .suggestedFood(let food):
                         result.suggestedFood = food
-                        log("🍽️ Food suggestion from follow-up: \(food.name)", type: .info)
+                        log("🍽️ Got food suggestion - stopping chain", type: .info)
 
                     case .suggestedPlanUpdate(let update):
                         result.planUpdate = update
-                        log("📊 Plan update from follow-up", type: .info)
+                        log("📊 Got plan update - stopping chain", type: .info)
+
+                    case .suggestedFoodEdit(let edit):
+                        result.suggestedFoodEdit = edit
+                        log("✏️ Got edit suggestion - stopping chain", type: .info)
 
                     case .dataResponse(let nextFuncResult):
                         additionalFunctionResults.append(nextFuncResult)
@@ -564,16 +615,17 @@ extension GeminiService {
             }
         }
 
-        // If there are additional chained function calls, recurse
-        if !additionalFunctionResults.isEmpty {
-            log("📤 Sending \(additionalFunctionResults.count) chained function result(s)", type: .info)
+        // If there are additional chained function calls, recurse (but not if we have a suggestion)
+        let hasSuggestion = result.suggestedFood != nil || result.planUpdate != nil || result.suggestedFoodEdit != nil
+        if !additionalFunctionResults.isEmpty && !hasSuggestion {
             let chainedResult = try await sendParallelFunctionResults(
                 functionResults: additionalFunctionResults,
                 previousContents: contents,
                 originalParts: result.accumulatedParts,
                 executor: executor,
                 previousText: accumulatedPreviousText + result.text,
-                onTextChunk: onTextChunk
+                onTextChunk: onTextChunk,
+                depth: depth + 1
             )
             // Append chained text (don't replace)
             if !chainedResult.text.isEmpty {
@@ -585,10 +637,12 @@ extension GeminiService {
             if let plan = chainedResult.planUpdate {
                 result.planUpdate = plan
             }
+            if let edit = chainedResult.suggestedFoodEdit {
+                result.suggestedFoodEdit = edit
+            }
             result.savedMemories.append(contentsOf: chainedResult.savedMemories)
         }
 
-        log("📤 Parallel follow-up complete. Text length: \(result.text.count)", type: .debug)
         return result
     }
 
@@ -625,9 +679,9 @@ extension GeminiService {
                 ]]
             ])
 
+            // Don't include tools - we just want a text response for the suggestion
             let requestBody: [String: Any] = [
                 "contents": contents,
-                "tools": [["function_declarations": GeminiFunctionDeclarations.chatFunctions]],
                 "generationConfig": buildGenerationConfig(thinkingLevel: .low, maxTokens: 1024)
             ]
 
@@ -659,11 +713,6 @@ extension GeminiService {
                     continue
                 }
 
-                // Check for finish reason without content (happens when Gemini ends without text)
-                if let finishReason = firstCandidate["finishReason"] as? String {
-                    log("📋 Finish reason: \(finishReason)", type: .debug)
-                }
-
                 guard let content = firstCandidate["content"] as? [String: Any],
                       let parts = content["parts"] as? [[String: Any]] else {
                     continue
@@ -674,57 +723,25 @@ extension GeminiService {
                 for part in parts {
                     currentParts.append(part)
 
-                    // Handle text - accumulate but don't stream (caller handles combined text)
                     if let text = part["text"] as? String {
                         result.text += text
-                        log("📨 Follow-up text chunk: +\(text.count) chars", type: .debug)
                     }
 
-                    // Handle function calls
+                    // Skip function calls in follow-up - we just want text
                     if let functionCall = part["functionCall"] as? [String: Any],
                        let functionName = functionCall["name"] as? String {
-                        log("🔧 Follow-up function called: \(functionName)", type: .info)
-
-                        let args = functionCall["args"] as? [String: Any] ?? [:]
-                        let call = GeminiFunctionExecutor.FunctionCall(name: functionName, arguments: args)
-                        let execResult = executor.execute(call)
-
-                        // Capture saved memory content
-                        if functionName == "save_memory", let content = args["content"] as? String {
-                            result.savedMemories.append(content)
-                            log("🧠 Memory saved in follow-up: \(content)", type: .info)
-                        }
-
-                        switch execResult {
-                        case .suggestedFood(let food):
-                            result.suggestedFood = food
-                            log("🍽️ Food suggestion from follow-up: \(food.name)", type: .info)
-
-                        case .suggestedPlanUpdate(let update):
-                            result.planUpdate = update
-                            log("📊 Plan update from follow-up", type: .info)
-
-                        case .dataResponse(let nextFuncResult):
-                            // Chain to another function call
-                            pendingFunctionResult = nextFuncResult
-                            log("📤 Chaining to next function call", type: .info)
-
-                        case .noAction:
-                            break
-                        }
+                        log("⏭️ Ignoring follow-up function call: \(functionName)", type: .debug)
                     }
                 }
             }
 
             result.accumulatedParts = currentParts
 
-            // Log if we received no content in this iteration
             if !receivedAnyContent {
-                log("⚠️ No content received in follow-up iteration \(iteration)", type: .info)
+                log("⚠️ No response at iteration \(iteration)", type: .info)
             }
         }
 
-        log("📤 Follow-up complete. Text length: \(result.text.count)", type: .debug)
         return result
     }
 }

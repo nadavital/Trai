@@ -8,6 +8,120 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - Suggested Edit Card
+
+struct SuggestedEditCard: View {
+    let edit: SuggestedFoodEdit
+    let onAccept: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            // Header
+            HStack {
+                HStack(spacing: 6) {
+                    Text(edit.displayEmoji)
+                    Text("Update this?")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(.orange)
+
+                Spacer()
+
+                Button {
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .background(Color(.tertiarySystemBackground))
+                        .clipShape(.circle)
+                }
+            }
+
+            // Meal name
+            Text(edit.name)
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Changes
+            VStack(spacing: 8) {
+                ForEach(edit.changes) { change in
+                    HStack {
+                        Text(change.field)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        HStack(spacing: 4) {
+                            Text(change.oldValue)
+                                .strikethrough()
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "arrow.right")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                            Text(change.newValue)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.orange)
+                        }
+                        .font(.subheadline)
+                    }
+                }
+            }
+
+            // Action buttons
+            HStack(spacing: 10) {
+                Button {
+                    onDismiss()
+                } label: {
+                    Text("Cancel")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    onAccept()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Update")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(.rect(cornerRadius: 16))
+    }
+}
+
+// MARK: - Applied Edit Badge
+
+struct AppliedEditBadge: View {
+    let edit: SuggestedFoodEdit
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(edit.displayEmoji)
+            Text("Updated \(edit.name)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Image(systemName: "checkmark")
+                .font(.caption2)
+                .foregroundStyle(.orange)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.orange.opacity(0.1))
+        .clipShape(.capsule)
+    }
+}
+
 // MARK: - Logged Meal Badge
 
 struct LoggedMealBadge: View {

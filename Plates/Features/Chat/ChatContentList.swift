@@ -11,6 +11,7 @@ struct ChatContentList: View {
     let messages: [ChatMessage]
     let isLoading: Bool
     let isStreamingResponse: Bool
+    let currentActivity: String?
     let currentCalories: Int?
     let currentProtein: Int?
     let currentCarbs: Int?
@@ -23,6 +24,8 @@ struct ChatContentList: View {
     let onAcceptPlan: (PlanUpdateSuggestionEntry, ChatMessage) -> Void
     let onEditPlan: (ChatMessage, PlanUpdateSuggestionEntry) -> Void
     let onDismissPlan: (ChatMessage) -> Void
+    let onAcceptFoodEdit: (SuggestedFoodEdit, ChatMessage) -> Void
+    let onDismissFoodEdit: (ChatMessage) -> Void
     let onRetry: (ChatMessage) -> Void
 
     var body: some View {
@@ -31,7 +34,7 @@ struct ChatContentList: View {
                 EmptyChatView(onSuggestionTapped: onSuggestionTapped, isLoading: isLoading)
             } else {
                 ForEach(messages) { message in
-                    if !message.content.isEmpty || message.isFromUser || message.errorMessage != nil || message.hasPendingMealSuggestion || message.loggedFoodEntryId != nil || message.hasPendingPlanSuggestion || message.planUpdateApplied {
+                    if !message.content.isEmpty || message.isFromUser || message.errorMessage != nil || message.hasPendingMealSuggestion || message.loggedFoodEntryId != nil || message.hasPendingPlanSuggestion || message.planUpdateApplied || message.hasPendingFoodEdit || message.hasAppliedFoodEdit {
                         VStack(spacing: 0) {
                             ChatBubble(
                                 message: message,
@@ -60,6 +63,12 @@ struct ChatContentList: View {
                                 onDismissPlan: {
                                     onDismissPlan(message)
                                 },
+                                onAcceptFoodEdit: { edit in
+                                    onAcceptFoodEdit(edit, message)
+                                },
+                                onDismissFoodEdit: {
+                                    onDismissFoodEdit(message)
+                                },
                                 onRetry: {
                                     onRetry(message)
                                 }
@@ -71,7 +80,7 @@ struct ChatContentList: View {
             }
 
             if isLoading && !isStreamingResponse {
-                ThinkingIndicator()
+                ThinkingIndicator(activity: currentActivity)
             }
         }
         .padding()

@@ -50,6 +50,9 @@ final class ChatMessage {
     /// Memories saved during this response (JSON encoded array of strings)
     var savedMemoriesData: Data?
 
+    /// Food edit confirmation data (JSON encoded) - shows changes made to existing food entry
+    var foodEditData: Data?
+
     init() {}
 
     init(content: String, isFromUser: Bool, sessionId: UUID? = nil, imageData: Data? = nil) {
@@ -122,6 +125,37 @@ final class ChatMessage {
         var memories = savedMemories
         memories.append(content)
         savedMemoriesData = try? JSONEncoder().encode(memories)
+    }
+
+    /// Whether the user has dismissed the suggested food edit
+    var suggestedFoodEditDismissed: Bool = false
+
+    /// Whether the food edit has been applied
+    var foodEditApplied: Bool = false
+
+    /// Whether this message has a pending food edit suggestion (not yet applied or dismissed)
+    var hasPendingFoodEdit: Bool {
+        foodEditData != nil && !foodEditApplied && !suggestedFoodEditDismissed
+    }
+
+    /// Whether this message has an applied food edit
+    var hasAppliedFoodEdit: Bool {
+        foodEditData != nil && foodEditApplied
+    }
+
+    /// Decode the suggested food edit
+    var suggestedFoodEdit: SuggestedFoodEdit? {
+        guard let data = foodEditData else { return nil }
+        return try? JSONDecoder().decode(SuggestedFoodEdit.self, from: data)
+    }
+
+    /// Set the suggested food edit data
+    func setSuggestedFoodEdit(_ edit: SuggestedFoodEdit?) {
+        if let edit {
+            foodEditData = try? JSONEncoder().encode(edit)
+        } else {
+            foodEditData = nil
+        }
     }
 
     /// Create a loading placeholder message for AI response
