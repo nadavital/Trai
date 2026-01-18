@@ -27,6 +27,10 @@ struct ProfileView: View {
     @State var showEditSheet = false
     @State var showMacroTrackingSheet = false
 
+    // For navigating to Trai tab with plan review
+    @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
+    @AppStorage("selectedTab") var selectedTabRaw: String = AppTab.dashboard.rawValue
+
     var profile: UserProfile? { profiles.first }
 
     var hasWorkoutToday: Bool {

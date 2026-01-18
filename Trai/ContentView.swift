@@ -73,7 +73,14 @@ enum AppTab: String, CaseIterable {
 }
 
 struct MainTabView: View {
-    @State private var selectedTab: AppTab = .dashboard
+    @AppStorage("selectedTab") private var selectedTabRaw: String = AppTab.dashboard.rawValue
+
+    private var selectedTab: Binding<AppTab> {
+        Binding(
+            get: { AppTab(rawValue: selectedTabRaw) ?? .dashboard },
+            set: { selectedTabRaw = $0.rawValue }
+        )
+    }
     @Query(filter: #Predicate<LiveWorkout> { $0.completedAt == nil })
     private var activeWorkouts: [LiveWorkout]
 
@@ -86,7 +93,7 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: selectedTab) {
             Tab("Dashboard", systemImage: "house.fill", value: .dashboard) {
                 DashboardView()
             }

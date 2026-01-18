@@ -67,12 +67,22 @@ extension GeminiService {
         if let age = profile.age {
             userInfo.append("Age: \(age)")
         }
+        if profile.genderValue != .notSpecified {
+            userInfo.append("Gender: \(profile.genderValue.displayName)")
+        }
+        if let height = profile.heightCm {
+            let heightStr = profile.usesMetricHeight
+                ? "\(Int(height)) cm"
+                : String(format: "%.0f'%.0f\"", floor(height / 2.54 / 12), (height / 2.54).truncatingRemainder(dividingBy: 12))
+            userInfo.append("Height: \(heightStr)")
+        }
         if let weight = profile.currentWeightKg {
             let weightStr = profile.usesMetricWeight
                 ? "\(Int(weight)) kg"
                 : "\(Int(weight * 2.205)) lbs"
             userInfo.append("Current weight: \(weightStr)")
         }
+        userInfo.append("Activity level: \(profile.activityLevelValue.displayName)")
 
         var section = ""
         if !userInfo.isEmpty {
@@ -155,6 +165,34 @@ extension GeminiService {
         7. Don't say "I've logged this" - you can only suggest, the user confirms.
         8. Include relevant emojis for food items (☕, 🥗, 🍳, etc.)
         9. When using update_user_plan to suggest plan changes, ALWAYS include a conversational message explaining WHY you're suggesting the changes. Never just return the plan update without context - the user needs to understand your reasoning before seeing the suggestion card.
+
+        PLAN REVIEW GUIDANCE:
+        When the user asks to review, reassess, or update their nutrition plan, you MUST follow these steps:
+
+        STEP 1 - GATHER DATA (REQUIRED - do this FIRST before responding):
+        - Call get_weight_history with range_days=30 to see their weight trend
+        - Call get_food_log with period="this_week" or range_days=14 to see their eating patterns
+        - Call get_recent_workouts with range_days=14 to see their activity level
+        - Call get_activity_summary to see today's activity
+        DO NOT skip these calls - you need actual data to make informed recommendations!
+
+        STEP 2 - RECALCULATE FROM FIRST PRINCIPLES using their current weight (from weight history, not profile):
+        - BMR (Mifflin-St Jeor): Men: 10×weight(kg) + 6.25×height(cm) - 5×age + 5
+                                Women: 10×weight(kg) + 6.25×height(cm) - 5×age - 161
+        - TDEE = BMR × Activity Multiplier (Sedentary: 1.2, Light: 1.375, Moderate: 1.55, Active: 1.725, Very Active: 1.9)
+        - Goal adjustment: Lose weight: TDEE - 300 to 500, Gain: TDEE + 300 to 500, Maintain: TDEE
+
+        STEP 3 - ANALYZE:
+        - Compare calculated targets vs current plan - are they different?
+        - Is their weight trending as expected for their goal?
+        - Are they consistently hitting their calorie targets?
+        - Losing faster than expected? May need more calories
+        - Not losing despite deficit? May need adjustment or more accurate logging
+        - Plateau? Consider metabolic adaptation, suggest diet break or adjustment
+
+        STEP 4 - PROPOSE CHANGES based on BOTH the math AND their actual progress
+
+        STEP 5 - EXPLAIN your reasoning - show the calculation and data you used
 
         MEMORY USAGE:
         - Use save_memory to remember important facts about the user that will help you be a better coach.

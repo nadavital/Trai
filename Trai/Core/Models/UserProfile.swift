@@ -78,6 +78,9 @@ final class UserProfile {
     var aiPlanRationale: String = ""
     var aiPlanGeneratedAt: Date?
 
+    // Plan assessment state (JSON for CloudKit compatibility)
+    var planAssessmentStateJSON: String?
+
     var createdAt: Date = Date()
     var hasCompletedOnboarding: Bool = false
 
@@ -400,5 +403,27 @@ extension UserProfile {
             injuries: injuries,
             preferences: preferences
         )
+    }
+}
+
+// MARK: - Plan Assessment State
+
+extension UserProfile {
+    /// The user's plan assessment state (for proactive plan review recommendations)
+    var planAssessmentState: PlanAssessmentState {
+        get {
+            guard let json = planAssessmentStateJSON,
+                  let data = json.data(using: .utf8),
+                  let state = try? JSONDecoder().decode(PlanAssessmentState.self, from: data) else {
+                return PlanAssessmentState()
+            }
+            return state
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let json = String(data: data, encoding: .utf8) {
+                planAssessmentStateJSON = json
+            }
+        }
     }
 }

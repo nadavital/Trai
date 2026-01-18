@@ -51,7 +51,7 @@ extension GeminiService {
         let activeCalories: Int
         let exerciseMinutes: Int
 
-        static let empty = ActivityData(steps: 0, activeCalories: 0, exerciseMinutes: 0)
+        nonisolated static let empty = ActivityData(steps: 0, activeCalories: 0, exerciseMinutes: 0)
     }
 
     // MARK: - Chat Context

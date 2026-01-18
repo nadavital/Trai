@@ -50,8 +50,14 @@ struct ChatView: View {
     @FocusState private var isInputFocused: Bool
     @AppStorage("currentChatSessionId") var currentSessionIdString: String = ""
     @AppStorage("lastChatActivityDate") var lastActivityTimestamp: Double = 0
+    @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest: Bool = false
     @State var isTemporarySession = false
     @State var temporaryMessages: [ChatMessage] = []
+
+    // Plan assessment
+    @State var planAssessmentService = PlanAssessmentService()
+    @State var pendingPlanRecommendation: PlanRecommendation?
+    @State var planRecommendationMessage: String?
 
     let sessionTimeoutHours: Double = 1.5
 
@@ -128,6 +134,8 @@ struct ChatView: View {
             currentCarbs: profile?.dailyCarbsGoal,
             currentFat: profile?.dailyFatGoal,
             enabledMacros: enabledMacrosValue,
+            planRecommendation: pendingPlanRecommendation,
+            planRecommendationMessage: planRecommendationMessage,
             onSuggestionTapped: sendMessage,
             onAcceptMeal: acceptMealSuggestion,
             onEditMeal: { message, meal in
@@ -151,7 +159,9 @@ struct ChatView: View {
             useExerciseWeightLbs: !(profile?.usesMetricExerciseWeight ?? true),
             onRetry: retryMessage,
             onImageTapped: { image in enlargedImage = image },
-            onViewAppliedPlan: { plan in viewingAppliedPlan = plan }
+            onViewAppliedPlan: { plan in viewingAppliedPlan = plan },
+            onReviewPlan: handlePlanReviewRequest,
+            onDismissPlanRecommendation: handleDismissPlanRecommendation
         )
     }
 
@@ -233,6 +243,8 @@ struct ChatView: View {
             }
             .onAppear {
                 checkSessionTimeout()
+                checkForPlanRecommendation()
+                checkForPendingPlanReview()
             }
             .chatCameraSheet(showingCamera: $showingCamera) { image in
                 selectedImage = image

@@ -77,6 +77,10 @@ extension ChatView {
             }
         }
 
+        // Update assessment state - marks plan as reviewed with current weight as new baseline
+        let currentWeight = weightEntries.first?.weightKg
+        planAssessmentService.markPlanReviewed(profile: profile, currentWeightKg: currentWeight)
+
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.planUpdateApplied = true
         }
@@ -254,5 +258,94 @@ extension ChatView {
             message.suggestedFoodEditDismissed = true
         }
         HapticManager.lightTap()
+    }
+}
+
+// MARK: - Plan Reassessment Actions
+
+extension ChatView {
+    /// Check if a plan review should be recommended on chat open
+    func checkForPlanRecommendation() {
+        // Only check if not in incognito mode and we have a profile
+        guard let profile, !isTemporarySession else { return }
+
+        // Don't check if we already have a recommendation showing
+        guard pendingPlanRecommendation == nil else { return }
+
+        // Check for recommendation triggers
+        if let recommendation = planAssessmentService.checkForRecommendation(
+            profile: profile,
+            weightEntries: Array(weightEntries),
+            foodEntries: Array(allFoodEntries)
+        ) {
+            pendingPlanRecommendation = recommendation
+            planRecommendationMessage = planAssessmentService.getRecommendationMessage(
+                recommendation,
+                useLbs: !profile.usesMetricWeight
+            )
+        }
+    }
+
+    /// Handle when user taps "Review Plan" on recommendation card
+    func handlePlanReviewRequest() {
+        guard let recommendation = pendingPlanRecommendation else { return }
+
+        // Clear the card first
+        withAnimation {
+            pendingPlanRecommendation = nil
+            planRecommendationMessage = nil
+        }
+
+        // Construct a contextual message based on the trigger
+        let prompt: String
+        switch recommendation.trigger {
+        case .weightChange:
+            if let change = recommendation.details.weightChangeKg {
+                if change > 0 {
+                    prompt = "My weight has increased since my plan was created. Can you analyze my progress and suggest plan adjustments?"
+                } else {
+                    prompt = "I've lost weight since my plan was created. Can you review my plan and suggest updates for continued progress?"
+                }
+            } else {
+                prompt = "My weight has changed. Can you review my plan?"
+            }
+
+        case .weightPlateau:
+            prompt = "I've hit a weight plateau. Can you analyze why and suggest plan adjustments to break through?"
+
+        case .planAge:
+            prompt = "It's been a while since my plan was reviewed. Can you check my progress and suggest any needed updates?"
+        }
+
+        // Send the message through the normal chat flow
+        sendMessage(prompt)
+    }
+
+    /// Handle when user taps "Later" or dismiss on recommendation card
+    func handleDismissPlanRecommendation() {
+        guard let recommendation = pendingPlanRecommendation,
+              let profile else { return }
+
+        // Record the dismissal
+        planAssessmentService.dismissRecommendation(recommendation, profile: profile)
+
+        // Clear the card
+        withAnimation {
+            pendingPlanRecommendation = nil
+            planRecommendationMessage = nil
+        }
+
+        HapticManager.lightTap()
+    }
+
+    /// Check for pending plan review request from Profile (cross-tab navigation)
+    func checkForPendingPlanReview() {
+        guard pendingPlanReviewRequest else { return }
+
+        // Reset the flag immediately
+        pendingPlanReviewRequest = false
+
+        // Send the review request message
+        sendMessage("Can you review my nutrition plan and check if any updates are needed based on my progress?")
     }
 }

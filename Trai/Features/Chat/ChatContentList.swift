@@ -18,6 +18,8 @@ struct ChatContentList: View {
     let currentCarbs: Int?
     let currentFat: Int?
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
+    var planRecommendation: PlanRecommendation?
+    var planRecommendationMessage: String?
     let onSuggestionTapped: (String) -> Void
     let onAcceptMeal: (SuggestedFoodEntry, ChatMessage) -> Void
     let onEditMeal: (ChatMessage, SuggestedFoodEntry) -> Void
@@ -36,9 +38,28 @@ struct ChatContentList: View {
     let onRetry: (ChatMessage) -> Void
     var onImageTapped: ((UIImage) -> Void)?
     var onViewAppliedPlan: ((PlanUpdateSuggestionEntry) -> Void)?
+    var onReviewPlan: (() -> Void)?
+    var onDismissPlanRecommendation: (() -> Void)?
 
     var body: some View {
         LazyVStack(spacing: 12) {
+            // Plan review recommendation card (if triggered)
+            if let recommendation = planRecommendation,
+               let message = planRecommendationMessage,
+               let onReview = onReviewPlan,
+               let onDismiss = onDismissPlanRecommendation {
+                PlanReviewRecommendationCard(
+                    recommendation: recommendation,
+                    message: message,
+                    onReviewPlan: onReview,
+                    onDismiss: onDismiss
+                )
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.95).combined(with: .opacity),
+                    removal: .scale(scale: 0.95).combined(with: .opacity)
+                ))
+            }
+
             if messages.isEmpty {
                 EmptyChatView(
                     onSuggestionTapped: onSuggestionTapped,

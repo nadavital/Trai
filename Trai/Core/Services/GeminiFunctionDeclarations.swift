@@ -130,7 +130,7 @@ enum GeminiFunctionDeclarations {
     static var getTodaysFoodLog: [String: Any] {
         [
             "name": "get_food_log",
-            "description": "Get the user's food log for a specific date or date range, including averages for multi-day queries. Use when the user asks what they've eaten, their progress, remaining calories/macros, nutrition status, or averages like 'what's my average calories this week' or 'how much protein did I average last month'. Returns daily_averages automatically for multi-day ranges.",
+            "description": "Get the user's food log for a specific date or date range, including averages for multi-day queries. IMPORTANT: Use this when reviewing/reassessing the nutrition plan to see their eating patterns and adherence. Also use when the user asks what they've eaten, their progress, remaining calories/macros, nutrition status, or averages. Returns daily_averages automatically for multi-day ranges.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -217,7 +217,7 @@ enum GeminiFunctionDeclarations {
     static var getRecentWorkouts: [String: Any] {
         [
             "name": "get_recent_workouts",
-            "description": "Get the user's workout history for a specific date or date range. Defaults to recent workouts if no date specified. Use when the user asks about their workout history, exercise patterns, training frequency, or past workouts like 'what workouts did I do last week'.",
+            "description": "Get the user's workout history for a specific date or date range. Defaults to recent workouts if no date specified. IMPORTANT: Use this when reviewing/reassessing the nutrition plan to understand their activity level. Also use when the user asks about their workout history, exercise patterns, training frequency, or past workouts.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -393,7 +393,7 @@ enum GeminiFunctionDeclarations {
     static var getWeightHistory: [String: Any] {
         [
             "name": "get_weight_history",
-            "description": "Get the user's weight history and trends. Defaults to recent entries if no date specified. Use when the user asks about their weight, weight progress, weight trends, or how much they've lost/gained.",
+            "description": "Get the user's weight history and trends. Defaults to recent entries if no date specified. IMPORTANT: Use this when reviewing/reassessing the nutrition plan to get actual weight data. Also use when the user asks about their weight, weight progress, weight trends, or how much they've lost/gained.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -425,7 +425,7 @@ enum GeminiFunctionDeclarations {
     static var getActivitySummary: [String: Any] {
         [
             "name": "get_activity_summary",
-            "description": "Get the user's daily activity data from Apple Health including steps, active calories burned, and exercise minutes. Use when the user asks about their activity, steps, calories burned, how active they've been, or exercise time for today.",
+            "description": "Get the user's daily activity data from Apple Health including steps, active calories burned, and exercise minutes. Use when reviewing/reassessing the nutrition plan or when the user asks about their activity, steps, calories burned, how active they've been, or exercise time for today.",
             "parameters": [
                 "type": "object",
                 "properties": [:],

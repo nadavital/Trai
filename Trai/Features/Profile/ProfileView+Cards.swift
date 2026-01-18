@@ -81,6 +81,21 @@ extension ProfileView {
                 }
             }
 
+            // Review with Trai button
+            Button {
+                pendingPlanReviewRequest = true
+                selectedTabRaw = AppTab.trai.rawValue
+                HapticManager.lightTap()
+            } label: {
+                HStack {
+                    Image(systemName: "sparkles")
+                    Text("Review with Trai")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(.purple)
+
             if let currentWeight = weightEntries.first?.weightKg,
                planService.shouldPromptForRecalculation(profile: profile, currentWeight: currentWeight),
                let diff = planService.getWeightDifference(profile: profile, currentWeight: currentWeight) {
