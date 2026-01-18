@@ -93,6 +93,8 @@ extension ChatView {
             return "Starting workout..."
         case "get_weight_history":
             return "Getting weight history..."
+        case "get_activity_summary":
+            return "Getting activity..."
         case "save_memory":
             return "Remembering..."
         case "delete_memory":
@@ -166,6 +168,9 @@ extension ChatView {
 
             let memoriesContext = activeMemories.formatForPrompt()
 
+            // Fetch activity data from HealthKit
+            let activityData = await fetchActivityData()
+
             let functionContext = GeminiService.ChatFunctionContext(
                 profile: profile,
                 todaysFoodEntries: todaysFoodEntries,
@@ -174,7 +179,8 @@ extension ChatView {
                 memoriesContext: memoriesContext,
                 pendingSuggestion: pendingMealSuggestion?.meal,
                 isIncognitoMode: isTemporarySession,
-                activeWorkout: workoutContext
+                activeWorkout: workoutContext,
+                activityData: activityData
             )
 
             let result = try await geminiService.chatWithFunctions(
@@ -292,6 +298,24 @@ extension ChatView {
                 previousMessages: previousMessages,
                 aiMessage: aiMessage
             )
+        }
+    }
+
+    private func fetchActivityData() async -> GeminiService.ActivityData {
+        do {
+            async let steps = healthKitService.fetchTodayStepCount()
+            async let calories = healthKitService.fetchTodayActiveEnergy()
+            async let exercise = healthKitService.fetchTodayExerciseMinutes()
+
+            let (fetchedSteps, fetchedCalories, fetchedExercise) = try await (steps, calories, exercise)
+            return GeminiService.ActivityData(
+                steps: fetchedSteps,
+                activeCalories: fetchedCalories,
+                exerciseMinutes: fetchedExercise
+            )
+        } catch {
+            // Return empty data if HealthKit fails
+            return .empty
         }
     }
 }

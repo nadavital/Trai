@@ -35,6 +35,7 @@ struct ChatView: View {
 
     @Environment(\.modelContext) var modelContext
     @State var geminiService = GeminiService()
+    @State var healthKitService = HealthKitService()
     @State var messageText = ""
     @State var isLoading = false
     @State var currentActivity: String?

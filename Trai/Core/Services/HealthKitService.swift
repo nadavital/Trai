@@ -33,6 +33,7 @@ final class HealthKitService {
             HKObjectType.quantityType(forIdentifier: .leanBodyMass)!,
             HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
             HKObjectType.quantityType(forIdentifier: .stepCount)!,
+            HKObjectType.quantityType(forIdentifier: .appleExerciseTime)!,
             HKObjectType.workoutType()
         ]
 
@@ -152,6 +153,11 @@ final class HealthKitService {
     func fetchTodayActiveEnergy() async throws -> Int {
         let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
         return try await fetchTodaySum(type: energyType, unit: .kilocalorie())
+    }
+
+    func fetchTodayExerciseMinutes() async throws -> Int {
+        let exerciseType = HKQuantityType.quantityType(forIdentifier: .appleExerciseTime)!
+        return try await fetchTodaySum(type: exerciseType, unit: .minute())
     }
 
     // MARK: - Private Helpers

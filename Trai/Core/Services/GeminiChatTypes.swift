@@ -43,6 +43,17 @@ extension GeminiService {
         }
     }
 
+    // MARK: - Activity Data
+
+    /// Today's activity data from Apple Health
+    struct ActivityData: Sendable {
+        let steps: Int
+        let activeCalories: Int
+        let exerciseMinutes: Int
+
+        static let empty = ActivityData(steps: 0, activeCalories: 0, exerciseMinutes: 0)
+    }
+
     // MARK: - Chat Context
 
     /// Context for function calling chat
@@ -55,6 +66,7 @@ extension GeminiService {
         let pendingSuggestion: SuggestedFoodEntry?
         let isIncognitoMode: Bool
         let activeWorkout: WorkoutContext?
+        let activityData: ActivityData
 
         init(
             profile: UserProfile?,
@@ -64,7 +76,8 @@ extension GeminiService {
             memoriesContext: String,
             pendingSuggestion: SuggestedFoodEntry? = nil,
             isIncognitoMode: Bool = false,
-            activeWorkout: WorkoutContext? = nil
+            activeWorkout: WorkoutContext? = nil,
+            activityData: ActivityData = .empty
         ) {
             self.profile = profile
             self.todaysFoodEntries = todaysFoodEntries
@@ -74,6 +87,7 @@ extension GeminiService {
             self.pendingSuggestion = pendingSuggestion
             self.isIncognitoMode = isIncognitoMode
             self.activeWorkout = activeWorkout
+            self.activityData = activityData
         }
     }
 

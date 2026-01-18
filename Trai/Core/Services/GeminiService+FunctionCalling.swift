@@ -133,7 +133,8 @@ extension GeminiService {
         let executor = GeminiFunctionExecutor(
             modelContext: modelContext,
             userProfile: context.profile,
-            isIncognitoMode: context.isIncognitoMode
+            isIncognitoMode: context.isIncognitoMode,
+            activityData: context.activityData
         )
 
         var pendingFunctionCalls: [(name: String, args: [String: Any])] = []

@@ -82,11 +82,18 @@ final class GeminiFunctionExecutor {
     let modelContext: ModelContext
     let userProfile: UserProfile?
     let isIncognitoMode: Bool
+    let activityData: GeminiService.ActivityData
 
-    init(modelContext: ModelContext, userProfile: UserProfile?, isIncognitoMode: Bool = false) {
+    init(
+        modelContext: ModelContext,
+        userProfile: UserProfile?,
+        isIncognitoMode: Bool = false,
+        activityData: GeminiService.ActivityData = .empty
+    ) {
         self.modelContext = modelContext
         self.userProfile = userProfile
         self.isIncognitoMode = isIncognitoMode
+        self.activityData = activityData
     }
 
     // MARK: - Execution
@@ -126,6 +133,9 @@ final class GeminiFunctionExecutor {
 
         case "get_weight_history":
             return executeGetWeightHistory(call.arguments)
+
+        case "get_activity_summary":
+            return executeGetActivitySummary()
 
         case "save_memory":
             return executeSaveMemory(call.arguments)

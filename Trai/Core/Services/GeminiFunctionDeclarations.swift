@@ -26,6 +26,7 @@ enum GeminiFunctionDeclarations {
             suggestWorkout,
             startLiveWorkout,
             getWeightHistory,
+            getActivitySummary,
             saveMemory,
             deleteMemory
         ]
@@ -413,6 +414,21 @@ enum GeminiFunctionDeclarations {
                         "description": "Number of days to include in the range (default: 1 for single day, use 30 for monthly trend)"
                     ]
                 ],
+                "required": []
+            ]
+        ]
+    }
+
+    // MARK: - Activity Functions
+
+    /// Get today's activity summary from Apple Health
+    static var getActivitySummary: [String: Any] {
+        [
+            "name": "get_activity_summary",
+            "description": "Get the user's daily activity data from Apple Health including steps, active calories burned, and exercise minutes. Use when the user asks about their activity, steps, calories burned, how active they've been, or exercise time for today.",
+            "parameters": [
+                "type": "object",
+                "properties": [:],
                 "required": []
             ]
         ]

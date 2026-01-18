@@ -37,6 +37,12 @@ struct DashboardView: View {
     // Date navigation
     @State private var selectedDate = Date()
 
+    // Activity data from HealthKit
+    @State private var todaySteps = 0
+    @State private var todayActiveCalories = 0
+    @State private var todayExerciseMinutes = 0
+    @State private var isLoadingActivity = false
+
     private var profile: UserProfile? { profiles.first }
 
     private var isViewingToday: Bool {
@@ -55,6 +61,19 @@ struct DashboardView: View {
         let startOfDay = calendar.startOfDay(for: selectedDate)
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
         return allWorkouts.filter { $0.loggedAt >= startOfDay && $0.loggedAt < endOfDay }
+    }
+
+    private var selectedDayLiveWorkouts: [LiveWorkout] {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: selectedDate)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        return liveWorkouts.filter { workout in
+            workout.startedAt >= startOfDay && workout.startedAt < endOfDay
+        }
+    }
+
+    private var todayTotalWorkoutCount: Int {
+        selectedDayWorkouts.count + selectedDayLiveWorkouts.count
     }
 
     var body: some View {
@@ -111,7 +130,13 @@ struct DashboardView: View {
                         onDeleteEntry: deleteFoodEntry
                     )
 
-                    TodaysActivityCard(workoutCount: selectedDayWorkouts.count)
+                    TodaysActivityCard(
+                        steps: todaySteps,
+                        activeCalories: todayActiveCalories,
+                        exerciseMinutes: todayExerciseMinutes,
+                        workoutCount: todayTotalWorkoutCount,
+                        isLoading: isLoadingActivity
+                    )
 
                     if isViewingToday, let latestWeight = weightEntries.first {
                         NavigationLink {
@@ -129,6 +154,14 @@ struct DashboardView: View {
                 .padding()
             }
             .navigationTitle("Dashboard")
+            .task {
+                await loadActivityData()
+            }
+            .onChange(of: selectedDate) { _, newDate in
+                if Calendar.current.isDateInToday(newDate) {
+                    Task { await loadActivityData() }
+                }
+            }
             .refreshable {
                 await refreshHealthData()
             }
@@ -234,8 +267,29 @@ struct DashboardView: View {
         selectedDayFoodEntries.reduce(0) { $0 + ($1.sugarGrams ?? 0) }
     }
 
+    private func loadActivityData() async {
+        guard isViewingToday else { return }
+        isLoadingActivity = true
+
+        do {
+            async let steps = healthKitService.fetchTodayStepCount()
+            async let calories = healthKitService.fetchTodayActiveEnergy()
+            async let exercise = healthKitService.fetchTodayExerciseMinutes()
+
+            let (fetchedSteps, fetchedCalories, fetchedExercise) = try await (steps, calories, exercise)
+            todaySteps = fetchedSteps
+            todayActiveCalories = fetchedCalories
+            todayExerciseMinutes = fetchedExercise
+        } catch {
+            // Silently fail - user may not have granted HealthKit permissions
+            print("Failed to load activity data: \(error)")
+        }
+
+        isLoadingActivity = false
+    }
+
     private func refreshHealthData() async {
-        // Will be implemented with HealthKit sync
+        await loadActivityData()
     }
 
     private func deleteFoodEntry(_ entry: FoodEntry) {

@@ -215,28 +215,131 @@ struct MacroBreakdownCard: View {
 // MARK: - Today's Activity Card
 
 struct TodaysActivityCard: View {
+    let steps: Int
+    let activeCalories: Int
+    let exerciseMinutes: Int
     let workoutCount: Int
+    var isLoading: Bool = false
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(spacing: 16) {
+            HStack {
                 Text("Today's Activity")
                     .font(.headline)
-
-                Text(workoutCount == 0 ? "No workouts yet" : "\(workoutCount) workout\(workoutCount == 1 ? "" : "s")")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Spacer()
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
             }
 
-            Spacer()
+            if isLoading && steps == 0 && activeCalories == 0 {
+                // Loading state
+                HStack(spacing: 16) {
+                    ForEach(0..<4, id: \.self) { _ in
+                        ActivityMetricPlaceholder()
+                    }
+                }
+            } else {
+                // Activity metrics grid
+                HStack(spacing: 0) {
+                    ActivityMetricItem(
+                        icon: "figure.walk",
+                        value: formatSteps(steps),
+                        label: "Steps",
+                        color: .green
+                    )
 
-            Image(systemName: "figure.run")
-                .font(.title)
-                .foregroundStyle(.tint)
+                    Divider()
+                        .frame(height: 40)
+
+                    ActivityMetricItem(
+                        icon: "flame.fill",
+                        value: "\(activeCalories)",
+                        label: "Active Cal",
+                        color: .orange
+                    )
+
+                    Divider()
+                        .frame(height: 40)
+
+                    ActivityMetricItem(
+                        icon: "figure.run",
+                        value: "\(exerciseMinutes)",
+                        label: "Exercise",
+                        color: .cyan
+                    )
+
+                    Divider()
+                        .frame(height: 40)
+
+                    ActivityMetricItem(
+                        icon: "dumbbell.fill",
+                        value: "\(workoutCount)",
+                        label: "Workouts",
+                        color: .purple
+                    )
+                }
+            }
         }
         .padding()
         .background(Color(.secondarySystemBackground))
         .clipShape(.rect(cornerRadius: 16))
+    }
+
+    private func formatSteps(_ steps: Int) -> String {
+        if steps >= 1000 {
+            let thousands = Double(steps) / 1000.0
+            return String(format: "%.1fk", thousands)
+        }
+        return "\(steps)"
+    }
+}
+
+// MARK: - Activity Metric Item
+
+private struct ActivityMetricItem: View {
+    let icon: String
+    let value: String
+    let label: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(color)
+
+            Text(value)
+                .font(.headline)
+                .monospacedDigit()
+
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Activity Metric Placeholder
+
+private struct ActivityMetricPlaceholder: View {
+    var body: some View {
+        VStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(.tertiarySystemFill))
+                .frame(width: 24, height: 24)
+
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(.tertiarySystemFill))
+                .frame(width: 32, height: 16)
+
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(.tertiarySystemFill))
+                .frame(width: 40, height: 10)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
