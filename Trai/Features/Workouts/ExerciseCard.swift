@@ -32,7 +32,9 @@ struct ExerciseCard: View {
 
         let sets = last.totalSets
         let reps = last.bestSetReps
-        let weight = Int(last.bestSetWeightKg)
+        let weightKg = last.bestSetWeightKg
+        let displayWeight = usesMetricWeight ? weightKg : weightKg * 2.20462
+        let weight = Int(displayWeight)
 
         return "Last: \(sets)×\(reps) @ \(weight)\(weightUnit)"
     }
@@ -204,7 +206,9 @@ struct SetRow: View {
                     .focused($isWeightFocused)
                     .onChange(of: weightText) { _, newValue in
                         if let weight = Double(newValue) {
-                            onUpdateWeight(weight)
+                            // Convert to kg if user entered lbs
+                            let weightKg = usesMetricWeight ? weight : weight / 2.20462
+                            onUpdateWeight(weightKg)
                         }
                     }
 
@@ -278,10 +282,19 @@ struct SetRow: View {
             }
         }
         .onAppear {
-            weightText = set.weightKg > 0 ? formatWeight(set.weightKg) : ""
+            // Convert kg to display unit if needed
+            let displayWeight = usesMetricWeight ? set.weightKg : set.weightKg * 2.20462
+            weightText = displayWeight > 0 ? formatWeight(displayWeight) : ""
             repsText = set.reps > 0 ? "\(set.reps)" : ""
             notesText = set.notes
             showNotesField = !set.notes.isEmpty
+        }
+        .onChange(of: usesMetricWeight) { _, newUsesMetric in
+            // When unit preference changes, re-display the weight in new unit
+            if set.weightKg > 0 {
+                let displayWeight = newUsesMetric ? set.weightKg : set.weightKg * 2.20462
+                weightText = formatWeight(displayWeight)
+            }
         }
     }
 

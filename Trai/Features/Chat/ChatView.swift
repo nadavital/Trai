@@ -59,6 +59,10 @@ struct ChatView: View {
     @State var pendingPlanRecommendation: PlanRecommendation?
     @State var planRecommendationMessage: String?
 
+    // Reminder editing
+    @State var pendingReminderEdit: GeminiFunctionExecutor.SuggestedReminder?
+    @State var showReminderEditSheet = false
+
     let sessionTimeoutHours: Double = 1.5
 
     var profile: UserProfile? { profiles.first }
@@ -141,7 +145,7 @@ struct ChatView: View {
             onEditMeal: { message, meal in
                 editingMealSuggestion = (message, meal)
             },
-            onDismissMeal: dismissMealSuggestion,
+            onDismissMeal: { meal, message in dismissMealSuggestion(meal, for: message) },
             onViewLoggedMeal: { entryId in
                 viewingLoggedMealId = entryId
             },
@@ -156,6 +160,12 @@ struct ChatView: View {
             onDismissWorkout: dismissWorkoutSuggestion,
             onAcceptWorkoutLog: acceptWorkoutLogSuggestion,
             onDismissWorkoutLog: dismissWorkoutLogSuggestion,
+            onAcceptReminder: acceptReminderSuggestion,
+            onEditReminder: { reminder, message in
+                pendingReminderEdit = reminder
+                showReminderEditSheet = true
+            },
+            onDismissReminder: dismissReminderSuggestion,
             useExerciseWeightLbs: !(profile?.usesMetricExerciseWeight ?? true),
             onRetry: retryMessage,
             onImageTapped: { image in enlargedImage = image },

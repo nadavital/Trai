@@ -24,7 +24,10 @@ struct TraiApp: App {
                 LiveWorkout.self,
                 LiveWorkoutEntry.self,
                 ExerciseHistory.self,
-                CoachMemory.self
+                CoachMemory.self,
+                NutritionPlanVersion.self,
+                CustomReminder.self,
+                ReminderCompletion.self
             ])
 
             let modelConfiguration = ModelConfiguration(
@@ -37,6 +40,12 @@ struct TraiApp: App {
                 for: schema,
                 configurations: [modelConfiguration]
             )
+
+            // Run one-time migration to fix existing workout sets
+            let container = modelContainer
+            Task { @MainActor in
+                migrateExistingWorkoutSets(modelContainer: container)
+            }
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }
@@ -47,5 +56,98 @@ struct TraiApp: App {
             ContentView()
         }
         .modelContainer(modelContainer)
+    }
+}
+
+// MARK: - Data Migrations
+
+/// Fix existing completed workouts that have sets with data but not marked as completed
+@MainActor
+private func migrateExistingWorkoutSets(modelContainer: ModelContainer) {
+    let context = modelContainer.mainContext
+    let migrationKey = "workout_sets_completion_migration_v1"
+
+    // Check if migration already ran
+    if UserDefaults.standard.bool(forKey: migrationKey) {
+        return
+    }
+
+    // Fetch all completed workouts
+    let descriptor = FetchDescriptor<LiveWorkout>(
+        predicate: #Predicate { $0.completedAt != nil }
+    )
+
+    guard let workouts = try? context.fetch(descriptor) else { return }
+
+    var fixedCount = 0
+
+    for workout in workouts {
+        guard let entries = workout.entries else { continue }
+
+        for entry in entries {
+            var needsUpdate = false
+            var updatedSets: [LiveWorkoutEntry.SetData] = []
+
+            for set in entry.sets {
+                if set.reps > 0 && !set.completed {
+                    var fixedSet = set
+                    fixedSet.completed = true
+                    updatedSets.append(fixedSet)
+                    needsUpdate = true
+                } else {
+                    updatedSets.append(set)
+                }
+            }
+
+            if needsUpdate {
+                entry.sets = updatedSets
+                fixedCount += 1
+            }
+        }
+
+        // Also ensure ExerciseHistory exists for this workout
+        createMissingExerciseHistory(for: workout, context: context)
+    }
+
+    if fixedCount > 0 {
+        try? context.save()
+        print("Migration: Fixed \(fixedCount) exercise entries with unmarked sets")
+    }
+
+    // Mark migration as complete
+    UserDefaults.standard.set(true, forKey: migrationKey)
+}
+
+/// Create ExerciseHistory entries for completed workouts that are missing them
+@MainActor
+private func createMissingExerciseHistory(for workout: LiveWorkout, context: ModelContext) {
+    guard let entries = workout.entries,
+          let completedAt = workout.completedAt else { return }
+
+    // Fetch all existing history and filter in memory
+    // (SwiftData predicates don't support captured variables)
+    let historyDescriptor = FetchDescriptor<ExerciseHistory>()
+    let allHistories = (try? context.fetch(historyDescriptor)) ?? []
+
+    // Find histories around this workout's completion time
+    let startTime = completedAt.addingTimeInterval(-60)
+    let endTime = completedAt.addingTimeInterval(60)
+    let existingExerciseNames = Set(
+        allHistories
+            .filter { $0.performedAt >= startTime && $0.performedAt <= endTime }
+            .map { $0.exerciseName }
+    )
+
+    for entry in entries {
+        // Check if entry has completed sets
+        let completedSets = entry.sets.filter { $0.completed && !$0.isWarmup && $0.reps > 0 }
+        guard !completedSets.isEmpty else { continue }
+
+        // Skip if history already exists for this exercise
+        guard !existingExerciseNames.contains(entry.exerciseName) else { continue }
+
+        // Create new history entry
+        let history = ExerciseHistory(from: entry, performedAt: completedAt)
+        context.insert(history)
     }
 }

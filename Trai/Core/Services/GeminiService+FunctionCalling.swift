@@ -122,11 +122,12 @@ extension GeminiService {
     ) async throws -> ChatFunctionResult {
         var functionsCalled: [String] = []
         var textResponse = ""
-        var suggestedFood: SuggestedFoodEntry?
+        var suggestedFoods: [SuggestedFoodEntry] = []
         var planUpdate: GeminiFunctionExecutor.PlanUpdateSuggestion?
         var suggestedFoodEdit: SuggestedFoodEdit?
         var suggestedWorkout: SuggestedWorkoutEntry?
         var suggestedWorkoutLog: SuggestedWorkoutLog?
+        var suggestedReminder: GeminiFunctionExecutor.SuggestedReminder?
         var savedMemories: [String] = []
         var accumulatedParts: [[String: Any]] = []
 
@@ -187,7 +188,7 @@ extension GeminiService {
 
                 switch result {
                 case .suggestedFood(let food):
-                    suggestedFood = food
+                    suggestedFoods.append(food)
                     log("🍽️ Suggest: \(food.name) (\(food.calories) kcal)", type: .info)
 
                 case .suggestedPlanUpdate(let update):
@@ -220,6 +221,10 @@ extension GeminiService {
                     // Legacy: Workout started directly (shouldn't happen with new flow)
                     log("🏋️ Started workout: \(workout.name)", type: .info)
 
+                case .suggestedReminder(let reminder):
+                    suggestedReminder = reminder
+                    log("⏰ Reminder suggestion: \(reminder.title) at \(reminder.hour):\(String(format: "%02d", reminder.minute))", type: .info)
+
                 case .noAction:
                     break
                 }
@@ -240,23 +245,28 @@ extension GeminiService {
                     textResponse += followUp.text
                     onTextChunk?(textResponse)
                 }
-                if let food = followUp.suggestedFood { suggestedFood = food }
+                suggestedFoods.append(contentsOf: followUp.suggestedFoods)
                 if let plan = followUp.planUpdate { planUpdate = plan }
                 if let edit = followUp.suggestedFoodEdit { suggestedFoodEdit = edit }
+                if let reminder = followUp.suggestedReminder { suggestedReminder = reminder }
                 savedMemories.append(contentsOf: followUp.savedMemories)
             }
         }
 
         // Generate conversational responses for suggestions
-        if let food = suggestedFood, textResponse.isEmpty {
+        if !suggestedFoods.isEmpty, textResponse.isEmpty {
+            let foodNames = suggestedFoods.map { $0.name }.joined(separator: ", ")
+            let totalCalories = suggestedFoods.reduce(0) { $0 + $1.calories }
             let followUp = try await sendFunctionResultForSuggestion(
                 name: "suggest_food_log",
                 response: [
                     "status": "suggestion_ready",
-                    "food_name": food.name,
-                    "calories": food.calories,
-                    "protein": food.proteinGrams,
-                    "instruction": "The user will see a card with this food suggestion. Please write a brief, friendly message acknowledging what they ate. Be conversational and encouraging."
+                    "food_names": foodNames,
+                    "food_count": suggestedFoods.count,
+                    "total_calories": totalCalories,
+                    "instruction": suggestedFoods.count > 1
+                        ? "The user will see cards with \(suggestedFoods.count) food suggestions. Please write a brief, friendly message acknowledging what they ate. Be conversational and encouraging."
+                        : "The user will see a card with this food suggestion. Please write a brief, friendly message acknowledging what they ate. Be conversational and encouraging."
                 ],
                 previousContents: contents,
                 originalParts: accumulatedParts,
@@ -344,15 +354,41 @@ extension GeminiService {
             onTextChunk?(textResponse)
         }
 
+        // Fallback: If functions were called but no text was generated, ask the model to summarize
+        if textResponse.isEmpty && !functionsCalled.isEmpty {
+            let dataFunctions = ["get_user_plan", "get_food_log", "get_todays_food_log", "get_recent_workouts",
+                                 "get_muscle_recovery_status", "get_weight_history", "get_activity_summary"]
+            let calledDataFunctions = functionsCalled.filter { dataFunctions.contains($0) }
+
+            if !calledDataFunctions.isEmpty {
+                log("⚠️ No text generated after data functions, requesting summary", type: .info)
+                let followUp = try await sendFunctionResultForSuggestion(
+                    name: calledDataFunctions.first!,
+                    response: [
+                        "status": "data_retrieved",
+                        "instruction": "The data has been retrieved. Please summarize the information for the user in a helpful, conversational way. Answer their original question based on the data."
+                    ],
+                    previousContents: contents,
+                    originalParts: accumulatedParts,
+                    executor: executor
+                )
+                if !followUp.text.isEmpty {
+                    textResponse = followUp.text
+                    onTextChunk?(textResponse)
+                }
+            }
+        }
+
         log("✅ Complete: \(textResponse.count) chars, functions: \(functionsCalled.joined(separator: ", "))", type: .info)
 
         return ChatFunctionResult(
             message: textResponse,
-            suggestedFood: suggestedFood,
+            suggestedFoods: suggestedFoods,
             planUpdate: planUpdate,
             suggestedFoodEdit: suggestedFoodEdit,
             suggestedWorkout: suggestedWorkout,
             suggestedWorkoutLog: suggestedWorkoutLog,
+            suggestedReminder: suggestedReminder,
             functionsCalled: functionsCalled,
             savedMemories: savedMemories
         )

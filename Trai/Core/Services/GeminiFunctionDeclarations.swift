@@ -28,7 +28,8 @@ enum GeminiFunctionDeclarations {
             getWeightHistory,
             getActivitySummary,
             saveMemory,
-            deleteMemory
+            deleteMemory,
+            createReminder
         ]
     }
 
@@ -486,6 +487,42 @@ enum GeminiFunctionDeclarations {
                     ]
                 ],
                 "required": ["memory_content"]
+            ]
+        ]
+    }
+
+    // MARK: - Reminder Functions
+
+    /// Create a custom reminder for the user
+    static var createReminder: [String: Any] {
+        [
+            "name": "create_reminder",
+            "description": "Create a custom reminder for the user. Use when the user asks to be reminded about something, set an alarm, or schedule a recurring notification. The user must confirm before the reminder is created.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "title": [
+                        "type": "string",
+                        "description": "Short title for the reminder (e.g., 'Take vitamins', 'Drink water', 'Meal prep')"
+                    ],
+                    "body": [
+                        "type": "string",
+                        "description": "Optional longer description or message for the reminder"
+                    ],
+                    "hour": [
+                        "type": "integer",
+                        "description": "Hour of day for the reminder in 24-hour format (0-23)"
+                    ],
+                    "minute": [
+                        "type": "integer",
+                        "description": "Minute for the reminder (0-59)"
+                    ],
+                    "repeat_days": [
+                        "type": "string",
+                        "description": "Comma-separated weekday numbers for repeating (1=Sunday, 2=Monday, ..., 7=Saturday). Leave empty for daily reminders. Examples: '2,4,6' for Mon/Wed/Fri, '1,7' for weekends"
+                    ]
+                ],
+                "required": ["title", "hour", "minute"]
             ]
         ]
     }

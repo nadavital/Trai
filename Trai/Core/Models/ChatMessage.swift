@@ -32,11 +32,14 @@ final class ChatMessage {
     /// Food entry logged from this message (AI response with logMeal action)
     var loggedFoodEntryId: UUID?
 
-    /// Suggested meal data (JSON encoded) - for confirmation before logging
-    var suggestedMealData: Data?
+    /// Suggested meals data (JSON encoded array) - for confirmation before logging
+    var suggestedMealsData: Data?
 
-    /// Whether the user has dismissed the meal suggestion
-    var suggestedMealDismissed: Bool = false
+    /// IDs of meals that have been logged from this message (string UUIDs)
+    var loggedMealIds: [String] = []
+
+    /// IDs of meals that have been dismissed (string UUIDs)
+    var dismissedMealIds: [String] = []
 
     /// Suggested plan update data (JSON encoded) - for confirmation before applying
     var suggestedPlanData: Data?
@@ -67,23 +70,74 @@ final class ChatMessage {
         imageData != nil
     }
 
-    /// Whether this message has a pending meal suggestion (not yet logged or dismissed)
+    /// Whether this message has any pending meal suggestions (not yet logged or dismissed)
     var hasPendingMealSuggestion: Bool {
-        suggestedMealData != nil && loggedFoodEntryId == nil && !suggestedMealDismissed
+        !pendingMealSuggestions.isEmpty
     }
 
-    /// Decode the suggested meal data
+    /// Decode all suggested meals
+    var suggestedMeals: [SuggestedFoodEntry] {
+        guard let data = suggestedMealsData else { return [] }
+        return (try? JSONDecoder().decode([SuggestedFoodEntry].self, from: data)) ?? []
+    }
+
+    /// Get meals that are still pending (not logged or dismissed)
+    var pendingMealSuggestions: [(index: Int, meal: SuggestedFoodEntry)] {
+        suggestedMeals.enumerated().compactMap { index, meal in
+            let isLogged = loggedMealIds.contains(meal.id)
+            let isDismissed = dismissedMealIds.contains(meal.id)
+            return (isLogged || isDismissed) ? nil : (index, meal)
+        }
+    }
+
+    /// Get meals that have been logged
+    var loggedMealSuggestions: [(index: Int, meal: SuggestedFoodEntry)] {
+        suggestedMeals.enumerated().compactMap { index, meal in
+            let isLogged = loggedMealIds.contains(meal.id)
+            return isLogged ? (index, meal) : nil
+        }
+    }
+
+    /// Backward compatibility - returns the first suggested meal
     var suggestedMeal: SuggestedFoodEntry? {
-        guard let data = suggestedMealData else { return nil }
-        return try? JSONDecoder().decode(SuggestedFoodEntry.self, from: data)
+        suggestedMeals.first
     }
 
-    /// Set the suggested meal data
+    /// Set the suggested meals data (supports multiple meals)
+    func setSuggestedMeals(_ meals: [SuggestedFoodEntry]) {
+        if meals.isEmpty {
+            suggestedMealsData = nil
+        } else {
+            suggestedMealsData = try? JSONEncoder().encode(meals)
+        }
+        loggedMealIds = []
+        dismissedMealIds = []
+    }
+
+    /// Backward compatibility - set a single meal
     func setSuggestedMeal(_ meal: SuggestedFoodEntry?) {
         if let meal {
-            suggestedMealData = try? JSONEncoder().encode(meal)
+            setSuggestedMeals([meal])
         } else {
-            suggestedMealData = nil
+            suggestedMealsData = nil
+        }
+    }
+
+    /// Mark a meal as logged by its ID
+    func markMealLogged(mealId: String, entryId: UUID) {
+        if !loggedMealIds.contains(mealId) {
+            loggedMealIds.append(mealId)
+        }
+        // Also set legacy field for first meal
+        if suggestedMeals.first?.id == mealId {
+            loggedFoodEntryId = entryId
+        }
+    }
+
+    /// Mark a meal as dismissed by its ID
+    func markMealDismissed(mealId: String) {
+        if !dismissedMealIds.contains(mealId) {
+            dismissedMealIds.append(mealId)
         }
     }
 
@@ -230,6 +284,42 @@ final class ChatMessage {
             suggestedWorkoutLogData = try? JSONEncoder().encode(workoutLog)
         } else {
             suggestedWorkoutLogData = nil
+        }
+    }
+
+    // MARK: - Reminder Suggestions
+
+    /// Suggested reminder data (JSON encoded) - for confirmation before creating
+    var suggestedReminderData: Data?
+
+    /// Whether the user has dismissed the reminder suggestion
+    var suggestedReminderDismissed: Bool = false
+
+    /// Whether the reminder was created from this message
+    var reminderCreated: Bool = false
+
+    /// Whether this message has a pending reminder suggestion (not yet created or dismissed)
+    var hasPendingReminderSuggestion: Bool {
+        suggestedReminderData != nil && !reminderCreated && !suggestedReminderDismissed
+    }
+
+    /// Whether this message has a created reminder
+    var hasCreatedReminder: Bool {
+        suggestedReminderData != nil && reminderCreated
+    }
+
+    /// Decode the suggested reminder data
+    var suggestedReminder: GeminiFunctionExecutor.SuggestedReminder? {
+        guard let data = suggestedReminderData else { return nil }
+        return try? JSONDecoder().decode(GeminiFunctionExecutor.SuggestedReminder.self, from: data)
+    }
+
+    /// Set the suggested reminder data
+    func setSuggestedReminder(_ reminder: GeminiFunctionExecutor.SuggestedReminder?) {
+        if let reminder {
+            suggestedReminderData = try? JSONEncoder().encode(reminder)
+        } else {
+            suggestedReminderData = nil
         }
     }
 

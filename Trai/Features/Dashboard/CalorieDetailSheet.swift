@@ -7,15 +7,18 @@
 
 import SwiftUI
 import SwiftData
+import Charts
 
 struct CalorieDetailSheet: View {
     let entries: [FoodEntry]
     let goal: Int
+    var historicalEntries: [FoodEntry] = []
     var onAddFood: (() -> Void)?
     let onEditEntry: (FoodEntry) -> Void
     let onDeleteEntry: (FoodEntry) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var showTrends = true
 
     private var consumed: Int {
         entries.reduce(0) { $0 + $1.calories }
@@ -32,6 +35,10 @@ struct CalorieDetailSheet: View {
     /// Entries sorted chronologically (most recent first)
     private var sortedEntries: [FoodEntry] {
         entries.sorted { $0.loggedAt > $1.loggedAt }
+    }
+
+    private var trendData: [TrendsService.DailyNutrition] {
+        TrendsService.aggregateNutritionByDay(entries: historicalEntries, days: 7)
     }
 
     var body: some View {
@@ -56,6 +63,16 @@ struct CalorieDetailSheet: View {
                     .padding()
                     .background(Color(.secondarySystemBackground))
                     .clipShape(.rect(cornerRadius: 16))
+
+                    // 7-Day Trend Chart
+                    if !historicalEntries.isEmpty && showTrends {
+                        NutritionTrendChart(
+                            data: trendData,
+                            goal: goal,
+                            metric: .calories,
+                            title: "7-Day Trend"
+                        )
+                    }
 
                     // Food list
                     VStack(alignment: .leading, spacing: 12) {

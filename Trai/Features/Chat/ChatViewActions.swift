@@ -14,7 +14,8 @@ extension ChatView {
     func acceptMealSuggestion(_ meal: SuggestedFoodEntry, for message: ChatMessage) {
         let messageIndex = currentSessionMessages.firstIndex(where: { $0.id == message.id }) ?? 0
         let userMessage = messageIndex > 0 ? currentSessionMessages[messageIndex - 1] : nil
-        let imageData = userMessage?.imageData
+        // Only use image from user message if this is the first/only meal suggestion
+        let imageData = message.suggestedMeals.count <= 1 ? userMessage?.imageData : nil
 
         let entry = FoodEntry()
         entry.name = meal.name
@@ -35,15 +36,15 @@ extension ChatView {
         modelContext.insert(entry)
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            message.loggedFoodEntryId = entry.id
+            message.markMealLogged(mealId: meal.id, entryId: entry.id)
         }
 
         HapticManager.success()
     }
 
-    func dismissMealSuggestion(for message: ChatMessage) {
+    func dismissMealSuggestion(_ meal: SuggestedFoodEntry, for message: ChatMessage) {
         withAnimation(.easeOut(duration: 0.2)) {
-            message.suggestedMealDismissed = true
+            message.markMealDismissed(mealId: meal.id)
         }
         HapticManager.lightTap()
     }
@@ -54,6 +55,11 @@ extension ChatView {
 extension ChatView {
     func acceptPlanSuggestion(_ plan: PlanUpdateSuggestionEntry, for message: ChatMessage) {
         guard let profile else { return }
+
+        let currentWeight = weightEntries.first?.weightKg
+
+        // Archive current plan before updating
+        archiveCurrentPlan(profile: profile, reason: .chatAdjustment, userWeightKg: currentWeight)
 
         if let calories = plan.calories {
             profile.dailyCalorieGoal = calories
@@ -78,7 +84,6 @@ extension ChatView {
         }
 
         // Update assessment state - marks plan as reviewed with current weight as new baseline
-        let currentWeight = weightEntries.first?.weightKg
         planAssessmentService.markPlanReviewed(profile: profile, currentWeightKg: currentWeight)
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -86,6 +91,42 @@ extension ChatView {
         }
 
         HapticManager.success()
+    }
+
+    /// Archive the current nutrition plan to history before making changes
+    private func archiveCurrentPlan(profile: UserProfile, reason: PlanChangeReason, userWeightKg: Double?) {
+        // Create a NutritionPlan from current profile values
+        let currentPlan = NutritionPlan(
+            dailyTargets: NutritionPlan.DailyTargets(
+                calories: profile.dailyCalorieGoal,
+                protein: profile.dailyProteinGoal,
+                carbs: profile.dailyCarbsGoal,
+                fat: profile.dailyFatGoal,
+                fiber: profile.dailyFiberGoal,
+                sugar: profile.dailySugarGoal
+            ),
+            rationale: profile.aiPlanRationale,
+            macroSplit: NutritionPlan.MacroSplit(
+                proteinPercent: 0, // Will be calculated
+                carbsPercent: 0,
+                fatPercent: 0
+            ),
+            nutritionGuidelines: [],
+            mealTimingSuggestion: "",
+            weeklyAdjustments: nil,
+            warnings: nil,
+            progressInsights: nil
+        )
+
+        // Create and insert version record
+        let version = NutritionPlanVersion(
+            plan: currentPlan,
+            reason: reason,
+            userWeightKg: userWeightKg,
+            userGoal: profile.goal.rawValue
+        )
+
+        modelContext.insert(version)
     }
 
     func dismissPlanSuggestion(for message: ChatMessage) {
@@ -347,5 +388,50 @@ extension ChatView {
 
         // Send the review request message
         sendMessage("Can you review my nutrition plan and check if any updates are needed based on my progress?")
+    }
+}
+
+// MARK: - Reminder Suggestion Actions
+
+extension ChatView {
+    func acceptReminderSuggestion(_ suggestion: GeminiFunctionExecutor.SuggestedReminder, for message: ChatMessage) {
+        // Create the custom reminder
+        let reminder = CustomReminder(
+            title: suggestion.title,
+            body: suggestion.body,
+            hour: suggestion.hour,
+            minute: suggestion.minute,
+            repeatDays: suggestion.repeatDays,
+            isEnabled: true
+        )
+
+        modelContext.insert(reminder)
+
+        // Schedule the notification
+        Task {
+            let service = NotificationService()
+            await service.updateAuthorizationStatus()
+            await service.scheduleCustomReminder(reminder)
+        }
+
+        // Update message state
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            message.reminderCreated = true
+        }
+
+        HapticManager.success()
+    }
+
+    func editReminderSuggestion(_ suggestion: GeminiFunctionExecutor.SuggestedReminder, for message: ChatMessage) {
+        // Show the edit sheet with the suggestion prefilled
+        pendingReminderEdit = suggestion
+        showReminderEditSheet = true
+    }
+
+    func dismissReminderSuggestion(for message: ChatMessage) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            message.suggestedReminderDismissed = true
+        }
+        HapticManager.lightTap()
     }
 }

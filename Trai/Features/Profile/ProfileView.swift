@@ -26,6 +26,7 @@ struct ProfileView: View {
     @State var showPlanSheet = false
     @State var showEditSheet = false
     @State var showMacroTrackingSheet = false
+    @State var customRemindersCount = 0
 
     // For navigating to Trai tab with plan review
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
@@ -95,7 +96,17 @@ struct ProfileView: View {
                     MacroTrackingSettingsSheet(profile: profile)
                 }
             }
+            .onAppear {
+                fetchCustomRemindersCount()
+            }
         }
+    }
+
+    private func fetchCustomRemindersCount() {
+        let descriptor = FetchDescriptor<CustomReminder>(
+            predicate: #Predicate { $0.isEnabled }
+        )
+        customRemindersCount = (try? modelContext.fetchCount(descriptor)) ?? 0
     }
 
     // MARK: - Header Card

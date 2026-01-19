@@ -39,7 +39,7 @@ struct LiveWorkoutView: View {
         NavigationStack {
             ZStack(alignment: .bottom) {
                 // Main content
-                ScrollView {
+                ScrollView(showsIndicators: false) {
                     VStack(spacing: 16) {
                         // Timer header (uses TimelineView for scroll performance)
                         WorkoutTimerHeader(
@@ -130,6 +130,10 @@ struct LiveWorkoutView: View {
                         Color.clear.frame(height: 80)
                     }
                     .padding()
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onTapGesture {
+                    dismissKeyboard()
                 }
 
                 // Bottom bar
@@ -229,16 +233,32 @@ struct LiveWorkoutView: View {
 
     // MARK: - Helpers
 
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
     private func buildWorkoutContext() -> GeminiService.WorkoutContext {
         let entries = viewModel.entries
+
+        // Count exercises with ALL sets having data entered as "completed"
         let completedExercises = entries.filter { entry in
-            entry.sets.allSatisfy(\.completed)
+            !entry.sets.isEmpty && entry.sets.allSatisfy { $0.reps > 0 }
         }.count
 
-        // Find current exercise (first with incomplete sets)
+        // Find current exercise (first with sets that don't have data yet)
         let currentExercise = entries.first { entry in
-            !entry.sets.allSatisfy(\.completed)
-        }?.exerciseName
+            entry.sets.isEmpty || entry.sets.contains { $0.reps == 0 }
+        }?.exerciseName ?? entries.last?.exerciseName  // Default to last if all have data
+
+        // Count sets with data entered (reps > 0) as completed for context
+        let setsWithData = entries.reduce(0) { total, entry in
+            total + entry.sets.filter { $0.reps > 0 && !$0.isWarmup }.count
+        }
+
+        // Calculate volume from sets with data
+        let volumeWithData = entries.reduce(0.0) { total, entry in
+            total + entry.sets.filter { $0.reps > 0 && !$0.isWarmup }.reduce(0.0) { $0 + $1.volume }
+        }
 
         return GeminiService.WorkoutContext(
             workoutName: viewModel.workoutName,
@@ -246,8 +266,8 @@ struct LiveWorkoutView: View {
             exercisesCompleted: completedExercises,
             exercisesTotal: entries.count,
             currentExercise: currentExercise,
-            setsCompleted: viewModel.completedSets,
-            totalVolume: viewModel.totalVolume,
+            setsCompleted: setsWithData,
+            totalVolume: volumeWithData,
             targetMuscleGroups: viewModel.targetMuscleGroups
         )
     }

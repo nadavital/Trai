@@ -25,8 +25,13 @@ struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var healthKitService = HealthKitService()
 
+    // Custom reminders (fetched manually to avoid @Query freeze)
+    @State private var customReminders: [CustomReminder] = []
+    @State private var todaysCompletedReminderIds: Set<UUID> = []
+
     // Sheet presentation state
     @State private var showingLogFood = false
+    @State private var showingReminders = false
     @State private var showingAddWorkout = false
     @State private var showingLogWeight = false
     @State private var showingCalorieDetail = false
@@ -54,6 +59,13 @@ struct DashboardView: View {
         let startOfDay = calendar.startOfDay(for: selectedDate)
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
         return allFoodEntries.filter { $0.loggedAt >= startOfDay && $0.loggedAt < endOfDay }
+    }
+
+    /// Last 7 days of food entries for trend charts
+    private var last7DaysFoodEntries: [FoodEntry] {
+        let calendar = Calendar.current
+        let startDate = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: Date()))!
+        return allFoodEntries.filter { $0.loggedAt >= startDate }
     }
 
     private var selectedDayWorkouts: [WorkoutSession] {
@@ -95,6 +107,16 @@ struct DashboardView: View {
                             onAddWorkout: { showingAddWorkout = true },
                             onLogWeight: { showingLogWeight = true }
                         )
+
+                        // Today's reminders
+                        if !todaysReminderItems.isEmpty {
+                            TodaysRemindersCard(
+                                reminders: todaysReminderItems,
+                                onReminderTap: { _ in showingReminders = true },
+                                onComplete: completeReminder,
+                                onViewAll: { showingReminders = true }
+                            )
+                        }
                     }
 
                     CalorieProgressCard(
@@ -155,6 +177,7 @@ struct DashboardView: View {
             }
             .navigationTitle("Dashboard")
             .task {
+                fetchCustomReminders()
                 await loadActivityData()
             }
             .onChange(of: selectedDate) { _, newDate in
@@ -184,6 +207,7 @@ struct DashboardView: View {
                 CalorieDetailSheet(
                     entries: selectedDayFoodEntries,
                     goal: profile?.dailyCalorieGoal ?? 2000,
+                    historicalEntries: last7DaysFoodEntries,
                     onAddFood: isViewingToday ? {
                         showingCalorieDetail = false
                         Task {
@@ -210,6 +234,7 @@ struct DashboardView: View {
                     fiberGoal: profile?.dailyFiberGoal ?? 30,
                     sugarGoal: profile?.dailySugarGoal ?? 50,
                     enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
+                    historicalEntries: last7DaysFoodEntries,
                     onAddFood: isViewingToday ? {
                         showingMacroDetail = false
                         Task {
@@ -228,6 +253,16 @@ struct DashboardView: View {
             }
             .sheet(item: $entryToEdit) { entry in
                 EditFoodEntrySheet(entry: entry)
+            }
+            .sheet(isPresented: $showingReminders) {
+                if let profile {
+                    NavigationStack {
+                        ReminderSettingsView(profile: profile)
+                    }
+                }
+            }
+            .onChange(of: showingReminders) { _, isShowing in
+                if !isShowing { fetchCustomReminders() }
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -265,6 +300,65 @@ struct DashboardView: View {
 
     private var totalSugar: Double {
         selectedDayFoodEntries.reduce(0) { $0 + ($1.sugarGrams ?? 0) }
+    }
+
+    private var todaysReminderItems: [TodaysRemindersCard.ReminderItem] {
+        guard let profile else { return [] }
+
+        let enabledMeals = Set(profile.enabledMealReminders.split(separator: ",").map(String.init))
+        let workoutDays = Set(profile.workoutReminderDays.split(separator: ",").compactMap { Int($0) })
+
+        let allItems = TodaysRemindersCard.buildReminderItems(
+            from: customReminders,
+            mealRemindersEnabled: profile.mealRemindersEnabled,
+            enabledMeals: enabledMeals,
+            workoutRemindersEnabled: profile.workoutRemindersEnabled,
+            workoutDays: workoutDays,
+            workoutHour: profile.workoutReminderHour,
+            workoutMinute: profile.workoutReminderMinute
+        )
+
+        // Filter out completed reminders
+        return allItems.filter { !todaysCompletedReminderIds.contains($0.id) }
+    }
+
+    private func fetchCustomReminders() {
+        let descriptor = FetchDescriptor<CustomReminder>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        customReminders = (try? modelContext.fetch(descriptor)) ?? []
+
+        // Fetch today's completed reminder IDs
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let completionDescriptor = FetchDescriptor<ReminderCompletion>(
+            predicate: #Predicate { $0.completedAt >= startOfDay }
+        )
+        let completions = (try? modelContext.fetch(completionDescriptor)) ?? []
+        todaysCompletedReminderIds = Set(completions.map { $0.reminderId })
+    }
+
+    private func completeReminder(_ reminder: TodaysRemindersCard.ReminderItem) {
+        // Calculate if completed on time (within 30 min of scheduled time)
+        let calendar = Calendar.current
+        let now = Date()
+        let currentHour = calendar.component(.hour, from: now)
+        let currentMinute = calendar.component(.minute, from: now)
+        let currentMinutes = currentHour * 60 + currentMinute
+        let reminderMinutes = reminder.hour * 60 + reminder.minute
+        let wasOnTime = currentMinutes <= reminderMinutes + 30
+
+        // Create and save completion record
+        let completion = ReminderCompletion(
+            reminderId: reminder.id,
+            completedAt: now,
+            wasOnTime: wasOnTime
+        )
+        modelContext.insert(completion)
+
+        // Update local state immediately for responsive UI
+        todaysCompletedReminderIds.insert(reminder.id)
+
+        HapticManager.success()
     }
 
     private func loadActivityData() async {

@@ -191,7 +191,66 @@ final class LiveWorkoutViewModel {
         startTimer()
         loadLastPerformances()
         loadExerciseUsageFrequency()
+
+        // If no template suggestions, generate from target muscle groups
+        if exerciseSuggestions.isEmpty {
+            loadSuggestionsFromTargetMuscles()
+        }
+
         loadSuggestionPerformances()
+    }
+
+    /// Load exercise suggestions based on workout's target muscle groups
+    private func loadSuggestionsFromTargetMuscles() {
+        guard let modelContext,
+              !workout.targetMuscleGroups.isEmpty else { return }
+
+        // Parse target muscle groups from comma-separated string
+        let targetMuscles = workout.targetMuscleGroups
+            .components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        guard !targetMuscles.isEmpty else { return }
+
+        // Map LiveWorkout.MuscleGroup to Exercise.MuscleGroup strings
+        let exerciseMuscleGroups = targetMuscles.flatMap { muscle -> [String] in
+            switch muscle {
+            case "chest", "back", "shoulders", "biceps", "triceps", "core":
+                return [muscle]
+            case "quads", "hamstrings", "glutes", "calves":
+                return ["legs"]  // Exercise model uses "legs" for all leg muscles
+            case "fullBody":
+                return ["chest", "back", "shoulders", "biceps", "triceps", "core", "legs"]
+            default:
+                return [muscle]
+            }
+        }
+
+        // Fetch exercises for target muscle groups
+        let descriptor = FetchDescriptor<Exercise>()
+        guard let exercises = try? modelContext.fetch(descriptor) else { return }
+
+        let uniqueMuscles = Set(exerciseMuscleGroups)
+        let matchingExercises = exercises.filter { exercise in
+            guard let muscleGroup = exercise.muscleGroup else { return false }
+            return uniqueMuscles.contains(muscleGroup)
+        }
+
+        // Sort by frequency (user's preferred exercises first)
+        let sortedExercises = matchingExercises.sorted { a, b in
+            (exerciseUsageFrequency[a.name] ?? 0) > (exerciseUsageFrequency[b.name] ?? 0)
+        }
+
+        // Create suggestions (limit to reasonable number)
+        exerciseSuggestions = sortedExercises.prefix(12).map { exercise in
+            ExerciseSuggestion(
+                exerciseName: exercise.name,
+                muscleGroup: exercise.muscleGroup ?? "other",
+                defaultSets: 3,
+                defaultReps: 10
+            )
+        }
     }
 
     /// Load exercise usage frequency from history
@@ -524,6 +583,20 @@ final class LiveWorkoutViewModel {
     func finishWorkout() {
         stopTimer()
         workout.completedAt = Date()
+
+        // Auto-mark all sets with data as completed
+        // (since set checking was removed from UI, we infer completion from having data)
+        for entry in entries {
+            for index in entry.sets.indices {
+                let set = entry.sets[index]
+                // Mark as completed if it has reps (user entered data)
+                if set.reps > 0 && !set.completed {
+                    var updatedSet = set
+                    updatedSet.completed = true
+                    entry.updateSet(at: index, with: updatedSet)
+                }
+            }
+        }
 
         // Create ExerciseHistory entries for each exercise
         createExerciseHistoryEntries()

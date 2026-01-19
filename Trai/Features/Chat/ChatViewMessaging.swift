@@ -99,6 +99,8 @@ extension ChatView {
             return "Remembering..."
         case "delete_memory":
             return "Updating memory..."
+        case "create_reminder":
+            return "Creating reminder..."
         default:
             return "Working..."
         }
@@ -208,9 +210,9 @@ extension ChatView {
     }
 
     func handleChatResult(_ result: GeminiService.ChatFunctionResult, aiMessage: ChatMessage) {
-        if let foodData = result.suggestedFood {
+        if !result.suggestedFoods.isEmpty {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                aiMessage.setSuggestedMeal(foodData)
+                aiMessage.setSuggestedMeals(result.suggestedFoods)
             }
             HapticManager.lightTap()
         }
@@ -247,6 +249,13 @@ extension ChatView {
         if let workoutLogData = result.suggestedWorkoutLog {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 aiMessage.setSuggestedWorkoutLog(workoutLogData)
+            }
+            HapticManager.lightTap()
+        }
+
+        if let reminderData = result.suggestedReminder {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                aiMessage.setSuggestedReminder(reminderData)
             }
             HapticManager.lightTap()
         }

@@ -166,6 +166,7 @@ struct PreferenceRow<Content: View>: View {
             }
         }
         .padding()
+        .contentShape(Rectangle())
     }
 }
 

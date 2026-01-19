@@ -23,7 +23,7 @@ struct ChatContentList: View {
     let onSuggestionTapped: (String) -> Void
     let onAcceptMeal: (SuggestedFoodEntry, ChatMessage) -> Void
     let onEditMeal: (ChatMessage, SuggestedFoodEntry) -> Void
-    let onDismissMeal: (ChatMessage) -> Void
+    let onDismissMeal: (SuggestedFoodEntry, ChatMessage) -> Void
     let onViewLoggedMeal: (UUID) -> Void
     let onAcceptPlan: (PlanUpdateSuggestionEntry, ChatMessage) -> Void
     let onEditPlan: (ChatMessage, PlanUpdateSuggestionEntry) -> Void
@@ -34,6 +34,9 @@ struct ChatContentList: View {
     let onDismissWorkout: (ChatMessage) -> Void
     let onAcceptWorkoutLog: (SuggestedWorkoutLog, ChatMessage) -> Void
     let onDismissWorkoutLog: (ChatMessage) -> Void
+    let onAcceptReminder: (GeminiFunctionExecutor.SuggestedReminder, ChatMessage) -> Void
+    let onEditReminder: (GeminiFunctionExecutor.SuggestedReminder, ChatMessage) -> Void
+    let onDismissReminder: (ChatMessage) -> Void
     var useExerciseWeightLbs: Bool = false
     let onRetry: (ChatMessage) -> Void
     var onImageTapped: ((UIImage) -> Void)?
@@ -68,7 +71,7 @@ struct ChatContentList: View {
                 )
             } else {
                 ForEach(messages) { message in
-                    if !message.content.isEmpty || message.isFromUser || message.errorMessage != nil || message.hasPendingMealSuggestion || message.loggedFoodEntryId != nil || message.hasPendingPlanSuggestion || message.planUpdateApplied || message.hasPendingFoodEdit || message.hasAppliedFoodEdit || message.hasPendingWorkoutSuggestion || message.hasStartedWorkout || message.hasPendingWorkoutLogSuggestion || message.hasSavedWorkoutLog {
+                    if !message.content.isEmpty || message.isFromUser || message.errorMessage != nil || message.hasPendingMealSuggestion || message.loggedFoodEntryId != nil || message.hasPendingPlanSuggestion || message.planUpdateApplied || message.hasPendingFoodEdit || message.hasAppliedFoodEdit || message.hasPendingWorkoutSuggestion || message.hasStartedWorkout || message.hasPendingWorkoutLogSuggestion || message.hasSavedWorkoutLog || message.hasPendingReminderSuggestion || message.hasCreatedReminder {
                         VStack(spacing: 0) {
                             ChatBubble(
                                 message: message,
@@ -83,8 +86,8 @@ struct ChatContentList: View {
                                 onEditMeal: { meal in
                                     onEditMeal(message, meal)
                                 },
-                                onDismissMeal: {
-                                    onDismissMeal(message)
+                                onDismissMeal: { meal in
+                                    onDismissMeal(meal, message)
                                 },
                                 onViewLoggedMeal: { entryId in
                                     onViewLoggedMeal(entryId)
@@ -115,6 +118,15 @@ struct ChatContentList: View {
                                 },
                                 onDismissWorkoutLog: {
                                     onDismissWorkoutLog(message)
+                                },
+                                onAcceptReminder: { reminder in
+                                    onAcceptReminder(reminder, message)
+                                },
+                                onEditReminder: { reminder in
+                                    onEditReminder(reminder, message)
+                                },
+                                onDismissReminder: {
+                                    onDismissReminder(message)
                                 },
                                 useExerciseWeightLbs: useExerciseWeightLbs,
                                 onRetry: {

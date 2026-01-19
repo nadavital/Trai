@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import Charts
 
 struct MacroDetailSheet: View {
     let entries: [FoodEntry]
@@ -16,10 +17,12 @@ struct MacroDetailSheet: View {
     var fiberGoal: Int = 30
     var sugarGoal: Int = 50
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
+    var historicalEntries: [FoodEntry] = []
     var onAddFood: (() -> Void)?
     let onEditEntry: (FoodEntry) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var showTrends = false
 
     private var macroValues: [MacroType: Double] {
         [
@@ -45,6 +48,10 @@ struct MacroDetailSheet: View {
         MacroType.displayOrder.filter { enabledMacros.contains($0) }
     }
 
+    private var trendData: [TrendsService.DailyNutrition] {
+        TrendsService.aggregateNutritionByDay(entries: historicalEntries, days: 7)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -66,6 +73,16 @@ struct MacroDetailSheet: View {
                             CalorieContributionCard(
                                 macroValues: macroValues,
                                 enabledMacros: enabledMacros
+                            )
+                        }
+
+                        // 7-Day Trends (collapsible)
+                        if !historicalEntries.isEmpty {
+                            MacroTrendsSection(
+                                trendData: trendData,
+                                macroGoals: macroGoals,
+                                enabledMacros: enabledMacros,
+                                isExpanded: $showTrends
                             )
                         }
 
@@ -406,6 +423,68 @@ private struct MacroValue: View {
                 .foregroundStyle(.secondary)
         }
         .frame(width: 32)
+    }
+}
+
+// MARK: - Macro Trends Section
+
+private struct MacroTrendsSection: View {
+    let trendData: [TrendsService.DailyNutrition]
+    let macroGoals: [MacroType: Int]
+    let enabledMacros: Set<MacroType>
+    @Binding var isExpanded: Bool
+
+    private var orderedMacros: [MacroType] {
+        MacroType.displayOrder.filter { enabledMacros.contains($0) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header with expand/collapse
+            Button {
+                withAnimation(.spring(duration: 0.3)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Label("7-Day Trends", systemImage: "chart.line.uptrend.xyaxis")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    Spacer()
+
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                // Show a chart for each enabled macro
+                ForEach(orderedMacros) { macro in
+                    NutritionTrendChart(
+                        data: trendData,
+                        goal: macroGoals[macro] ?? 100,
+                        metric: metricFor(macro),
+                        title: "\(macro.displayName) Trend"
+                    )
+                }
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(.rect(cornerRadius: 16))
+    }
+
+    private func metricFor(_ macro: MacroType) -> NutritionTrendChart.NutritionMetric {
+        switch macro {
+        case .protein: .protein
+        case .carbs: .carbs
+        case .fat: .fat
+        case .fiber: .fiber
+        case .sugar: .sugar
+        }
     }
 }
 

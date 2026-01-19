@@ -34,7 +34,8 @@ struct ChatFoodAnalysisResult: Sendable {
 }
 
 /// Food entry suggested by AI for logging
-struct SuggestedFoodEntry: Codable, Sendable {
+struct SuggestedFoodEntry: Codable, Sendable, Identifiable {
+    var id: String = UUID().uuidString
     let name: String
     let calories: Int
     let proteinGrams: Double
@@ -68,7 +69,8 @@ struct SuggestedFoodEntry: Codable, Sendable {
         emoji ?? "🍽️"
     }
 
-    init(name: String, calories: Int, proteinGrams: Double, carbsGrams: Double, fatGrams: Double, fiberGrams: Double? = nil, sugarGrams: Double? = nil, servingSize: String?, emoji: String? = nil, loggedAtTime: String? = nil) {
+    init(id: String = UUID().uuidString, name: String, calories: Int, proteinGrams: Double, carbsGrams: Double, fatGrams: Double, fiberGrams: Double? = nil, sugarGrams: Double? = nil, servingSize: String?, emoji: String? = nil, loggedAtTime: String? = nil) {
+        self.id = id
         self.name = name
         self.calories = calories
         self.proteinGrams = proteinGrams

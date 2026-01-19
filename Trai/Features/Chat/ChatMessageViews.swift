@@ -130,7 +130,7 @@ struct ChatBubble: View {
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     var onAcceptMeal: ((SuggestedFoodEntry) -> Void)?
     var onEditMeal: ((SuggestedFoodEntry) -> Void)?
-    var onDismissMeal: (() -> Void)?
+    var onDismissMeal: ((SuggestedFoodEntry) -> Void)?
     var onViewLoggedMeal: ((UUID) -> Void)?
     var onAcceptPlan: ((PlanUpdateSuggestionEntry) -> Void)?
     var onEditPlan: ((PlanUpdateSuggestionEntry) -> Void)?
@@ -141,6 +141,9 @@ struct ChatBubble: View {
     var onDismissWorkout: (() -> Void)?
     var onAcceptWorkoutLog: ((SuggestedWorkoutLog) -> Void)?
     var onDismissWorkoutLog: (() -> Void)?
+    var onAcceptReminder: ((GeminiFunctionExecutor.SuggestedReminder) -> Void)?
+    var onEditReminder: ((GeminiFunctionExecutor.SuggestedReminder) -> Void)?
+    var onDismissReminder: (() -> Void)?
     var useExerciseWeightLbs: Bool = false
     var onRetry: (() -> Void)?
     var onImageTapped: ((UIImage) -> Void)?
@@ -186,14 +189,14 @@ struct ChatBubble: View {
                             .textSelection(.enabled)
                     }
 
-                    // Show meal suggestion card if pending
-                    if message.hasPendingMealSuggestion, let meal = message.suggestedMeal {
+                    // Show meal suggestion cards for all pending meals
+                    ForEach(message.pendingMealSuggestions, id: \.meal.id) { _, meal in
                         SuggestedMealCard(
                             meal: meal,
                             enabledMacros: enabledMacros,
                             onAccept: { onAcceptMeal?(meal) },
                             onEdit: { onEditMeal?(meal) },
-                            onDismiss: { onDismissMeal?() }
+                            onDismiss: { onDismissMeal?(meal) }
                         )
                         .transition(.asymmetric(
                             insertion: .scale(scale: 0.9).combined(with: .opacity),
@@ -220,14 +223,16 @@ struct ChatBubble: View {
                         ))
                     }
 
-                    // Show logged meal indicator (after message content)
-                    if let entryId = message.loggedFoodEntryId {
-                        LoggedMealBadge(
-                            meal: message.suggestedMeal,
-                            foodEntryId: entryId,
-                            onTap: { onViewLoggedMeal?(entryId) }
-                        )
-                        .transition(.scale.combined(with: .opacity))
+                    // Show logged meal badges for all logged meals
+                    ForEach(message.loggedMealSuggestions, id: \.meal.id) { _, meal in
+                        if let entryId = UUID(uuidString: meal.id) ?? message.loggedFoodEntryId {
+                            LoggedMealBadge(
+                                meal: meal,
+                                foodEntryId: entryId,
+                                onTap: { onViewLoggedMeal?(entryId) }
+                            )
+                            .transition(.scale.combined(with: .opacity))
+                        }
                     }
 
                     // Show food edit suggestion card if pending
@@ -288,6 +293,26 @@ struct ChatBubble: View {
                             .transition(.scale.combined(with: .opacity))
                     }
 
+                    // Show reminder suggestion card if pending
+                    if message.hasPendingReminderSuggestion, let reminder = message.suggestedReminder {
+                        ReminderSuggestionCard(
+                            suggestion: reminder,
+                            onConfirm: { onAcceptReminder?(reminder) },
+                            onEdit: { onEditReminder?(reminder) },
+                            onDismiss: { onDismissReminder?() }
+                        )
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: 0.9).combined(with: .opacity),
+                            removal: .scale(scale: 0.95).combined(with: .opacity)
+                        ))
+                    }
+
+                    // Show reminder created badge
+                    if message.hasCreatedReminder, let reminder = message.suggestedReminder {
+                        CreatedReminderChip(suggestion: reminder)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+
                     // Show plan update applied indicator (tappable to view details)
                     if message.planUpdateApplied, let plan = message.suggestedPlan {
                         PlanUpdateAppliedBadge(plan: plan) {
@@ -313,6 +338,8 @@ struct ChatBubble: View {
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasStartedWorkout)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasPendingWorkoutLogSuggestion)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasSavedWorkoutLog)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasPendingReminderSuggestion)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasCreatedReminder)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 

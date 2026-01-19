@@ -81,6 +81,35 @@ final class UserProfile {
     // Plan assessment state (JSON for CloudKit compatibility)
     var planAssessmentStateJSON: String?
 
+    // MARK: - Reminder Preferences
+
+    /// Whether meal reminders are enabled
+    var mealRemindersEnabled: Bool = false
+
+    /// Which meals to remind about (stored as comma-separated: "breakfast,lunch,dinner")
+    var enabledMealReminders: String = "breakfast,lunch,dinner"
+
+    /// Whether workout reminders are enabled
+    var workoutRemindersEnabled: Bool = false
+
+    /// Workout reminder time (hour 0-23)
+    var workoutReminderHour: Int = 17
+
+    /// Workout reminder time (minute 0-59)
+    var workoutReminderMinute: Int = 0
+
+    /// Days to remind about workouts (comma-separated weekday numbers: "2,4,6" for Mon/Wed/Fri)
+    var workoutReminderDays: String = "2,4,6"
+
+    /// Whether weekly weight reminder is enabled
+    var weightReminderEnabled: Bool = false
+
+    /// Weight reminder weekday (1=Sun, 2=Mon, ..., 7=Sat)
+    var weightReminderWeekday: Int = 1
+
+    /// Weight reminder hour
+    var weightReminderHour: Int = 8
+
     var createdAt: Date = Date()
     var hasCompletedOnboarding: Bool = false
 

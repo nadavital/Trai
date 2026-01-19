@@ -81,20 +81,33 @@ extension ProfileView {
                 }
             }
 
-            // Review with Trai button
-            Button {
-                pendingPlanReviewRequest = true
-                selectedTabRaw = AppTab.trai.rawValue
-                HapticManager.lightTap()
-            } label: {
-                HStack {
-                    Image(systemName: "sparkles")
-                    Text("Review with Trai")
+            HStack(spacing: 12) {
+                // Review with Trai button
+                Button {
+                    pendingPlanReviewRequest = true
+                    selectedTabRaw = AppTab.trai.rawValue
+                    HapticManager.lightTap()
+                } label: {
+                    HStack {
+                        Image(systemName: "sparkles")
+                        Text("Review with Trai")
+                    }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.bordered)
+                .tint(.purple)
+
+                // Plan History link
+                NavigationLink {
+                    PlanHistoryView()
+                } label: {
+                    HStack {
+                        Image(systemName: "clock.arrow.circlepath")
+                        Text("History")
+                    }
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.bordered)
-            .tint(.purple)
 
             if let currentWeight = weightEntries.first?.weightKg,
                planService.shouldPromptForRecalculation(profile: profile, currentWeight: currentWeight),
@@ -288,6 +301,23 @@ extension ProfileView {
                     .pickerStyle(.segmented)
                     .frame(width: 110)
                 }
+
+                Divider()
+                    .padding(.leading, 56)
+
+                // Reminders row
+                NavigationLink {
+                    ReminderSettingsView(profile: profile)
+                } label: {
+                    PreferenceRow(
+                        icon: "bell.fill",
+                        iconColor: .red,
+                        title: "Reminders",
+                        value: remindersSummary(profile),
+                        showChevron: true
+                    )
+                }
+                .buttonStyle(.plain)
             }
             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
         }
@@ -308,6 +338,27 @@ extension ProfileView {
             return "All macros"
         } else {
             return "\(count) macros"
+        }
+    }
+
+    func remindersSummary(_ profile: UserProfile) -> String {
+        var builtInCount = 0
+        if profile.mealRemindersEnabled { builtInCount += 1 }
+        if profile.workoutRemindersEnabled { builtInCount += 1 }
+        if profile.weightReminderEnabled { builtInCount += 1 }
+
+        let totalCount = builtInCount + customRemindersCount
+
+        if totalCount == 0 {
+            return "Off"
+        } else if customRemindersCount > 0 && builtInCount == 0 {
+            return "\(customRemindersCount) custom"
+        } else if customRemindersCount > 0 {
+            return "\(totalCount) active"
+        } else if builtInCount == 3 {
+            return "All enabled"
+        } else {
+            return "\(builtInCount) enabled"
         }
     }
 

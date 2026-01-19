@@ -406,7 +406,9 @@ extension GeminiService {
 
                 if let functionCall = part["functionCall"] as? [String: Any],
                    let functionName = functionCall["name"] as? String {
-                    if result.suggestedFood != nil || result.planUpdate != nil || result.suggestedFoodEdit != nil {
+                    // Allow multiple food suggestions but stop chain for other types
+                    let hasNonFoodSuggestion = result.planUpdate != nil || result.suggestedFoodEdit != nil
+                    if hasNonFoodSuggestion && functionName != "suggest_food_log" {
                         log("⏭️ Skipping \(functionName) - already have suggestion", type: .info)
                         continue
                     }
@@ -424,8 +426,8 @@ extension GeminiService {
 
                     switch execResult {
                     case .suggestedFood(let food):
-                        result.suggestedFood = food
-                        log("🍽️ Got food suggestion - stopping chain", type: .info)
+                        result.suggestedFoods.append(food)
+                        log("🍽️ Got food suggestion (\(result.suggestedFoods.count) total)", type: .info)
 
                     case .suggestedPlanUpdate(let update):
                         result.planUpdate = update
@@ -456,6 +458,10 @@ extension GeminiService {
                         // User should navigate to workout view
                         _ = workout
 
+                    case .suggestedReminder(let reminder):
+                        result.suggestedReminder = reminder
+                        log("⏰ Got reminder suggestion - stopping chain", type: .info)
+
                     case .noAction:
                         break
                     }
@@ -463,7 +469,7 @@ extension GeminiService {
             }
         }
 
-        let hasSuggestion = result.suggestedFood != nil || result.planUpdate != nil || result.suggestedFoodEdit != nil || result.suggestedWorkout != nil || result.suggestedWorkoutLog != nil
+        let hasSuggestion = !result.suggestedFoods.isEmpty || result.planUpdate != nil || result.suggestedFoodEdit != nil || result.suggestedWorkout != nil || result.suggestedWorkoutLog != nil || result.suggestedReminder != nil
         if !additionalFunctionResults.isEmpty && !hasSuggestion {
             let chainedResult = try await sendParallelFunctionResults(
                 functionResults: additionalFunctionResults,
@@ -477,14 +483,15 @@ extension GeminiService {
             if !chainedResult.text.isEmpty {
                 result.text += chainedResult.text
             }
-            if let food = chainedResult.suggestedFood {
-                result.suggestedFood = food
-            }
+            result.suggestedFoods.append(contentsOf: chainedResult.suggestedFoods)
             if let plan = chainedResult.planUpdate {
                 result.planUpdate = plan
             }
             if let edit = chainedResult.suggestedFoodEdit {
                 result.suggestedFoodEdit = edit
+            }
+            if let reminder = chainedResult.suggestedReminder {
+                result.suggestedReminder = reminder
             }
             result.savedMemories.append(contentsOf: chainedResult.savedMemories)
         }
