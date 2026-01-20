@@ -38,6 +38,9 @@ final class ChatMessage {
     /// IDs of meals that have been logged from this message (string UUIDs)
     var loggedMealIds: [String] = []
 
+    /// Mapping from meal ID to actual FoodEntry ID (JSON encoded dictionary)
+    var loggedFoodEntryIdsData: Data?
+
     /// IDs of meals that have been dismissed (string UUIDs)
     var dismissedMealIds: [String] = []
 
@@ -123,11 +126,39 @@ final class ChatMessage {
         }
     }
 
+    /// Mapping from meal ID to actual FoodEntry ID
+    var loggedFoodEntryIds: [String: String] {
+        get {
+            guard let data = loggedFoodEntryIdsData else { return [:] }
+            return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+        }
+        set {
+            loggedFoodEntryIdsData = try? JSONEncoder().encode(newValue)
+        }
+    }
+
+    /// Get the actual FoodEntry ID for a logged meal
+    func foodEntryId(for mealId: String) -> UUID? {
+        if let idString = loggedFoodEntryIds[mealId], let uuid = UUID(uuidString: idString) {
+            return uuid
+        }
+        // Fallback to legacy field for first meal
+        if suggestedMeals.first?.id == mealId {
+            return loggedFoodEntryId
+        }
+        return nil
+    }
+
     /// Mark a meal as logged by its ID
     func markMealLogged(mealId: String, entryId: UUID) {
         if !loggedMealIds.contains(mealId) {
             loggedMealIds.append(mealId)
         }
+        // Store the mapping from meal ID to food entry ID
+        var mapping = loggedFoodEntryIds
+        mapping[mealId] = entryId.uuidString
+        loggedFoodEntryIds = mapping
+
         // Also set legacy field for first meal
         if suggestedMeals.first?.id == mealId {
             loggedFoodEntryId = entryId

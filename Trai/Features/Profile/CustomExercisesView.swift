@@ -131,6 +131,15 @@ private struct ExerciseManagementRow: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+
+                    if let equipment = exercise.equipmentName {
+                        Text("•")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                        Text(equipment)
+                            .font(.caption)
+                            .foregroundStyle(.accent)
+                    }
                 }
             }
 

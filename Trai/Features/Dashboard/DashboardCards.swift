@@ -80,7 +80,7 @@ struct CalorieProgressCard: View {
                 }
 
                 ProgressView(value: progress)
-                    .tint(progress < 0.8 ? .green : progress < 1.0 ? .orange : .red)
+                    .tint(progress < 0.8 ? .green : progress < 1.0 ? .teal : .blue)
 
                 HStack {
                     VStack(alignment: .leading) {
@@ -410,6 +410,7 @@ struct QuickActionsCard: View {
     let onLogFood: () -> Void
     let onAddWorkout: () -> Void
     let onLogWeight: () -> Void
+    var workoutName: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -424,7 +425,8 @@ struct QuickActionsCard: View {
                     action: onLogFood
                 )
                 QuickActionButton(
-                    title: "Add Workout",
+                    title: "Start Workout",
+                    subtitle: workoutName,
                     icon: "figure.run",
                     color: .orange,
                     action: onAddWorkout

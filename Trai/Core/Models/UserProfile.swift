@@ -115,6 +115,14 @@ final class UserProfile {
     /// Whether to sync food entries to Apple Health
     var syncFoodToHealthKit: Bool = true
 
+    /// Whether to sync weight entries to Apple Health
+    var syncWeightToHealthKit: Bool = true
+
+    // MARK: - Workout Preferences
+
+    /// Default action when tapping "Add Workout" on Dashboard: "customWorkout" or "recommendedWorkout"
+    var defaultWorkoutAction: String = "customWorkout"
+
     var createdAt: Date = Date()
     var hasCompletedOnboarding: Bool = false
 
@@ -459,5 +467,35 @@ extension UserProfile {
                 planAssessmentStateJSON = json
             }
         }
+    }
+}
+
+// MARK: - Default Workout Action
+
+extension UserProfile {
+    enum DefaultWorkoutAction: String, CaseIterable, Identifiable {
+        case customWorkout = "customWorkout"
+        case recommendedWorkout = "recommendedWorkout"
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .customWorkout: "Custom Workout"
+            case .recommendedWorkout: "Recommended Workout"
+            }
+        }
+
+        var description: String {
+            switch self {
+            case .customWorkout: "Start an empty workout where you add exercises"
+            case .recommendedWorkout: "Start the best workout from your plan based on recovery"
+            }
+        }
+    }
+
+    var defaultWorkoutActionValue: DefaultWorkoutAction {
+        get { DefaultWorkoutAction(rawValue: defaultWorkoutAction) ?? .customWorkout }
+        set { defaultWorkoutAction = newValue.rawValue }
     }
 }

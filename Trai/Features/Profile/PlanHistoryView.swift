@@ -9,9 +9,8 @@ import SwiftUI
 import SwiftData
 
 struct PlanHistoryView: View {
-    @Query(sort: \NutritionPlanVersion.createdAt, order: .reverse)
-    private var planVersions: [NutritionPlanVersion]
-
+    @Environment(\.modelContext) private var modelContext
+    @State private var planVersions: [NutritionPlanVersion] = []
     @State private var selectedVersion: NutritionPlanVersion?
 
     var body: some View {
@@ -53,6 +52,16 @@ struct PlanHistoryView: View {
                 PlanVersionDetailView(version: version)
             }
         }
+        .onAppear {
+            fetchPlanVersions()
+        }
+    }
+
+    private func fetchPlanVersions() {
+        let descriptor = FetchDescriptor<NutritionPlanVersion>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        planVersions = (try? modelContext.fetch(descriptor)) ?? []
     }
 }
 

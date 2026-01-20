@@ -1,0 +1,309 @@
+//
+//  WorkoutPlanDetailView.swift
+//  Trai
+//
+//  Detailed view of the user's workout plan
+//
+
+import SwiftUI
+
+struct WorkoutPlanDetailView: View {
+    let plan: WorkoutPlan
+    var usesMetricExerciseWeight: Bool = true
+    var onEditPlan: (() -> Void)?
+
+    private var weightIncrementDisplay: String {
+        let kg = plan.progressionStrategy.weightIncrementKg
+        if usesMetricExerciseWeight {
+            return String(format: "%.1f kg", kg)
+        } else {
+            return String(format: "%.1f lbs", kg * 2.20462)
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                overviewCard
+                templatesSection
+                progressionCard
+                guidelinesCard
+                warningsCard
+            }
+            .padding()
+        }
+        .navigationTitle("Workout Plan")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let editAction = onEditPlan {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Edit", action: editAction)
+                }
+            }
+        }
+    }
+
+    // MARK: - Overview Card
+
+    private var overviewCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: plan.splitType.iconName)
+                    .font(.title2)
+                    .foregroundStyle(.accent)
+                    .frame(width: 40, height: 40)
+                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(plan.splitType.displayName)
+                        .font(.headline)
+
+                    Text("\(plan.daysPerWeek) days per week")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+
+            if !plan.rationale.isEmpty {
+                Text(plan.rationale)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(.rect(cornerRadius: 16))
+    }
+
+    // MARK: - Templates Section
+
+    private var templatesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Workouts")
+                .font(.headline)
+                .padding(.horizontal, 4)
+
+            ForEach(plan.templates.sorted { $0.order < $1.order }) { template in
+                templateCard(template)
+            }
+        }
+    }
+
+    private func templateCard(_ template: WorkoutPlan.WorkoutTemplate) -> some View {
+        HStack(spacing: 12) {
+            // Color indicator based on muscle group
+            RoundedRectangle(cornerRadius: 2)
+                .fill(colorForMuscleGroup(template.targetMuscleGroups.first))
+                .frame(width: 4)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(template.name)
+                    .font(.headline)
+
+                Text(template.muscleGroupsDisplay)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 12) {
+                    Label("\(template.estimatedDurationMinutes) min", systemImage: "clock")
+                    Label("\(template.exerciseCount) exercises", systemImage: "dumbbell")
+                }
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            }
+
+            Spacer()
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(.rect(cornerRadius: 12))
+    }
+
+    private func colorForMuscleGroup(_ muscleGroup: String?) -> Color {
+        guard let muscle = muscleGroup else { return .gray }
+        switch muscle {
+        case "chest", "shoulders", "triceps":
+            return .orange
+        case "back", "biceps":
+            return .blue
+        case "quads", "hamstrings", "glutes", "calves", "legs":
+            return .green
+        case "core":
+            return .purple
+        default:
+            return .gray
+        }
+    }
+
+    // MARK: - Progression Card
+
+    private var progressionCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.title3)
+                    .foregroundStyle(.green)
+
+                Text("Progression Strategy")
+                    .font(.headline)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Type:")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Text(plan.progressionStrategy.type.displayName)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                }
+
+                Text(plan.progressionStrategy.description)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 16) {
+                    if let repsTrigger = plan.progressionStrategy.repsTrigger {
+                        HStack(spacing: 4) {
+                            Text("Rep target:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("\(repsTrigger)")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                        }
+                    }
+
+                    HStack(spacing: 4) {
+                        Text("Weight increment:")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(weightIncrementDisplay)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(.rect(cornerRadius: 16))
+    }
+
+    // MARK: - Guidelines Card
+
+    @ViewBuilder
+    private var guidelinesCard: some View {
+        if !plan.guidelines.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "lightbulb.fill")
+                        .font(.title3)
+                        .foregroundStyle(.yellow)
+
+                    Text("Guidelines")
+                        .font(.headline)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(plan.guidelines.indices, id: \.self) { index in
+                        HStack(alignment: .top, spacing: 8) {
+                            Text("•")
+                                .foregroundStyle(.secondary)
+
+                            Text(plan.guidelines[index])
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(Color(.secondarySystemBackground))
+            .clipShape(.rect(cornerRadius: 16))
+        }
+    }
+
+    // MARK: - Warnings Card
+
+    @ViewBuilder
+    private var warningsCard: some View {
+        if let warnings = plan.warnings, !warnings.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.orange)
+
+                    Text("Important Notes")
+                        .font(.headline)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(warnings.indices, id: \.self) { index in
+                        HStack(alignment: .top, spacing: 8) {
+                            Text("•")
+                                .foregroundStyle(.orange)
+
+                            Text(warnings[index])
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(Color.orange.opacity(0.1))
+            .clipShape(.rect(cornerRadius: 16))
+        }
+    }
+}
+
+#Preview {
+    NavigationStack {
+        WorkoutPlanDetailView(plan: .previewPlan)
+    }
+}
+
+extension WorkoutPlan {
+    static let previewPlan = WorkoutPlan(
+        splitType: .pushPullLegs,
+        daysPerWeek: 3,
+        templates: [
+            WorkoutTemplate(
+                name: "Push Day",
+                targetMuscleGroups: ["chest", "shoulders", "triceps"],
+                exercises: [],
+                estimatedDurationMinutes: 45,
+                order: 0
+            ),
+            WorkoutTemplate(
+                name: "Pull Day",
+                targetMuscleGroups: ["back", "biceps"],
+                exercises: [],
+                estimatedDurationMinutes: 45,
+                order: 1
+            ),
+            WorkoutTemplate(
+                name: "Leg Day",
+                targetMuscleGroups: ["quads", "hamstrings", "glutes"],
+                exercises: [],
+                estimatedDurationMinutes: 50,
+                order: 2
+            )
+        ],
+        rationale: "A Push/Pull/Legs split is ideal for your goals, allowing you to train each muscle group with optimal frequency while maintaining good recovery.",
+        guidelines: [
+            "Focus on progressive overload",
+            "Rest 48 hours between similar muscle groups",
+            "Prioritize compound movements"
+        ],
+        progressionStrategy: .defaultStrategy,
+        warnings: ["Start lighter if you're new to these exercises"]
+    )
+}

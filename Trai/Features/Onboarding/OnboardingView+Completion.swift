@@ -60,37 +60,68 @@ extension OnboardingView {
         profile.hasCompletedOnboarding = true
         modelContext.insert(profile)
 
-        // Create memories from user notes
-        createMemoriesFromNotes()
+        // Parse and create categorized memories from user notes (async)
+        Task {
+            await parseAndCreateMemories()
+        }
     }
 
     // MARK: - Memory Creation
 
-    func createMemoriesFromNotes() {
-        // Import activity notes as a memory
+    /// Parse user notes using AI to create properly categorized memories
+    func parseAndCreateMemories() async {
+        let geminiService = GeminiService()
+
+        // Combine all notes with context
+        var allNotes: [(notes: String, context: String)] = []
+
         let trimmedActivityNotes = activityNotes.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedActivityNotes.isEmpty {
-            let activityMemory = CoachMemory(
-                content: trimmedActivityNotes,
-                category: .context,
-                topic: .workout,
-                source: "onboarding",
-                importance: 4
-            )
-            modelContext.insert(activityMemory)
+            allNotes.append((trimmedActivityNotes, "activity and workout preferences"))
         }
 
-        // Import additional goal notes as a memory
         let trimmedGoalNotes = additionalGoalNotes.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedGoalNotes.isEmpty {
-            let goalMemory = CoachMemory(
-                content: trimmedGoalNotes,
-                category: .context,
-                topic: .general,
-                source: "onboarding",
-                importance: 4
-            )
-            modelContext.insert(goalMemory)
+            allNotes.append((trimmedGoalNotes, "fitness goals and preferences"))
         }
+
+        // If no notes to parse, return early
+        guard !allNotes.isEmpty else { return }
+
+        // Parse each set of notes
+        for (notes, context) in allNotes {
+            do {
+                let parsedMemories = try await geminiService.parseNotesIntoMemories(
+                    notes: notes,
+                    context: context
+                )
+
+                // Insert each parsed memory
+                for parsed in parsedMemories {
+                    let memory = parsed.toCoachMemory(source: "onboarding")
+                    modelContext.insert(memory)
+                }
+
+                try? modelContext.save()
+            } catch {
+                // Fall back to simple memory creation if AI parsing fails
+                print("Failed to parse notes with AI, using fallback: \(error)")
+                createSimpleMemory(content: notes, context: context)
+            }
+        }
+    }
+
+    /// Fallback: Create a single memory if AI parsing fails
+    private func createSimpleMemory(content: String, context: String) {
+        let topic: MemoryTopic = context.contains("workout") ? .workout : .general
+        let memory = CoachMemory(
+            content: content,
+            category: .context,
+            topic: topic,
+            source: "onboarding",
+            importance: 4
+        )
+        modelContext.insert(memory)
+        try? modelContext.save()
     }
 }

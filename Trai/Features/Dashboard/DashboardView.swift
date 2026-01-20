@@ -27,6 +27,7 @@ struct DashboardView: View {
 
     @Environment(\.modelContext) private var modelContext
     @State private var healthKitService = HealthKitService()
+    @State private var recoveryService = MuscleRecoveryService()
 
     // Custom reminders (fetched manually to avoid @Query freeze)
     @State private var customReminders: [CustomReminder] = []
@@ -34,12 +35,16 @@ struct DashboardView: View {
 
     // Sheet presentation state
     @State private var showingLogFood = false
-    @State private var showingAddWorkout = false
     @State private var showingLogWeight = false
     @State private var showingCalorieDetail = false
     @State private var showingMacroDetail = false
     @State private var entryToEdit: FoodEntry?
     @State private var sessionIdToAddTo: UUID?
+
+    // Workout sheet state
+    @State private var showingWorkoutSheet = false
+    @State private var pendingWorkout: LiveWorkout?
+    @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
 
     init(showRemindersBinding: Binding<Bool> = .constant(false)) {
         _showRemindersBinding = showRemindersBinding
@@ -94,6 +99,20 @@ struct DashboardView: View {
         selectedDayWorkouts.count + selectedDayLiveWorkouts.count
     }
 
+    /// Returns the workout name to display on the quick action button
+    /// Only shows a name when set to recommended workout and a plan exists
+    private var quickAddWorkoutName: String? {
+        guard let profile,
+              profile.defaultWorkoutActionValue == .recommendedWorkout,
+              let plan = profile.workoutPlan else {
+            return nil
+        }
+
+        let recommendedId = recoveryService.getRecommendedTemplateId(plan: plan, modelContext: modelContext)
+        let template = plan.templates.first { $0.id == recommendedId } ?? plan.templates.first
+        return template?.name
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -110,8 +129,9 @@ struct DashboardView: View {
                         // Quick action buttons (only on today)
                         QuickActionsCard(
                             onLogFood: { showingLogFood = true },
-                            onAddWorkout: { showingAddWorkout = true },
-                            onLogWeight: { showingLogWeight = true }
+                            onAddWorkout: { startWorkout() },
+                            onLogWeight: { showingLogWeight = true },
+                            workoutName: quickAddWorkoutName
                         )
 
                         // Today's reminders
@@ -203,11 +223,17 @@ struct DashboardView: View {
             .sheet(isPresented: $showingLogWeight) {
                 LogWeightSheet()
             }
-            .sheet(isPresented: $showingAddWorkout) {
-                // TODO: AddWorkoutView - will be implemented in Sprint 4
-                Text("Add Workout - Coming Soon")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
+            .sheet(isPresented: $showingWorkoutSheet) {
+                if let workout = pendingWorkout {
+                    NavigationStack {
+                        LiveWorkoutView(workout: workout, template: pendingTemplate)
+                    }
+                }
+            }
+            .onChange(of: showingWorkoutSheet) { _, isShowing in
+                if !isShowing {
+                    pendingTemplate = nil
+                }
             }
             .sheet(isPresented: $showingCalorieDetail) {
                 CalorieDetailSheet(
@@ -269,17 +295,6 @@ struct DashboardView: View {
             }
             .onChange(of: showRemindersBinding) { _, isShowing in
                 if !isShowing { fetchCustomReminders() }
-            }
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    NavigationLink {
-                        ProfileView()
-                    } label: {
-                        Image(systemName: "person.fill")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
             }
         }
     }
@@ -397,6 +412,71 @@ struct DashboardView: View {
     private func deleteFoodEntry(_ entry: FoodEntry) {
         modelContext.delete(entry)
         HapticManager.success()
+    }
+
+    // MARK: - Workout Actions
+
+    private func startWorkout() {
+        guard let profile else {
+            startCustomWorkout()
+            return
+        }
+
+        switch profile.defaultWorkoutActionValue {
+        case .customWorkout:
+            startCustomWorkout()
+        case .recommendedWorkout:
+            startRecommendedWorkout()
+        }
+    }
+
+    private func startCustomWorkout() {
+        let workout = LiveWorkout(
+            name: "Custom Workout",
+            workoutType: .strength,
+            targetMuscleGroups: []
+        )
+        modelContext.insert(workout)
+        try? modelContext.save()
+
+        pendingWorkout = workout
+        showingWorkoutSheet = true
+        HapticManager.selectionChanged()
+    }
+
+    private func startRecommendedWorkout() {
+        guard let plan = profile?.workoutPlan else {
+            // Fall back to custom workout if no plan exists
+            startCustomWorkout()
+            return
+        }
+
+        // Get recommended template based on muscle recovery
+        let recommendedId = recoveryService.getRecommendedTemplateId(plan: plan, modelContext: modelContext)
+        let template = plan.templates.first { $0.id == recommendedId } ?? plan.templates.first
+
+        guard let template else {
+            startCustomWorkout()
+            return
+        }
+
+        // Map template muscle groups to LiveWorkout.MuscleGroup
+        let muscleGroups = template.targetMuscleGroups.compactMap { name in
+            LiveWorkout.MuscleGroup(rawValue: name)
+        }
+
+        let workout = LiveWorkout(
+            name: template.name,
+            workoutType: .strength,
+            targetMuscleGroups: muscleGroups
+        )
+        modelContext.insert(workout)
+        try? modelContext.save()
+
+        pendingTemplate = template
+        pendingWorkout = workout
+        showingWorkoutSheet = true
+        HapticManager.selectionChanged()
     }
 }
 

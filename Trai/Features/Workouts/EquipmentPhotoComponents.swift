@@ -82,7 +82,8 @@ struct EquipmentCameraView: View {
 struct EquipmentAnalysisSheet: View {
     @Environment(\.dismiss) private var dismiss
     let analysis: ExercisePhotoAnalysis
-    let onSelectExercise: (String, String) -> Void
+    /// Callback with (exerciseName, muscleGroup, equipmentName)
+    let onSelectExercise: (String, String, String?) -> Void
 
     var body: some View {
         NavigationStack {
@@ -130,7 +131,7 @@ struct EquipmentAnalysisSheet: View {
 
                         ForEach(analysis.suggestedExercises) { exercise in
                             Button {
-                                onSelectExercise(exercise.name, exercise.muscleGroup)
+                                onSelectExercise(exercise.name, exercise.muscleGroup, analysis.equipmentName)
                                 dismiss()
                             } label: {
                                 HStack {

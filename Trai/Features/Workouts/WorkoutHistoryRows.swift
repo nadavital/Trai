@@ -80,10 +80,19 @@ struct LiveWorkoutHistoryRow: View {
                     .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(workout.name)
-                        .font(.subheadline)
-                        .lineLimit(1)
-                        .foregroundStyle(.primary)
+                    HStack(spacing: 4) {
+                        Text(workout.name)
+                            .font(.subheadline)
+                            .lineLimit(1)
+                            .foregroundStyle(.primary)
+
+                        // Apple Watch indicator for merged workouts
+                        if workout.mergedHealthKitWorkoutID != nil {
+                            Image(systemName: "applewatch")
+                                .font(.caption2)
+                                .foregroundStyle(.red)
+                        }
+                    }
 
                     HStack(spacing: 6) {
                         if exerciseCount > 0 {
@@ -98,6 +107,13 @@ struct LiveWorkoutHistoryRow: View {
                             Text("•")
                                 .foregroundStyle(.tertiary)
                             Text("\(durationMinutes) min")
+                        }
+                        // Show calories from Apple Watch if merged
+                        if let calories = workout.healthKitCalories {
+                            Text("•")
+                                .foregroundStyle(.tertiary)
+                            Text("\(Int(calories)) kcal")
+                                .foregroundStyle(.red)
                         }
                     }
                     .font(.caption2)

@@ -147,6 +147,203 @@ extension ProfileView {
         )
     }
 
+    // MARK: - Workout Plan Card
+
+    @ViewBuilder
+    func workoutPlanCard(_ profile: UserProfile) -> some View {
+        if let plan = profile.workoutPlan {
+            // Has plan - show detailed card like nutrition plan
+            VStack(spacing: 16) {
+                // Header with title and adjust button
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("Workout Plan", systemImage: "figure.strengthtraining.traditional")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+
+                        HStack(spacing: 4) {
+                            Image(systemName: plan.splitType.iconName)
+                                .font(.caption2)
+                            Text(plan.splitType.displayName)
+                                .font(.caption)
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        showPlanEditSheet = true
+                    } label: {
+                        Text("Adjust")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+
+                // Big stats display
+                HStack(spacing: 24) {
+                    VStack(spacing: 2) {
+                        Text("\(plan.daysPerWeek)")
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .foregroundStyle(.green)
+                        Text("days/week")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    VStack(spacing: 2) {
+                        Text("\(plan.templates.count)")
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .foregroundStyle(.blue)
+                        Text("workouts")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let avgDuration = plan.templates.isEmpty ? nil : plan.templates.map(\.estimatedDurationMinutes).reduce(0, +) / plan.templates.count {
+                        VStack(spacing: 2) {
+                            Text("~\(avgDuration)")
+                                .font(.system(size: 36, weight: .bold, design: .rounded))
+                                .foregroundStyle(.orange)
+                            Text("min avg")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
+                // Template chips
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(plan.templates.sorted { $0.order < $1.order }) { template in
+                            WorkoutPlanChip(template: template)
+                        }
+                    }
+                }
+
+                // Action buttons
+                HStack(spacing: 12) {
+                    NavigationLink {
+                        WorkoutPlanDetailView(
+                            plan: plan,
+                            usesMetricExerciseWeight: profile.usesMetricExerciseWeight,
+                            onEditPlan: { showPlanEditSheet = true }
+                        )
+                    } label: {
+                        HStack {
+                            Image(systemName: "list.bullet.rectangle")
+                            Text("View Details")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            .padding(20)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.ultraThinMaterial)
+            )
+        } else {
+            // No plan - show create CTA
+            VStack(spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("Workout Plan", systemImage: "figure.strengthtraining.traditional")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+
+                        Text("No plan created yet")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+                }
+
+                // Create plan prompt
+                Button {
+                    showPlanSetupSheet = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "sparkles")
+                            .font(.title2)
+                            .foregroundStyle(.purple)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Create Personalized Plan")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.primary)
+
+                            Text("Let Trai design a training program for your goals")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding()
+                    .background(Color.purple.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.purple.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [6, 3]))
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(20)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.ultraThinMaterial)
+            )
+        }
+    }
+
+    // MARK: - Workout Plan Chip
+
+    private func WorkoutPlanChip(template: WorkoutPlan.WorkoutTemplate) -> some View {
+        let primaryColor = colorForMuscleGroup(template.targetMuscleGroups.first)
+
+        return HStack(spacing: 6) {
+            Circle()
+                .fill(primaryColor)
+                .frame(width: 8, height: 8)
+
+            Text(template.name)
+                .font(.caption)
+                .bold()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(primaryColor.opacity(0.15))
+        .clipShape(.capsule)
+    }
+
+    private func colorForMuscleGroup(_ muscleGroup: String?) -> Color {
+        guard let muscle = muscleGroup else { return .gray }
+        switch muscle {
+        case "chest", "shoulders", "triceps":
+            return .orange
+        case "back", "biceps":
+            return .blue
+        case "quads", "hamstrings", "glutes", "calves", "legs":
+            return .green
+        case "core":
+            return .purple
+        default:
+            return .gray
+        }
+    }
+
     // MARK: - Memories Card
 
     @ViewBuilder
@@ -225,164 +422,6 @@ extension ProfileView {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Preferences Card
-
-    @ViewBuilder
-    func preferencesCard(_ profile: UserProfile) -> some View {
-        VStack(spacing: 16) {
-            HStack {
-                Label("Preferences", systemImage: "gearshape.fill")
-                    .font(.headline)
-                Spacer()
-            }
-
-            VStack(spacing: 0) {
-                // Macro Tracking row
-                Button {
-                    showMacroTrackingSheet = true
-                } label: {
-                    PreferenceRow(
-                        icon: "chart.pie.fill",
-                        iconColor: .purple,
-                        title: "Macro Tracking",
-                        value: macroTrackingSummary(profile),
-                        showChevron: true
-                    )
-                }
-                .buttonStyle(.plain)
-
-                Divider()
-                    .padding(.leading, 56)
-
-                // Body weight units row
-                PreferenceRow(
-                    icon: "scalemass.fill",
-                    iconColor: .blue,
-                    title: "Body Weight",
-                    value: nil,
-                    showChevron: false
-                ) {
-                    Picker("Body Weight", selection: Binding(
-                        get: { profile.usesMetricWeight },
-                        set: {
-                            profile.usesMetricWeight = $0
-                            profile.usesMetricHeight = $0
-                            HapticManager.lightTap()
-                        }
-                    )) {
-                        Text("kg").tag(true)
-                        Text("lbs").tag(false)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 110)
-                }
-
-                Divider()
-                    .padding(.leading, 56)
-
-                // Exercise weight units row
-                PreferenceRow(
-                    icon: "dumbbell.fill",
-                    iconColor: .orange,
-                    title: "Exercise Weight",
-                    value: nil,
-                    showChevron: false
-                ) {
-                    Picker("Exercise Weight", selection: Binding(
-                        get: { profile.usesMetricExerciseWeight },
-                        set: {
-                            profile.usesMetricExerciseWeight = $0
-                            HapticManager.lightTap()
-                        }
-                    )) {
-                        Text("kg").tag(true)
-                        Text("lbs").tag(false)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 110)
-                }
-
-                Divider()
-                    .padding(.leading, 56)
-
-                // Apple Health sync row
-                PreferenceRow(
-                    icon: "heart.fill",
-                    iconColor: .pink,
-                    title: "Sync Food to Health",
-                    value: nil,
-                    showChevron: false
-                ) {
-                    Toggle("", isOn: Binding(
-                        get: { profile.syncFoodToHealthKit },
-                        set: {
-                            profile.syncFoodToHealthKit = $0
-                            HapticManager.lightTap()
-                        }
-                    ))
-                    .labelsHidden()
-                }
-
-                Divider()
-                    .padding(.leading, 56)
-
-                // Reminders row
-                NavigationLink {
-                    ReminderSettingsView(profile: profile)
-                } label: {
-                    PreferenceRow(
-                        icon: "bell.fill",
-                        iconColor: .red,
-                        title: "Reminders",
-                        value: remindersSummary(profile),
-                        showChevron: true
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-        }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(.ultraThinMaterial)
-        )
-    }
-
-    // MARK: - Helpers
-
-    func macroTrackingSummary(_ profile: UserProfile) -> String {
-        let count = profile.enabledMacros.count
-        if count == 0 {
-            return "Calories only"
-        } else if count == 5 {
-            return "All macros"
-        } else {
-            return "\(count) macros"
-        }
-    }
-
-    func remindersSummary(_ profile: UserProfile) -> String {
-        var builtInCount = 0
-        if profile.mealRemindersEnabled { builtInCount += 1 }
-        if profile.workoutRemindersEnabled { builtInCount += 1 }
-        if profile.weightReminderEnabled { builtInCount += 1 }
-
-        let totalCount = builtInCount + customRemindersCount
-
-        if totalCount == 0 {
-            return "Off"
-        } else if customRemindersCount > 0 && builtInCount == 0 {
-            return "\(customRemindersCount) custom"
-        } else if customRemindersCount > 0 {
-            return "\(totalCount) active"
-        } else if builtInCount == 3 {
-            return "All enabled"
-        } else {
-            return "\(builtInCount) enabled"
-        }
-    }
-
     /// Calculate grid columns for macro pills based on count
     func macroGridColumns(for count: Int) -> [GridItem] {
         let columnCount: Int
@@ -400,49 +439,98 @@ extension ProfileView {
 
     @ViewBuilder
     func exercisesCard() -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        NavigationLink {
+            CustomExercisesView()
+        } label: {
             HStack {
-                Label("My Exercises", systemImage: "dumbbell.fill")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+                Image(systemName: "figure.strengthtraining.traditional")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+                    .frame(width: 40, height: 40)
+                    .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Custom Exercises")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    Text("View and manage your exercises")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
-
-            NavigationLink {
-                CustomExercisesView()
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "figure.strengthtraining.traditional")
-                        .font(.title2)
-                        .foregroundStyle(.accent)
-                        .frame(width: 40)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Custom Exercises")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-
-                        Text("View and manage your custom exercises")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .padding()
-                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-            }
-            .buttonStyle(.plain)
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.ultraThinMaterial)
+            )
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(.ultraThinMaterial)
-        )
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Reminders Card
+
+    @ViewBuilder
+    func remindersCard(_ profile: UserProfile, customRemindersCount: Int) -> some View {
+        NavigationLink {
+            ReminderSettingsView(profile: profile)
+        } label: {
+            HStack {
+                Image(systemName: "bell.fill")
+                    .font(.title2)
+                    .foregroundStyle(.red)
+                    .frame(width: 40, height: 40)
+                    .background(Color.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Reminders")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    Text(remindersSummary(profile, customCount: customRemindersCount))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.ultraThinMaterial)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Helpers
+
+    func remindersSummary(_ profile: UserProfile, customCount: Int) -> String {
+        var builtInCount = 0
+        if profile.mealRemindersEnabled { builtInCount += 1 }
+        if profile.workoutRemindersEnabled { builtInCount += 1 }
+        if profile.weightReminderEnabled { builtInCount += 1 }
+
+        let totalCount = builtInCount + customCount
+
+        if totalCount == 0 {
+            return "No reminders set"
+        } else if customCount > 0 && builtInCount == 0 {
+            return "\(customCount) custom"
+        } else if customCount > 0 {
+            return "\(totalCount) active"
+        } else {
+            return "\(builtInCount) enabled"
+        }
     }
 }

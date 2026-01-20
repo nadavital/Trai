@@ -24,9 +24,12 @@ struct ProfileView: View {
     @Environment(\.modelContext) var modelContext
     @State var planService = PlanService()
     @State var showPlanSheet = false
-    @State var showEditSheet = false
-    @State var showMacroTrackingSheet = false
+    @State var showSettingsSheet = false
     @State var customRemindersCount = 0
+
+    // Workout plan management sheets
+    @State var showPlanSetupSheet = false
+    @State var showPlanEditSheet = false
 
     // For navigating to Trai tab with plan review
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
@@ -63,12 +66,12 @@ struct ProfileView: View {
                 VStack(spacing: 24) {
                     if let profile {
                         headerCard(profile)
-                        statsGrid(profile)
                         planCard(profile)
+                        workoutPlanCard(profile)
                         memoriesCard()
                         chatHistoryCard()
-                        preferencesCard(profile)
                         exercisesCard()
+                        remindersCard(profile, customRemindersCount: customRemindersCount)
                     }
                 }
                 .padding()
@@ -82,19 +85,34 @@ struct ProfileView: View {
                 .ignoresSafeArea()
             )
             .navigationTitle("Profile")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showSettingsSheet = true
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
             .sheet(isPresented: $showPlanSheet) {
                 if let profile {
                     PlanAdjustmentSheet(profile: profile)
                 }
             }
-            .sheet(isPresented: $showEditSheet) {
+            .sheet(isPresented: $showSettingsSheet) {
                 if let profile {
-                    ProfileEditSheet(profile: profile)
+                    NavigationStack {
+                        SettingsView(profile: profile)
+                    }
                 }
             }
-            .sheet(isPresented: $showMacroTrackingSheet) {
-                if let profile {
-                    MacroTrackingSettingsSheet(profile: profile)
+            .sheet(isPresented: $showPlanSetupSheet) {
+                WorkoutPlanChatFlow()
+            }
+            .sheet(isPresented: $showPlanEditSheet) {
+                if let plan = profile?.workoutPlan {
+                    WorkoutPlanEditSheet(currentPlan: plan)
                 }
             }
             .onAppear {
@@ -173,64 +191,6 @@ struct ProfileView: View {
             RoundedRectangle(cornerRadius: 24)
                 .fill(.ultraThinMaterial)
         )
-    }
-
-    // MARK: - Stats Grid
-
-    @ViewBuilder
-    private func statsGrid(_ profile: UserProfile) -> some View {
-        VStack(spacing: 12) {
-            HStack {
-                Text("Your Stats")
-                    .font(.headline)
-
-                Spacer()
-
-                Button {
-                    showEditSheet = true
-                } label: {
-                    Text("Edit")
-                        .font(.subheadline)
-                }
-            }
-            .padding(.horizontal, 4)
-
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                StatCard(
-                    icon: "ruler",
-                    label: "Height",
-                    value: profile.heightCm.map { "\(Int($0)) cm" } ?? "Not set",
-                    color: .blue
-                )
-
-                StatCard(
-                    icon: "scalemass",
-                    label: "Current",
-                    value: weightEntries.first.map { String(format: "%.1f kg", $0.weightKg) } ?? "—",
-                    color: .purple
-                )
-
-                if let target = profile.targetWeightKg {
-                    StatCard(
-                        icon: "target",
-                        label: "Target",
-                        value: String(format: "%.1f kg", target),
-                        color: .green
-                    )
-                } else {
-                    SetGoalCard {
-                        showEditSheet = true
-                    }
-                }
-
-                StatCard(
-                    icon: "flame",
-                    label: "Activity",
-                    value: profile.activityLevelValue.displayName,
-                    color: .orange
-                )
-            }
-        }
     }
 
 }

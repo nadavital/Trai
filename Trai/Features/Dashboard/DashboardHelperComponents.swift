@@ -47,13 +47,14 @@ struct MacroRingItem: View {
 
 struct QuickActionButton: View {
     let title: String
+    var subtitle: String?
     let icon: String
     let color: Color
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
+            VStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.title2)
                     .foregroundStyle(color)
@@ -61,6 +62,13 @@ struct QuickActionButton: View {
                 Text(title)
                     .font(.caption)
                     .foregroundStyle(.primary)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)

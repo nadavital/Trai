@@ -45,8 +45,14 @@ final class LiveWorkoutViewModel {
     // User preferences cache (exercise usage frequency)
     var exerciseUsageFrequency: [String: Int] = [:]
 
+    // Heart rate from Apple Watch (via HealthKit)
+    var currentHeartRate: Double?
+    var lastHeartRateUpdate: Date?
+    var isHeartRateAvailable: Bool { currentHeartRate != nil }
+
     private var modelContext: ModelContext?
     private var templateService = WorkoutTemplateService()
+    private var healthKitService: HealthKitService?
 
     // MARK: - Exercise Suggestion Model
 
@@ -182,8 +188,9 @@ final class LiveWorkoutViewModel {
 
     // MARK: - Setup
 
-    func setup(with modelContext: ModelContext) {
+    func setup(with modelContext: ModelContext, healthKitService: HealthKitService? = nil) {
         self.modelContext = modelContext
+        self.healthKitService = healthKitService
 
         // Insert workout if not already persisted
         if workout.modelContext == nil {
@@ -201,6 +208,29 @@ final class LiveWorkoutViewModel {
         }
 
         loadSuggestionPerformances()
+
+        // Start heart rate streaming from Apple Watch
+        startHeartRateMonitoring()
+    }
+
+    // MARK: - Heart Rate Monitoring
+
+    func startHeartRateMonitoring() {
+        healthKitService?.startHeartRateStreaming()
+        updateHeartRateFromService()
+    }
+
+    func stopHeartRateMonitoring() {
+        healthKitService?.stopHeartRateStreaming()
+        currentHeartRate = nil
+        lastHeartRateUpdate = nil
+    }
+
+    /// Updates heart rate from the HealthKit service - called by the view
+    func updateHeartRateFromService() {
+        guard let service = healthKitService else { return }
+        currentHeartRate = service.currentHeartRate
+        lastHeartRateUpdate = service.lastHeartRateUpdate
     }
 
     /// Load exercise suggestions based on workout's target muscle groups
@@ -377,6 +407,7 @@ final class LiveWorkoutViewModel {
             pauseStartTime = nil
         }
         isTimerRunning = false
+        stopHeartRateMonitoring()
     }
 
     // MARK: - Suggestion Management

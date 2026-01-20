@@ -14,11 +14,15 @@ struct LiveWorkoutView: View {
     @State private var viewModel: LiveWorkoutViewModel
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @Query private var profiles: [UserProfile]
 
     private var usesMetricExerciseWeight: Bool {
         profiles.first?.usesMetricExerciseWeight ?? true
     }
+
+    // Heart rate update timer
+    @State private var heartRateTimer: Timer?
 
     // Sheet states
     @State private var showingExerciseList = false
@@ -51,6 +55,14 @@ struct LiveWorkoutView: View {
                             completedSets: viewModel.completedSets,
                             totalVolume: viewModel.totalVolume
                         )
+
+                        // Apple Watch heart rate (if available)
+                        if viewModel.isHeartRateAvailable || viewModel.currentHeartRate != nil {
+                            WatchHeartRateCard(
+                                heartRate: viewModel.currentHeartRate,
+                                lastUpdate: viewModel.lastHeartRateUpdate
+                            )
+                        }
 
                         // Target muscles selector (editable for custom workouts)
                         MuscleGroupSelector(
@@ -172,10 +184,12 @@ struct LiveWorkoutView: View {
                 }
             }
             .onAppear {
-                viewModel.setup(with: modelContext)
+                viewModel.setup(with: modelContext, healthKitService: healthKitService)
+                startHeartRateUpdates()
             }
             .onDisappear {
                 viewModel.stopTimer()
+                stopHeartRateUpdates()
             }
             .sheet(isPresented: $showingExerciseList) {
                 ExerciseListView(
@@ -236,6 +250,20 @@ struct LiveWorkoutView: View {
 
     private func dismissKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    private func startHeartRateUpdates() {
+        // Update heart rate from HealthKit service every 2 seconds
+        heartRateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+            Task { @MainActor in
+                viewModel.updateHeartRateFromService()
+            }
+        }
+    }
+
+    private func stopHeartRateUpdates() {
+        heartRateTimer?.invalidate()
+        heartRateTimer = nil
     }
 
     private func buildWorkoutContext() -> GeminiService.WorkoutContext {

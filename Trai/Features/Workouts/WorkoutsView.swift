@@ -44,7 +44,6 @@ struct WorkoutsView: View {
     // MARK: - Sheet States
 
     @State private var showingPlanSetup = false
-    @State private var showingPlanEdit = false
     @State private var showingMuscleRecoveryDetail = false
     @State private var showingWorkoutDetail: WorkoutSession?
     @State private var showingLiveWorkoutDetail: LiveWorkout?
@@ -73,18 +72,6 @@ struct WorkoutsView: View {
             guard let hkID = workout.healthKitWorkoutID else { return true }
             return !mergedHealthKitIDs.contains(hkID)
         }
-    }
-
-    private var todaysWorkouts: [WorkoutSession] {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
-        return filteredWorkouts.filter { $0.loggedAt >= startOfDay }
-    }
-
-    private var todaysLiveWorkouts: [LiveWorkout] {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
-        return completedLiveWorkouts.filter { $0.startedAt >= startOfDay }
     }
 
     private var workoutsByDate: [(date: Date, workouts: [WorkoutSession])] {
@@ -122,22 +109,14 @@ struct WorkoutsView: View {
                         }
                     }
 
-                    // 2. Workout plan overview or create CTA
-                    WorkoutPlanOverviewCard(
-                        workoutPlan: workoutPlan,
-                        onCreatePlan: { showingPlanSetup = true },
-                        onEditPlan: { showingPlanEdit = true }
+                    // 2. Workout templates section (shows create CTA if no plan)
+                    WorkoutTemplatesSection(
+                        templates: workoutPlan?.templates ?? [],
+                        recoveryScores: templateScores,
+                        recommendedTemplateId: recommendedTemplateId,
+                        onStartTemplate: startWorkoutFromTemplate,
+                        onCreatePlan: workoutPlan == nil ? { showingPlanSetup = true } : nil
                     )
-
-                    // 3. Workout templates section (if has plan)
-                    if let plan = workoutPlan {
-                        WorkoutTemplatesSection(
-                            templates: plan.templates,
-                            recoveryScores: templateScores,
-                            recommendedTemplateId: recommendedTemplateId,
-                            onStartTemplate: startWorkoutFromTemplate
-                        )
-                    }
 
                     // 3b. Quick start custom workout option
                     QuickStartCard {
@@ -150,10 +129,7 @@ struct WorkoutsView: View {
                         onTap: { showingMuscleRecoveryDetail = true }
                     )
 
-                    // 5. Today's activity summary
-                    TodaysWorkoutSummary(workouts: todaysWorkouts, liveWorkouts: todaysLiveWorkouts)
-
-                    // 6. Recent workout history (includes both in-app and HealthKit workouts)
+                    // 5. Recent workout history (includes both in-app and HealthKit workouts)
                     WorkoutHistorySection(
                         workoutsByDate: workoutsByDate,
                         liveWorkoutsByDate: liveWorkoutsByDate,
@@ -170,15 +146,6 @@ struct WorkoutsView: View {
                 .padding()
             }
             .navigationTitle("Workouts")
-            .toolbar {
-                ToolbarItem(placement: .secondaryAction) {
-                    Button("Sync HealthKit", systemImage: "arrow.triangle.2.circlepath") {
-                        Task {
-                            await syncHealthKit()
-                        }
-                    }
-                }
-            }
             .refreshable {
                 await syncHealthKit()
                 loadRecoveryAndScores()
@@ -192,11 +159,6 @@ struct WorkoutsView: View {
             }
             .sheet(isPresented: $showingPlanSetup) {
                 WorkoutPlanChatFlow()
-            }
-            .sheet(isPresented: $showingPlanEdit) {
-                if let plan = workoutPlan {
-                    WorkoutPlanEditSheet(currentPlan: plan)
-                }
             }
             .sheet(isPresented: $showingMuscleRecoveryDetail) {
                 MuscleRecoveryDetailSheet(recoveryInfo: recoveryInfo)

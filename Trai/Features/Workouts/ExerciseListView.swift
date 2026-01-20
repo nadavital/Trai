@@ -274,11 +274,12 @@ struct ExerciseListView: View {
                 if let analysis = equipmentAnalysis {
                     EquipmentAnalysisSheet(
                         analysis: analysis,
-                        onSelectExercise: { exerciseName, muscleGroup in
+                        onSelectExercise: { exerciseName, muscleGroup, equipmentName in
                             addCustomExercise(
                                 name: exerciseName,
                                 muscleGroup: Exercise.MuscleGroup(rawValue: muscleGroup),
-                                category: .strength
+                                category: .strength,
+                                equipmentName: equipmentName
                             )
                         }
                     )
@@ -416,7 +417,8 @@ struct ExerciseListView: View {
     private func addCustomExercise(
         name: String,
         muscleGroup: Exercise.MuscleGroup? = nil,
-        category: Exercise.Category = .strength
+        category: Exercise.Category = .strength,
+        equipmentName: String? = nil
     ) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -434,6 +436,7 @@ struct ExerciseListView: View {
             muscleGroup: muscleGroup
         )
         exercise.isCustom = true
+        exercise.equipmentName = equipmentName
         modelContext.insert(exercise)
         try? modelContext.save()
 

@@ -83,6 +83,7 @@ enum AppTab: String, CaseIterable {
     case dashboard
     case trai
     case workouts
+    case profile
 }
 
 struct MainTabView: View {
@@ -119,6 +120,10 @@ struct MainTabView: View {
 
             Tab("Workouts", systemImage: "figure.run", value: .workouts) {
                 WorkoutsView()
+            }
+
+            Tab("Profile", systemImage: "person.fill", value: .profile) {
+                ProfileView()
             }
         }
         .onChange(of: showRemindersFromNotification.wrappedValue) { _, shouldShow in

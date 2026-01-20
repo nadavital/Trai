@@ -129,9 +129,9 @@ private struct CalorieRing: View {
         if progress < 0.8 {
             return .green
         } else if progress < 1.0 {
-            return .orange
+            return .teal
         } else {
-            return .red
+            return .blue
         }
     }
 

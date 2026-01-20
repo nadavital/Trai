@@ -221,7 +221,9 @@ final class NotificationService {
         // Cancel existing notification for this reminder first
         await cancelCustomReminder(id: reminder.id)
 
-        guard isAuthorized, reminder.isEnabled else { return }
+        // Check authorization status directly (not cached) to handle edit scenarios
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized, reminder.isEnabled else { return }
 
         let content = UNMutableNotificationContent()
         content.title = reminder.title

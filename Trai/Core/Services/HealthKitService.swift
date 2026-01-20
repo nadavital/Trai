@@ -16,6 +16,12 @@ final class HealthKitService {
     var isAuthorized = false
     var authorizationError: String?
 
+    // Heart rate streaming
+    var currentHeartRate: Double?
+    var lastHeartRateUpdate: Date?
+    private var heartRateQuery: HKAnchoredObjectQuery?
+    private var heartRateAnchor: HKQueryAnchor?
+
     var isHealthKitAvailable: Bool {
         HKHealthStore.isHealthDataAvailable()
     }
@@ -34,6 +40,7 @@ final class HealthKitService {
             HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
             HKObjectType.quantityType(forIdentifier: .stepCount)!,
             HKObjectType.quantityType(forIdentifier: .appleExerciseTime)!,
+            HKObjectType.quantityType(forIdentifier: .heartRate)!,
             HKObjectType.workoutType()
         ]
 
@@ -158,6 +165,95 @@ final class HealthKitService {
     func fetchTodayExerciseMinutes() async throws -> Int {
         let exerciseType = HKQuantityType.quantityType(forIdentifier: .appleExerciseTime)!
         return try await fetchTodaySum(type: exerciseType, unit: .minute())
+    }
+
+    // MARK: - Heart Rate Streaming
+
+    /// Start streaming heart rate updates from Apple Watch
+    /// Uses HKAnchoredObjectQuery to receive updates as they sync from Watch
+    func startHeartRateStreaming() {
+        guard isHealthKitAvailable else { return }
+
+        // Stop any existing query
+        stopHeartRateStreaming()
+
+        let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
+
+        // Only look at heart rate samples from the last hour
+        let startDate = Date().addingTimeInterval(-3600)
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: nil, options: .strictStartDate)
+
+        let query = HKAnchoredObjectQuery(
+            type: heartRateType,
+            predicate: predicate,
+            anchor: heartRateAnchor,
+            limit: HKObjectQueryNoLimit
+        ) { [weak self] _, samples, _, newAnchor, error in
+            Task { @MainActor in
+                self?.heartRateAnchor = newAnchor
+                self?.processHeartRateSamples(samples)
+            }
+        }
+
+        // Update handler for continuous monitoring
+        query.updateHandler = { [weak self] _, samples, _, newAnchor, error in
+            Task { @MainActor in
+                self?.heartRateAnchor = newAnchor
+                self?.processHeartRateSamples(samples)
+            }
+        }
+
+        heartRateQuery = query
+        healthStore.execute(query)
+    }
+
+    /// Stop streaming heart rate updates
+    func stopHeartRateStreaming() {
+        if let query = heartRateQuery {
+            healthStore.stop(query)
+            heartRateQuery = nil
+        }
+        currentHeartRate = nil
+        lastHeartRateUpdate = nil
+    }
+
+    /// Get the most recent heart rate from the last few minutes (one-time fetch)
+    func fetchRecentHeartRate() async -> (bpm: Double, date: Date)? {
+        let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
+
+        // Look back 5 minutes
+        let startDate = Date().addingTimeInterval(-300)
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: Date(), options: .strictStartDate)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: heartRateType,
+                predicate: predicate,
+                limit: 1,
+                sortDescriptors: [sortDescriptor]
+            ) { _, samples, _ in
+                guard let sample = samples?.first as? HKQuantitySample else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+
+                let bpm = sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+                continuation.resume(returning: (bpm: bpm, date: sample.startDate))
+            }
+            self.healthStore.execute(query)
+        }
+    }
+
+    private func processHeartRateSamples(_ samples: [HKSample]?) {
+        guard let heartRateSamples = samples as? [HKQuantitySample],
+              let mostRecent = heartRateSamples.max(by: { $0.startDate < $1.startDate }) else {
+            return
+        }
+
+        let bpm = mostRecent.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+        currentHeartRate = bpm
+        lastHeartRateUpdate = mostRecent.startDate
     }
 
     // MARK: - Private Helpers

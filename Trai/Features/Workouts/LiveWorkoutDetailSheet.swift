@@ -51,11 +51,6 @@ struct LiveWorkoutDetailSheet: View {
                     if !workout.notes.isEmpty {
                         notesSection(workout.notes)
                     }
-
-                    // HealthKit merge info
-                    if workout.mergedHealthKitWorkoutID != nil {
-                        healthKitMergeSection
-                    }
                 }
                 .padding()
             }
@@ -105,13 +100,18 @@ struct LiveWorkoutDetailSheet: View {
             }
 
             // Stats row
-            HStack(spacing: 20) {
+            HStack(spacing: 16) {
                 if durationMinutes > 0 {
                     StatPill(icon: "clock.fill", value: formatDuration(Double(durationMinutes)), label: "time", color: .blue)
                 }
 
                 StatPill(icon: "dumbbell.fill", value: "\(exerciseCount)", label: exerciseCount == 1 ? "exercise" : "exercises", color: .green)
                 StatPill(icon: "square.stack.3d.up.fill", value: "\(totalSets)", label: totalSets == 1 ? "set" : "sets", color: .orange)
+
+                // Apple Watch merged data
+                if let calories = workout.healthKitCalories {
+                    StatPill(icon: "applewatch", value: "\(Int(calories))", label: "kcal", color: .red)
+                }
             }
         }
         .frame(maxWidth: .infinity)
@@ -150,27 +150,6 @@ struct LiveWorkoutDetailSheet: View {
                 .background(Color(.secondarySystemBackground))
                 .clipShape(.rect(cornerRadius: 12))
         }
-    }
-
-    // MARK: - HealthKit Merge Section
-
-    private var healthKitMergeSection: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "applewatch")
-                .foregroundStyle(.green)
-            Text("Merged with Apple Watch data")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if let calories = workout.healthKitCalories {
-                Text("• \(Int(calories)) kcal")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding()
-        .frame(maxWidth: .infinity)
-        .background(Color.green.opacity(0.1))
-        .clipShape(.rect(cornerRadius: 12))
     }
 
     // MARK: - Helpers

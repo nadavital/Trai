@@ -109,9 +109,11 @@ struct EmptyChatView: View {
                             .clipShape(.rect(cornerRadius: 12))
                         }
                         .foregroundStyle(.primary)
+                        .contentShape(.rect)
                     }
                 }
                 .padding()
+                .padding(.bottom, 80) // Extra space above input bar
             }
 
             Spacer()
@@ -225,7 +227,7 @@ struct ChatBubble: View {
 
                     // Show logged meal badges for all logged meals
                     ForEach(message.loggedMealSuggestions, id: \.meal.id) { _, meal in
-                        if let entryId = UUID(uuidString: meal.id) ?? message.loggedFoodEntryId {
+                        if let entryId = message.foodEntryId(for: meal.id) {
                             LoggedMealBadge(
                                 meal: meal,
                                 foodEntryId: entryId,

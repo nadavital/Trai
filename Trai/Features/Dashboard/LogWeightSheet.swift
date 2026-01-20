@@ -22,6 +22,7 @@ struct LogWeightSheet: View {
     @State private var notes = ""
     @State private var logDate = Date()
     @State private var hasInitialized = false
+    @State private var healthKitService = HealthKitService()
     @FocusState private var isWeightFocused: Bool
 
     private var profile: UserProfile? { profiles.first }
@@ -181,6 +182,14 @@ struct LogWeightSheet: View {
         // Update profile's current weight
         if let profile {
             profile.currentWeightKg = weightKg
+
+            // Sync to Apple Health if enabled
+            if profile.syncWeightToHealthKit {
+                Task {
+                    try? await healthKitService.requestAuthorization()
+                    try? await healthKitService.saveWeight(weightKg, date: logDate)
+                }
+            }
         }
 
         HapticManager.success()

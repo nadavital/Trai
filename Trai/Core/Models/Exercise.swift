@@ -13,6 +13,9 @@ final class Exercise {
     /// Target muscle group (for strength exercises)
     var muscleGroup: String?
 
+    /// Equipment/machine name (for exercises added via photo identification)
+    var equipmentName: String?
+
     /// User notes about the exercise
     var notes: String?
 

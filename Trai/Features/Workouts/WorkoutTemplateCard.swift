@@ -214,6 +214,7 @@ struct WorkoutTemplatesSection: View {
     let recoveryScores: [UUID: (score: Double, reason: String)]
     let recommendedTemplateId: UUID?
     let onStartTemplate: (WorkoutPlan.WorkoutTemplate) -> Void
+    var onCreatePlan: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -221,7 +222,12 @@ struct WorkoutTemplatesSection: View {
                 .font(.headline)
 
             if templates.isEmpty {
-                emptyState
+                // Show create plan option if callback provided
+                if let createAction = onCreatePlan {
+                    createPlanPrompt(action: createAction)
+                } else {
+                    emptyState
+                }
             } else {
                 // Show recommended template first (full card)
                 if let recommendedId = recommendedTemplateId,
@@ -274,6 +280,37 @@ struct WorkoutTemplatesSection: View {
         .padding()
         .background(Color(.tertiarySystemFill))
         .clipShape(.rect(cornerRadius: 12))
+    }
+
+    // Subtle create plan prompt (not the big CTA)
+    private func createPlanPrompt(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.title3)
+                    .foregroundStyle(.accent)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Get Personalized Workouts")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    Text("Let Trai create a plan based on your goals")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding()
+            .background(Color(.tertiarySystemFill))
+            .clipShape(.rect(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
     }
 }
 
