@@ -141,7 +141,7 @@ extension ChatView {
         selectedImage = nil
         selectedPhotoItem = nil
 
-        Task {
+        currentMessageTask = Task {
             await performSendMessage(
                 text: text,
                 capturedImage: capturedImage,
@@ -149,6 +149,14 @@ extension ChatView {
                 aiMessage: aiMessage
             )
         }
+    }
+
+    func stopGenerating() {
+        currentMessageTask?.cancel()
+        currentMessageTask = nil
+        isLoading = false
+        currentActivity = nil
+        HapticManager.lightTap()
     }
 
     func performSendMessage(
@@ -200,6 +208,8 @@ extension ChatView {
             )
 
             handleChatResult(result, aiMessage: aiMessage)
+        } catch is CancellationError {
+            // User cancelled - don't show error, keep partial content
         } catch {
             aiMessage.content = ""
             aiMessage.errorMessage = error.localizedDescription
@@ -207,6 +217,7 @@ extension ChatView {
 
         isLoading = false
         currentActivity = nil
+        currentMessageTask = nil
     }
 
     func handleChatResult(_ result: GeminiService.ChatFunctionResult, aiMessage: ChatMessage) {

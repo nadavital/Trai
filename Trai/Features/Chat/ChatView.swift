@@ -63,6 +63,9 @@ struct ChatView: View {
     @State var pendingReminderEdit: GeminiFunctionExecutor.SuggestedReminder?
     @State var showReminderEditSheet = false
 
+    // Task tracking for cancellation
+    @State var currentMessageTask: Task<Void, Never>?
+
     let sessionTimeoutHours: Double = 1.5
 
     var profile: UserProfile? { profiles.first }
@@ -198,6 +201,7 @@ struct ChatView: View {
                         selectedPhotoItem: $selectedPhotoItem,
                         isLoading: isLoading,
                         onSend: { sendMessage(messageText) },
+                        onStop: stopGenerating,
                         onTakePhoto: { showingCamera = true },
                         onImageTapped: { image in enlargedImage = image },
                         isFocused: $isInputFocused

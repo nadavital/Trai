@@ -13,7 +13,7 @@ struct TodaysRemindersCard: View {
     let onComplete: (ReminderItem) -> Void
     let onViewAll: () -> Void
 
-    /// Simple reminder item for display (only upcoming reminders)
+    /// Simple reminder item for display
     struct ReminderItem: Identifiable {
         let id: UUID
         let title: String
@@ -29,7 +29,7 @@ struct TodaysRemindersCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("Upcoming Reminders", systemImage: "bell.fill")
+                Label("Today's Reminders", systemImage: "bell.fill")
                     .font(.headline)
                     .foregroundStyle(.primary)
 
@@ -164,7 +164,7 @@ private struct ReminderRow: View {
 // MARK: - Helper to build reminder items from various sources
 
 extension TodaysRemindersCard {
-    /// Build upcoming reminder items for today (excludes past reminders)
+    /// Build reminder items for today (shows all reminders until completed)
     static func buildReminderItems(
         from customReminders: [CustomReminder],
         mealRemindersEnabled: Bool,
@@ -178,20 +178,13 @@ extension TodaysRemindersCard {
         let calendar = Calendar.current
         let now = Date()
         let currentWeekday = calendar.component(.weekday, from: now)
-        let currentHour = calendar.component(.hour, from: now)
-        let currentMinute = calendar.component(.minute, from: now)
 
-        // Helper to check if a time is upcoming
-        func isUpcoming(hour: Int, minute: Int) -> Bool {
-            hour > currentHour || (hour == currentHour && minute > currentMinute)
-        }
-
-        // Add custom reminders scheduled for today (only upcoming)
+        // Add custom reminders scheduled for today
         for reminder in customReminders where reminder.isEnabled {
             let reminderDays = reminder.repeatDaysSet
             let scheduledForToday = reminderDays.isEmpty || reminderDays.contains(currentWeekday)
 
-            if scheduledForToday && isUpcoming(hour: reminder.hour, minute: reminder.minute) {
+            if scheduledForToday {
                 items.append(ReminderItem(
                     id: reminder.id,
                     title: reminder.title,
@@ -203,34 +196,30 @@ extension TodaysRemindersCard {
             }
         }
 
-        // Add meal reminders if enabled (only upcoming)
+        // Add meal reminders if enabled
         if mealRemindersEnabled {
             for meal in MealReminderTime.allMeals where enabledMeals.contains(meal.id) {
-                if isUpcoming(hour: meal.hour, minute: meal.minute) {
-                    items.append(ReminderItem(
-                        id: StableUUID.forMeal(meal.id),
-                        title: meal.displayName,
-                        time: formatTime(hour: meal.hour, minute: meal.minute),
-                        hour: meal.hour,
-                        minute: meal.minute,
-                        isCustom: false
-                    ))
-                }
-            }
-        }
-
-        // Add workout reminder if enabled and scheduled for today (only upcoming)
-        if workoutRemindersEnabled && workoutDays.contains(currentWeekday) {
-            if isUpcoming(hour: workoutHour, minute: workoutMinute) {
                 items.append(ReminderItem(
-                    id: StableUUID.forWorkoutReminder(),
-                    title: "Workout",
-                    time: formatTime(hour: workoutHour, minute: workoutMinute),
-                    hour: workoutHour,
-                    minute: workoutMinute,
+                    id: StableUUID.forMeal(meal.id),
+                    title: meal.displayName,
+                    time: formatTime(hour: meal.hour, minute: meal.minute),
+                    hour: meal.hour,
+                    minute: meal.minute,
                     isCustom: false
                 ))
             }
+        }
+
+        // Add workout reminder if enabled and scheduled for today
+        if workoutRemindersEnabled && workoutDays.contains(currentWeekday) {
+            items.append(ReminderItem(
+                id: StableUUID.forWorkoutReminder(),
+                title: "Workout",
+                time: formatTime(hour: workoutHour, minute: workoutMinute),
+                hour: workoutHour,
+                minute: workoutMinute,
+                isCustom: false
+            ))
         }
 
         // Sort by time

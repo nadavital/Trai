@@ -200,6 +200,26 @@ struct WeightChartView: View {
         useLbs ? "lbs" : "kg"
     }
 
+    /// Computes the Y-axis domain with padding around the data range
+    private var yAxisDomain: ClosedRange<Double> {
+        let weights = entries.map { displayWeight($0.weightKg) }
+        var minWeight = weights.min() ?? 0
+        var maxWeight = weights.max() ?? 100
+
+        // Include target weight in range if present
+        if let target = targetWeight {
+            let displayTarget = displayWeight(target)
+            minWeight = min(minWeight, displayTarget)
+            maxWeight = max(maxWeight, displayTarget)
+        }
+
+        // Add padding (5% of range or minimum of 2 units)
+        let range = maxWeight - minWeight
+        let padding = max(range * 0.1, useLbs ? 5 : 2)
+
+        return (minWeight - padding)...(maxWeight + padding)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Weight Trend")
@@ -227,6 +247,7 @@ struct WeightChartView: View {
                 }
             }
             .frame(height: 200)
+            .chartYScale(domain: yAxisDomain)
             .chartYAxis {
                 AxisMarks(position: .leading)
             }

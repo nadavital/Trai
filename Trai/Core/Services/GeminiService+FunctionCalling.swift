@@ -143,6 +143,9 @@ extension GeminiService {
 
         // Parse streaming response - collect ALL function calls first
         for try await line in bytes.lines {
+            // Check for task cancellation
+            try Task.checkCancellation()
+
             guard line.hasPrefix("data: ") else { continue }
             let jsonString = String(line.dropFirst(6))
 

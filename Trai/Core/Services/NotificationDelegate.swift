@@ -67,8 +67,53 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        // Show banner and play sound even when app is in foreground
-        completionHandler([.banner, .sound])
+        let userInfo = notification.request.content.userInfo
+        let categoryIdentifier = notification.request.content.categoryIdentifier
+
+        Task { @MainActor in
+            // Check if this reminder was already completed today - if so, suppress notification
+            if await isReminderCompletedToday(userInfo: userInfo, categoryIdentifier: categoryIdentifier) {
+                completionHandler([])
+            } else {
+                // Show banner and play sound
+                completionHandler([.banner, .sound])
+            }
+        }
+    }
+
+    /// Check if the reminder in this notification has already been completed today
+    private func isReminderCompletedToday(userInfo: [AnyHashable: Any], categoryIdentifier: String) async -> Bool {
+        let context = modelContainer.mainContext
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+
+        // Determine the reminder ID based on notification type
+        let reminderId: UUID?
+
+        if let reminderIdString = userInfo["reminderId"] as? String {
+            // Custom reminder
+            reminderId = UUID(uuidString: reminderIdString)
+        } else if let mealId = userInfo["mealId"] as? String {
+            // Meal reminder - use stable UUID matching TodaysRemindersCard
+            reminderId = StableUUID.forMeal(mealId)
+        } else if categoryIdentifier == NotificationService.NotificationCategory.workoutReminder.rawValue {
+            // Workout reminder - use stable UUID
+            reminderId = StableUUID.forWorkoutReminder()
+        } else {
+            // Weight reminder or unknown - no completion tracking
+            reminderId = nil
+        }
+
+        guard let id = reminderId else { return false }
+
+        // Check if there's a completion record for this reminder today
+        let descriptor = FetchDescriptor<ReminderCompletion>(
+            predicate: #Predicate { completion in
+                completion.reminderId == id && completion.completedAt >= startOfDay
+            }
+        )
+
+        let completions = (try? context.fetch(descriptor)) ?? []
+        return !completions.isEmpty
     }
 
     // MARK: - Action Handlers

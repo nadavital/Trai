@@ -32,6 +32,8 @@ struct DashboardView: View {
     // Custom reminders (fetched manually to avoid @Query freeze)
     @State private var customReminders: [CustomReminder] = []
     @State private var todaysCompletedReminderIds: Set<UUID> = []
+    @State private var remindersLoaded = false
+    @State private var pendingScrollToReminders = false
 
     // Sheet presentation state
     @State private var showingLogFood = false
@@ -217,10 +219,27 @@ struct DashboardView: View {
                 .onChange(of: showRemindersBinding) { _, isShowing in
                     // Scroll to reminders section when triggered by notification
                     if isShowing {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            scrollProxy.scrollTo("reminders-section", anchor: .top)
+                        if remindersLoaded && !todaysReminderItems.isEmpty {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                scrollProxy.scrollTo("reminders-section", anchor: .top)
+                            }
+                            showRemindersBinding = false
+                        } else {
+                            // Data not ready yet - wait for it
+                            pendingScrollToReminders = true
                         }
-                        // Reset the binding after scrolling
+                    }
+                }
+                .onChange(of: remindersLoaded) { _, loaded in
+                    // Execute pending scroll after reminders load
+                    if loaded && pendingScrollToReminders {
+                        if !todaysReminderItems.isEmpty {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                scrollProxy.scrollTo("reminders-section", anchor: .top)
+                            }
+                        }
+                        // Reset state even if no reminders to scroll to
+                        pendingScrollToReminders = false
                         showRemindersBinding = false
                     }
                 }
@@ -228,6 +247,7 @@ struct DashboardView: View {
             .navigationTitle("Dashboard")
             .task {
                 fetchCustomReminders()
+                remindersLoaded = true
                 await loadActivityData()
             }
             .onChange(of: selectedDate) { _, newDate in

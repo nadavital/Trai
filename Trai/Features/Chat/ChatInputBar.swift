@@ -14,6 +14,7 @@ struct ChatInputBar: View {
     @Binding var selectedPhotoItem: PhotosPickerItem?
     let isLoading: Bool
     let onSend: () -> Void
+    let onStop: (() -> Void)?
     let onTakePhoto: () -> Void
     let onImageTapped: (UIImage) -> Void
     var isFocused: FocusState<Bool>.Binding
@@ -87,22 +88,38 @@ struct ChatInputBar: View {
             .background(Color(.secondarySystemBackground))
             .clipShape(.rect(cornerRadius: 20))
 
-            // Send button
-            Button {
-                onSend()
-                isFocused.wrappedValue = false
-            } label: {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
+            // Send or Stop button
+            if isLoading, let onStop {
+                Button {
+                    onStop()
+                } label: {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                }
+                .glassEffect(.regular.tint(.red).interactive(), in: .circle)
+                .transition(.scale.combined(with: .opacity))
+            } else {
+                Button {
+                    onSend()
+                    isFocused.wrappedValue = false
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                }
+                .glassEffect(.regular.tint(canSend ? .accent : .gray).interactive(), in: .circle)
+                .opacity(canSend ? 1 : 0.5)
+                .disabled(!canSend)
+                .transition(.scale.combined(with: .opacity))
             }
-            .glassEffect(.regular.tint(canSend ? .accent : .gray).interactive(), in: .circle)
-            .opacity(canSend ? 1 : 0.5)
-            .disabled(!canSend)
         }
+        .animation(.snappy(duration: 0.2), value: isLoading)
         .padding(.horizontal)
         .padding(.bottom, 8)
+        .background(Color(.systemBackground).ignoresSafeArea(edges: .bottom))
         .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedPhotoItem, matching: .images)
     }
 }
