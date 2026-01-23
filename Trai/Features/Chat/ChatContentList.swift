@@ -71,7 +71,7 @@ struct ChatContentList: View {
                 )
             } else {
                 ForEach(messages) { message in
-                    if !message.content.isEmpty || message.isFromUser || message.errorMessage != nil || message.hasPendingMealSuggestion || message.loggedFoodEntryId != nil || message.hasPendingPlanSuggestion || message.planUpdateApplied || message.hasPendingFoodEdit || message.hasAppliedFoodEdit || message.hasPendingWorkoutSuggestion || message.hasStartedWorkout || message.hasPendingWorkoutLogSuggestion || message.hasSavedWorkoutLog || message.hasPendingReminderSuggestion || message.hasCreatedReminder {
+                    if !message.content.isEmpty || message.isFromUser || message.errorMessage != nil || message.hasPendingMealSuggestion || message.loggedFoodEntryId != nil || message.hasPendingPlanSuggestion || message.planUpdateApplied || message.hasPendingFoodEdit || message.hasAppliedFoodEdit || message.hasPendingWorkoutSuggestion || message.hasStartedWorkout || message.hasPendingWorkoutLogSuggestion || message.hasSavedWorkoutLog || message.hasPendingReminderSuggestion || message.hasCreatedReminder || message.hasSavedMemories {
                         VStack(spacing: 0) {
                             ChatBubble(
                                 message: message,

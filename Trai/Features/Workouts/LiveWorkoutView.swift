@@ -30,6 +30,8 @@ struct LiveWorkoutView: View {
     @State private var showingEndConfirmation = false
     @State private var showingSummary = false
     @State private var showingChat = false
+    @State private var showingExerciseReplacement = false
+    @State private var entryToReplace: LiveWorkoutEntry?
 
     // MARK: - Initialization
 
@@ -95,6 +97,17 @@ struct LiveWorkoutView: View {
                 ) { exercise in
                     viewModel.addExercise(exercise)
                     showingExerciseList = false
+                }
+            }
+            .sheet(isPresented: $showingExerciseReplacement) {
+                ExerciseListView(
+                    targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup }
+                ) { exercise in
+                    if let entry = entryToReplace {
+                        viewModel.replaceExercise(entry, with: exercise)
+                    }
+                    entryToReplace = nil
+                    showingExerciseReplacement = false
                 }
             }
             .sheet(isPresented: $showingChat) {
@@ -193,7 +206,6 @@ struct LiveWorkoutView: View {
                                 entry: entry,
                                 lastPerformance: viewModel.getLastPerformance(for: entry.exerciseName),
                                 personalRecord: viewModel.getPersonalRecord(for: entry.exerciseName),
-                                livePRType: viewModel.isNewPR(for: entry),
                                 usesMetricWeight: usesMetricExerciseWeight,
                                 onAddSet: { viewModel.addSet(to: entry) },
                                 onRemoveSet: { setIndex in viewModel.removeSet(at: setIndex, from: entry) },
@@ -201,7 +213,11 @@ struct LiveWorkoutView: View {
                                     viewModel.updateSet(at: setIndex, in: entry, reps: reps, weight: weight, notes: notes)
                                 },
                                 onToggleWarmup: { setIndex in viewModel.toggleWarmup(at: setIndex, in: entry) },
-                                onDeleteExercise: { viewModel.removeExercise(at: index) }
+                                onDeleteExercise: { viewModel.removeExercise(at: index) },
+                                onChangeExercise: {
+                                    entryToReplace = entry
+                                    showingExerciseReplacement = true
+                                }
                             )
                         }
                     }

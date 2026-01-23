@@ -116,6 +116,7 @@ final class NotificationService {
         content.title = "Time for \(meal.displayName)"
         content.body = meal.message
         content.sound = .default
+        content.interruptionLevel = .timeSensitive
         content.categoryIdentifier = NotificationCategory.mealReminder.rawValue
         content.userInfo = [
             "mealId": meal.id,
@@ -160,6 +161,7 @@ final class NotificationService {
         content.title = "Workout Time"
         content.body = "Ready to crush your workout? Let's go!"
         content.sound = .default
+        content.interruptionLevel = .timeSensitive
         content.categoryIdentifier = NotificationCategory.workoutReminder.rawValue
 
         var dateComponents = DateComponents()
@@ -193,6 +195,7 @@ final class NotificationService {
         content.title = "Weekly Weigh-In"
         content.body = "Time for your weekly weight check. Track your progress!"
         content.sound = .default
+        content.interruptionLevel = .timeSensitive
         content.categoryIdentifier = NotificationCategory.weightReminder.rawValue
 
         var dateComponents = DateComponents()
@@ -231,6 +234,7 @@ final class NotificationService {
             content.body = reminder.body
         }
         content.sound = .default
+        content.interruptionLevel = .timeSensitive
         content.categoryIdentifier = NotificationCategory.customReminder.rawValue
         content.userInfo = [
             "reminderId": reminder.id.uuidString,
@@ -328,6 +332,7 @@ final class NotificationService {
         content.title = title
         content.body = body
         content.sound = .default
+        content.interruptionLevel = .timeSensitive
         content.categoryIdentifier = category.rawValue
         content.userInfo = userInfo
 

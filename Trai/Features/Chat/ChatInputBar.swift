@@ -83,7 +83,7 @@ struct ChatInputBar: View {
                     .focused(isFocused)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.vertical, 14)
             .frame(minHeight: minInputHeight)
             .background(Color(.secondarySystemBackground))
             .clipShape(.rect(cornerRadius: 20))
@@ -118,7 +118,7 @@ struct ChatInputBar: View {
         }
         .animation(.snappy(duration: 0.2), value: isLoading)
         .padding(.horizontal)
-        .padding(.bottom, 8)
+        .padding(.vertical, 8)
         .background(Color(.systemBackground).ignoresSafeArea(edges: .bottom))
         .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedPhotoItem, matching: .images)
     }
@@ -146,7 +146,7 @@ struct SimpleChatInputBar: View {
                 .lineLimit(1...6)
                 .focused(isFocused)
                 .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .padding(.vertical, 14)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(.rect(cornerRadius: 20))
 
@@ -165,6 +165,6 @@ struct SimpleChatInputBar: View {
             .disabled(!canSend)
         }
         .padding(.horizontal)
-        .padding(.bottom, 8)
+        .padding(.vertical, 8)
     }
 }

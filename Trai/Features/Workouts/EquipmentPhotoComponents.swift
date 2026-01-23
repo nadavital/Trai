@@ -152,7 +152,6 @@ struct EquipmentAnalysisSheet: View {
                                                 Text(howTo)
                                                     .font(.caption)
                                                     .foregroundStyle(.secondary)
-                                                    .lineLimit(1)
                                             }
                                         }
                                     }

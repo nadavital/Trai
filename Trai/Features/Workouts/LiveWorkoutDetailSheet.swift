@@ -57,22 +57,37 @@ struct LiveWorkoutDetailSheet: View {
             .navigationTitle("Workout Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done", systemImage: "checkmark") {
-                        if isEditing {
-                            try? modelContext.save()
+                if isEditing {
+                    // Edit mode: Cancel (left) and Save (right)
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel", systemImage: "xmark") {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isEditing = false
+                            }
                         }
-                        dismiss()
                     }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button(isEditing ? "Save" : "Edit", systemImage: isEditing ? "checkmark" : "pencil") {
-                        if isEditing {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save", systemImage: "checkmark") {
                             try? modelContext.save()
                             HapticManager.success()
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isEditing = false
+                            }
                         }
-                        withAnimation(.snappy(duration: 0.2)) {
-                            isEditing.toggle()
+                        .tint(.accentColor)
+                    }
+                } else {
+                    // View mode: Edit (left) and Done (right)
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Edit", systemImage: "pencil") {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isEditing = true
+                            }
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done", systemImage: "checkmark") {
+                            dismiss()
                         }
                     }
                 }

@@ -13,13 +13,13 @@ struct ExerciseCard: View {
     let entry: LiveWorkoutEntry
     let lastPerformance: ExerciseHistory?
     let personalRecord: ExerciseHistory?
-    let livePRType: LiveWorkoutViewModel.PRType?  // Live PR detection during workout
     let usesMetricWeight: Bool
     let onAddSet: () -> Void
     let onRemoveSet: (Int) -> Void
     let onUpdateSet: (Int, Int?, Double?, String?) -> Void
     let onToggleWarmup: (Int) -> Void
     var onDeleteExercise: (() -> Void)? = nil
+    var onChangeExercise: (() -> Void)? = nil
 
     @State private var isExpanded = true
     @State private var showDeleteConfirmation = false
@@ -58,7 +58,7 @@ struct ExerciseCard: View {
             // Header
             HStack {
                 Button {
-                    withAnimation(.spring(duration: 0.3)) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
                         isExpanded.toggle()
                     }
                 } label: {
@@ -66,6 +66,13 @@ struct ExerciseCard: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(entry.exerciseName)
                                 .font(.headline)
+
+                            // Equipment name if available
+                            if let equipment = entry.equipmentName, !equipment.isEmpty {
+                                Text("@ \(equipment)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
 
                             HStack(spacing: 8) {
                                 Text("\(entry.sets.count) sets")
@@ -81,20 +88,8 @@ struct ExerciseCard: View {
                                         .foregroundStyle(.blue)
                                 }
 
-                                // Show live PR indicator or historical PR
-                                if let liveType = livePRType {
-                                    Text("•")
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
-                                    HStack(spacing: 2) {
-                                        Image(systemName: "trophy.fill")
-                                            .font(.caption2)
-                                        Text("NEW \(liveType.rawValue.uppercased())!")
-                                    }
-                                    .font(.caption)
-                                    .bold()
-                                    .foregroundStyle(Color.accentColor)
-                                } else if let pr = prDisplay {
+                                // Show historical PR (live PR detection removed - shown in summary only)
+                                if let pr = prDisplay {
                                     Text("•")
                                         .font(.caption)
                                         .foregroundStyle(.tertiary)
@@ -118,13 +113,23 @@ struct ExerciseCard: View {
                 }
                 .buttonStyle(.plain)
 
-                // Delete exercise button (optional)
-                if onDeleteExercise != nil {
+                // Exercise options menu
+                if onDeleteExercise != nil || onChangeExercise != nil {
                     Menu {
-                        Button(role: .destructive) {
-                            showDeleteConfirmation = true
-                        } label: {
-                            Label("Remove Exercise", systemImage: "trash")
+                        if onChangeExercise != nil {
+                            Button {
+                                onChangeExercise?()
+                            } label: {
+                                Label("Change Exercise", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                        }
+
+                        if onDeleteExercise != nil {
+                            Button(role: .destructive) {
+                                showDeleteConfirmation = true
+                            } label: {
+                                Label("Remove Exercise", systemImage: "trash")
+                            }
                         }
                     } label: {
                         Image(systemName: "ellipsis")
@@ -282,7 +287,7 @@ struct SetRow: View {
 
                 // Notes toggle button
                 Button {
-                    withAnimation(.snappy(duration: 0.2)) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
                         showNotesField.toggle()
                         if showNotesField {
                             isNotesFocused = true
@@ -369,7 +374,6 @@ struct SetRow: View {
         }(),
         lastPerformance: nil,
         personalRecord: nil,
-        livePRType: nil,
         usesMetricWeight: true,
         onAddSet: {},
         onRemoveSet: { _ in },

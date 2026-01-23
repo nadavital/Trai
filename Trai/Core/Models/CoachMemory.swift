@@ -125,6 +125,86 @@ final class CoachMemory {
 // MARK: - Memory Formatting
 
 extension Array where Element == CoachMemory {
+    /// Detect conversation topic from user message
+    private static func detectTopic(from message: String) -> MemoryTopic? {
+        let lower = message.lowercased()
+
+        let foodKeywords = ["food", "eat", "meal", "calories", "protein", "macro", "nutrition",
+                           "diet", "hungry", "breakfast", "lunch", "dinner", "snack", "cook",
+                           "recipe", "ingredient", "carb", "fat", "fiber", "sugar"]
+        let workoutKeywords = ["workout", "exercise", "gym", "lift", "pull", "push", "cardio",
+                              "training", "sets", "reps", "muscle", "weight", "squat", "bench",
+                              "deadlift", "run", "jog", "stretch", "rest day", "recovery"]
+        let scheduleKeywords = ["time", "morning", "evening", "schedule", "when", "busy",
+                               "routine", "tomorrow", "today", "week", "daily", "night shift"]
+
+        let foodScore = foodKeywords.filter { lower.contains($0) }.count
+        let workoutScore = workoutKeywords.filter { lower.contains($0) }.count
+        let scheduleScore = scheduleKeywords.filter { lower.contains($0) }.count
+
+        let maxScore = Swift.max(foodScore, Swift.max(workoutScore, scheduleScore))
+        guard maxScore > 0 else { return nil }
+
+        if maxScore == foodScore { return .food }
+        if maxScore == workoutScore { return .workout }
+        return .schedule
+    }
+
+    /// Filter memories by relevance to the current conversation
+    /// - Parameters:
+    ///   - message: The user's current message
+    ///   - maxCount: Maximum number of memories to include (default 10)
+    /// - Returns: Filtered and sorted array of relevant memories
+    func filterForRelevance(message: String, maxCount: Int = 10) -> [CoachMemory] {
+        guard !isEmpty else { return [] }
+
+        let detectedTopic = Self.detectTopic(from: message)
+
+        // Score each memory for relevance
+        let scored: [(memory: CoachMemory, score: Int)] = self.map { memory in
+            var score = 0
+
+            // Always include restrictions (safety-critical)
+            if memory.category == .restriction {
+                score += 100
+            }
+
+            // High importance memories always relevant
+            if memory.importance >= 4 {
+                score += 50
+            }
+
+            // Topic match bonus
+            if let topic = detectedTopic, memory.topic == topic {
+                score += 30
+            }
+
+            // General topic memories are always somewhat relevant
+            if memory.topic == .general {
+                score += 10
+            }
+
+            // Importance adds to score
+            score += memory.importance * 2
+
+            // Newer memories slightly preferred
+            let daysSinceCreation = Date().timeIntervalSince(memory.createdAt) / 86400
+            if daysSinceCreation < 7 {
+                score += 5
+            }
+
+            return (memory, score)
+        }
+
+        // Sort by score (highest first) and take top N
+        let sorted = scored
+            .sorted { $0.score > $1.score }
+            .prefix(maxCount)
+            .map(\.memory)
+
+        return Array(sorted)
+    }
+
     /// Format memories for inclusion in AI system prompt
     func formatForPrompt() -> String {
         guard !isEmpty else { return "" }

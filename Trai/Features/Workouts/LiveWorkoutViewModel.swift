@@ -47,13 +47,40 @@ final class LiveWorkoutViewModel {
     // Cache of personal records (all-time max weight) for exercises
     var personalRecords: [String: ExerciseHistory] = [:]
 
-    // PRs achieved during this workout (exercise name -> type of PR)
-    var achievedPRs: [String: PRType] = [:]
+    // PRs achieved during this workout (exercise name -> PR details)
+    var achievedPRs: [String: PRValue] = [:]
 
     enum PRType: String {
         case weight = "Weight PR"
         case volume = "Volume PR"
         case reps = "Rep PR"
+    }
+
+    struct PRValue: Equatable {
+        let type: PRType
+        let exerciseName: String
+        let newValue: Double
+        let previousValue: Double
+        let isFirstTime: Bool
+
+        var improvement: Double { newValue - previousValue }
+
+        var formattedNewValue: String {
+            switch type {
+            case .weight: return String(format: "%.1f kg", newValue)
+            case .volume: return String(format: "%.0f kg", newValue)
+            case .reps: return "\(Int(newValue)) reps"
+            }
+        }
+
+        var formattedImprovement: String {
+            guard !isFirstTime && improvement > 0 else { return "" }
+            switch type {
+            case .weight: return String(format: "+%.1f kg", improvement)
+            case .volume: return String(format: "+%.0f kg", improvement)
+            case .reps: return "+\(Int(improvement)) reps"
+            }
+        }
     }
 
     // User preferences cache (exercise usage frequency)
@@ -568,7 +595,7 @@ final class LiveWorkoutViewModel {
         let patternReps = lastPerformance?.repPatternArray.first
         let patternWeight = lastPerformance?.weightPatternArray.first
 
-        let suggestedReps = patternReps ?? lastPerformance?.bestSetReps ?? 10
+        let suggestedReps = patternReps ?? lastPerformance?.bestSetReps ?? getUserDefaultRepCount()
         let suggestedWeight = patternWeight ?? lastPerformance?.bestSetWeightKg ?? 0
 
         // Start with 1 set - user adds more as needed
@@ -596,7 +623,7 @@ final class LiveWorkoutViewModel {
         let patternReps = lastPerformance?.repPatternArray.first
         let patternWeight = lastPerformance?.weightPatternArray.first
 
-        let suggestedReps = patternReps ?? lastPerformance?.bestSetReps ?? 10
+        let suggestedReps = patternReps ?? lastPerformance?.bestSetReps ?? getUserDefaultRepCount()
         let suggestedWeight = patternWeight ?? lastPerformance?.bestSetWeightKg ?? 0
 
         // Start with 1 set - user adds more as needed
@@ -623,6 +650,41 @@ final class LiveWorkoutViewModel {
         for (newIndex, entry) in (workout.entries ?? []).enumerated() {
             entry.orderIndex = newIndex
         }
+
+        save()
+    }
+
+    /// Replace an existing exercise with a new one, keeping the same position
+    func replaceExercise(_ existingEntry: LiveWorkoutEntry, with newExercise: Exercise) {
+        let orderIndex = existingEntry.orderIndex
+
+        // Create new entry with the same order index
+        let newEntry = LiveWorkoutEntry(exercise: newExercise, orderIndex: orderIndex)
+
+        // Get last performance to pre-fill first set
+        let lastPerformance = getLastPerformance(for: newExercise.name)
+        let patternReps = lastPerformance?.repPatternArray.first
+        let patternWeight = lastPerformance?.weightPatternArray.first
+
+        let suggestedReps = patternReps ?? lastPerformance?.bestSetReps ?? getUserDefaultRepCount()
+        let suggestedWeight = patternWeight ?? lastPerformance?.bestSetWeightKg ?? 0
+
+        // Start with 1 set
+        newEntry.addSet(LiveWorkoutEntry.SetData(
+            reps: suggestedReps,
+            weightKg: suggestedWeight,
+            completed: false,
+            isWarmup: false
+        ))
+
+        // Remove old entry and add new one
+        workout.entries?.removeAll { $0.id == existingEntry.id }
+        newEntry.workout = workout
+        modelContext?.insert(newEntry)
+        workout.entries?.append(newEntry)
+
+        // Re-sort entries by order index
+        workout.entries?.sort { $0.orderIndex < $1.orderIndex }
 
         save()
     }
@@ -816,21 +878,45 @@ final class LiveWorkoutViewModel {
             if let previousPR = personalRecords[entry.exerciseName] {
                 // Weight PR
                 if history.bestSetWeightKg > previousPR.bestSetWeightKg {
-                    achievedPRs[entry.exerciseName] = .weight
+                    achievedPRs[entry.exerciseName] = PRValue(
+                        type: .weight,
+                        exerciseName: entry.exerciseName,
+                        newValue: history.bestSetWeightKg,
+                        previousValue: previousPR.bestSetWeightKg,
+                        isFirstTime: false
+                    )
                 }
                 // Volume PR (only if no weight PR already detected)
                 else if history.totalVolume > previousPR.totalVolume,
                         achievedPRs[entry.exerciseName] == nil {
-                    achievedPRs[entry.exerciseName] = .volume
+                    achievedPRs[entry.exerciseName] = PRValue(
+                        type: .volume,
+                        exerciseName: entry.exerciseName,
+                        newValue: history.totalVolume,
+                        previousValue: previousPR.totalVolume,
+                        isFirstTime: false
+                    )
                 }
                 // Rep PR (only if nothing else detected)
                 else if history.bestSetReps > previousPR.bestSetReps,
                         achievedPRs[entry.exerciseName] == nil {
-                    achievedPRs[entry.exerciseName] = .reps
+                    achievedPRs[entry.exerciseName] = PRValue(
+                        type: .reps,
+                        exerciseName: entry.exerciseName,
+                        newValue: Double(history.bestSetReps),
+                        previousValue: Double(previousPR.bestSetReps),
+                        isFirstTime: false
+                    )
                 }
             } else if history.bestSetWeightKg > 0 {
                 // First time doing this exercise - it's a PR by default
-                achievedPRs[entry.exerciseName] = .weight
+                achievedPRs[entry.exerciseName] = PRValue(
+                    type: .weight,
+                    exerciseName: entry.exerciseName,
+                    newValue: history.bestSetWeightKg,
+                    previousValue: 0,
+                    isFirstTime: true
+                )
             }
         }
     }

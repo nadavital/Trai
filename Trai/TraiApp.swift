@@ -15,6 +15,7 @@ struct TraiApp: App {
 
     let modelContainer: ModelContainer
     @State private var notificationService = NotificationService()
+    @State private var healthKitService = HealthKitService()
     @State private var notificationDelegate: NotificationDelegate?
     @State private var showRemindersFromNotification = false
     @State private var deepLinkDestination: DeepLinkDestination?
@@ -71,6 +72,7 @@ struct TraiApp: App {
         WindowGroup {
             ContentView(deepLinkDestination: $deepLinkDestination)
                 .environment(notificationService)
+                .environment(healthKitService)
                 .environment(\.showRemindersFromNotification, $showRemindersFromNotification)
                 .onAppear {
                     setupNotificationDelegate()

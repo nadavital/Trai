@@ -283,8 +283,8 @@ struct ExerciseListView: View {
             .sheet(isPresented: $showingAddCustom) {
                 AddCustomExerciseSheet(
                     initialName: searchText,
-                    onSave: { name, muscleGroup, category in
-                        addCustomExercise(name: name, muscleGroup: muscleGroup, category: category)
+                    onSave: { name, muscleGroup, category, secondaryMuscles in
+                        addCustomExercise(name: name, muscleGroup: muscleGroup, category: category, secondaryMuscles: secondaryMuscles)
                     }
                 )
             }
@@ -463,7 +463,8 @@ struct ExerciseListView: View {
         name: String,
         muscleGroup: Exercise.MuscleGroup? = nil,
         category: Exercise.Category = .strength,
-        equipmentName: String? = nil
+        equipmentName: String? = nil,
+        secondaryMuscles: [String]? = nil
     ) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -482,6 +483,9 @@ struct ExerciseListView: View {
         )
         exercise.isCustom = true
         exercise.equipmentName = equipmentName
+        if let secondary = secondaryMuscles, !secondary.isEmpty {
+            exercise.secondaryMuscles = secondary.joined(separator: ",")
+        }
         modelContext.insert(exercise)
         try? modelContext.save()
 

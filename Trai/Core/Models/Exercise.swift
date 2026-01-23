@@ -13,6 +13,9 @@ final class Exercise {
     /// Target muscle group (for strength exercises)
     var muscleGroup: String?
 
+    /// Secondary muscle groups worked (comma-separated for CloudKit compatibility)
+    var secondaryMuscles: String?
+
     /// Equipment/machine name (for exercises added via photo identification)
     var equipmentName: String?
 
@@ -124,6 +127,26 @@ extension Exercise {
         }
         set { muscleGroup = newValue?.rawValue }
     }
+
+    /// Secondary muscle groups as array (parsed from comma-separated string)
+    var secondaryMuscleGroups: [MuscleGroup] {
+        get {
+            guard let secondary = secondaryMuscles else { return [] }
+            return secondary.split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .compactMap { MuscleGroup(rawValue: $0) }
+        }
+        set {
+            secondaryMuscles = newValue.isEmpty ? nil : newValue.map(\.rawValue).joined(separator: ",")
+        }
+    }
+
+    /// Display string for secondary muscles (e.g., "Biceps, Core")
+    var secondaryMusclesDisplay: String? {
+        let groups = secondaryMuscleGroups
+        guard !groups.isEmpty else { return nil }
+        return groups.map(\.displayName).joined(separator: ", ")
+    }
 }
 
 // MARK: - Default Exercises
@@ -141,6 +164,7 @@ extension Exercise {
         ("Bent Over Row", "strength", "back"),
         ("Lat Pulldown", "strength", "back"),
         ("Pull-Ups", "strength", "back"),
+        ("Rowing Machine", "strength", "back"),
 
         // Shoulders
         ("Overhead Press", "strength", "shoulders"),

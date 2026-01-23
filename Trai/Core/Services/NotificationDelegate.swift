@@ -75,8 +75,8 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
             if await isReminderCompletedToday(userInfo: userInfo, categoryIdentifier: categoryIdentifier) {
                 completionHandler([])
             } else {
-                // Show banner and play sound
-                completionHandler([.banner, .sound])
+                // Show banner, play sound, and keep in notification center
+                completionHandler([.banner, .sound, .list])
             }
         }
     }

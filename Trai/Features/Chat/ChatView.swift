@@ -103,7 +103,7 @@ struct ChatView: View {
 
     private var isStreamingResponse: Bool {
         guard let lastMessage = currentSessionMessages.last else { return false }
-        return !lastMessage.isFromUser && isLoading && !lastMessage.content.isEmpty
+        return !lastMessage.isFromUser && isLoading
     }
 
     var todaysFoodEntries: [FoodEntry] {

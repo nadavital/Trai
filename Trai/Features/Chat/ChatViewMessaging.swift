@@ -176,7 +176,9 @@ extension ChatView {
                 .map { ($0.isFromUser ? "User" : "Coach") + ": " + $0.content }
                 .joined(separator: "\n")
 
-            let memoriesContext = activeMemories.formatForPrompt()
+            // Filter memories by relevance to current message (reduces prompt size, improves relevance)
+            let relevantMemories = activeMemories.filterForRelevance(message: text, maxCount: 10)
+            let memoriesContext = relevantMemories.formatForPrompt()
 
             // Fetch activity data from HealthKit
             let activityData = await fetchActivityData()
@@ -278,6 +280,9 @@ extension ChatView {
         if !result.message.isEmpty {
             aiMessage.content = result.message
         }
+
+        // Explicit save to ensure SwiftData persists changes after function calls
+        try? modelContext.save()
     }
 
     func buildFitnessContext() -> FitnessContext {

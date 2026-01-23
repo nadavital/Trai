@@ -12,7 +12,7 @@ import SwiftData
 
 struct WorkoutSummarySheet: View {
     @Bindable var workout: LiveWorkout
-    var achievedPRs: [String: LiveWorkoutViewModel.PRType] = [:]
+    var achievedPRs: [String: LiveWorkoutViewModel.PRValue] = [:]
     let onDismiss: () -> Void
 
     @State private var showConfetti = false
@@ -43,19 +43,8 @@ struct WorkoutSummarySheet: View {
                             }
 
                             ForEach(Array(achievedPRs.keys.sorted()), id: \.self) { exerciseName in
-                                if let prType = achievedPRs[exerciseName] {
-                                    HStack {
-                                        Text(exerciseName)
-                                            .font(.subheadline)
-                                        Spacer()
-                                        Text(prType.rawValue)
-                                            .font(.caption)
-                                            .foregroundStyle(.white)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(Color.accentColor)
-                                            .clipShape(.capsule)
-                                    }
+                                if let prValue = achievedPRs[exerciseName] {
+                                    PRRow(prValue: prValue)
                                 }
                             }
                         }
@@ -83,14 +72,6 @@ struct WorkoutSummarySheet: View {
                             value: "\(workout.totalSets)",
                             icon: "square.stack.3d.up.fill"
                         )
-
-                        if workout.totalVolume > 0 {
-                            SummaryStatRow(
-                                label: "Total Volume",
-                                value: "\(Int(workout.totalVolume)) kg",
-                                icon: "scalemass.fill"
-                            )
-                        }
                     }
                     .padding()
                     .background(Color(.secondarySystemBackground))
@@ -143,7 +124,7 @@ struct WorkoutSummarySheet: View {
 /// Summary content without NavigationStack - for embedding in parent view
 struct WorkoutSummaryContent: View {
     @Bindable var workout: LiveWorkout
-    var achievedPRs: [String: LiveWorkoutViewModel.PRType] = [:]
+    var achievedPRs: [String: LiveWorkoutViewModel.PRValue] = [:]
     let onDismiss: () -> Void
 
     @State private var showConfetti = false
@@ -173,19 +154,8 @@ struct WorkoutSummaryContent: View {
                         }
 
                         ForEach(Array(achievedPRs.keys.sorted()), id: \.self) { exerciseName in
-                            if let prType = achievedPRs[exerciseName] {
-                                HStack {
-                                    Text(exerciseName)
-                                        .font(.subheadline)
-                                    Spacer()
-                                    Text(prType.rawValue)
-                                        .font(.caption)
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.accentColor)
-                                        .clipShape(.capsule)
-                                }
+                            if let prValue = achievedPRs[exerciseName] {
+                                PRRow(prValue: prValue)
                             }
                         }
                     }
@@ -213,14 +183,6 @@ struct WorkoutSummaryContent: View {
                         value: "\(workout.totalSets)",
                         icon: "square.stack.3d.up.fill"
                     )
-
-                    if workout.totalVolume > 0 {
-                        SummaryStatRow(
-                            label: "Total Volume",
-                            value: "\(Int(workout.totalVolume)) kg",
-                            icon: "scalemass.fill"
-                        )
-                    }
                 }
                 .padding()
                 .background(Color(.secondarySystemBackground))
@@ -259,6 +221,48 @@ struct WorkoutSummaryContent: View {
     }
 }
 
+// MARK: - PR Row
+
+struct PRRow: View {
+    let prValue: LiveWorkoutViewModel.PRValue
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(prValue.exerciseName)
+                    .font(.subheadline)
+
+                HStack(spacing: 6) {
+                    Text(prValue.formattedNewValue)
+                        .font(.caption)
+                        .bold()
+                        .foregroundStyle(.primary)
+
+                    if prValue.isFirstTime {
+                        Text("First time!")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else if !prValue.formattedImprovement.isEmpty {
+                        Text(prValue.formattedImprovement)
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
+                }
+            }
+
+            Spacer()
+
+            Text(prValue.type.rawValue)
+                .font(.caption)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.accentColor)
+                .clipShape(.capsule)
+        }
+    }
+}
+
 // MARK: - Summary Stat Row
 
 struct SummaryStatRow: View {
@@ -290,18 +294,16 @@ struct ExerciseSummaryRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Exercise name and volume
-            HStack {
+            // Exercise name and equipment
+            VStack(alignment: .leading, spacing: 2) {
                 Text(entry.exerciseName)
                     .font(.subheadline)
                     .bold()
 
-                Spacer()
-
-                if entry.totalVolume > 0 {
-                    Text("\(Int(entry.totalVolume)) kg")
+                if let equipment = entry.equipmentName, !equipment.isEmpty {
+                    Text("@ \(equipment)")
                         .font(.caption)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(.secondary)
                 }
             }
 

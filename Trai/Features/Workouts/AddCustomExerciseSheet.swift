@@ -13,7 +13,7 @@ struct AddCustomExerciseSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let initialName: String
-    let onSave: (String, Exercise.MuscleGroup?, Exercise.Category) -> Void
+    let onSave: (String, Exercise.MuscleGroup?, Exercise.Category, [String]?) -> Void
 
     @State private var exerciseName: String = ""
     @State private var selectedCategory: Exercise.Category = .strength
@@ -60,7 +60,7 @@ struct AddCustomExerciseSheet: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add", systemImage: "checkmark") {
-                        onSave(exerciseName, selectedMuscleGroup, selectedCategory)
+                        onSave(exerciseName, selectedMuscleGroup, selectedCategory, analysisResult?.secondaryMuscles)
                         HapticManager.success()
                         dismiss()
                     }
@@ -110,7 +110,7 @@ struct AddCustomExerciseSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "sparkles")
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(.accent)
                 Text("Trai Analysis")
                     .font(.subheadline)
                     .fontWeight(.medium)
@@ -127,7 +127,7 @@ struct AddCustomExerciseSheet: View {
                     Spacer()
                 }
                 .padding()
-                .background(Color.purple.opacity(0.1))
+                .background(Color.accentColor.opacity(0.1))
                 .clipShape(.rect(cornerRadius: 12))
             } else if let analysis = analysisResult {
                 VStack(alignment: .leading, spacing: 10) {
@@ -158,7 +158,7 @@ struct AddCustomExerciseSheet: View {
                     }
                 }
                 .padding()
-                .background(Color.purple.opacity(0.1))
+                .background(Color.accentColor.opacity(0.1))
                 .clipShape(.rect(cornerRadius: 12))
             } else {
                 Button {
@@ -171,7 +171,7 @@ struct AddCustomExerciseSheet: View {
                             .font(.title3)
                     }
                     .padding()
-                    .background(Color.purple.opacity(0.1))
+                    .background(Color.accentColor.opacity(0.1))
                     .clipShape(.rect(cornerRadius: 12))
                 }
                 .buttonStyle(.plain)

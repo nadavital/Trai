@@ -20,6 +20,9 @@ final class LiveWorkoutEntry {
     /// Exercise name (stored for display, in case exercise is deleted)
     var exerciseName: String = ""
 
+    /// Equipment/machine name (e.g., "Life Fitness Lat Pulldown", "Rack 3")
+    var equipmentName: String?
+
     /// Type of exercise: "strength", "cardio", or "flexibility"
     var exerciseType: String = "strength"
 
@@ -61,14 +64,16 @@ final class LiveWorkoutEntry {
         self.exerciseId = exercise.id
         self.exerciseName = exercise.name
         self.exerciseType = exercise.category
+        self.equipmentName = exercise.equipmentName
         self.orderIndex = orderIndex
     }
 
-    init(exerciseName: String, orderIndex: Int, exerciseId: UUID? = nil, exerciseType: String = "strength") {
+    init(exerciseName: String, orderIndex: Int, exerciseId: UUID? = nil, exerciseType: String = "strength", equipmentName: String? = nil) {
         self.exerciseName = exerciseName
         self.orderIndex = orderIndex
         self.exerciseId = exerciseId
         self.exerciseType = exerciseType
+        self.equipmentName = equipmentName
     }
 }
 
