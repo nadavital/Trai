@@ -33,9 +33,10 @@ struct PersonalRecordsView: View {
         useLbs ? "lbs" : "kg"
     }
 
-    /// Convert kg to display weight (lbs or kg)
+    /// Convert kg to display weight (lbs or kg) with proper rounding
     private func displayWeight(_ kg: Double) -> Int {
-        useLbs ? Int(kg * 2.20462) : Int(kg)
+        let unit = WeightUnit(usesMetric: !useLbs)
+        return WeightUtility.displayInt(kg, displayUnit: unit)
     }
 
     // MARK: - Computed Properties
@@ -347,7 +348,8 @@ private struct ExercisePRRow: View {
     private var weightUnit: String { useLbs ? "lbs" : "kg" }
 
     private func displayWeight(_ kg: Double) -> Int {
-        useLbs ? Int(kg * 2.20462) : Int(kg)
+        let unit = WeightUnit(usesMetric: !useLbs)
+        return WeightUtility.displayInt(kg, displayUnit: unit)
     }
 
     var body: some View {
@@ -460,7 +462,8 @@ private struct PRDetailSheet: View {
     private var weightUnit: String { useLbs ? "lbs" : "kg" }
 
     private func displayWeight(_ kg: Double) -> Int {
-        useLbs ? Int(kg * 2.20462) : Int(kg)
+        let unit = WeightUnit(usesMetric: !useLbs)
+        return WeightUtility.displayInt(kg, displayUnit: unit)
     }
 
     var body: some View {
@@ -642,7 +645,8 @@ private struct HistoryRow: View {
     private var weightUnit: String { useLbs ? "lbs" : "kg" }
 
     private func displayWeight(_ kg: Double) -> Int {
-        useLbs ? Int(kg * 2.20462) : Int(kg)
+        let unit = WeightUnit(usesMetric: !useLbs)
+        return WeightUtility.displayInt(kg, displayUnit: unit)
     }
 
     var body: some View {

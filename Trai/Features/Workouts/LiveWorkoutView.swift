@@ -209,8 +209,8 @@ struct LiveWorkoutView: View {
                                 usesMetricWeight: usesMetricExerciseWeight,
                                 onAddSet: { viewModel.addSet(to: entry) },
                                 onRemoveSet: { setIndex in viewModel.removeSet(at: setIndex, from: entry) },
-                                onUpdateSet: { setIndex, reps, weight, notes in
-                                    viewModel.updateSet(at: setIndex, in: entry, reps: reps, weight: weight, notes: notes)
+                                onUpdateSet: { setIndex, reps, weightKg, weightLbs, notes in
+                                    viewModel.updateSet(at: setIndex, in: entry, reps: reps, weightKg: weightKg, weightLbs: weightLbs, notes: notes)
                                 },
                                 onToggleWarmup: { setIndex in viewModel.toggleWarmup(at: setIndex, in: entry) },
                                 onDeleteExercise: { viewModel.removeExercise(at: index) },
@@ -335,14 +335,14 @@ struct LiveWorkoutView: View {
         )
 
         let entry1 = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)
-        entry1.addSet(LiveWorkoutEntry.SetData(reps: 10, weightKg: 60, completed: true, isWarmup: true))
-        entry1.addSet(LiveWorkoutEntry.SetData(reps: 8, weightKg: 80, completed: true, isWarmup: false))
-        entry1.addSet(LiveWorkoutEntry.SetData(reps: 6, weightKg: 90, completed: false, isWarmup: false))
+        entry1.addSet(LiveWorkoutEntry.SetData(reps: 10, weight: CleanWeight(kg: 60, lbs: 132.5), completed: true, isWarmup: true))
+        entry1.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: CleanWeight(kg: 80, lbs: 177.5), completed: true, isWarmup: false))
+        entry1.addSet(LiveWorkoutEntry.SetData(reps: 6, weight: CleanWeight(kg: 90, lbs: 200), completed: false, isWarmup: false))
 
         let entry2 = LiveWorkoutEntry(exerciseName: "Overhead Press", orderIndex: 1)
-        entry2.addSet(LiveWorkoutEntry.SetData(reps: 10, weightKg: 40, completed: false, isWarmup: false))
-        entry2.addSet(LiveWorkoutEntry.SetData(reps: 10, weightKg: 40, completed: false, isWarmup: false))
-        entry2.addSet(LiveWorkoutEntry.SetData(reps: 10, weightKg: 40, completed: false, isWarmup: false))
+        entry2.addSet(LiveWorkoutEntry.SetData(reps: 10, weight: CleanWeight(kg: 40, lbs: 90), completed: false, isWarmup: false))
+        entry2.addSet(LiveWorkoutEntry.SetData(reps: 10, weight: CleanWeight(kg: 40, lbs: 90), completed: false, isWarmup: false))
+        entry2.addSet(LiveWorkoutEntry.SetData(reps: 10, weight: CleanWeight(kg: 40, lbs: 90), completed: false, isWarmup: false))
 
         workout.entries = [entry1, entry2]
         return workout

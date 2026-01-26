@@ -172,9 +172,10 @@ extension ChatView {
 
             // Add each set with its specific reps/weight
             for setData in exercise.sets {
+                let cleanWeight = WeightUtility.cleanWeightFromKg(setData.weightKg ?? 0)
                 entry.addSet(LiveWorkoutEntry.SetData(
                     reps: setData.reps,
-                    weightKg: setData.weightKg ?? 0,
+                    weight: cleanWeight,
                     completed: true,
                     isWarmup: false
                 ))
@@ -241,10 +242,11 @@ extension ChatView {
             let entry = LiveWorkoutEntry(exerciseName: exercise.name, orderIndex: index)
 
             // Pre-populate sets
+            let cleanWeight = WeightUtility.cleanWeightFromKg(exercise.weightKg ?? 0)
             for _ in 0..<exercise.sets {
                 entry.addSet(LiveWorkoutEntry.SetData(
                     reps: exercise.reps,
-                    weightKg: exercise.weightKg ?? 0,
+                    weight: cleanWeight,
                     completed: false,
                     isWarmup: false
                 ))

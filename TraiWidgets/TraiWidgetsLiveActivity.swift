@@ -31,6 +31,8 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         let currentReps: Int?
         let totalVolumeKg: Double?
         let nextExercise: String?
+        // User's weight unit preference
+        let usesMetricWeight: Bool
 
         init(
             elapsedSeconds: Int,
@@ -42,7 +44,8 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             currentWeight: Double? = nil,
             currentReps: Int? = nil,
             totalVolumeKg: Double? = nil,
-            nextExercise: String? = nil
+            nextExercise: String? = nil,
+            usesMetricWeight: Bool = true
         ) {
             self.elapsedSeconds = elapsedSeconds
             self.currentExercise = currentExercise
@@ -54,6 +57,7 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             self.currentReps = currentReps
             self.totalVolumeKg = totalVolumeKg
             self.nextExercise = nextExercise
+            self.usesMetricWeight = usesMetricWeight
         }
 
         /// Formatted elapsed time string (MM:SS or H:MM:SS)
@@ -79,19 +83,23 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             "\(completedSets)/\(totalSets) sets"
         }
 
-        /// Volume display string (e.g., "2.5k kg")
+        /// Volume display string (e.g., "2.5k kg" or "5.5k lbs")
         var volumeDisplay: String? {
             guard let volume = totalVolumeKg, volume > 0 else { return nil }
-            if volume >= 1000 {
-                return String(format: "%.1fk kg", volume / 1000)
+            let displayVolume = usesMetricWeight ? volume : volume * 2.20462
+            let unit = usesMetricWeight ? "kg" : "lbs"
+            if displayVolume >= 1000 {
+                return String(format: "%.1fk %@", displayVolume / 1000, unit)
             }
-            return "\(Int(volume)) kg"
+            return "\(Int(displayVolume)) \(unit)"
         }
 
-        /// Current set display (e.g., "80kg × 8")
+        /// Current set display (e.g., "80kg × 8" or "175lbs × 8")
         var currentSetDisplay: String? {
             guard let weight = currentWeight, let reps = currentReps, weight > 0 else { return nil }
-            return "\(Int(weight))kg × \(reps)"
+            let displayWeight = usesMetricWeight ? weight : weight * 2.20462
+            let unit = usesMetricWeight ? "kg" : "lbs"
+            return "\(Int(displayWeight))\(unit) \u{00D7} \(reps)"
         }
     }
 }

@@ -126,8 +126,8 @@ struct WorkoutBanner: View {
                     targetMuscleGroups: [.chest, .shoulders, .triceps]
                 )
                 let entry = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)
-                entry.addSet(LiveWorkoutEntry.SetData(reps: 10, weightKg: 60, completed: true, isWarmup: false))
-                entry.addSet(LiveWorkoutEntry.SetData(reps: 8, weightKg: 70, completed: true, isWarmup: false))
+                entry.addSet(LiveWorkoutEntry.SetData(reps: 10, weight: CleanWeight(kg: 60, lbs: 132.5), completed: true, isWarmup: false))
+                entry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: CleanWeight(kg: 70, lbs: 155), completed: true, isWarmup: false))
                 workout.entries = [entry]
                 return workout
             }(),

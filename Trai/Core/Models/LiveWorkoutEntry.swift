@@ -84,32 +84,66 @@ extension LiveWorkoutEntry {
         var id: UUID = UUID()
         var reps: Int
         var weightKg: Double
+        var weightLbs: Double
         var completed: Bool
         var isWarmup: Bool
         var notes: String
 
-        init(reps: Int = 0, weightKg: Double = 0, completed: Bool = false, isWarmup: Bool = false, notes: String = "") {
+        init(reps: Int = 0, weightKg: Double = 0, weightLbs: Double = 0, completed: Bool = false, isWarmup: Bool = false, notes: String = "") {
             self.reps = reps
             self.weightKg = weightKg
+            self.weightLbs = weightLbs
             self.completed = completed
             self.isWarmup = isWarmup
             self.notes = notes
         }
 
-        // Custom decoder to handle missing notes field in existing data
+        /// Initialize with clean weight (both units pre-computed)
+        init(reps: Int = 0, weight: CleanWeight, completed: Bool = false, isWarmup: Bool = false, notes: String = "") {
+            self.reps = reps
+            self.weightKg = weight.kg
+            self.weightLbs = weight.lbs
+            self.completed = completed
+            self.isWarmup = isWarmup
+            self.notes = notes
+        }
+
+        // Custom decoder to handle missing fields in existing data
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
             reps = try container.decode(Int.self, forKey: .reps)
             weightKg = try container.decode(Double.self, forKey: .weightKg)
+            // Migration: compute lbs from kg if not present
+            if let lbs = try container.decodeIfPresent(Double.self, forKey: .weightLbs) {
+                weightLbs = lbs
+            } else {
+                // Legacy data: convert kg to lbs with clean rounding
+                weightLbs = WeightUtility.round(weightKg * WeightUtility.kgToLbs, unit: .lbs)
+            }
             completed = try container.decode(Bool.self, forKey: .completed)
             isWarmup = try container.decode(Bool.self, forKey: .isWarmup)
             notes = try container.decodeIfPresent(String.self, forKey: .notes) ?? ""
         }
 
-        /// Volume for this set (weight × reps)
+        /// Volume for this set (weight × reps) - uses kg for calculations
         var volume: Double {
             Double(reps) * weightKg
+        }
+
+        /// Get clean weight in user's preferred unit
+        func displayWeight(usesMetric: Bool) -> Double {
+            usesMetric ? weightKg : weightLbs
+        }
+
+        /// Get formatted weight string in user's preferred unit
+        func formattedWeight(usesMetric: Bool, showUnit: Bool = true) -> String {
+            let value = displayWeight(usesMetric: usesMetric)
+            let unit = usesMetric ? "kg" : "lbs"
+            if value.truncatingRemainder(dividingBy: 1) == 0 {
+                return showUnit ? "\(Int(value)) \(unit)" : "\(Int(value))"
+            }
+            return showUnit ? String(format: "%.1f %@", value, unit) : String(format: "%.1f", value)
         }
     }
 }

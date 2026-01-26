@@ -190,7 +190,8 @@ struct LiveWorkoutDetailSheet: View {
             if let history = allExerciseHistory.first(where: { $0.sourceWorkoutEntryId == entry.id }) {
                 // Update history with current entry data
                 if let best = entry.bestSet {
-                    history.bestSetWeightKg = (best.weightKg * 2).rounded() / 2
+                    // Round to 0.5 kg (storage unit) using WeightUtility
+                    history.bestSetWeightKg = WeightUtility.round(best.weightKg, unit: .kg)
                     history.bestSetReps = best.reps
                 }
                 history.totalVolume = entry.totalVolume
@@ -202,7 +203,7 @@ struct LiveWorkoutDetailSheet: View {
                 if let completedSets = entry.completedSets, !completedSets.isEmpty {
                     history.repPattern = completedSets.map { "\($0.reps)" }.joined(separator: ",")
                     history.weightPattern = completedSets.map { set -> String in
-                        let rounded = (set.weightKg * 2).rounded() / 2
+                        let rounded = WeightUtility.round(set.weightKg, unit: .kg)
                         return String(format: "%.1f", rounded)
                     }.joined(separator: ",")
                 }
@@ -348,9 +349,11 @@ struct EditableSetRow: View {
                 .background(Color(.tertiarySystemFill))
                 .clipShape(.rect(cornerRadius: 6))
                 .onChange(of: weightText) { _, newValue in
-                    if let weight = Double(newValue) {
+                    let unit = WeightUnit(usesMetric: !useLbs)
+                    if let cleanWeight = WeightUtility.parseToCleanWeight(newValue, inputUnit: unit) {
                         var updated = set
-                        updated.weightKg = useLbs ? weight / 2.20462 : weight
+                        updated.weightKg = cleanWeight.kg
+                        updated.weightLbs = cleanWeight.lbs
                         entry.updateSet(at: setIndex, with: updated)
                     }
                 }
@@ -362,7 +365,8 @@ struct EditableSetRow: View {
         .padding(.vertical, 4)
         .onAppear {
             repsText = set.reps > 0 ? "\(set.reps)" : ""
-            let displayWeight = useLbs ? set.weightKg * 2.20462 : set.weightKg
+            // Use stored clean value directly
+            let displayWeight = set.displayWeight(usesMetric: !useLbs)
             weightText = displayWeight > 0 ? formatWeight(displayWeight) : ""
         }
     }
@@ -387,9 +391,14 @@ struct SetDetailRow: View {
 
     private var displayWeight: String {
         guard weight > 0 else { return "" }
-        let converted = useLbs ? Int(weight * 2.20462) : Int(weight)
+        // Weight is stored in kg, convert for display
+        let displayValue = useLbs ? weight * WeightUtility.kgToLbs : weight
+        let rounded = WeightUtility.round(displayValue, unit: useLbs ? .lbs : .kg)
         let unit = useLbs ? "lbs" : "kg"
-        return "\(converted) \(unit)"
+        if rounded.truncatingRemainder(dividingBy: 1) == 0 {
+            return "\(Int(rounded)) \(unit)"
+        }
+        return String(format: "%.1f %@", rounded, unit)
     }
 
     var body: some View {

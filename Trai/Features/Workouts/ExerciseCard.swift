@@ -16,7 +16,7 @@ struct ExerciseCard: View {
     let usesMetricWeight: Bool
     let onAddSet: () -> Void
     let onRemoveSet: (Int) -> Void
-    let onUpdateSet: (Int, Int?, Double?, String?) -> Void
+    let onUpdateSet: (Int, Int?, Double?, Double?, String?) -> Void  // (index, reps, kg, lbs, notes)
     let onToggleWarmup: (Int) -> Void
     var onDeleteExercise: (() -> Void)? = nil
     var onChangeExercise: (() -> Void)? = nil
@@ -34,23 +34,21 @@ struct ExerciseCard: View {
 
         let sets = last.totalSets
         let reps = last.bestSetReps
-        let weightKg = last.bestSetWeightKg
-        let displayWeight = usesMetricWeight ? weightKg : weightKg * 2.20462
-        let weight = Int(displayWeight)
+        let unit = WeightUnit(usesMetric: usesMetricWeight)
+        let weight = WeightUtility.displayInt(last.bestSetWeightKg, displayUnit: unit)
 
-        return "Last: \(sets)×\(reps) @ \(weight)\(weightUnit)"
+        return "Last: \(sets)×\(reps) @ \(weight) \(weightUnit)"
     }
 
     private var prDisplay: String? {
         guard let pr = personalRecord,
               pr.bestSetWeightKg > 0 else { return nil }
 
-        let weightKg = pr.bestSetWeightKg
-        let displayWeight = usesMetricWeight ? weightKg : weightKg * 2.20462
-        let weight = Int(displayWeight)
+        let unit = WeightUnit(usesMetric: usesMetricWeight)
+        let weight = WeightUtility.displayInt(pr.bestSetWeightKg, displayUnit: unit)
         let reps = pr.bestSetReps
 
-        return "PR: \(weight)\(weightUnit) × \(reps)"
+        return "PR: \(weight) \(weightUnit) \u{00D7} \(reps)"
     }
 
     var body: some View {
@@ -162,9 +160,9 @@ struct ExerciseCard: View {
                             setNumber: index + 1,
                             set: entry.sets[index],
                             usesMetricWeight: usesMetricWeight,
-                            onUpdateReps: { reps in onUpdateSet(index, reps, nil, nil) },
-                            onUpdateWeight: { weight in onUpdateSet(index, nil, weight, nil) },
-                            onUpdateNotes: { notes in onUpdateSet(index, nil, nil, notes) },
+                            onUpdateReps: { reps in onUpdateSet(index, reps, nil, nil, nil) },
+                            onUpdateWeight: { kg, lbs in onUpdateSet(index, nil, kg, lbs, nil) },
+                            onUpdateNotes: { notes in onUpdateSet(index, nil, nil, nil, notes) },
                             onToggleWarmup: { onToggleWarmup(index) },
                             onDelete: { onRemoveSet(index) }
                         )
@@ -208,7 +206,7 @@ struct SetRow: View {
     let set: LiveWorkoutEntry.SetData
     let usesMetricWeight: Bool
     let onUpdateReps: (Int) -> Void
-    let onUpdateWeight: (Double) -> Void
+    let onUpdateWeight: (Double, Double) -> Void  // (kg, lbs)
     let onUpdateNotes: (String) -> Void
     let onToggleWarmup: () -> Void
     let onDelete: () -> Void
@@ -253,12 +251,10 @@ struct SetRow: View {
                     .onChange(of: weightText) { _, newValue in
                         // Skip save if this change is from unit conversion (not user input)
                         guard !isUpdatingFromUnitChange else { return }
-                        if let weight = Double(newValue) {
-                            // Convert to kg if user entered lbs
-                            let weightKg = usesMetricWeight ? weight : weight / 2.20462
-                            // Round to nearest 0.5 to avoid floating point issues (90 showing as 89.9)
-                            let roundedWeight = (weightKg * 2).rounded() / 2
-                            onUpdateWeight(roundedWeight)
+                        let unit = WeightUnit(usesMetric: usesMetricWeight)
+                        if let cleanWeight = WeightUtility.parseToCleanWeight(newValue, inputUnit: unit) {
+                            // Pass both kg and lbs to the update handler
+                            onUpdateWeight(cleanWeight.kg, cleanWeight.lbs)
                         }
                     }
 
@@ -332,19 +328,18 @@ struct SetRow: View {
             }
         }
         .onAppear {
-            // Convert kg to display unit if needed
-            let displayWeight = usesMetricWeight ? set.weightKg : set.weightKg * 2.20462
+            // Use stored clean values directly - no conversion needed
+            let displayWeight = set.displayWeight(usesMetric: usesMetricWeight)
             weightText = displayWeight > 0 ? formatWeight(displayWeight) : ""
             repsText = set.reps > 0 ? "\(set.reps)" : ""
             notesText = set.notes
             showNotesField = !set.notes.isEmpty
         }
         .onChange(of: usesMetricWeight) { _, newUsesMetric in
-            // When unit preference changes, re-display the weight in new unit
-            // Set flag to prevent onChange(weightText) from re-saving with wrong conversion
-            if set.weightKg > 0 {
+            // When unit preference changes, re-display using stored clean value
+            let displayWeight = set.displayWeight(usesMetric: newUsesMetric)
+            if displayWeight > 0 {
                 isUpdatingFromUnitChange = true
-                let displayWeight = newUsesMetric ? set.weightKg : set.weightKg * 2.20462
                 weightText = formatWeight(displayWeight)
                 // Reset flag after the update propagates
                 Task { @MainActor in
@@ -369,9 +364,9 @@ struct SetRow: View {
     ExerciseCard(
         entry: {
             let entry = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)
-            entry.addSet(LiveWorkoutEntry.SetData(reps: 10, weightKg: 60, completed: false, isWarmup: true))
-            entry.addSet(LiveWorkoutEntry.SetData(reps: 8, weightKg: 70, completed: false, isWarmup: false))
-            entry.addSet(LiveWorkoutEntry.SetData(reps: 6, weightKg: 80, completed: false, isWarmup: false))
+            entry.addSet(LiveWorkoutEntry.SetData(reps: 10, weight: CleanWeight(kg: 60, lbs: 132.5), completed: false, isWarmup: true))
+            entry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: CleanWeight(kg: 70, lbs: 155), completed: false, isWarmup: false))
+            entry.addSet(LiveWorkoutEntry.SetData(reps: 6, weight: CleanWeight(kg: 80, lbs: 177.5), completed: false, isWarmup: false))
             return entry
         }(),
         lastPerformance: nil,
@@ -379,7 +374,7 @@ struct SetRow: View {
         usesMetricWeight: true,
         onAddSet: {},
         onRemoveSet: { _ in },
-        onUpdateSet: { _, _, _, _ in },
+        onUpdateSet: { _, _, _, _, _ in },
         onToggleWarmup: { _ in }
     )
     .padding()

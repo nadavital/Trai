@@ -42,9 +42,10 @@ struct UpNextSuggestionCard: View {
                             .foregroundStyle(.secondary)
 
                         if let last = lastPerformance, last.bestSetWeightKg > 0 {
+                            let displayWeight = WeightUtility.displayInt(last.bestSetWeightKg, displayUnit: WeightUnit(usesMetric: usesMetricWeight))
                             Text("•")
                                 .foregroundStyle(.tertiary)
-                            Text("Last: \(last.totalSets)×\(last.bestSetReps) @ \(Int(last.bestSetWeightKg))\(weightUnit)")
+                            Text("Last: \(last.totalSets)×\(last.bestSetReps) @ \(displayWeight) \(weightUnit)")
                                 .font(.caption)
                                 .foregroundStyle(.blue)
                         }

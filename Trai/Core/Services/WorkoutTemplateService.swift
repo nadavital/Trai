@@ -56,17 +56,18 @@ final class WorkoutTemplateService {
             )
 
             // Calculate suggested weight with progression
-            let (weight, reps) = calculateSuggestedWeightAndReps(
+            let (weightKg, reps) = calculateSuggestedWeightAndReps(
                 lastPerformance: lastPerformance,
                 template: exerciseTemplate,
                 strategy: progressionStrategy
             )
+            let cleanWeight = WeightUtility.cleanWeightFromKg(weightKg)
 
             // Add sets based on template
             for _ in 0..<exerciseTemplate.defaultSets {
                 entry.addSet(LiveWorkoutEntry.SetData(
                     reps: reps,
-                    weightKg: weight,
+                    weight: cleanWeight,
                     completed: false,
                     isWarmup: false
                 ))

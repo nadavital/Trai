@@ -23,6 +23,9 @@ final class ExerciseHistory {
     /// Best set weight in kg
     var bestSetWeightKg: Double = 0
 
+    /// Best set weight in lbs (pre-computed for clean display)
+    var bestSetWeightLbs: Double = 0
+
     /// Best set reps
     var bestSetReps: Int = 0
 
@@ -55,8 +58,9 @@ final class ExerciseHistory {
         self.performedAt = performedAt
 
         if let best = entry.bestSet {
-            // Round weight to nearest 0.5 to avoid floating point issues
-            self.bestSetWeightKg = (best.weightKg * 2).rounded() / 2
+            // Use pre-computed clean values from SetData
+            self.bestSetWeightKg = WeightUtility.round(best.weightKg, unit: .kg)
+            self.bestSetWeightLbs = WeightUtility.round(best.weightLbs, unit: .lbs)
             self.bestSetReps = best.reps
         }
 
@@ -67,11 +71,10 @@ final class ExerciseHistory {
         self.sourceWorkoutEntryId = entry.id
 
         // Store rep and weight patterns from completed sets
-        // Round weights to nearest 0.5 to avoid floating point issues
         if let completedSets = entry.completedSets, !completedSets.isEmpty {
             self.repPattern = completedSets.map { "\($0.reps)" }.joined(separator: ",")
-            self.weightPattern = completedSets.map { weight -> String in
-                let rounded = (weight.weightKg * 2).rounded() / 2
+            self.weightPattern = completedSets.map { set -> String in
+                let rounded = WeightUtility.round(set.weightKg, unit: .kg)
                 return String(format: "%.1f", rounded)
             }.joined(separator: ",")
         }
@@ -101,6 +104,26 @@ extension ExerciseHistory {
     /// Formatted date
     var formattedDate: String {
         performedAt.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    /// Get clean weight in user's preferred unit
+    func displayWeight(usesMetric: Bool) -> Double {
+        if usesMetric {
+            return bestSetWeightKg
+        } else {
+            // Use stored lbs if available, otherwise compute
+            return bestSetWeightLbs > 0 ? bestSetWeightLbs : WeightUtility.round(bestSetWeightKg * WeightUtility.kgToLbs, unit: .lbs)
+        }
+    }
+
+    /// Get formatted weight string in user's preferred unit
+    func formattedWeight(usesMetric: Bool, showUnit: Bool = true) -> String {
+        let value = displayWeight(usesMetric: usesMetric)
+        let unit = usesMetric ? "kg" : "lbs"
+        if value.truncatingRemainder(dividingBy: 1) == 0 {
+            return showUnit ? "\(Int(value)) \(unit)" : "\(Int(value))"
+        }
+        return showUnit ? String(format: "%.1f %@", value, unit) : String(format: "%.1f", value)
     }
 }
 

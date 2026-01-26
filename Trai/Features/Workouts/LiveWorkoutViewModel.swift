@@ -568,12 +568,13 @@ final class LiveWorkoutViewModel {
         let patternWeight = lastPerformance?.weightPatternArray.first
 
         let suggestedReps = patternReps ?? lastPerformance?.bestSetReps ?? suggestion.defaultReps
-        let suggestedWeight = patternWeight ?? lastPerformance?.bestSetWeightKg ?? 0
+        let suggestedWeightKg = patternWeight ?? lastPerformance?.bestSetWeightKg ?? 0
+        let cleanWeight = WeightUtility.cleanWeightFromKg(suggestedWeightKg)
 
         // Start with 1 set - user adds more as needed
         entry.addSet(LiveWorkoutEntry.SetData(
             reps: suggestedReps,
-            weightKg: suggestedWeight,
+            weight: cleanWeight,
             completed: false,
             isWarmup: false
         ))
@@ -604,12 +605,13 @@ final class LiveWorkoutViewModel {
         let patternWeight = lastPerformance?.weightPatternArray.first
 
         let suggestedReps = patternReps ?? lastPerformance?.bestSetReps ?? getUserDefaultRepCount()
-        let suggestedWeight = patternWeight ?? lastPerformance?.bestSetWeightKg ?? 0
+        let suggestedWeightKg = patternWeight ?? lastPerformance?.bestSetWeightKg ?? 0
+        let cleanWeight = WeightUtility.cleanWeightFromKg(suggestedWeightKg)
 
         // Start with 1 set - user adds more as needed
         entry.addSet(LiveWorkoutEntry.SetData(
             reps: suggestedReps,
-            weightKg: suggestedWeight,
+            weight: cleanWeight,
             completed: false,
             isWarmup: false
         ))
@@ -632,12 +634,13 @@ final class LiveWorkoutViewModel {
         let patternWeight = lastPerformance?.weightPatternArray.first
 
         let suggestedReps = patternReps ?? lastPerformance?.bestSetReps ?? getUserDefaultRepCount()
-        let suggestedWeight = patternWeight ?? lastPerformance?.bestSetWeightKg ?? 0
+        let suggestedWeightKg = patternWeight ?? lastPerformance?.bestSetWeightKg ?? 0
+        let cleanWeight = WeightUtility.cleanWeightFromKg(suggestedWeightKg)
 
         // Start with 1 set - user adds more as needed
         entry.addSet(LiveWorkoutEntry.SetData(
             reps: suggestedReps,
-            weightKg: suggestedWeight,
+            weight: cleanWeight,
             completed: false,
             isWarmup: false
         ))
@@ -675,12 +678,13 @@ final class LiveWorkoutViewModel {
         let patternWeight = lastPerformance?.weightPatternArray.first
 
         let suggestedReps = patternReps ?? lastPerformance?.bestSetReps ?? getUserDefaultRepCount()
-        let suggestedWeight = patternWeight ?? lastPerformance?.bestSetWeightKg ?? 0
+        let suggestedWeightKg = patternWeight ?? lastPerformance?.bestSetWeightKg ?? 0
+        let cleanWeight = WeightUtility.cleanWeightFromKg(suggestedWeightKg)
 
         // Start with 1 set
         newEntry.addSet(LiveWorkoutEntry.SetData(
             reps: suggestedReps,
-            weightKg: suggestedWeight,
+            weight: cleanWeight,
             completed: false,
             isWarmup: false
         ))
@@ -721,7 +725,7 @@ final class LiveWorkoutViewModel {
 
         // Suggest next reps/weight based on pattern, or copy last set
         let suggestedReps: Int
-        let suggestedWeight: Double
+        let cleanWeight: CleanWeight
 
         // For weight: prioritize current workout's last set if user modified it
         // This ensures that if user changes weight mid-workout, subsequent sets follow that weight
@@ -731,19 +735,23 @@ final class LiveWorkoutViewModel {
             let userModifiedWeight = abs(lastSet.weightKg - patternWeight) > 0.1
 
             if userModifiedWeight {
-                // User overrode the pattern, follow their lead
-                suggestedWeight = lastSet.weightKg
+                // User overrode the pattern, follow their lead (use their stored clean values)
+                cleanWeight = CleanWeight(kg: lastSet.weightKg, lbs: lastSet.weightLbs)
             } else if currentSetIndex < weightPattern.count {
-                // Use pattern weight for this set
-                suggestedWeight = weightPattern[currentSetIndex]
+                // Use pattern weight for this set (pattern is in kg)
+                cleanWeight = WeightUtility.cleanWeightFromKg(weightPattern[currentSetIndex])
             } else {
                 // Past pattern length, copy last set
-                suggestedWeight = lastSet.weightKg
+                cleanWeight = CleanWeight(kg: lastSet.weightKg, lbs: lastSet.weightLbs)
             }
         } else if currentSetIndex < weightPattern.count {
-            suggestedWeight = weightPattern[currentSetIndex]
+            cleanWeight = WeightUtility.cleanWeightFromKg(weightPattern[currentSetIndex])
         } else {
-            suggestedWeight = lastSet?.weightKg ?? 0
+            if let lastSet {
+                cleanWeight = CleanWeight(kg: lastSet.weightKg, lbs: lastSet.weightLbs)
+            } else {
+                cleanWeight = .zero
+            }
         }
 
         // For reps: use pattern or copy last set
@@ -755,14 +763,14 @@ final class LiveWorkoutViewModel {
 
         entry.addSet(LiveWorkoutEntry.SetData(
             reps: suggestedReps,
-            weightKg: suggestedWeight,
+            weight: cleanWeight,
             completed: false,
             isWarmup: false
         ))
         save()
     }
 
-    func updateSet(at index: Int, in entry: LiveWorkoutEntry, reps: Int? = nil, weight: Double? = nil, notes: String? = nil) {
+    func updateSet(at index: Int, in entry: LiveWorkoutEntry, reps: Int? = nil, weightKg: Double? = nil, weightLbs: Double? = nil, notes: String? = nil) {
         let sets = entry.sets
         guard index < sets.count else { return }
 
@@ -770,8 +778,11 @@ final class LiveWorkoutViewModel {
         if let reps {
             set.reps = reps
         }
-        if let weight {
-            set.weightKg = weight
+        if let weightKg {
+            set.weightKg = weightKg
+        }
+        if let weightLbs {
+            set.weightLbs = weightLbs
         }
         if let notes {
             set.notes = notes
@@ -883,6 +894,16 @@ final class LiveWorkoutViewModel {
             return profile.defaultRepCount
         }
         return 10 // Fallback default
+    }
+
+    /// Get user's weight unit preference from their profile
+    private func getUserUsesMetricWeight() -> Bool {
+        guard let modelContext else { return true }
+        let descriptor = FetchDescriptor<UserProfile>()
+        if let profile = try? modelContext.fetch(descriptor).first {
+            return profile.usesMetricExerciseWeight
+        }
+        return true // Fallback default (metric)
     }
 
     func cancelWorkout() {
@@ -1010,7 +1031,8 @@ final class LiveWorkoutViewModel {
             currentWeight: currentWeight,
             currentReps: currentReps,
             totalVolumeKg: totalVolume,
-            nextExercise: nextExercise
+            nextExercise: nextExercise,
+            usesMetricWeight: getUserUsesMetricWeight()
         )
     }
 }
