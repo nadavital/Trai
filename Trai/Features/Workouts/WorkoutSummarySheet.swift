@@ -15,7 +15,13 @@ struct WorkoutSummarySheet: View {
     var achievedPRs: [String: LiveWorkoutViewModel.PRValue] = [:]
     let onDismiss: () -> Void
 
+    @Query private var profiles: [UserProfile]
     @State private var showConfetti = false
+
+    /// Whether to use metric (kg) based on user profile
+    private var usesMetric: Bool {
+        profiles.first?.usesMetricExerciseWeight ?? true
+    }
 
     var body: some View {
         NavigationStack {
@@ -44,7 +50,7 @@ struct WorkoutSummarySheet: View {
 
                             ForEach(Array(achievedPRs.keys.sorted()), id: \.self) { exerciseName in
                                 if let prValue = achievedPRs[exerciseName] {
-                                    PRRow(prValue: prValue)
+                                    PRRow(prValue: prValue, usesMetric: usesMetric)
                                 }
                             }
                         }
@@ -82,9 +88,10 @@ struct WorkoutSummarySheet: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Exercises")
                                 .font(.headline)
+                                .frame(maxWidth: .infinity, alignment: .leading)
 
                             ForEach(entries.sorted { $0.orderIndex < $1.orderIndex }) { entry in
-                                ExerciseSummaryRow(entry: entry)
+                                ExerciseSummaryRow(entry: entry, usesMetric: usesMetric)
                             }
                         }
                         .padding()
@@ -127,7 +134,13 @@ struct WorkoutSummaryContent: View {
     var achievedPRs: [String: LiveWorkoutViewModel.PRValue] = [:]
     let onDismiss: () -> Void
 
+    @Query private var profiles: [UserProfile]
     @State private var showConfetti = false
+
+    /// Whether to use metric (kg) based on user profile
+    private var usesMetric: Bool {
+        profiles.first?.usesMetricExerciseWeight ?? true
+    }
 
     var body: some View {
         ScrollView {
@@ -155,7 +168,7 @@ struct WorkoutSummaryContent: View {
 
                         ForEach(Array(achievedPRs.keys.sorted()), id: \.self) { exerciseName in
                             if let prValue = achievedPRs[exerciseName] {
-                                PRRow(prValue: prValue)
+                                PRRow(prValue: prValue, usesMetric: usesMetric)
                             }
                         }
                     }
@@ -193,9 +206,10 @@ struct WorkoutSummaryContent: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Exercises")
                             .font(.headline)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
                         ForEach(entries.sorted { $0.orderIndex < $1.orderIndex }) { entry in
-                            ExerciseSummaryRow(entry: entry)
+                            ExerciseSummaryRow(entry: entry, usesMetric: usesMetric)
                         }
                     }
                     .padding()
@@ -225,6 +239,50 @@ struct WorkoutSummaryContent: View {
 
 struct PRRow: View {
     let prValue: LiveWorkoutViewModel.PRValue
+    let usesMetric: Bool
+
+    private var weightUnit: String { usesMetric ? "kg" : "lbs" }
+
+    /// Format a weight value (stored in kg) for display
+    private func formatWeight(_ kg: Double) -> String {
+        let value = usesMetric ? kg : kg * WeightUtility.kgToLbs
+        let rounded = WeightUtility.round(value, unit: usesMetric ? .kg : .lbs)
+        if rounded.truncatingRemainder(dividingBy: 1) == 0 {
+            return "\(Int(rounded)) \(weightUnit)"
+        }
+        return String(format: "%.1f %@", rounded, weightUnit)
+    }
+
+    /// Format improvement value
+    private func formatImprovement(_ kg: Double) -> String {
+        let value = usesMetric ? kg : kg * WeightUtility.kgToLbs
+        let rounded = WeightUtility.round(value, unit: usesMetric ? .kg : .lbs)
+        if rounded.truncatingRemainder(dividingBy: 1) == 0 {
+            return "+\(Int(rounded)) \(weightUnit)"
+        }
+        return String(format: "+%.1f %@", rounded, weightUnit)
+    }
+
+    /// Formatted new value respecting user's unit preference
+    private var formattedNewValue: String {
+        switch prValue.type {
+        case .weight, .volume:
+            return formatWeight(prValue.newValue)
+        case .reps:
+            return "\(Int(prValue.newValue)) reps"
+        }
+    }
+
+    /// Formatted improvement respecting user's unit preference
+    private var formattedImprovement: String {
+        guard !prValue.isFirstTime && prValue.improvement > 0 else { return "" }
+        switch prValue.type {
+        case .weight, .volume:
+            return formatImprovement(prValue.improvement)
+        case .reps:
+            return "+\(Int(prValue.improvement)) reps"
+        }
+    }
 
     var body: some View {
         HStack {
@@ -233,7 +291,7 @@ struct PRRow: View {
                     .font(.subheadline)
 
                 HStack(spacing: 6) {
-                    Text(prValue.formattedNewValue)
+                    Text(formattedNewValue)
                         .font(.caption)
                         .bold()
                         .foregroundStyle(.primary)
@@ -242,8 +300,8 @@ struct PRRow: View {
                         Text("First time!")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                    } else if !prValue.formattedImprovement.isEmpty {
-                        Text(prValue.formattedImprovement)
+                    } else if !formattedImprovement.isEmpty {
+                        Text(formattedImprovement)
                             .font(.caption)
                             .foregroundStyle(.green)
                     }
@@ -291,6 +349,9 @@ struct SummaryStatRow: View {
 
 struct ExerciseSummaryRow: View {
     let entry: LiveWorkoutEntry
+    let usesMetric: Bool
+
+    private var weightUnit: String { usesMetric ? "kg" : "lbs" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -311,11 +372,14 @@ struct ExerciseSummaryRow: View {
             let completedSets = entry.sets.filter { $0.reps > 0 && !$0.isWarmup }
             if !completedSets.isEmpty {
                 // Check if all sets have the same weight - use condensed format
-                let weights = Set(completedSets.map { $0.weightKg })
+                let weights = Set(completedSets.map { $0.displayWeight(usesMetric: usesMetric) })
                 if weights.count == 1, let weight = weights.first, weight > 0 {
-                    // Condensed format: "3 sets: 12, 10, 8 @ 80kg"
+                    // Condensed format: "3 sets: 12, 10, 8 @ 80 kg"
                     let reps = completedSets.map { "\($0.reps)" }.joined(separator: ", ")
-                    Text("\(completedSets.count) sets: \(reps) @ \(Int(weight))kg")
+                    let weightStr = weight.truncatingRemainder(dividingBy: 1) == 0
+                        ? "\(Int(weight))"
+                        : String(format: "%.1f", weight)
+                    Text("\(completedSets.count) sets: \(reps) @ \(weightStr) \(weightUnit)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -323,7 +387,7 @@ struct ExerciseSummaryRow: View {
                     HStack(spacing: 4) {
                         ForEach(completedSets.indices, id: \.self) { index in
                             let set = completedSets[index]
-                            SetBadge(set: set, isBest: set == entry.bestSet)
+                            SetBadge(set: set, isBest: set == entry.bestSet, usesMetric: usesMetric)
 
                             if index < completedSets.count - 1 {
                                 Text("•")
@@ -335,6 +399,7 @@ struct ExerciseSummaryRow: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)
     }
 }
@@ -344,15 +409,21 @@ struct ExerciseSummaryRow: View {
 struct SetBadge: View {
     let set: LiveWorkoutEntry.SetData
     let isBest: Bool
+    let usesMetric: Bool
 
     var body: some View {
+        let weight = set.displayWeight(usesMetric: usesMetric)
+        let weightStr = weight.truncatingRemainder(dividingBy: 1) == 0
+            ? "\(Int(weight))"
+            : String(format: "%.1f", weight)
+
         HStack(spacing: 2) {
             if isBest {
                 Image(systemName: "star.fill")
                     .font(.system(size: 8))
                     .foregroundStyle(.yellow)
             }
-            Text("\(Int(set.weightKg))×\(set.reps)")
+            Text("\(weightStr)×\(set.reps)")
                 .font(.caption)
                 .foregroundStyle(isBest ? .primary : .secondary)
         }
