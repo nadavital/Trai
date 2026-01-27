@@ -8,13 +8,23 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - Identifiable String Wrapper
+
+private struct IdentifiableExercise: Identifiable {
+    let id: String
+    var name: String { id }
+}
+
 struct LiveWorkoutDetailSheet: View {
     @Bindable var workout: LiveWorkout
     var useLbs: Bool = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Query private var allExerciseHistory: [ExerciseHistory]
+    @Query(sort: \ExerciseHistory.performedAt, order: .reverse)
+    private var allExerciseHistory: [ExerciseHistory]
+    @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @State private var isEditing = false
+    @State private var selectedExercise: IdentifiableExercise?
 
     private var exerciseCount: Int {
         workout.entries?.count ?? 0
@@ -94,6 +104,47 @@ struct LiveWorkoutDetailSheet: View {
                     }
                 }
             }
+            .sheet(item: $selectedExercise) { exercise in
+                exercisePRSheet(for: exercise.name)
+            }
+        }
+    }
+
+    /// Build the PR detail sheet for a given exercise name
+    @ViewBuilder
+    private func exercisePRSheet(for exerciseName: String) -> some View {
+        let history = allExerciseHistory.filter { $0.exerciseName == exerciseName }
+        let exercise = exercises.first { $0.name == exerciseName }
+
+        if let pr = ExercisePR.from(
+            exerciseName: exerciseName,
+            history: history,
+            muscleGroup: exercise?.targetMuscleGroup
+        ) {
+            PRDetailSheet(
+                pr: pr,
+                history: history,
+                useLbs: useLbs,
+                onDeleteAll: {}
+            )
+        } else {
+            // No history yet - show simple info
+            NavigationStack {
+                ContentUnavailableView(
+                    "No History Yet",
+                    systemImage: "chart.line.uptrend.xyaxis",
+                    description: Text("Complete more workouts with \(exerciseName) to see your progress")
+                )
+                .navigationTitle(exerciseName)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {
+                            selectedExercise = nil
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -146,7 +197,14 @@ struct LiveWorkoutDetailSheet: View {
 
             VStack(spacing: 12) {
                 ForEach(entries) { entry in
-                    LiveWorkoutExerciseCard(entry: entry, useLbs: useLbs, isEditing: isEditing)
+                    LiveWorkoutExerciseCard(
+                        entry: entry,
+                        useLbs: useLbs,
+                        isEditing: isEditing,
+                        onTap: {
+                            selectedExercise = IdentifiableExercise(id: entry.exerciseName)
+                        }
+                    )
                 }
             }
         }
@@ -241,6 +299,7 @@ struct LiveWorkoutExerciseCard: View {
     @Bindable var entry: LiveWorkoutEntry
     let useLbs: Bool
     var isEditing: Bool = false
+    var onTap: (() -> Void)?
 
     private var weightUnit: String {
         useLbs ? "lbs" : "kg"
@@ -248,10 +307,20 @@ struct LiveWorkoutExerciseCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Exercise name
-            Text(entry.exerciseName)
-                .font(.subheadline)
-                .fontWeight(.semibold)
+            // Exercise name with chevron when tappable
+            HStack {
+                Text(entry.exerciseName)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Spacer()
+
+                if !isEditing && onTap != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
 
             // Sets as rows
             if !entry.sets.isEmpty {
@@ -290,6 +359,12 @@ struct LiveWorkoutExerciseCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemBackground))
         .clipShape(.rect(cornerRadius: 12))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !isEditing {
+                onTap?()
+            }
+        }
     }
 }
 

@@ -220,6 +220,14 @@ struct SetRow: View {
     @FocusState private var isRepsFocused: Bool
     @FocusState private var isNotesFocused: Bool
 
+    // Debounce tasks for input fields
+    @State private var weightDebounceTask: Task<Void, Never>?
+    @State private var repsDebounceTask: Task<Void, Never>?
+    @State private var notesDebounceTask: Task<Void, Never>?
+
+    // Debounce delay in seconds
+    private let debounceDelay: Duration = .milliseconds(500)
+
     private var weightUnit: String {
         usesMetricWeight ? "kg" : "lbs"
     }
@@ -251,10 +259,20 @@ struct SetRow: View {
                     .onChange(of: weightText) { _, newValue in
                         // Skip save if this change is from unit conversion (not user input)
                         guard !isUpdatingFromUnitChange else { return }
-                        let unit = WeightUnit(usesMetric: usesMetricWeight)
-                        if let cleanWeight = WeightUtility.parseToCleanWeight(newValue, inputUnit: unit) {
-                            // Pass both kg and lbs to the update handler
-                            onUpdateWeight(cleanWeight.kg, cleanWeight.lbs)
+                        // Cancel any pending debounce
+                        weightDebounceTask?.cancel()
+                        // Start new debounced update
+                        weightDebounceTask = Task { @MainActor in
+                            try? await Task.sleep(for: debounceDelay)
+                            guard !Task.isCancelled else { return }
+                            commitWeight(newValue)
+                        }
+                    }
+                    .onChange(of: isWeightFocused) { _, focused in
+                        // Commit immediately when focus leaves
+                        if !focused {
+                            weightDebounceTask?.cancel()
+                            commitWeight(weightText)
                         }
                     }
 
@@ -274,8 +292,20 @@ struct SetRow: View {
                     .clipShape(.rect(cornerRadius: 8))
                     .focused($isRepsFocused)
                     .onChange(of: repsText) { _, newValue in
-                        if let reps = Int(newValue) {
-                            onUpdateReps(reps)
+                        // Cancel any pending debounce
+                        repsDebounceTask?.cancel()
+                        // Start new debounced update
+                        repsDebounceTask = Task { @MainActor in
+                            try? await Task.sleep(for: debounceDelay)
+                            guard !Task.isCancelled else { return }
+                            commitReps(newValue)
+                        }
+                    }
+                    .onChange(of: isRepsFocused) { _, focused in
+                        // Commit immediately when focus leaves
+                        if !focused {
+                            repsDebounceTask?.cancel()
+                            commitReps(repsText)
                         }
                     }
 
@@ -320,7 +350,21 @@ struct SetRow: View {
                     .padding(.leading, 40)
                     .focused($isNotesFocused)
                     .onChange(of: notesText) { _, newValue in
-                        onUpdateNotes(newValue)
+                        // Cancel any pending debounce
+                        notesDebounceTask?.cancel()
+                        // Start new debounced update
+                        notesDebounceTask = Task { @MainActor in
+                            try? await Task.sleep(for: debounceDelay)
+                            guard !Task.isCancelled else { return }
+                            onUpdateNotes(newValue)
+                        }
+                    }
+                    .onChange(of: isNotesFocused) { _, focused in
+                        // Commit immediately when focus leaves
+                        if !focused {
+                            notesDebounceTask?.cancel()
+                            onUpdateNotes(notesText)
+                        }
                     }
                     .onAppear {
                         notesText = set.notes
@@ -346,6 +390,21 @@ struct SetRow: View {
                     isUpdatingFromUnitChange = false
                 }
             }
+        }
+    }
+
+    /// Commit weight value to parent (called after debounce or on focus loss)
+    private func commitWeight(_ value: String) {
+        let unit = WeightUnit(usesMetric: usesMetricWeight)
+        if let cleanWeight = WeightUtility.parseToCleanWeight(value, inputUnit: unit) {
+            onUpdateWeight(cleanWeight.kg, cleanWeight.lbs)
+        }
+    }
+
+    /// Commit reps value to parent (called after debounce or on focus loss)
+    private func commitReps(_ value: String) {
+        if let reps = Int(value) {
+            onUpdateReps(reps)
         }
     }
 

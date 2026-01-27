@@ -309,6 +309,32 @@ struct ExercisePR: Identifiable {
 
     let totalSessions: Int
     let lastPerformed: Date
+
+    /// Create an ExercisePR from exercise history entries
+    static func from(exerciseName: String, history: [ExerciseHistory], muscleGroup: Exercise.MuscleGroup? = nil) -> ExercisePR? {
+        guard !history.isEmpty else { return nil }
+
+        let maxWeight = history.max(by: { $0.bestSetWeightKg < $1.bestSetWeightKg })
+        let maxReps = history.max(by: { $0.bestSetReps < $1.bestSetReps })
+        let maxVolume = history.max(by: { $0.totalVolume < $1.totalVolume })
+        let max1RM = history.compactMap { $0.estimatedOneRepMax }.max()
+
+        return ExercisePR(
+            exerciseName: exerciseName,
+            muscleGroup: muscleGroup,
+            maxWeightKg: maxWeight?.bestSetWeightKg ?? 0,
+            maxWeightDate: maxWeight?.performedAt,
+            maxWeightReps: maxWeight?.bestSetReps ?? 0,
+            maxReps: maxReps?.bestSetReps ?? 0,
+            maxRepsDate: maxReps?.performedAt,
+            maxRepsWeight: maxReps?.bestSetWeightKg ?? 0,
+            maxVolume: maxVolume?.totalVolume ?? 0,
+            maxVolumeDate: maxVolume?.performedAt,
+            estimated1RM: max1RM,
+            totalSessions: history.count,
+            lastPerformed: history.first?.performedAt ?? Date()
+        )
+    }
 }
 
 // MARK: - Supporting Views
@@ -446,7 +472,7 @@ private struct ExercisePRRow: View {
 
 // MARK: - PR Detail Sheet
 
-private struct PRDetailSheet: View {
+struct PRDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
@@ -459,55 +485,21 @@ private struct PRDetailSheet: View {
     @State private var showingDeleteConfirmation = false
     @State private var historyToDelete: ExerciseHistory?
 
-    private var weightUnit: String { useLbs ? "lbs" : "kg" }
-
-    private func displayWeight(_ kg: Double) -> Int {
-        let unit = WeightUnit(usesMetric: !useLbs)
-        return WeightUtility.displayInt(kg, displayUnit: unit)
-    }
-
     var body: some View {
         NavigationStack {
             List {
-                // PR Cards
-                Section {
-                    PRCard(
-                        title: "Heaviest Weight",
-                        icon: "scalemass.fill",
-                        iconColor: .orange,
-                        value: "\(displayWeight(pr.maxWeightKg)) \(weightUnit)",
-                        subtitle: "× \(pr.maxWeightReps) reps",
-                        date: pr.maxWeightDate
-                    )
-
-                    PRCard(
-                        title: "Most Reps",
-                        icon: "number.circle.fill",
-                        iconColor: .blue,
-                        value: "\(pr.maxReps) reps",
-                        subtitle: "@ \(displayWeight(pr.maxRepsWeight)) \(weightUnit)",
-                        date: pr.maxRepsDate
-                    )
-
-                    PRCard(
-                        title: "Highest Volume",
-                        icon: "chart.bar.fill",
-                        iconColor: .green,
-                        value: formatVolume(pr.maxVolume),
-                        subtitle: "total volume",
-                        date: pr.maxVolumeDate
-                    )
-
-                    if let oneRM = pr.estimated1RM {
-                        PRCard(
-                            title: "Estimated 1RM",
-                            icon: "trophy.fill",
-                            iconColor: .yellow,
-                            value: "\(displayWeight(oneRM)) \(weightUnit)",
-                            subtitle: "Brzycki formula",
-                            date: nil
-                        )
+                // Progress chart (only show if enough data)
+                if history.count >= 2 {
+                    Section {
+                        ExerciseTrendsChart(history: history, useLbs: useLbs)
+                    } header: {
+                        Text("Progress")
                     }
+                }
+
+                // PR Stats - Compact 2x2 Grid
+                Section {
+                    PRStatsGrid(pr: pr, useLbs: useLbs)
                 } header: {
                     Text("Personal Records")
                 }
@@ -580,14 +572,6 @@ private struct PRDetailSheet: View {
         }
     }
 
-    private func formatVolume(_ volume: Double) -> String {
-        let displayVolume = useLbs ? volume * 2.20462 : volume
-        if displayVolume >= 1000 {
-            return String(format: "%.1fk %@", displayVolume / 1000, weightUnit)
-        }
-        return "\(Int(displayVolume)) \(weightUnit)"
-    }
-
     private func deleteHistory(_ history: ExerciseHistory) {
         modelContext.delete(history)
         try? modelContext.save()
@@ -595,50 +579,108 @@ private struct PRDetailSheet: View {
     }
 }
 
-private struct PRCard: View {
-    let title: String
-    let icon: String
-    let iconColor: Color
-    let value: String
-    let subtitle: String
-    let date: Date?
+struct PRStatsGrid: View {
+    let pr: ExercisePR
+    let useLbs: Bool
+
+    private var weightUnit: String { useLbs ? "lbs" : "kg" }
+
+    private func displayWeight(_ kg: Double) -> Int {
+        let unit = WeightUnit(usesMetric: !useLbs)
+        return WeightUtility.displayInt(kg, displayUnit: unit)
+    }
+
+    private func formatVolume(_ volume: Double) -> String {
+        let displayVolume = useLbs ? volume * 2.20462 : volume
+        if displayVolume >= 1000 {
+            return String(format: "%.1fk", displayVolume / 1000)
+        }
+        return "\(Int(displayVolume))"
+    }
 
     var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(iconColor)
-                .frame(width: 40)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(value)
-                        .font(.title3)
-                        .bold()
-
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                if let date {
-                    Text(date.formatted(date: .abbreviated, time: .omitted))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+        Grid(horizontalSpacing: 16, verticalSpacing: 12) {
+            GridRow {
+                PRStatCell(
+                    icon: "scalemass.fill",
+                    iconColor: .orange,
+                    label: "Max Weight",
+                    value: "\(displayWeight(pr.maxWeightKg)) \(weightUnit)",
+                    detail: "× \(pr.maxWeightReps)"
+                )
+                PRStatCell(
+                    icon: "number.circle.fill",
+                    iconColor: .blue,
+                    label: "Max Reps",
+                    value: "\(pr.maxReps)",
+                    detail: "@ \(displayWeight(pr.maxRepsWeight))"
+                )
+            }
+            GridRow {
+                PRStatCell(
+                    icon: "chart.bar.fill",
+                    iconColor: .green,
+                    label: "Volume",
+                    value: formatVolume(pr.maxVolume),
+                    detail: weightUnit
+                )
+                if let oneRM = pr.estimated1RM {
+                    PRStatCell(
+                        icon: "trophy.fill",
+                        iconColor: .yellow,
+                        label: "Est. 1RM",
+                        value: "\(displayWeight(oneRM))",
+                        detail: weightUnit
+                    )
+                } else {
+                    PRStatCell(
+                        icon: "trophy.fill",
+                        iconColor: .secondary,
+                        label: "Est. 1RM",
+                        value: "--",
+                        detail: ""
+                    )
                 }
             }
-
-            Spacer()
         }
-        .padding(.vertical, 4)
     }
 }
 
-private struct HistoryRow: View {
+struct PRStatCell: View {
+    let icon: String
+    let iconColor: Color
+    let label: String
+    let value: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.body)
+                .foregroundStyle(iconColor)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text(value)
+                        .font(.subheadline)
+                        .bold()
+                    if !detail.isEmpty {
+                        Text(detail)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct HistoryRow: View {
     let entry: ExerciseHistory
     let useLbs: Bool
 
@@ -651,35 +693,21 @@ private struct HistoryRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.performedAt.formatted(date: .abbreviated, time: .omitted))
-                    .font(.subheadline)
+            Text(entry.performedAt, format: .dateTime.month(.abbreviated).day())
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(width: 50, alignment: .leading)
 
-                Text("\(entry.totalSets) sets • \(entry.totalReps) reps")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            Text("\(displayWeight(entry.bestSetWeightKg)) \(weightUnit) × \(entry.bestSetReps)")
+                .font(.subheadline)
+                .bold()
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(displayWeight(entry.bestSetWeightKg)) \(weightUnit) × \(entry.bestSetReps)")
-                    .font(.subheadline)
-                    .bold()
-
-                Text(formatVolume(entry.totalVolume))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            Text("\(entry.totalSets)s • \(entry.totalReps)r")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-    }
-
-    private func formatVolume(_ volume: Double) -> String {
-        let displayVolume = useLbs ? volume * 2.20462 : volume
-        if displayVolume >= 1000 {
-            return String(format: "%.1fk %@", displayVolume / 1000, weightUnit)
-        }
-        return "\(Int(displayVolume)) \(weightUnit)"
     }
 }
 

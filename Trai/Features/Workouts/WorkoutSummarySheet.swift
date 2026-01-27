@@ -10,13 +10,24 @@ import SwiftData
 
 // MARK: - Workout Summary Sheet
 
+// MARK: - Identifiable Exercise Wrapper
+
+private struct IdentifiableExerciseName: Identifiable {
+    let id: String
+    var name: String { id }
+}
+
 struct WorkoutSummarySheet: View {
     @Bindable var workout: LiveWorkout
     var achievedPRs: [String: LiveWorkoutViewModel.PRValue] = [:]
     let onDismiss: () -> Void
 
     @Query private var profiles: [UserProfile]
+    @Query(sort: \ExerciseHistory.performedAt, order: .reverse)
+    private var allExerciseHistory: [ExerciseHistory]
+    @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @State private var showConfetti = false
+    @State private var selectedExercise: IdentifiableExerciseName?
 
     /// Whether to use metric (kg) based on user profile
     private var usesMetric: Bool {
@@ -91,7 +102,9 @@ struct WorkoutSummarySheet: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
                             ForEach(entries.sorted { $0.orderIndex < $1.orderIndex }) { entry in
-                                ExerciseSummaryRow(entry: entry, usesMetric: usesMetric)
+                                ExerciseSummaryRow(entry: entry, usesMetric: usesMetric) {
+                                    selectedExercise = IdentifiableExerciseName(id: entry.exerciseName)
+                                }
                             }
                         }
                         .padding()
@@ -114,6 +127,9 @@ struct WorkoutSummarySheet: View {
                 }
                 HapticManager.success()
             }
+            .sheet(item: $selectedExercise) { exercise in
+                exercisePRSheet(for: exercise.name)
+            }
         }
         .overlay {
             // Confetti overlay - covers entire sheet
@@ -121,6 +137,43 @@ struct WorkoutSummarySheet: View {
                 ConfettiView()
                     .allowsHitTesting(false)
                     .ignoresSafeArea()
+            }
+        }
+    }
+
+    /// Build the PR detail sheet for a given exercise name
+    @ViewBuilder
+    private func exercisePRSheet(for exerciseName: String) -> some View {
+        let history = allExerciseHistory.filter { $0.exerciseName == exerciseName }
+        let exercise = exercises.first { $0.name == exerciseName }
+
+        if let pr = ExercisePR.from(
+            exerciseName: exerciseName,
+            history: history,
+            muscleGroup: exercise?.targetMuscleGroup
+        ) {
+            PRDetailSheet(
+                pr: pr,
+                history: history,
+                useLbs: !usesMetric,
+                onDeleteAll: {}
+            )
+        } else {
+            NavigationStack {
+                ContentUnavailableView(
+                    "No History Yet",
+                    systemImage: "chart.line.uptrend.xyaxis",
+                    description: Text("Complete more workouts with \(exerciseName) to see your progress")
+                )
+                .navigationTitle(exerciseName)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {
+                            selectedExercise = nil
+                        }
+                    }
+                }
             }
         }
     }
@@ -350,21 +403,32 @@ struct SummaryStatRow: View {
 struct ExerciseSummaryRow: View {
     let entry: LiveWorkoutEntry
     let usesMetric: Bool
+    var onTap: (() -> Void)?
 
     private var weightUnit: String { usesMetric ? "kg" : "lbs" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Exercise name and equipment
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.exerciseName)
-                    .font(.subheadline)
-                    .bold()
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.exerciseName)
+                        .font(.subheadline)
+                        .bold()
 
-                if let equipment = entry.equipmentName, !equipment.isEmpty {
-                    Text("@ \(equipment)")
+                    if let equipment = entry.equipmentName, !equipment.isEmpty {
+                        Text("@ \(equipment)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                if onTap != nil {
+                    Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                 }
             }
 
@@ -401,6 +465,10 @@ struct ExerciseSummaryRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onTap?()
+        }
     }
 }
 

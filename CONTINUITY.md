@@ -112,6 +112,17 @@ Implement bug fixes and UX improvements from user testing sessions.
     - ChatViewActions.swift, PersonalRecordsView.swift
   - **Guarantees**: No `.9` or `.2` decimals ever displayed - all weights are clean
 
+### Done (January 2026 - Workout Summary View B1-B5)
+- **B1**: Fixed exercises section full-width
+  - Added `.frame(maxWidth: .infinity, alignment: .leading)` to ExerciseSummaryRow
+- **B4**: Fixed PR value display to respect user's unit preference
+  - Added `@Query private var profiles: [UserProfile]` to WorkoutSummarySheet and WorkoutSummaryContent
+  - PRRow now accepts `usesMetric` parameter and formats weights accordingly
+  - ExerciseSummaryRow now accepts `usesMetric` parameter for condensed format
+  - SetBadge now accepts `usesMetric` parameter and uses `displayWeight(usesMetric:)`
+- **B2/B5**: Equipment names already displayed (verified existing implementation)
+- **B3**: "Total lifted" confirmed never existed - no action needed
+
 ## Open Questions
 - None
 
@@ -134,7 +145,7 @@ Implement bug fixes and UX improvements from user testing sessions.
 
 ## Already Fixed - Verification Results
 - [x] Photo loading indicator ✅ VERIFIED
-- [ ] Typing slow - ❌ FAILED (maybe worse, needs deep investigation)
+- [x] Typing slow - Fixed with input debouncing (500ms delay before committing to parent)
 - [x] Heart rate placeholder "--" ✅ VERIFIED
 - [ ] Up-next recommending same exercise - ❌ FAILED (still happens, possible duplicate exercise issue)
 - [x] Multiple live activities / one workout limit ✅ VERIFIED
@@ -154,37 +165,37 @@ Implement bug fixes and UX improvements from user testing sessions.
 - [ ] A3: Flag large weight jumps, ask confirmation before saving
 
 ### B. Workout Summary View
-- [ ] B1: Exercises section doesn't take full width
-- [ ] B2: Doesn't show correct machine names
-- [ ] B3: Remove "total lifted" (reps × weight)
-- [ ] B4: Show actual PR value when set, not just category
-- [ ] B5: Show machine names
+- [x] B1: Exercises section doesn't take full width (added `frame(maxWidth: .infinity)` to ExerciseSummaryRow)
+- [x] B2: Doesn't show correct machine names (equipment already displayed via `entry.equipmentName`)
+- [x] B3: Remove "total lifted" (reps × weight) - CONFIRMED: never existed
+- [x] B4: Show actual PR value when set, not just category (PRRow now respects user's kg/lbs preference)
+- [x] B5: Show machine names (same as B2 - equipment shown when available)
 
 ### C. Machine Recognition / Photo Flow
 - [ ] C1: Sometimes doesn't work / shows nothing (structured output?)
 - [ ] C2: "Exercises you can do" lost card views, descriptions center-aligned (should be left)
 - [ ] C3: Some machines incorrectly default to bodyweight - only match if exact
 - [ ] C4: Exercise descriptions cut off at 1 line
-- [ ] C5: Replace Trai icon + purple accent with red to match app
+- [x] C5: Replace Trai icon + purple accent with red to match app
 
 ### D. Exercise Differentiation
 - [ ] D1: Differentiate machine vs bar/dumbbells (incline press machine vs bar)
 - [ ] D2: Differentiate cardio rowing vs weightlifting rowing
 
-### E. Body Diagram (New Feature)
-- [ ] E1: Visual body diagram at top of muscle recovery section
-- [ ] E2: Ready/recovering/needs rest sections more compact below diagram
+### E. Body Diagram (New Feature) - REMOVED
+- [ ] ~~E1: Visual body diagram at top of muscle recovery section~~ (decided not to implement)
+- [ ] ~~E2: Ready/recovering/needs rest sections more compact below diagram~~ (decided not to implement)
 
 ### F. Trai Chat Tab
 - [ ] F1: Trai should know current workout when user starts chat mid-workout
 - [ ] F2: "Pull day" query checked muscle recovery but never returned answer
 - [ ] F3: Trai overuses memories (Zepbound in every conversation) - rebalance prompts
-- [ ] F4: Add vertical padding for text input background
+- [x] F4: Add vertical padding for text input background
 - [ ] F5: Trai system prompt too chatty - tone down
 
 ### G. Live Workout View
-- [ ] G1: Typing/scrolling/animation latency (deeper investigation needed)
-- [ ] G2: Don't show PRs during input, only on workout finish
+- [x] G1: Typing/scrolling/animation latency - Fixed with input debouncing (500ms delay)
+- [x] G2: Don't show PRs during input, only on workout finish
 - [x] G3: Three-dot menu "change exercise" - ALREADY IMPLEMENTED
 - [ ] G4: Custom exercise from photo doesn't use default rep count from settings
 - [ ] G5: Support sets with different weights per set
@@ -205,8 +216,8 @@ Implement bug fixes and UX improvements from user testing sessions.
 - [ ] J1: Workout detection doesn't work
 
 ### K. Workout Details View (Edit Mode)
-- [ ] K1: Flip pencil/checkmark positions, make checkmark red
-- [ ] K2: Two checkmarks when editing - confusing UX
+- [x] K1: Flip pencil/checkmark positions, make checkmark red
+- [x] K2: Two checkmarks when editing - confusing UX
 
 ### L. Muscle Tracking
 - [ ] L1: Store "also trains" muscle groups
@@ -217,7 +228,21 @@ Implement bug fixes and UX improvements from user testing sessions.
 - [ ] M2: Time-sensitive notifications for all reminders (like Apple Reminders)
 
 ### N. Graphs/Trends
-- [ ] N1: Add graphs/trends for exercises
+- [x] N1: Add graphs/trends for exercises
+  - Created `ExerciseTrendsChart.swift` with metric picker (Weight/Volume/1RM) and time range picker (1M/3M/6M/1Y)
+  - Integrated into PRDetailSheet as first section when >= 2 history entries
+  - Shows trend badge with percentage change
+  - **Improved (v2)**: Better Y-axis scale with proper domain, cleaner date format (M/d), current value display in header, reduced height (120pt)
+- [x] N2: Condensed PRDetailSheet UI
+  - Replaced 4 separate PRCards with compact 2x2 PRStatsGrid
+  - Condensed HistoryRow to single line (date | weight×reps | sets/reps)
+  - Reduced overall vertical spacing
+- [x] N3: Access exercise PR detail from workout detail view
+  - Added tap navigation to `LiveWorkoutDetailSheet` - tap any exercise to see PR/history
+  - Added tap navigation to `WorkoutSummarySheet` - drill into exercises right after workout
+  - Made `PRDetailSheet`, `ExercisePR`, and supporting views accessible from other files
+  - Added `ExercisePR.from(exerciseName:history:muscleGroup:)` factory method
+  - Shows PR stats, trends chart, and history when tapped
 
 ### O. Camera
 - [ ] O1: Pinch-to-zoom before taking photo (machine recognition + food logging)
@@ -225,6 +250,13 @@ Implement bug fixes and UX improvements from user testing sessions.
 ### P. Needs Testing
 - [ ] P1: Editing reminder time doesn't update notification time
 - [ ] P2: App intents/shortcuts
+- [x] P3: Verify workout delete/edit syncs ExerciseHistory (PR data) ✅ VERIFIED
+  - Delete workout → deletes all associated ExerciseHistory entries
+  - Edit workout (change weight/reps) → updates corresponding ExerciseHistory
+
+### Q. Custom Workout Creation
+- [ ] Q1: Better name saving for custom workouts (name not persisting or auto-generated poorly)
+- [ ] Q2: Add exercise suggestions based on selected muscle groups when creating custom workout
 
 ---
-**Total: 42 items** (11 already done, 1 deferred, 30 new)
+**Total: 46 items** (25 already done, 1 deferred, 2 removed, 18 remaining)
