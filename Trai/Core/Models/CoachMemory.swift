@@ -164,40 +164,43 @@ extension Array where Element == CoachMemory {
         let scored: [(memory: CoachMemory, score: Int)] = self.map { memory in
             var score = 0
 
-            // Always include restrictions (safety-critical)
+            // Always include restrictions (safety-critical) - highest priority
             if memory.category == .restriction {
                 score += 100
+            } else {
+                // For non-restrictions, require topic match or high importance for visibility
+                if let topic = detectedTopic, memory.topic == topic {
+                    // Topic match - high relevance
+                    score += 40
+                } else if memory.topic == .general {
+                    // General memories somewhat relevant
+                    score += 25
+                } else {
+                    // Off-topic memories only included if critical importance
+                    if memory.importance >= 5 {
+                        score += 20
+                    }
+                    // Otherwise score stays 0 - not included
+                }
+
+                // Recency decay for non-restrictions (stale info less relevant)
+                let daysSinceCreation = Date().timeIntervalSince(memory.createdAt) / 86400
+                if daysSinceCreation > 30 {
+                    score -= 15
+                } else if daysSinceCreation < 7 {
+                    score += 5
+                }
             }
 
-            // High importance memories always relevant
-            if memory.importance >= 4 {
-                score += 50
-            }
-
-            // Topic match bonus
-            if let topic = detectedTopic, memory.topic == topic {
-                score += 30
-            }
-
-            // General topic memories are always somewhat relevant
-            if memory.topic == .general {
-                score += 10
-            }
-
-            // Importance adds to score
-            score += memory.importance * 2
-
-            // Newer memories slightly preferred
-            let daysSinceCreation = Date().timeIntervalSince(memory.createdAt) / 86400
-            if daysSinceCreation < 7 {
-                score += 5
-            }
+            // Importance adds to score (less weight than before to reduce overuse)
+            score += memory.importance
 
             return (memory, score)
         }
 
-        // Sort by score (highest first) and take top N
+        // Filter out very low scores (not relevant), then sort and take top N
         let sorted = scored
+            .filter { $0.score > 5 } // Must have some relevance
             .sorted { $0.score > $1.score }
             .prefix(maxCount)
             .map(\.memory)

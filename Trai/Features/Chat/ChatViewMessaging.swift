@@ -212,6 +212,7 @@ extension ChatView {
             handleChatResult(result, aiMessage: aiMessage)
         } catch is CancellationError {
             // User cancelled - don't show error, keep partial content
+            aiMessage.wasManuallyStopped = true
         } catch {
             aiMessage.content = ""
             aiMessage.errorMessage = error.localizedDescription

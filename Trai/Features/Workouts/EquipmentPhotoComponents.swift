@@ -136,25 +136,25 @@ struct EquipmentAnalysisSheet: View {
                                 onSelectExercise(exercise.name, exercise.muscleGroup, analysis.equipmentName)
                                 dismiss()
                             } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
+                                HStack(alignment: .top) {
+                                    VStack(alignment: .leading, spacing: 6) {
                                         Text(exercise.name)
                                             .font(.body)
                                             .fontWeight(.medium)
 
-                                        HStack(spacing: 6) {
-                                            Text(exercise.muscleGroup.capitalized)
-                                                .font(.caption)
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 2)
-                                                .background(Color.accent.opacity(0.2))
-                                                .clipShape(.capsule)
+                                        Text(exercise.muscleGroup.capitalized)
+                                            .font(.caption)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 2)
+                                            .background(Color.accentColor.opacity(0.2))
+                                            .clipShape(.capsule)
 
-                                            if let howTo = exercise.howTo {
-                                                Text(howTo)
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                            }
+                                        if let howTo = exercise.howTo, !howTo.isEmpty {
+                                            Text(howTo)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .multilineTextAlignment(.leading)
+                                                .fixedSize(horizontal: false, vertical: true)
                                         }
                                     }
 

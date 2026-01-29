@@ -147,7 +147,8 @@ extension GeminiFunctionExecutor {
     }
 
     func executeGetFoodLog(_ args: [String: Any]) -> ExecutionResult {
-        let calendar = Calendar.current
+        var calendar = Calendar.current
+        calendar.timeZone = TimeZone.current
         let today = Date()
 
         // Log the args for debugging
@@ -335,6 +336,15 @@ extension GeminiFunctionExecutor {
             }
             let day = calendar.component(.day, from: today)
             return (day - 1 + daysInLastMonth, daysInLastMonth)
+        case "past_3_days":
+            // Last 3 days including today
+            return (2, 3)
+        case "past_7_days":
+            // Last 7 days including today (full week)
+            return (6, 7)
+        case "past_14_days":
+            // Last 14 days including today (two weeks)
+            return (13, 14)
         default:
             return (0, 1) // Default to today
         }

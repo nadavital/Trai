@@ -26,6 +26,9 @@ final class ChatMessage {
     /// Error message if the request failed
     var errorMessage: String?
 
+    /// Whether the user manually stopped this message (don't show retry)
+    var wasManuallyStopped: Bool = false
+
     /// Image data attached to this message (for food logging via chat)
     var imageData: Data?
 

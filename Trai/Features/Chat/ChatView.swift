@@ -32,6 +32,7 @@ struct ChatView: View {
     var weightEntries: [WeightEntry]
     @Query(filter: #Predicate<CoachMemory> { $0.isActive }, sort: \CoachMemory.importance, order: .reverse)
     var activeMemories: [CoachMemory]
+    @Query var suggestionUsage: [SuggestionUsage]
 
     @Environment(\.modelContext) var modelContext
     @State var geminiService = GeminiService()
@@ -103,7 +104,8 @@ struct ChatView: View {
 
     private var isStreamingResponse: Bool {
         guard let lastMessage = currentSessionMessages.last else { return false }
-        return !lastMessage.isFromUser && isLoading
+        // Only consider it "streaming" if we have content arriving (not initial thinking state)
+        return !lastMessage.isFromUser && isLoading && !lastMessage.content.isEmpty
     }
 
     var todaysFoodEntries: [FoodEntry] {
@@ -129,12 +131,34 @@ struct ChatView: View {
         profile?.enabledMacros ?? MacroType.defaultEnabled
     }
 
+    private var smartStarterContext: SmartStarterContext {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: Date())
+        let todayEntries = allFoodEntries.filter { $0.loggedAt >= startOfDay }
+        let todayCalories = todayEntries.reduce(0) { $0 + $1.calories }
+        let todayProtein = todayEntries.reduce(0) { $0 + Int($1.proteinGrams) }
+        let lastWorkout = liveWorkouts.first?.startedAt ?? recentWorkouts.first?.loggedAt
+
+        return SmartStarterContext(
+            userName: profile?.name ?? "",
+            todayFoodCount: todayEntries.count,
+            todayCalories: todayCalories,
+            calorieGoal: profile?.dailyCalorieGoal ?? 2000,
+            todayProtein: todayProtein,
+            proteinGoal: profile?.dailyProteinGoal ?? 150,
+            lastWorkoutDate: lastWorkout,
+            hasActiveWorkout: workoutContext != nil,
+            goalType: profile?.goal.rawValue ?? "maintenance"
+        )
+    }
+
     private var chatContentList: some View {
         ChatContentList(
             messages: currentSessionMessages,
             isLoading: isLoading,
             isStreamingResponse: isStreamingResponse,
             isTemporarySession: isTemporarySession,
+            smartStarterContext: smartStarterContext,
             currentActivity: currentActivity,
             currentCalories: profile?.dailyCalorieGoal,
             currentProtein: profile?.dailyProteinGoal,
@@ -143,7 +167,6 @@ struct ChatView: View {
             enabledMacros: enabledMacrosValue,
             planRecommendation: pendingPlanRecommendation,
             planRecommendationMessage: planRecommendationMessage,
-            onSuggestionTapped: sendMessage,
             onAcceptMeal: acceptMealSuggestion,
             onEditMeal: { message, meal in
                 editingMealSuggestion = (message, meal)
@@ -195,17 +218,31 @@ struct ChatView: View {
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
-                    ChatInputBar(
-                        text: $messageText,
-                        selectedImage: $selectedImage,
-                        selectedPhotoItem: $selectedPhotoItem,
-                        isLoading: isLoading,
-                        onSend: { sendMessage(messageText) },
-                        onStop: stopGenerating,
-                        onTakePhoto: { showingCamera = true },
-                        onImageTapped: { image in enlargedImage = image },
-                        isFocused: $isInputFocused
-                    )
+                    VStack(spacing: 0) {
+                        // Show suggestion rows when chat is empty (not in incognito)
+                        if currentSessionMessages.isEmpty && !isTemporarySession {
+                            SuggestionRowsView(
+                                context: smartStarterContext,
+                                suggestionUsage: suggestionUsage,
+                                onSuggestionTapped: sendMessage,
+                                onTrackTap: trackSuggestionTap
+                            )
+                            .transition(.opacity)
+                        }
+
+                        ChatInputBar(
+                            text: $messageText,
+                            selectedImage: $selectedImage,
+                            selectedPhotoItem: $selectedPhotoItem,
+                            isLoading: isLoading,
+                            onSend: { sendMessage(messageText) },
+                            onStop: stopGenerating,
+                            onTakePhoto: { showingCamera = true },
+                            onImageTapped: { image in enlargedImage = image },
+                            isFocused: $isInputFocused
+                        )
+                    }
+                    .animation(.easeInOut(duration: 0.25), value: isTemporarySession)
                 }
             }
             .navigationTitle("Trai")
@@ -220,9 +257,7 @@ struct ChatView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        withAnimation(.spring(response: 0.3)) {
-                            toggleTemporaryMode()
-                        }
+                        toggleTemporaryMode()
                         HapticManager.lightTap()
                     } label: {
                         Image(systemName: isTemporarySession ? "text.bubble.badge.clock.fill" : "text.bubble.badge.clock")
@@ -230,23 +265,7 @@ struct ChatView: View {
                     }
                     .help(isTemporarySession ? "Exit incognito mode" : "Start incognito chat")
                 }
-                ToolbarItem(placement: .principal) {
-                    if isTemporarySession {
-                        HStack(spacing: 6) {
-                            Image(systemName: "text.bubble.badge.clock.fill")
-                                .font(.caption)
-                                .foregroundStyle(.orange)
-                            Text("Incognito")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundStyle(.orange)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(.orange.opacity(0.15), in: .capsule)
-                    }
-                }
-                ToolbarItem(placement: .primaryAction) {
+                                ToolbarItem(placement: .primaryAction) {
                     ChatHistoryMenu(
                         sessions: chatSessions,
                         onSelectSession: switchToSession,

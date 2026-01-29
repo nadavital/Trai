@@ -12,6 +12,7 @@ struct ChatContentList: View {
     let isLoading: Bool
     let isStreamingResponse: Bool
     let isTemporarySession: Bool
+    var smartStarterContext: SmartStarterContext = SmartStarterContext()
     let currentActivity: String?
     let currentCalories: Int?
     let currentProtein: Int?
@@ -20,7 +21,6 @@ struct ChatContentList: View {
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     var planRecommendation: PlanRecommendation?
     var planRecommendationMessage: String?
-    let onSuggestionTapped: (String) -> Void
     let onAcceptMeal: (SuggestedFoodEntry, ChatMessage) -> Void
     let onEditMeal: (ChatMessage, SuggestedFoodEntry) -> Void
     let onDismissMeal: (SuggestedFoodEntry, ChatMessage) -> Void
@@ -57,6 +57,7 @@ struct ChatContentList: View {
                     onReviewPlan: onReview,
                     onDismiss: onDismiss
                 )
+                .padding(.horizontal)
                 .transition(.asymmetric(
                     insertion: .scale(scale: 0.95).combined(with: .opacity),
                     removal: .scale(scale: 0.95).combined(with: .opacity)
@@ -65,9 +66,9 @@ struct ChatContentList: View {
 
             if messages.isEmpty {
                 EmptyChatView(
-                    onSuggestionTapped: onSuggestionTapped,
                     isLoading: isLoading,
-                    isTemporary: isTemporarySession
+                    isTemporary: isTemporarySession,
+                    context: smartStarterContext
                 )
             } else {
                 ForEach(messages) { message in
@@ -136,6 +137,7 @@ struct ChatContentList: View {
                                 onViewAppliedPlan: onViewAppliedPlan
                             )
                         }
+                        .padding(.horizontal)
                         .id(message.id)
                     }
                 }
@@ -143,8 +145,8 @@ struct ChatContentList: View {
 
             if isLoading && !isStreamingResponse {
                 ThinkingIndicator(activity: currentActivity)
+                    .padding(.horizontal)
             }
         }
-        .padding()
     }
 }

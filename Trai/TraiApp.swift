@@ -43,7 +43,8 @@ struct TraiApp: App {
                 CoachMemory.self,
                 NutritionPlanVersion.self,
                 CustomReminder.self,
-                ReminderCompletion.self
+                ReminderCompletion.self,
+                SuggestionUsage.self
             ])
 
             let modelConfiguration = ModelConfiguration(

@@ -138,7 +138,7 @@ enum GeminiFunctionDeclarations {
                     "period": [
                         "type": "string",
                         "description": "Quick period selection. Use this for common queries like weekly/monthly averages.",
-                        "enum": ["today", "yesterday", "this_week", "last_week", "this_month", "last_month"]
+                        "enum": ["today", "yesterday", "this_week", "last_week", "this_month", "last_month", "past_3_days", "past_7_days", "past_14_days"]
                     ],
                     "date": [
                         "type": "string",

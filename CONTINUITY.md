@@ -18,6 +18,77 @@ Implement bug fixes and UX improvements from user testing sessions.
 
 ## State
 
+### Done (January 2026 - Personalized Trai Suggestions)
+Implemented personalized suggestion tracking and prioritization:
+- [x] Phase 1: Created `SuggestionUsage` SwiftData model with hourly tap tracking
+- [x] Phase 2: Added `type` property to SmartStarter, implemented tap tracking
+- [x] Phase 3: Implemented scoring algorithm (contextual bonus, usage frequency, time match, recency)
+- [x] Phase 4: Replaced marquee with user-controlled horizontal scroll (2 independently scrolling rows, pinned above chat bar)
+
+**Files created/modified:**
+- `Trai/Core/Models/SuggestionUsage.swift` (NEW)
+- `TraiApp.swift` (added to schema)
+- `ChatMessageViews.swift` (SmartStarter + EmptyChatView)
+- `ChatContentList.swift` (pass through usage data)
+- `ChatView.swift` (query usage, pass to content)
+- `ChatViewActions.swift` (trackSuggestionTap function)
+
+### Done (January 2026 - Trai Chat Fixes v2)
+Refined implementation based on Gemini 3 Flash prompting best practices research:
+
+**Phase 1: Critical Bug Fixes**
+- [x] Plan Review now starts new conversation (ChatViewActions.swift)
+- [x] Thinking indicator shows before content arrives - `isStreamingResponse` checks `!lastMessage.content.isEmpty`
+- [x] Retry button hidden on manual stop - added `wasManuallyStopped` flag to ChatMessage
+
+**Phase 2: Data & Function Fixes**
+- [x] Food log retrieval: explicit timezone + new periods (past_3_days, past_7_days, past_14_days)
+- [x] Recovery query: added guidance to synthesize answer with recommendations
+- [x] Active workout context: condensed to 2-3 sentence response expectation
+
+**Phase 3: System Prompt Refactored (Gemini 3 Best Practices)**
+- [x] Researched Gemini 3 Flash prompting guidelines (temperature=1.0, avoid overly broad constraints)
+- [x] Removed XML rule (symptomatic, not root cause)
+- [x] Condensed guidelines from ~65 lines to ~25 lines
+- [x] Memory relevance rebalanced with topic matching + recency decay (CoachMemory.swift)
+
+**Phase 4: Smart Context-Aware Empty State (v2 + Animated)**
+- [x] `SmartStarterContext` with userName, calories, protein, lastWorkoutDate, goal
+- [x] **Personalized greetings** via `generateGreeting()`:
+  - Uses user's first name when available
+  - Time-based variations (morning/afternoon/evening/night)
+  - Context-aware messages (protein goal close, workout recovery, meal times)
+  - Consistent per day (doesn't change on re-render)
+- [x] **Unified SuggestionCard design**:
+  - Horizontal layout: icon | title
+  - Fixed size (160x60pt), neutral background
+  - Only icons are tinted (not backgrounds)
+- [x] **Continuous scrolling marquee**:
+  - Two horizontal rows that scroll automatically
+  - Top row scrolls left, bottom row scrolls right
+  - Seamless looping with duplicated content
+  - Users can still tap cards to interact
+- [x] **16+ Smart suggestions**: Log meal (time-aware), Protein tracking, Start workout, Snap a meal, My progress, Muscle recovery, Am I on track?, Meal ideas, Healthy snacks, Log weight, Review plan, Calories left, My PRs, Rest day tips, Water intake, Daily activity
+
+### Done (January 2026 - C1-C4 Machine Recognition Fixes)
+- **C1**: Added error alert for photo analysis failures with "Try Again" and "Take New Photo" options
+  - ExerciseListView.swift: Added `photoAnalysisError` and `lastCapturedImageData` state
+  - Shows user-friendly error message instead of silent failure
+- **C2 + C4**: Fixed howTo description layout in EquipmentAnalysisSheet
+  - Moved howTo to separate line below muscle group badge
+  - Added `multilineTextAlignment(.leading)` and `fixedSize(horizontal: false, vertical: true)`
+  - Allows multi-line descriptions instead of cutting off
+- **C3**: Fixed equipment inference to not misclassify machine exercises as bodyweight
+  - Added `isMachineExercise` check for machine/cable/smith/seated/assisted keywords
+  - Bodyweight inference only runs when `!isMachineExercise`
+  - Prevents "Machine Crunch" from being tagged as "Bodyweight"
+
+### Done (January 2026 - G4 Default Rep Count Fix)
+- **G4**: Custom exercise from photo/suggestions now uses default rep count from settings
+  - Fixed `loadExerciseSuggestions()` at line 385: Was hardcoded `defaultReps: 10`, now uses `getUserDefaultRepCount()`
+  - Fixed `addExerciseFromSuggestion()` at line 570: Was falling back to `suggestion.defaultReps`, now uses `getUserDefaultRepCount()`
+  - Affects: suggestion chips in live workout, "Up Next" exercise, all exercises added via suggestions
+
 ### Done (Previous Phases)
 - Phase 1-6: All previous bug fixes completed
 - Memory relevance filtering, Live Activity entitlement, etc.
@@ -126,6 +197,12 @@ Implement bug fixes and UX improvements from user testing sessions.
 ## Open Questions
 - None
 
+### Verification Checklist (Personalized Suggestions)
+- [x] Build succeeds
+- [ ] Tap a suggestion → SuggestionUsage record created/updated
+- [ ] Tap same suggestion 5+ times → appears earlier in list
+- [ ] Horizontal scroll with 2 brick-offset rows (no auto-animation)
+
 ## Working Set
 - WeightUtility.swift (CleanWeight dual-unit storage)
 - LiveWorkoutEntry.swift (SetData with kg + lbs)
@@ -172,10 +249,10 @@ Implement bug fixes and UX improvements from user testing sessions.
 - [x] B5: Show machine names (same as B2 - equipment shown when available)
 
 ### C. Machine Recognition / Photo Flow
-- [ ] C1: Sometimes doesn't work / shows nothing (structured output?)
-- [ ] C2: "Exercises you can do" lost card views, descriptions center-aligned (should be left)
-- [ ] C3: Some machines incorrectly default to bodyweight - only match if exact
-- [ ] C4: Exercise descriptions cut off at 1 line
+- [x] C1: Photo analysis error handling - shows alert with retry/take new photo options
+- [x] C2: "Exercises you can do" howTo now on separate line, left-aligned
+- [x] C3: Equipment inference checks machine keywords before bodyweight (fixes "Machine Crunch" → Bodyweight)
+- [x] C4: Exercise descriptions now multi-line with fixedSize vertical expansion
 - [x] C5: Replace Trai icon + purple accent with red to match app
 
 ### D. Exercise Differentiation
@@ -187,17 +264,17 @@ Implement bug fixes and UX improvements from user testing sessions.
 - [ ] ~~E2: Ready/recovering/needs rest sections more compact below diagram~~ (decided not to implement)
 
 ### F. Trai Chat Tab
-- [ ] F1: Trai should know current workout when user starts chat mid-workout
-- [ ] F2: "Pull day" query checked muscle recovery but never returned answer
-- [ ] F3: Trai overuses memories (Zepbound in every conversation) - rebalance prompts
+- [x] F1: Trai knows current workout - enhanced active workout section in system prompt
+- [x] F2: Recovery query now synthesizes answer with specific recommendations
+- [x] F3: Memory relevance rebalanced - topic matching, recency decay, reduced overuse
 - [x] F4: Add vertical padding for text input background
-- [ ] F5: Trai system prompt too chatty - tone down
+- [x] F5: System prompt condensed from ~65 to ~25 lines, less chatty
 
 ### G. Live Workout View
 - [x] G1: Typing/scrolling/animation latency - Fixed with input debouncing (500ms delay)
 - [x] G2: Don't show PRs during input, only on workout finish
 - [x] G3: Three-dot menu "change exercise" - ALREADY IMPLEMENTED
-- [ ] G4: Custom exercise from photo doesn't use default rep count from settings
+- [x] G4: Custom exercise from photo doesn't use default rep count from settings
 - [ ] G5: Support sets with different weights per set
 
 ### H. Live Activity
@@ -259,4 +336,4 @@ Implement bug fixes and UX improvements from user testing sessions.
 - [ ] Q2: Add exercise suggestions based on selected muscle groups when creating custom workout
 
 ---
-**Total: 46 items** (25 already done, 1 deferred, 2 removed, 18 remaining)
+**Total: 46 items** (29 done, 1 deferred, 2 removed, 14 remaining)

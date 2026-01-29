@@ -34,6 +34,8 @@ struct ExerciseListView: View {
     @State private var showingEquipmentResult = false
     @State private var equipmentAnalysis: ExercisePhotoAnalysis?
     @State private var isAnalyzingPhoto = false
+    @State private var photoAnalysisError: String?
+    @State private var lastCapturedImageData: Data?
 
     // MARK: - Initializers
 
@@ -286,8 +288,30 @@ struct ExerciseListView: View {
             .fullScreenCover(isPresented: $showingCamera) {
                 EquipmentCameraView { imageData in
                     showingCamera = false
+                    lastCapturedImageData = imageData
                     Task { await analyzeEquipmentPhoto(imageData) }
                 }
+            }
+            .alert("Equipment Analysis Failed", isPresented: .init(
+                get: { photoAnalysisError != nil },
+                set: { if !$0 { photoAnalysisError = nil } }
+            )) {
+                if lastCapturedImageData != nil {
+                    Button("Try Again") {
+                        if let imageData = lastCapturedImageData {
+                            Task { await analyzeEquipmentPhoto(imageData) }
+                        }
+                    }
+                }
+                Button("Take New Photo") {
+                    photoAnalysisError = nil
+                    showingCamera = true
+                }
+                Button("Cancel", role: .cancel) {
+                    photoAnalysisError = nil
+                }
+            } message: {
+                Text(photoAnalysisError ?? "Unable to identify equipment. Try taking a clearer photo.")
             }
             .sheet(isPresented: $showingEquipmentResult) {
                 if let analysis = equipmentAnalysis {
@@ -349,8 +373,8 @@ struct ExerciseListView: View {
             showingEquipmentResult = true
             HapticManager.success()
         } catch {
-            // Handle error - could show alert
             HapticManager.error()
+            photoAnalysisError = "Couldn't identify the equipment. Make sure the machine is clearly visible and try again."
         }
     }
 

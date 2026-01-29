@@ -377,12 +377,13 @@ final class LiveWorkoutViewModel {
         }
 
         // Create suggestions (limit to reasonable number)
+        let userDefaultReps = getUserDefaultRepCount()
         exerciseSuggestions = sortedExercises.prefix(12).map { exercise in
             ExerciseSuggestion(
                 exerciseName: exercise.name,
                 muscleGroup: exercise.muscleGroup ?? "other",
                 defaultSets: 3,
-                defaultReps: 10
+                defaultReps: userDefaultReps
             )
         }
     }
@@ -563,11 +564,11 @@ final class LiveWorkoutViewModel {
         // Get last performance to pre-fill first set
         let lastPerformance = getLastPerformance(for: suggestion.exerciseName)
 
-        // Use first value from user's rep/weight pattern, or fall back to defaults
+        // Use first value from user's rep/weight pattern, or fall back to user's default
         let patternReps = lastPerformance?.repPatternArray.first
         let patternWeight = lastPerformance?.weightPatternArray.first
 
-        let suggestedReps = patternReps ?? lastPerformance?.bestSetReps ?? suggestion.defaultReps
+        let suggestedReps = patternReps ?? lastPerformance?.bestSetReps ?? getUserDefaultRepCount()
         let suggestedWeightKg = patternWeight ?? lastPerformance?.bestSetWeightKg ?? 0
         let cleanWeight = WeightUtility.cleanWeightFromKg(suggestedWeightKg)
 

@@ -8,6 +8,25 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - Suggestion Tracking
+
+extension ChatView {
+    /// Track when a user taps a suggestion to personalize future ordering
+    func trackSuggestionTap(_ suggestionType: String) {
+        // Find existing usage record or create new one
+        if let existing = suggestionUsage.first(where: { $0.suggestionType == suggestionType }) {
+            existing.recordTap()
+        } else {
+            let newUsage = SuggestionUsage(suggestionType: suggestionType)
+            newUsage.recordTap()
+            modelContext.insert(newUsage)
+        }
+
+        // Save immediately to persist the tap
+        try? modelContext.save()
+    }
+}
+
 // MARK: - Meal Suggestion Actions
 
 extension ChatView {
@@ -404,6 +423,9 @@ extension ChatView {
 
         // Reset the flag immediately
         pendingPlanReviewRequest = false
+
+        // Start a fresh session for the plan review
+        startNewSession(silent: true)
 
         // Send the review request message
         sendMessage("Can you review my nutrition plan and check if any updates are needed based on my progress?")

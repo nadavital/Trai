@@ -205,10 +205,19 @@ extension Exercise {
     ]
 
     /// Infers equipment name from exercise name keywords
+    /// Only returns a match when the exercise name clearly indicates specific equipment
     static func inferEquipment(from exerciseName: String) -> String? {
         let lowercased = exerciseName.lowercased()
 
-        // Check for explicit machine keywords
+        // Check for machine keywords FIRST (before bodyweight checks)
+        // This prevents "Machine Crunch" from being tagged as "Bodyweight"
+        let isMachineExercise = lowercased.contains("machine") ||
+                                lowercased.contains("cable") ||
+                                lowercased.contains("smith") ||
+                                lowercased.contains("seated") ||
+                                lowercased.contains("assisted")
+
+        // Explicit machine types
         if lowercased.contains("cable") { return "Cable Machine" }
         if lowercased.contains("machine") { return "Machine" }
         if lowercased.contains("smith") { return "Smith Machine" }
@@ -228,15 +237,17 @@ extension Exercise {
         if lowercased.contains("band") { return "Resistance Bands" }
         if lowercased.contains("ez bar") || lowercased.contains("ez-bar") { return "EZ Bar" }
 
-        // Bodyweight exercises
-        if lowercased.contains("push-up") || lowercased.contains("pushup") { return "Bodyweight" }
-        if lowercased.contains("pull-up") || lowercased.contains("pullup") { return "Pull-Up Bar" }
-        if lowercased.contains("chin-up") || lowercased.contains("chinup") { return "Pull-Up Bar" }
-        if lowercased.contains("dip") { return "Dip Station / Parallel Bars" }
-        if lowercased.contains("plank") || lowercased.contains("crunch") { return "Bodyweight" }
-        if lowercased.contains("lunge") { return "Bodyweight / Dumbbells" }
-        if lowercased.contains("squat") && !lowercased.contains("machine") && !lowercased.contains("hack") {
-            return "Barbell / Squat Rack"
+        // Bodyweight exercises - only if NOT a machine exercise
+        if !isMachineExercise {
+            if lowercased.contains("push-up") || lowercased.contains("pushup") { return "Bodyweight" }
+            if lowercased.contains("pull-up") || lowercased.contains("pullup") { return "Pull-Up Bar" }
+            if lowercased.contains("chin-up") || lowercased.contains("chinup") { return "Pull-Up Bar" }
+            if lowercased.contains("dip") { return "Dip Station / Parallel Bars" }
+            if lowercased.contains("plank") || lowercased.contains("crunch") { return "Bodyweight" }
+            if lowercased.contains("lunge") { return "Bodyweight / Dumbbells" }
+            if lowercased.contains("squat") && !lowercased.contains("hack") {
+                return "Barbell / Squat Rack"
+            }
         }
 
         return nil
