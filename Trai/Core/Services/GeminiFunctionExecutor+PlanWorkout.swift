@@ -407,6 +407,72 @@ extension GeminiFunctionExecutor {
         ))
     }
 
+    /// Log a new body weight entry
+    func executeLogWeight(_ args: [String: Any]) -> ExecutionResult {
+        guard let weight = args["weight"] as? Double,
+              let unit = args["unit"] as? String else {
+            return .dataResponse(FunctionResult(
+                name: "log_weight",
+                response: ["error": "Missing required parameters: weight and unit"]
+            ))
+        }
+
+        // Convert to kg if needed
+        let weightKg: Double
+        if unit == "lbs" {
+            weightKg = weight / 2.20462
+        } else {
+            weightKg = weight
+        }
+
+        // Parse optional date (defaults to now)
+        var logDate = Date()
+        if let dateString = args["date"] as? String {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            if let parsedDate = formatter.date(from: dateString) {
+                logDate = parsedDate
+            }
+        }
+
+        // Create and save the weight entry
+        let entry = WeightEntry(weightKg: weightKg, loggedAt: logDate)
+        if let notes = args["notes"] as? String {
+            entry.notes = notes
+        }
+
+        modelContext.insert(entry)
+
+        do {
+            try modelContext.save()
+        } catch {
+            return .dataResponse(FunctionResult(
+                name: "log_weight",
+                response: ["error": "Failed to save weight entry: \(error.localizedDescription)"]
+            ))
+        }
+
+        // Update user profile's current weight if logging for today
+        if Calendar.current.isDateInToday(logDate), let profile = userProfile {
+            profile.currentWeightKg = weightKg
+            try? modelContext.save()
+        }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+
+        return .dataResponse(FunctionResult(
+            name: "log_weight",
+            response: [
+                "success": true,
+                "message": "Weight logged successfully",
+                "weight_kg": weightKg,
+                "weight_lbs": weightKg * 2.20462,
+                "date": dateFormatter.string(from: logDate)
+            ]
+        ))
+    }
+
     /// Determines the date range for weight queries
     private func determineWeightDateRange(
         args: [String: Any],

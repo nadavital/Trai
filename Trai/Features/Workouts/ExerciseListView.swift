@@ -72,9 +72,18 @@ struct ExerciseListView: View {
     }
 
     private var recentExercises: [Exercise] {
-        recentExerciseNames.compactMap { name in
+        let allRecent = recentExerciseNames.compactMap { name in
             exercises.first { $0.name == name }
         }
+        // Filter to target muscle groups if specified
+        if !targetMuscleGroups.isEmpty {
+            let targetRawValues = Set(targetMuscleGroups.map(\.rawValue))
+            return allRecent.filter { exercise in
+                guard let muscleGroup = exercise.muscleGroup else { return false }
+                return targetRawValues.contains(muscleGroup)
+            }
+        }
+        return allRecent
     }
 
     private var filteredExercises: [Exercise] {

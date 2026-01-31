@@ -26,10 +26,12 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         let totalSets: Int
         let heartRate: Int?
         let isPaused: Bool
-        // New: richer data
-        let currentWeight: Double?
+        // Dual-unit weight storage (pre-cleaned to avoid rounding errors)
+        let currentWeightKg: Double?
+        let currentWeightLbs: Double?
         let currentReps: Int?
         let totalVolumeKg: Double?
+        let totalVolumeLbs: Double?
         let nextExercise: String?
         // User's weight unit preference
         let usesMetricWeight: Bool
@@ -41,9 +43,11 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             totalSets: Int,
             heartRate: Int? = nil,
             isPaused: Bool,
-            currentWeight: Double? = nil,
+            currentWeightKg: Double? = nil,
+            currentWeightLbs: Double? = nil,
             currentReps: Int? = nil,
             totalVolumeKg: Double? = nil,
+            totalVolumeLbs: Double? = nil,
             nextExercise: String? = nil,
             usesMetricWeight: Bool = true
         ) {
@@ -53,9 +57,11 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             self.totalSets = totalSets
             self.heartRate = heartRate
             self.isPaused = isPaused
-            self.currentWeight = currentWeight
+            self.currentWeightKg = currentWeightKg
+            self.currentWeightLbs = currentWeightLbs
             self.currentReps = currentReps
             self.totalVolumeKg = totalVolumeKg
+            self.totalVolumeLbs = totalVolumeLbs
             self.nextExercise = nextExercise
             self.usesMetricWeight = usesMetricWeight
         }
@@ -85,21 +91,38 @@ struct TraiWorkoutAttributes: ActivityAttributes {
 
         /// Volume display string (e.g., "2.5k kg" or "5.5k lbs")
         var volumeDisplay: String? {
-            guard let volume = totalVolumeKg, volume > 0 else { return nil }
-            let displayVolume = usesMetricWeight ? volume : volume * 2.20462
-            let unit = usesMetricWeight ? "kg" : "lbs"
-            if displayVolume >= 1000 {
-                return String(format: "%.1fk %@", displayVolume / 1000, unit)
+            // Use pre-cleaned volume values to avoid rounding errors
+            let displayVolume: Double?
+            let unit: String
+            if usesMetricWeight {
+                displayVolume = totalVolumeKg
+                unit = "kg"
+            } else {
+                displayVolume = totalVolumeLbs ?? totalVolumeKg.map { $0 * 2.20462 }
+                unit = "lbs"
             }
-            return "\(Int(displayVolume)) \(unit)"
+            guard let volume = displayVolume, volume > 0 else { return nil }
+            if volume >= 1000 {
+                return String(format: "%.1fk %@", volume / 1000, unit)
+            }
+            return "\(Int(volume.rounded())) \(unit)"
         }
 
         /// Current set display (e.g., "80kg × 8" or "175lbs × 8")
         var currentSetDisplay: String? {
-            guard let weight = currentWeight, let reps = currentReps, weight > 0 else { return nil }
-            let displayWeight = usesMetricWeight ? weight : weight * 2.20462
-            let unit = usesMetricWeight ? "kg" : "lbs"
-            return "\(Int(displayWeight))\(unit) \u{00D7} \(reps)"
+            guard let reps = currentReps else { return nil }
+            // Use pre-cleaned weight values to avoid rounding errors (200 lbs showing as 199)
+            let displayWeight: Double?
+            let unit: String
+            if usesMetricWeight {
+                displayWeight = currentWeightKg
+                unit = "kg"
+            } else {
+                displayWeight = currentWeightLbs ?? currentWeightKg.map { $0 * 2.20462 }
+                unit = "lbs"
+            }
+            guard let weight = displayWeight, weight > 0 else { return nil }
+            return "\(Int(weight.rounded()))\(unit) \u{00D7} \(reps)"
         }
     }
 }
@@ -401,9 +424,11 @@ extension TraiWorkoutAttributes.ContentState {
             totalSets: 15,
             heartRate: 142,
             isPaused: false,
-            currentWeight: 80,
+            currentWeightKg: 80,
+            currentWeightLbs: 176,
             currentReps: 8,
             totalVolumeKg: 2450,
+            totalVolumeLbs: 5401,
             nextExercise: "Incline Dumbbell Press"
         )
     }
@@ -416,9 +441,11 @@ extension TraiWorkoutAttributes.ContentState {
             totalSets: 15,
             heartRate: 98,
             isPaused: true,
-            currentWeight: 50,
+            currentWeightKg: 50,
+            currentWeightLbs: 110,
             currentReps: 10,
             totalVolumeKg: 3200,
+            totalVolumeLbs: 7055,
             nextExercise: "Lateral Raises"
         )
     }

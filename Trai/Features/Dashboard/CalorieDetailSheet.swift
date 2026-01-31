@@ -152,23 +152,26 @@ private struct CalorieRing: View {
                 .animation(.spring(duration: 0.8), value: progress)
 
             // Center text
-            VStack(spacing: 4) {
+            VStack(spacing: 2) {
                 Text("\(consumed)")
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
 
                 Text("of \(goal) kcal")
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
 
                 if remaining > 0 {
-                    Text("\(remaining) remaining")
-                        .font(.caption)
+                    Text("\(remaining) left")
+                        .font(.caption2)
                         .foregroundStyle(.green)
-                        .padding(.top, 4)
+                        .padding(.top, 2)
                 }
             }
+            .padding(.horizontal, 8)
         }
-        .padding(30)
+        .padding(24)
     }
 }
 

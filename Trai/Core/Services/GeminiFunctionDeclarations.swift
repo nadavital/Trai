@@ -26,6 +26,7 @@ enum GeminiFunctionDeclarations {
             suggestWorkout,
             startLiveWorkout,
             getWeightHistory,
+            logWeight,
             getActivitySummary,
             saveMemory,
             deleteMemory,
@@ -416,6 +417,37 @@ enum GeminiFunctionDeclarations {
                     ]
                 ],
                 "required": []
+            ]
+        ]
+    }
+
+    /// Log a body weight measurement for the user
+    static var logWeight: [String: Any] {
+        [
+            "name": "log_weight",
+            "description": "Log a body weight measurement for the user. Use when the user tells you their current weight or wants to log a weight measurement. Always confirm the weight was logged successfully.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "weight": [
+                        "type": "number",
+                        "description": "The weight value to log"
+                    ],
+                    "unit": [
+                        "type": "string",
+                        "description": "The unit of the weight value",
+                        "enum": ["kg", "lbs"]
+                    ],
+                    "date": [
+                        "type": "string",
+                        "description": "Date for the weight entry in YYYY-MM-DD format (defaults to today if not specified)"
+                    ],
+                    "notes": [
+                        "type": "string",
+                        "description": "Optional notes about the weight measurement"
+                    ]
+                ],
+                "required": ["weight", "unit"]
             ]
         ]
     }

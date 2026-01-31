@@ -174,6 +174,9 @@ final class GeminiFunctionExecutor {
         case "get_weight_history":
             return executeGetWeightHistory(call.arguments)
 
+        case "log_weight":
+            return executeLogWeight(call.arguments)
+
         case "get_activity_summary":
             return executeGetActivitySummary()
 

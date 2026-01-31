@@ -1014,9 +1014,15 @@ final class LiveWorkoutViewModel {
         let currentExercise = currentEntry?.exerciseName
 
         // Get current set data (last set with data from current entry)
+        // Use both kg and lbs values to avoid rounding errors (200 lbs → 199 bug)
         let currentSet = currentEntry?.sets.last { $0.reps > 0 }
-        let currentWeight = currentSet?.weightKg
+        let currentWeightKg = currentSet?.weightKg
+        let currentWeightLbs = currentSet?.weightLbs
         let currentReps = currentSet?.reps
+
+        // Calculate total volume in both units
+        let totalVolumeKg = totalVolume
+        let totalVolumeLbs = totalVolume * 2.20462
 
         // Find next exercise (first after current that isn't started yet)
         let currentIndex = entries.firstIndex { $0.id == currentEntry?.id } ?? -1
@@ -1029,9 +1035,11 @@ final class LiveWorkoutViewModel {
             totalSets: totalSets,
             heartRate: currentHeartRate.map { Int($0) },
             isPaused: !isTimerRunning,
-            currentWeight: currentWeight,
+            currentWeightKg: currentWeightKg,
+            currentWeightLbs: currentWeightLbs,
             currentReps: currentReps,
-            totalVolumeKg: totalVolume,
+            totalVolumeKg: totalVolumeKg,
+            totalVolumeLbs: totalVolumeLbs,
             nextExercise: nextExercise,
             usesMetricWeight: getUserUsesMetricWeight()
         )

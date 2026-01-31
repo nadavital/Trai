@@ -275,7 +275,7 @@ Refined implementation based on Gemini 3 Flash prompting best practices research
 - [x] G2: Don't show PRs during input, only on workout finish
 - [x] G3: Three-dot menu "change exercise" - ALREADY IMPLEMENTED
 - [x] G4: Custom exercise from photo doesn't use default rep count from settings
-- [ ] G5: Support sets with different weights per set
+- [x] G5: Support sets with different weights per set → moved to U2
 
 ### H. Live Activity
 - [ ] H1: Doesn't update when adding exercises
@@ -333,7 +333,49 @@ Refined implementation based on Gemini 3 Flash prompting best practices research
 
 ### Q. Custom Workout Creation
 - [ ] Q1: Better name saving for custom workouts (name not persisting or auto-generated poorly)
+  - Also: Generate better titles based on muscle groups worked
 - [ ] Q2: Add exercise suggestions based on selected muscle groups when creating custom workout
 
+### R. Exercise Selection
+- [x] R1: "Recently used" exercises should filter to muscles you're currently targeting
+  - Modified `recentExercises` computed property in ExerciseListView.swift
+  - Now filters by `targetMuscleGroups` when specified (e.g., during a leg workout, only shows leg exercises)
+
+### S. Trai Chat
+- [x] S1: Logging weight with Trai didn't work and no response given
+  - Root cause: `log_weight` function was never implemented
+  - Added function declaration in GeminiFunctionDeclarations.swift
+  - Added handler in GeminiFunctionExecutor+PlanWorkout.swift
+  - Supports kg/lbs input, optional date, optional notes
+  - Updates UserProfile.currentWeightKg when logging for today
+
+### T. UI Consistency
+- [ ] T1: Replace weight log sheet (from weight history page) with the quick actions version
+- [x] T2: Calorie breakdown screen - text doesn't fit within the ring at top
+  - Reduced font size from 44 to 36 with minimumScaleFactor(0.7)
+  - Reduced padding and spacing for better fit
+  - Shortened "remaining" to "left" for space
+
+### U. Live Workout Flexibility
+- [ ] U1: Be able to switch target muscle groups mid-workout
+- [ ] U2: Support sets with different weights per set (moved from G5)
+
+### V. Workout History/Details
+- [ ] V1: Show PRs you hit in workout detail view (not just summary)
+
+### W. Branding
+- [ ] W1: Rethink Trai symbol/icon
+
+### X. Machine Recognition (Enhanced)
+- [ ] X1: Differentiate similar machines (chest press vs converging chest press)
+- [ ] X2: Default to machine name visible in image when possible (edit vision prompt)
+
+### Y. Live Activity Bugs
+- [x] Y1: Weight rounding issue - 200lb in app shows as 199 in Live Activity
+  - Root cause: Runtime conversion `weight * 2.20462` caused floating point errors
+  - Fix: Added `currentWeightLbs` and `totalVolumeLbs` to ContentState (dual-unit storage)
+  - Now uses pre-cleaned weight values, same pattern as SetData/ExerciseHistory
+  - Files: TraiWorkoutAttributes.swift, TraiWidgetsLiveActivity.swift, LiveWorkoutViewModel.swift
+
 ---
-**Total: 46 items** (29 done, 1 deferred, 2 removed, 14 remaining)
+**Total: 56 items** (33 done, 1 deferred, 2 removed, 20 remaining)
