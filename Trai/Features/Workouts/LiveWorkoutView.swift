@@ -5,6 +5,7 @@
 //  Full-screen live workout tracking interface
 //
 
+import ActivityKit
 import SwiftUI
 import SwiftData
 
@@ -32,6 +33,7 @@ struct LiveWorkoutView: View {
     @State private var showingChat = false
     @State private var showingExerciseReplacement = false
     @State private var entryToReplace: LiveWorkoutEntry?
+    @State private var showingLiveActivityDisabledAlert = false
 
     // MARK: - Initialization
 
@@ -86,6 +88,11 @@ struct LiveWorkoutView: View {
             .onAppear {
                 viewModel.setup(with: modelContext, healthKitService: healthKitService)
                 startHeartRateUpdates()
+                
+                // Check if Live Activities are disabled
+                if !ActivityAuthorizationInfo().areActivitiesEnabled {
+                    showingLiveActivityDisabledAlert = true
+                }
             }
             .onDisappear {
                 viewModel.stopTimer()
@@ -150,6 +157,19 @@ struct LiveWorkoutView: View {
             } message: {
                 Text("Are you ready to finish this workout?")
             }
+            .alert(
+                "Live Activity Disabled",
+                isPresented: $showingLiveActivityDisabledAlert
+            ) {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                Button("Not Now", role: .cancel) {}
+            } message: {
+                Text("Enable Live Activities in Settings to see workout progress on your Lock Screen and Dynamic Island.")
+            }
         }
     }
 
@@ -158,7 +178,11 @@ struct LiveWorkoutView: View {
     private var workoutContent: some View {
         ZStack(alignment: .bottom) {
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 16) {
+                let entries = viewModel.entries
+                let upNext = viewModel.upNextSuggestion
+                let availableSuggestions = viewModel.availableSuggestions
+
+                LazyVStack(spacing: 16) {
                     // Timer header with optional watch data
                     WorkoutTimerHeader(
                         workoutStartedAt: viewModel.workout.startedAt,
@@ -186,7 +210,7 @@ struct LiveWorkoutView: View {
                     )
 
                     // Exercise cards - different UI for strength vs cardio
-                    ForEach(Array(viewModel.entries.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         if entry.isCardio {
                             CardioExerciseCard(
                                 entry: entry,
@@ -223,7 +247,7 @@ struct LiveWorkoutView: View {
                     }
 
                     // Up Next suggestion (smart rotation)
-                    if let upNext = viewModel.upNextSuggestion {
+                    if let upNext {
                         UpNextSuggestionCard(
                             suggestion: upNext,
                             lastPerformance: viewModel.getLastPerformance(for: upNext.exerciseName),
@@ -234,7 +258,7 @@ struct LiveWorkoutView: View {
                     }
 
                     // More suggestions by muscle group
-                    if !viewModel.availableSuggestions.isEmpty {
+                    if !availableSuggestions.isEmpty {
                         // Filter out the up next suggestion from the grouped view
                         let filteredSuggestions = viewModel.suggestionsByMuscle.mapValues { suggestions in
                             suggestions.filter { $0.id != viewModel.upNextSuggestion?.id }

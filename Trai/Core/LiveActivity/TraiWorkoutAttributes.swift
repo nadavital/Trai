@@ -19,6 +19,7 @@ struct TraiWorkoutAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
         let elapsedSeconds: Int
         let currentExercise: String?
+        let currentEquipment: String?
         let completedSets: Int
         let totalSets: Int
         let heartRate: Int?
@@ -36,6 +37,7 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         init(
             elapsedSeconds: Int,
             currentExercise: String? = nil,
+            currentEquipment: String? = nil,
             completedSets: Int,
             totalSets: Int,
             heartRate: Int? = nil,
@@ -50,6 +52,7 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         ) {
             self.elapsedSeconds = elapsedSeconds
             self.currentExercise = currentExercise
+            self.currentEquipment = currentEquipment
             self.completedSets = completedSets
             self.totalSets = totalSets
             self.heartRate = heartRate
@@ -175,7 +178,7 @@ final class LiveActivityManager {
             isPaused: false
         )
 
-        let content = ActivityContent(state: initialState, staleDate: nil)
+        let content = ActivityContent(state: initialState, staleDate: Date().addingTimeInterval(60))
 
         do {
             currentActivity = try Activity.request(
@@ -193,6 +196,7 @@ final class LiveActivityManager {
     func updateActivity(
         elapsedSeconds: Int,
         currentExercise: String?,
+        currentEquipment: String? = nil,
         completedSets: Int,
         totalSets: Int,
         heartRate: Int?,
@@ -210,6 +214,7 @@ final class LiveActivityManager {
         let updatedState = TraiWorkoutAttributes.ContentState(
             elapsedSeconds: elapsedSeconds,
             currentExercise: currentExercise,
+            currentEquipment: currentEquipment,
             completedSets: completedSets,
             totalSets: totalSets,
             heartRate: heartRate,
@@ -223,7 +228,7 @@ final class LiveActivityManager {
             usesMetricWeight: usesMetricWeight
         )
 
-        let content = ActivityContent(state: updatedState, staleDate: nil)
+        let content = ActivityContent(state: updatedState, staleDate: Date().addingTimeInterval(60))
 
         Task {
             await activity.update(content)

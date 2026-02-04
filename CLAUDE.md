@@ -51,6 +51,55 @@ You are a **Senior iOS Engineer**, specializing in SwiftUI, SwiftData, and relat
 - Avoid UIKit unless requested.
 
 
+## Xcode MCP Server
+
+An Xcode MCP server is available with direct Xcode integration. Call `XcodeListWindows` first to get the `tabIdentifier`.
+
+### Tool Selection Rules
+
+**DEFAULT: Use standard Claude Code tools** for all file operations:
+- `Read` for reading files (NOT `XcodeRead`)
+- `Edit` for editing existing files (NOT `XcodeUpdate`)
+- `Write` for creating files (NOT `XcodeWrite`)
+- `Glob` / `Grep` for searching (NOT `XcodeGlob` / `XcodeGrep`)
+
+**ONLY use Xcode MCP tools** for these specific cases:
+
+| Tool | When to Use |
+|------|-------------|
+| `BuildProject` | Build project and catch compile errors |
+| `GetBuildLog` | View build errors/warnings after a build |
+| `XcodeListNavigatorIssues` | See all issues in Xcode's Issue Navigator |
+| `XcodeRefreshCodeIssuesInFile` | **Fast validation** - get diagnostics for a file in seconds (faster than full build) |
+| `RunAllTests` / `RunSomeTests` | Run tests directly in Xcode |
+| `DocumentationSearch` | Search Apple Developer Documentation |
+| `RenderPreview` | Render SwiftUI previews to verify UI changes visually |
+| `ExecuteSnippet` | Run code snippets in file context (like a REPL) |
+| `XcodeWrite` | **Only** when creating a NEW file that must be added to .xcodeproj |
+| `XcodeRM` | **Only** when removing a file that must also be removed from .xcodeproj |
+| `XcodeMV` | **Only** when moving/renaming files that need project reference updates |
+| `XcodeMakeDir` | **Only** when creating a new group in project structure |
+
+### Apple Developer Documentation
+
+Use `DocumentationSearch` to search for the latest Apple developer documentation. It runs locally and returns results quickly, often with newer information than training data.
+
+**New APIs you MUST search for if referenced:**
+- **Liquid Glass** - new iOS 26 design system
+- **FoundationModels** - new on-device ML framework with structured generation macros
+- **SwiftUI changes** - especially things that previously required view representables
+
+If you can't find an implementation of something mentioned in the project, assume it's new API and use `DocumentationSearch` to find details.
+
+### Validation Tools
+
+Use these to verify your work without running a full build:
+
+- `XcodeRefreshCodeIssuesInFile` - Fast (seconds) check for type errors, missing imports, hallucinated APIs. Use this frequently while editing.
+- `ExecuteSnippet` - Run code in file context to test ideas. Faster than unit tests for quick experiments.
+- `BuildProject` - Full build. Use to verify everything compiles correctly. Takes longer but catches linking and cross-file issues.
+
+
 ## Gemini API instructions
 
 **Reference `GEMINI_API.md` for complete API documentation before modifying Gemini code.**
@@ -67,6 +116,7 @@ Key rules:
 
 - Always mark `@Observable` classes with `@MainActor`.
 - Assume strict Swift concurrency rules are being applied.
+- **Avoid the Combine framework.** Prefer Swift's async/await APIs instead.
 - Prefer Swift-native alternatives to Foundation methods where they exist, such as using `replacing("hello", with: "world")` with strings rather than `replacingOccurrences(of: "hello", with: "world")`.
 - Prefer modern Foundation API, for example `URL.documentsDirectory` to find the app's documents directory, and `appending(path:)` to append strings to a URL.
 - Never use C-style number formatting such as `Text(String(format: "%.2f", abs(myNumber)))`; always use `Text(abs(change), format: .number.precision(.fractionLength(2)))` instead.
@@ -115,8 +165,8 @@ If SwiftData is configured to use CloudKit:
 - Use a consistent project structure, with folder layout determined by app features.
 - Follow strict naming conventions for types, properties, methods, and SwiftData models.
 - Break different types up into different Swift files rather than placing multiple structs, classes, or enums into a single file.
-- Write unit tests for core application logic.
-- Only write UI tests if unit tests are not possible.
+- Write unit tests for core application logic using the **Testing framework** (`import Testing`).
+- Write UI tests using the **XCUIAutomation framework** when unit tests are not possible.
 - Add code comments and documentation comments as needed.
 - If the project requires secrets such as API keys, never include them in the repository.
 

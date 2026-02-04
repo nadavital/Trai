@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import WidgetKit
 
 @main
 struct TraiApp: App {
@@ -19,12 +20,13 @@ struct TraiApp: App {
     @State private var notificationDelegate: NotificationDelegate?
     @State private var showRemindersFromNotification = false
     @State private var deepLinkDestination: DeepLinkDestination?
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Deep link destinations for URL scheme handling
     enum DeepLinkDestination: Equatable {
         case logFood
         case logWeight
-        case workout
+        case workout(templateName: String?)
         case chat
     }
 
@@ -81,12 +83,26 @@ struct TraiApp: App {
                     Task { @MainActor in
                         LiveActivityManager.shared.cancelAllActivities()
                     }
+                    // Process any pending widget food logs
+                    processPendingWidgetFoodLogs()
+                    // Update widget data on launch
+                    Task { @MainActor in
+                        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContainer.mainContext)
+                    }
                 }
                 .onOpenURL { url in
                     handleDeepLink(url)
                 }
         }
         .modelContainer(modelContainer)
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background {
+                // Update widget data when app goes to background
+                Task { @MainActor in
+                    WidgetDataProvider.shared.updateWidgetData(modelContext: modelContainer.mainContext)
+                }
+            }
+        }
     }
 
     private func handleDeepLink(_ url: URL) {
@@ -98,7 +114,10 @@ struct TraiApp: App {
         case "logweight":
             deepLinkDestination = .logWeight
         case "workout":
-            deepLinkDestination = .workout
+            // Parse optional template parameter
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let templateName = components?.queryItems?.first(where: { $0.name == "template" })?.value
+            deepLinkDestination = .workout(templateName: templateName)
         case "chat":
             deepLinkDestination = .chat
         default:
@@ -117,6 +136,50 @@ struct TraiApp: App {
         }
         notificationDelegate = delegate
     }
+}
+
+// MARK: - Widget Food Log Processing
+
+extension TraiApp {
+    /// Process any pending food logs from widget quick actions
+    @MainActor
+    func processPendingWidgetFoodLogs() {
+        guard let defaults = UserDefaults(suiteName: "group.com.nadav.trai"),
+              let pendingData = defaults.data(forKey: "pendingFoodLogs"),
+              let pendingLogs = try? JSONDecoder().decode([PendingFoodLog].self, from: pendingData),
+              !pendingLogs.isEmpty else {
+            return
+        }
+
+        let context = modelContainer.mainContext
+
+        for log in pendingLogs {
+            let entry = FoodEntry()
+            entry.name = log.name
+            entry.calories = log.calories
+            entry.proteinGrams = Double(log.protein)
+            entry.loggedAt = log.loggedAt
+            entry.mealType = log.mealType
+            context.insert(entry)
+        }
+
+        try? context.save()
+
+        // Clear pending logs
+        defaults.removeObject(forKey: "pendingFoodLogs")
+
+        // Refresh widgets with new data
+        WidgetDataProvider.shared.updateWidgetData(modelContext: context)
+    }
+}
+
+/// Pending food log from widget
+struct PendingFoodLog: Codable {
+    let name: String
+    let calories: Int
+    let protein: Int
+    let loggedAt: Date
+    let mealType: String
 }
 
 // MARK: - Data Migrations

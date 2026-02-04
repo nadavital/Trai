@@ -219,8 +219,8 @@ struct MainTabView: View {
             showingLogFood = true
         case .logWeight:
             showingLogWeight = true
-        case .workout:
-            startWorkoutFromIntent(name: "custom")
+        case .workout(let templateName):
+            startWorkoutFromIntent(name: templateName ?? "custom")
         case .chat:
             selectedTabRaw = AppTab.trai.rawValue
         }

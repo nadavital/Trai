@@ -52,6 +52,8 @@ struct ExerciseCard: View {
     }
 
     var body: some View {
+        let sets = entry.sets
+
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
@@ -73,7 +75,7 @@ struct ExerciseCard: View {
                             }
 
                             HStack(spacing: 8) {
-                                Text("\(entry.sets.count) sets")
+                                Text("\(sets.count) sets")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
 
@@ -155,11 +157,12 @@ struct ExerciseCard: View {
                     .foregroundStyle(.tertiary)
 
                     // Set rows
-                    ForEach(entry.sets.indices, id: \.self) { index in
+                    ForEach(sets.indices, id: \.self) { index in
                         SetRow(
                             setNumber: index + 1,
-                            set: entry.sets[index],
+                            set: sets[index],
                             usesMetricWeight: usesMetricWeight,
+                            previousSetWeight: index > 0 ? sets[index - 1].weightKg : nil,
                             onUpdateReps: { reps in onUpdateSet(index, reps, nil, nil, nil) },
                             onUpdateWeight: { kg, lbs in onUpdateSet(index, nil, kg, lbs, nil) },
                             onUpdateNotes: { notes in onUpdateSet(index, nil, nil, nil, notes) },
@@ -205,6 +208,7 @@ struct SetRow: View {
     let setNumber: Int
     let set: LiveWorkoutEntry.SetData
     let usesMetricWeight: Bool
+    let previousSetWeight: Double?  // Previous set's weight for jump detection
     let onUpdateReps: (Int) -> Void
     let onUpdateWeight: (Double, Double) -> Void  // (kg, lbs)
     let onUpdateNotes: (String) -> Void
@@ -216,6 +220,8 @@ struct SetRow: View {
     @State private var notesText: String = ""
     @State private var showNotesField = false
     @State private var isUpdatingFromUnitChange = false
+    @State private var showWeightJumpConfirmation = false
+    @State private var pendingWeight: CleanWeight?
     @FocusState private var isWeightFocused: Bool
     @FocusState private var isRepsFocused: Bool
     @FocusState private var isNotesFocused: Bool
@@ -227,6 +233,10 @@ struct SetRow: View {
 
     // Debounce delay in seconds
     private let debounceDelay: Duration = .milliseconds(500)
+    
+    // Weight jump detection thresholds
+    private let percentageThreshold: Double = 0.5  // 50% increase
+    private let absoluteThresholdKg: Double = 25.0  // 25kg / ~55lbs absolute jump
 
     private var weightUnit: String {
         usesMetricWeight ? "kg" : "lbs"
@@ -391,14 +401,69 @@ struct SetRow: View {
                 }
             }
         }
+        .confirmationDialog(
+            "Large Weight Increase",
+            isPresented: $showWeightJumpConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Use \(pendingWeight?.formatted(unit: WeightUnit(usesMetric: usesMetricWeight), showUnit: true) ?? "")") {
+                if let weight = pendingWeight {
+                    onUpdateWeight(weight.kg, weight.lbs)
+                }
+                pendingWeight = nil
+            }
+            Button("Cancel", role: .cancel) {
+                // Revert text field to original value
+                let displayWeight = set.displayWeight(usesMetric: usesMetricWeight)
+                weightText = displayWeight > 0 ? formatWeight(displayWeight) : ""
+                pendingWeight = nil
+            }
+        } message: {
+            if let weight = pendingWeight {
+                let previousDisplay = previousSetWeight.map { WeightUtility.format($0, displayUnit: WeightUnit(usesMetric: usesMetricWeight), showUnit: true) } ?? WeightUtility.format(set.weightKg, displayUnit: WeightUnit(usesMetric: usesMetricWeight), showUnit: true)
+                Text("This is a significant increase from \(previousDisplay) to \(weight.formatted(unit: WeightUnit(usesMetric: usesMetricWeight), showUnit: true)). Is this correct?")
+            }
+        }
     }
 
     /// Commit weight value to parent (called after debounce or on focus loss)
     private func commitWeight(_ value: String) {
         let unit = WeightUnit(usesMetric: usesMetricWeight)
-        if let cleanWeight = WeightUtility.parseToCleanWeight(value, inputUnit: unit) {
+        guard let cleanWeight = WeightUtility.parseToCleanWeight(value, inputUnit: unit) else { return }
+        
+        // Check for large weight jump
+        if isLargeWeightJump(newWeightKg: cleanWeight.kg) {
+            pendingWeight = cleanWeight
+            showWeightJumpConfirmation = true
+        } else {
             onUpdateWeight(cleanWeight.kg, cleanWeight.lbs)
         }
+    }
+    
+    /// Check if the new weight represents a suspiciously large jump
+    private func isLargeWeightJump(newWeightKg: Double) -> Bool {
+        // Get the reference weight (previous set or current set's original value)
+        let referenceWeightKg: Double
+        if let previousSetWeight, previousSetWeight > 0 {
+            referenceWeightKg = previousSetWeight
+        } else if set.weightKg > 0 {
+            referenceWeightKg = set.weightKg
+        } else {
+            // No reference weight, can't detect a jump
+            return false
+        }
+        
+        // Skip if new weight is lower (decreasing weight is normal)
+        guard newWeightKg > referenceWeightKg else { return false }
+        
+        // Skip small weights (under 10kg) - relative jumps don't matter as much
+        guard referenceWeightKg >= 10 else { return false }
+        
+        let absoluteJump = newWeightKg - referenceWeightKg
+        let percentageJump = absoluteJump / referenceWeightKg
+        
+        // Flag if jump exceeds both thresholds (must be significant in both relative and absolute terms)
+        return percentageJump >= percentageThreshold && absoluteJump >= absoluteThresholdKg
     }
 
     /// Commit reps value to parent (called after debounce or on focus loss)

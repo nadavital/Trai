@@ -20,6 +20,15 @@ final class LiveWorkoutViewModel {
     // Live Activity manager (shared singleton to prevent duplicates)
     private var liveActivityManager: LiveActivityManager { LiveActivityManager.shared }
     private var liveActivityUpdateTimer: Timer?
+    private var pendingSaveTask: Task<Void, Never>?
+    private var pendingLiveActivityUpdateTask: Task<Void, Never>?
+    private let saveDebounceDelay: Duration = .milliseconds(500)
+    private let liveActivityDebounceDelay: Duration = .milliseconds(300)
+    
+    // Live Activity intent handling via App Groups
+    private var liveActivityIntentTimer: Timer?
+    private var lastAddSetTimestamp: TimeInterval = 0
+    private var lastTogglePauseTimestamp: TimeInterval = 0
 
     // Timer state - use date calculation for accuracy
     private(set) var pausedDuration: TimeInterval = 0
@@ -303,6 +312,63 @@ final class LiveWorkoutViewModel {
 
         // Start Live Activity
         startLiveActivity()
+        
+        // Set up Live Activity intent observers
+        setupLiveActivityObservers()
+    }
+    
+    private func setupLiveActivityObservers() {
+        // Poll App Groups UserDefaults for Live Activity button taps
+        // This is needed because LiveActivityIntent runs in the widget extension
+        liveActivityIntentTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.checkLiveActivityIntents()
+            }
+        }
+    }
+    
+    private func checkLiveActivityIntents() {
+        guard let defaults = UserDefaults(suiteName: "group.com.nadav.trai") else { return }
+        
+        // Check for "Add Set" action
+        let addSetTimestamp = defaults.double(forKey: "liveActivityAddSetTimestamp")
+        if addSetTimestamp > lastAddSetTimestamp {
+            lastAddSetTimestamp = addSetTimestamp
+            handleAddSetFromLiveActivity()
+        }
+        
+        // Check for "Toggle Pause" action
+        let togglePauseTimestamp = defaults.double(forKey: "liveActivityTogglePauseTimestamp")
+        if togglePauseTimestamp > lastTogglePauseTimestamp {
+            lastTogglePauseTimestamp = togglePauseTimestamp
+            handleTogglePauseFromLiveActivity()
+        }
+    }
+    
+    private func removeLiveActivityObservers() {
+        liveActivityIntentTimer?.invalidate()
+        liveActivityIntentTimer = nil
+    }
+    
+    /// Handle "Add Set" button tap from Live Activity
+    private func handleAddSetFromLiveActivity() {
+        // Find the current exercise (first incomplete or last one)
+        guard let currentEntry = entries.first(where: { entry in
+            entry.sets.isEmpty || entry.sets.contains { !$0.completed }
+        }) ?? entries.last else { return }
+        
+        addSet(to: currentEntry)
+        HapticManager.mediumTap()
+    }
+    
+    /// Handle "Pause/Resume" button tap from Live Activity
+    private func handleTogglePauseFromLiveActivity() {
+        if isTimerRunning {
+            pauseTimer()
+        } else {
+            resumeTimer()
+        }
+        HapticManager.lightTap()
     }
 
     // MARK: - Apple Watch Monitoring
@@ -546,8 +612,11 @@ final class LiveWorkoutViewModel {
             pauseStartTime = nil
         }
         isTimerRunning = false
+        pendingSaveTask?.cancel()
+        pendingLiveActivityUpdateTask?.cancel()
         stopHeartRateMonitoring()
         stopLiveActivityUpdates()
+        removeLiveActivityObservers()
     }
 
     // MARK: - Suggestion Management
@@ -584,7 +653,7 @@ final class LiveWorkoutViewModel {
             workout.entries = []
         }
         workout.entries?.append(entry)
-        save()
+        saveImmediately()
     }
 
     /// Add the "Up Next" suggested exercise
@@ -621,7 +690,7 @@ final class LiveWorkoutViewModel {
             workout.entries = []
         }
         workout.entries?.append(entry)
-        save()
+        saveImmediately()
     }
 
     func addExerciseByName(_ name: String, exerciseType: String = "strength") {
@@ -650,7 +719,7 @@ final class LiveWorkoutViewModel {
             workout.entries = []
         }
         workout.entries?.append(entry)
-        save()
+        saveImmediately()
     }
 
     func removeExercise(at index: Int) {
@@ -663,7 +732,7 @@ final class LiveWorkoutViewModel {
             entry.orderIndex = newIndex
         }
 
-        save()
+        saveImmediately()
     }
 
     /// Replace an existing exercise with a new one, keeping the same position
@@ -699,7 +768,7 @@ final class LiveWorkoutViewModel {
         // Re-sort entries by order index
         workout.entries?.sort { $0.orderIndex < $1.orderIndex }
 
-        save()
+        saveImmediately()
     }
 
     func moveExercise(from source: IndexSet, to destination: Int) {
@@ -710,7 +779,7 @@ final class LiveWorkoutViewModel {
             entry.orderIndex = index
         }
 
-        save()
+        saveImmediately()
     }
 
     // MARK: - Set Management
@@ -768,7 +837,7 @@ final class LiveWorkoutViewModel {
             completed: false,
             isWarmup: false
         ))
-        save()
+        saveImmediately()
     }
 
     func updateSet(at index: Int, in entry: LiveWorkoutEntry, reps: Int? = nil, weightKg: Double? = nil, weightLbs: Double? = nil, notes: String? = nil) {
@@ -776,25 +845,31 @@ final class LiveWorkoutViewModel {
         guard index < sets.count else { return }
 
         var set = sets[index]
-        if let reps {
+        var didChange = false
+        if let reps, reps != set.reps {
             set.reps = reps
+            didChange = true
         }
-        if let weightKg {
+        if let weightKg, weightKg != set.weightKg {
             set.weightKg = weightKg
+            didChange = true
         }
-        if let weightLbs {
+        if let weightLbs, weightLbs != set.weightLbs {
             set.weightLbs = weightLbs
+            didChange = true
         }
-        if let notes {
+        if let notes, notes != set.notes {
             set.notes = notes
+            didChange = true
         }
+        guard didChange else { return }
         entry.updateSet(at: index, with: set)
-        save()
+        saveDebounced(updateLiveActivity: true)
     }
 
     func removeSet(at index: Int, from entry: LiveWorkoutEntry) {
         entry.removeSet(at: index)
-        save()
+        saveImmediately()
     }
 
     func toggleWarmup(at index: Int, in entry: LiveWorkoutEntry) {
@@ -804,19 +879,19 @@ final class LiveWorkoutViewModel {
         var set = sets[index]
         set.isWarmup.toggle()
         entry.updateSet(at: index, with: set)
-        save()
+        saveImmediately()
     }
 
     // MARK: - Cardio Management
 
     func updateCardioDuration(for entry: LiveWorkoutEntry, seconds: Int) {
         entry.durationSeconds = seconds
-        save()
+        saveDebounced(updateLiveActivity: true)
     }
 
     func updateCardioDistance(for entry: LiveWorkoutEntry, meters: Double) {
         entry.distanceMeters = meters
-        save()
+        saveDebounced(updateLiveActivity: true)
     }
 
     func toggleCardioCompletion(for entry: LiveWorkoutEntry) {
@@ -825,7 +900,7 @@ final class LiveWorkoutViewModel {
         } else {
             entry.completedAt = Date()
         }
-        save()
+        saveImmediately()
         HapticManager.selectionChanged()
     }
 
@@ -841,7 +916,7 @@ final class LiveWorkoutViewModel {
                 .joined(separator: " + ")
             workout.name = muscleNames
         }
-        save()
+        saveImmediately()
     }
 
     // MARK: - Workout Completion
@@ -972,9 +1047,35 @@ final class LiveWorkoutViewModel {
     }
 
     func save() {
+        saveImmediately()
+    }
+
+    private func saveImmediately(updateLiveActivity: Bool = true) {
+        pendingSaveTask?.cancel()
         try? modelContext?.save()
-        // Update Live Activity when data changes
-        updateLiveActivity()
+        if updateLiveActivity {
+            scheduleLiveActivityUpdate()
+        }
+    }
+
+    private func saveDebounced(updateLiveActivity: Bool = true) {
+        pendingSaveTask?.cancel()
+        pendingSaveTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: saveDebounceDelay)
+            guard let self else { return }
+            try? self.modelContext?.save()
+            if updateLiveActivity {
+                self.scheduleLiveActivityUpdate()
+            }
+        }
+    }
+
+    private func scheduleLiveActivityUpdate() {
+        pendingLiveActivityUpdateTask?.cancel()
+        pendingLiveActivityUpdateTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: liveActivityDebounceDelay)
+            self?.updateLiveActivity()
+        }
     }
 
     // MARK: - Live Activity
@@ -1012,6 +1113,7 @@ final class LiveWorkoutViewModel {
         } ?? entries.last
 
         let currentExercise = currentEntry?.exerciseName
+        let currentEquipment = currentEntry?.equipmentName
 
         // Get current set data (last set with data from current entry)
         // Use both kg and lbs values to avoid rounding errors (200 lbs → 199 bug)
@@ -1031,6 +1133,7 @@ final class LiveWorkoutViewModel {
         liveActivityManager.updateActivity(
             elapsedSeconds: Int(elapsedTime),
             currentExercise: currentExercise,
+            currentEquipment: currentEquipment,
             completedSets: completedSets,
             totalSets: totalSets,
             heartRate: currentHeartRate.map { Int($0) },

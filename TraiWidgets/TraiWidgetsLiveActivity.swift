@@ -6,6 +6,7 @@
 //
 
 import ActivityKit
+import AppIntents
 import SwiftUI
 import WidgetKit
 
@@ -22,6 +23,7 @@ struct TraiWorkoutAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
         let elapsedSeconds: Int
         let currentExercise: String?
+        let currentEquipment: String?
         let completedSets: Int
         let totalSets: Int
         let heartRate: Int?
@@ -39,6 +41,7 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         init(
             elapsedSeconds: Int,
             currentExercise: String? = nil,
+            currentEquipment: String? = nil,
             completedSets: Int,
             totalSets: Int,
             heartRate: Int? = nil,
@@ -53,6 +56,7 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         ) {
             self.elapsedSeconds = elapsedSeconds
             self.currentExercise = currentExercise
+            self.currentEquipment = currentEquipment
             self.completedSets = completedSets
             self.totalSets = totalSets
             self.heartRate = heartRate
@@ -170,98 +174,133 @@ private struct LockScreenWorkoutView: View {
     let context: ActivityViewContext<TraiWorkoutAttributes>
 
     var body: some View {
-        HStack(spacing: 16) {
-            // Status (no timer per user feedback)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Image(systemName: context.state.isPaused ? "pause.fill" : "figure.run")
-                        .font(.caption)
-                        .foregroundStyle(context.state.isPaused ? .orange : .green)
-
-                    Text(context.attributes.workoutName)
-                        .font(.headline)
-                        .lineLimit(1)
-                }
-
-                if let exercise = context.state.currentExercise {
-                    HStack(spacing: 4) {
-                        Text(exercise)
+        VStack(spacing: 12) {
+            HStack(spacing: 16) {
+                // Status (no timer per user feedback)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: context.state.isPaused ? "pause.fill" : "figure.run")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .foregroundStyle(context.state.isPaused ? .orange : .green)
 
-                        // Show current weight × reps if available
-                        if let setDisplay = context.state.currentSetDisplay {
-                            Text("•")
+                        Text(context.attributes.workoutName)
+                            .font(.headline)
+                            .lineLimit(1)
+                    }
+
+                    if let exercise = context.state.currentExercise {
+                        HStack(spacing: 4) {
+                            Text(exercise)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+
+                            // Show equipment if available
+                            if let equipment = context.state.currentEquipment {
+                                Text("•")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                                Text(equipment)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(1)
+                            }
+
+                            // Show current weight × reps if available
+                            if let setDisplay = context.state.currentSetDisplay {
+                                Text("•")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                                Text(setDisplay)
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
+                    }
+
+                    // Show next exercise if available
+                    if let nextExercise = context.state.nextExercise {
+                        HStack(spacing: 4) {
+                            Text("Next:")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
-                            Text(setDisplay)
-                                .font(.caption)
-                                .foregroundStyle(.orange)
+                            Text(nextExercise)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                     }
                 }
 
-                // Show next exercise if available
-                if let nextExercise = context.state.nextExercise {
-                    HStack(spacing: 4) {
-                        Text("Next:")
+                Spacer()
+
+                // Progress and sets
+                VStack(alignment: .trailing, spacing: 6) {
+                    // Circular progress
+                    ZStack {
+                        Circle()
+                            .stroke(Color.secondary.opacity(0.2), lineWidth: 4)
+                            .frame(width: 44, height: 44)
+
+                        Circle()
+                            .trim(from: 0, to: context.state.progress)
+                            .stroke(Color.orange, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .frame(width: 44, height: 44)
+                            .rotationEffect(.degrees(-90))
+
+                        Text("\(context.state.completedSets)")
+                            .font(.system(.caption, design: .rounded, weight: .bold))
+                    }
+
+                    Text(context.state.setsDisplay)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    // Volume if available
+                    if let volume = context.state.volumeDisplay {
+                        Text(volume)
                             .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                        Text(nextExercise)
+                            .foregroundStyle(.orange)
+                    }
+
+                    // Heart rate display (shows "--" when unavailable)
+                    HStack(spacing: 2) {
+                        Image(systemName: "heart.fill")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .foregroundStyle(.red)
+                        if let hr = context.state.heartRate {
+                            Text("\(hr)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("--")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
                 }
             }
-
-            Spacer()
-
-            // Progress and sets
-            VStack(alignment: .trailing, spacing: 6) {
-                // Circular progress
-                ZStack {
-                    Circle()
-                        .stroke(Color.secondary.opacity(0.2), lineWidth: 4)
-                        .frame(width: 44, height: 44)
-
-                    Circle()
-                        .trim(from: 0, to: context.state.progress)
-                        .stroke(Color.orange, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                        .frame(width: 44, height: 44)
-                        .rotationEffect(.degrees(-90))
-
-                    Text("\(context.state.completedSets)")
-                        .font(.system(.caption, design: .rounded, weight: .bold))
+            
+            // Action buttons
+            HStack(spacing: 12) {
+                Button(intent: AddSetIntent()) {
+                    Label("Add Set", systemImage: "plus.circle.fill")
+                        .font(.caption)
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.bordered)
+                .tint(.orange)
 
-                Text(context.state.setsDisplay)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                // Volume if available
-                if let volume = context.state.volumeDisplay {
-                    Text(volume)
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
+                Button(intent: TogglePauseIntent()) {
+                    Label(
+                        context.state.isPaused ? "Resume" : "Pause",
+                        systemImage: context.state.isPaused ? "play.fill" : "pause.fill"
+                    )
+                    .font(.caption)
+                    .frame(maxWidth: .infinity)
                 }
-
-                // Heart rate display (shows "--" when unavailable)
-                HStack(spacing: 2) {
-                    Image(systemName: "heart.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.red)
-                    if let hr = context.state.heartRate {
-                        Text("\(hr)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("--")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
+                .buttonStyle(.bordered)
+                .tint(context.state.isPaused ? .green : .secondary)
             }
         }
         .padding()
@@ -420,6 +459,7 @@ extension TraiWorkoutAttributes.ContentState {
         TraiWorkoutAttributes.ContentState(
             elapsedSeconds: 1847,
             currentExercise: "Bench Press",
+            currentEquipment: "Smith Machine",
             completedSets: 8,
             totalSets: 15,
             heartRate: 142,
@@ -437,6 +477,7 @@ extension TraiWorkoutAttributes.ContentState {
         TraiWorkoutAttributes.ContentState(
             elapsedSeconds: 2100,
             currentExercise: "Overhead Press",
+            currentEquipment: nil,
             completedSets: 10,
             totalSets: 15,
             heartRate: 98,

@@ -194,6 +194,77 @@ Refined implementation based on Gemini 3 Flash prompting best practices research
 - **B2/B5**: Equipment names already displayed (verified existing implementation)
 - **B3**: "Total lifted" confirmed never existed - no action needed
 
+## Now
+- Widget redesign complete (I1-I4)
+
+### Done (February 2026 - Widget Redesign I1-I4)
+- **I1**: Large widget now adds utility - full dashboard with dual calorie/protein rings, recovery status, workout streak
+- **I2**: Fixed widget colors - set AccentColor to systemRedColor, all elements use accentColor
+- **I3**: Improved spacing - removed colored backgrounds, cleaner layout with progress bars
+- **I4**: Added interactive food logging - LogQuickFoodIntent for water/coffee/snack from widgets
+
+**Infrastructure Changes:**
+- Added App Groups entitlement to main app (`group.com.nadav.trai`)
+- Created `WidgetDataProvider.swift` service to sync fitness data to widgets
+- Widget data updates on app background and launch
+- Process pending food logs from widgets on app launch
+
+**Home Screen Widgets (TraiWidgets.swift):**
+- Small: Calorie ring with ready muscles count and workout streak
+- Medium: Progress bars (calories/protein) + action buttons (Food, Workout, Trai)
+- Large: Dual rings, recovery status, recommended workout, quick action buttons
+- Smart Stack relevance scoring (higher at meal times, near goal completion)
+
+**Lock Screen Widgets (LockScreenWidgets.swift):**
+- `accessoryCircular`: Calorie gauge with percentage
+- `accessoryRectangular`: 3-line stats (calories, protein, workout status)
+- `accessoryInline`: Compact text "72% cal | 80% protein | 5 ready"
+
+**Interactive Intents (AppIntent.swift):**
+- `LogQuickFoodIntent`: Log water (0 cal), coffee (5 cal), snack (150 cal)
+- `LogWaterIntent`, `LogCoffeeIntent`, `LogSnackIntent`: Widget button shortcuts
+- Pending logs stored in App Groups, processed by main app on launch
+
+**Files Created:**
+- `Trai/Core/Services/WidgetDataProvider.swift`
+- `TraiWidgets/LockScreenWidgets.swift`
+
+**Files Modified:**
+- `TraiWidgets/Assets.xcassets/AccentColor.colorset/Contents.json` - Set RED
+- `Trai/Trai.entitlements` - Added App Groups
+- `TraiWidgets/TraiWidgets.swift` - Complete redesign with data
+- `TraiWidgets/TraiWidgetsBundle.swift` - Register new widgets
+- `TraiWidgets/AppIntent.swift` - Food logging intents
+- `Trai/TraiApp.swift` - Widget data sync + pending log processing
+
+### Done (February 2026 - Live Activity Improvements H1-H4)
+- **H1**: Fixed Live Activity not updating when modifying sets (CRITICAL)
+  - Changed `saveDebounced(updateLiveActivity: false)` to `true` at lines 804, 826, 831
+  - Reduced LA debounce delay from 700ms to 300ms for faster feedback
+- **H2**: Added action buttons (Add Set, Pause/Resume) to Lock Screen
+  - Created `AddSetIntent` and `TogglePauseIntent` in TraiWidgets/AppIntent.swift
+  - Uses App Groups (`group.com.nadav.trai`) for widget-to-app communication
+  - ViewModel polls App Groups UserDefaults every 0.5s for button taps
+  - Buttons styled with orange/green tint, shown below workout info
+- **H3**: Added equipment name display in Live Activity
+  - Added `currentEquipment` field to `ContentState` in both attributes files
+  - Shows equipment after exercise name on Lock Screen (e.g., "Bench Press • Smith Machine")
+  - ViewModel passes `currentEntry?.equipmentName` to Live Activity
+- **H4**: Added Live Activity disabled detection
+  - Checks `ActivityAuthorizationInfo().areActivitiesEnabled` in `LiveWorkoutView.onAppear`
+  - Shows alert directing user to Settings if LA is disabled
+- **Bonus**: Added 60-second stale date to Live Activity
+  - Both `startActivity()` and `updateActivity()` now set stale date
+  - LA will appear stale if not updated within 60 seconds
+
+**Files Modified:**
+- `LiveWorkoutViewModel.swift` - Update triggers, App Groups polling, haptics
+- `TraiWorkoutAttributes.swift` - Added `currentEquipment`, stale dates
+- `TraiWidgetsLiveActivity.swift` - Equipment display, action buttons
+- `TraiWidgets/AppIntent.swift` - Live Activity intents
+- `LiveWorkoutView.swift` - LA disabled detection alert
+- `LiveActivityIntents.swift` - App Group constants
+
 ## Open Questions
 - None
 
@@ -239,7 +310,11 @@ Refined implementation based on Gemini 3 Flash prompting best practices research
 ### A. Weight & Units (Centralization) - HIGH PRIORITY
 - [x] A1: Centralized weight logic for rounding + unit conversion throughout app
 - [x] A2: Live activity shows kg instead of user's preferred units
-- [ ] A3: Flag large weight jumps, ask confirmation before saving
+- [x] A3: Flag large weight jumps, ask confirmation before saving
+  - Added `previousSetWeight` parameter to SetRow for jump detection
+  - Detects jumps that are both ≥50% increase AND ≥25kg absolute
+  - Shows confirmation dialog with clear message about the increase
+  - User can confirm the new weight or cancel to revert
 
 ### B. Workout Summary View
 - [x] B1: Exercises section doesn't take full width (added `frame(maxWidth: .infinity)` to ExerciseSummaryRow)
@@ -283,11 +358,11 @@ Refined implementation based on Gemini 3 Flash prompting best practices research
 - [ ] H3: Show current exercise info
 - [ ] H4: User couldn't see it during actual workout
 
-### I. Widgets (Design Overhaul)
-- [ ] I1: Larger size adds no utility
-- [ ] I2: Doesn't match app colors/vibe
-- [ ] I3: Feels crammed, margins/borders too large
-- [ ] I4: Food logging doesn't work from widget
+### I. Widgets (Design Overhaul) - ✅ COMPLETE
+- [x] I1: Larger size adds no utility → Large widget now shows 2x2 macro grid + workout + recovery + actions
+- [x] I2: Doesn't match app colors/vibe → Colors now match MacroType (red/blue/orange/purple)
+- [x] I3: Feels crammed, margins/borders too large → Cleaner layout with subtle colored backgrounds
+- [x] I4: Food logging doesn't work from widget → Deep link action buttons for Log Food/Weight/Workout/Trai
 
 ### J. Apple Watch
 - [ ] J1: Workout detection doesn't work
@@ -350,7 +425,7 @@ Refined implementation based on Gemini 3 Flash prompting best practices research
   - Updates UserProfile.currentWeightKg when logging for today
 
 ### T. UI Consistency
-- [ ] T1: Replace weight log sheet (from weight history page) with the quick actions version
+- [x] T1: Replace weight log sheet (from weight history page) with the quick actions version
 - [x] T2: Calorie breakdown screen - text doesn't fit within the ring at top
   - Reduced font size from 44 to 36 with minimumScaleFactor(0.7)
   - Reduced padding and spacing for better fit
@@ -358,7 +433,10 @@ Refined implementation based on Gemini 3 Flash prompting best practices research
 
 ### U. Live Workout Flexibility
 - [ ] U1: Be able to switch target muscle groups mid-workout
-- [ ] U2: Support sets with different weights per set (moved from G5)
+- [x] U2: Support sets with different weights per set (moved from G5)
+  - **Already implemented**: Each SetData stores individual weightKg/weightLbs
+  - SetRow has independent weight input per set
+  - ViewModel's updateSet() handles per-set weight updates
 
 ### V. Workout History/Details
 - [ ] V1: Show PRs you hit in workout detail view (not just summary)
@@ -378,4 +456,4 @@ Refined implementation based on Gemini 3 Flash prompting best practices research
   - Files: TraiWorkoutAttributes.swift, TraiWidgetsLiveActivity.swift, LiveWorkoutViewModel.swift
 
 ---
-**Total: 56 items** (33 done, 1 deferred, 2 removed, 20 remaining)
+**Total: 56 items** (39 done, 1 deferred, 2 removed, 14 remaining)
