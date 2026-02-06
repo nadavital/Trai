@@ -31,6 +31,12 @@ extension ChatView {
 
 extension ChatView {
     func acceptMealSuggestion(_ meal: SuggestedFoodEntry, for message: ChatMessage) {
+        let mealKey = mealSuggestionKey(for: meal, in: message)
+        guard !processingMealSuggestionKeys.contains(mealKey) else {
+            return
+        }
+        processingMealSuggestionKeys.insert(mealKey)
+
         let messageIndex = currentSessionMessages.firstIndex(where: { $0.id == message.id }) ?? 0
         let userMessage = messageIndex > 0 ? currentSessionMessages[messageIndex - 1] : nil
         // Only use image from user message if this is the first/only meal suggestion

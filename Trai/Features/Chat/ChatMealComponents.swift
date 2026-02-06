@@ -157,6 +157,7 @@ struct LoggedMealBadge: View {
 struct SuggestedMealCard: View {
     let meal: SuggestedFoodEntry
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
+    var isLogging: Bool = false
     let onAccept: () -> Void
     let onEdit: () -> Void
     let onDismiss: () -> Void
@@ -254,14 +255,15 @@ struct SuggestedMealCard: View {
                     .padding(.vertical, 10)
                 }
                 .buttonStyle(.bordered)
+                .disabled(isLogging)
 
                 Button {
                     onAccept()
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "checkmark.circle.fill")
+                        Image(systemName: isLogging ? "hourglass" : "checkmark.circle.fill")
                             .font(.subheadline)
-                        Text("Log")
+                        Text(isLogging ? "Logging..." : "Log")
                             .font(.subheadline)
                             .fontWeight(.semibold)
                     }
@@ -270,6 +272,7 @@ struct SuggestedMealCard: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
+                .disabled(isLogging)
             }
         }
         .padding(14)

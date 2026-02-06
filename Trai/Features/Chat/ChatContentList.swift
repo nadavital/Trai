@@ -22,6 +22,7 @@ struct ChatContentList: View {
     var planRecommendation: PlanRecommendation?
     var planRecommendationMessage: String?
     let onAcceptMeal: (SuggestedFoodEntry, ChatMessage) -> Void
+    let isMealLogging: (SuggestedFoodEntry, ChatMessage) -> Bool
     let onEditMeal: (ChatMessage, SuggestedFoodEntry) -> Void
     let onDismissMeal: (SuggestedFoodEntry, ChatMessage) -> Void
     let onViewLoggedMeal: (UUID) -> Void
@@ -83,6 +84,9 @@ struct ChatContentList: View {
                                 enabledMacros: enabledMacros,
                                 onAcceptMeal: { meal in
                                     onAcceptMeal(meal, message)
+                                },
+                                isMealLogging: { meal in
+                                    isMealLogging(meal, message)
                                 },
                                 onEditMeal: { meal in
                                     onEditMeal(message, meal)

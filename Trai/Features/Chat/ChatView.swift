@@ -12,6 +12,11 @@ import SwiftData
 import PhotosUI
 
 struct ChatView: View {
+    struct MealSuggestionKey: Hashable {
+        let messageId: UUID
+        let mealId: String
+    }
+
     // Track if we've started a fresh session this app launch
     static var hasStartedFreshSession = false
 
@@ -54,6 +59,7 @@ struct ChatView: View {
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest: Bool = false
     @State var isTemporarySession = false
     @State var temporaryMessages: [ChatMessage] = []
+    @State var processingMealSuggestionKeys: Set<MealSuggestionKey> = []
 
     // Plan assessment
     @State var planAssessmentService = PlanAssessmentService()
@@ -157,6 +163,7 @@ struct ChatView: View {
             planRecommendation: pendingPlanRecommendation,
             planRecommendationMessage: planRecommendationMessage,
             onAcceptMeal: acceptMealSuggestion,
+            isMealLogging: isMealSuggestionProcessing,
             onEditMeal: { message, meal in
                 editingMealSuggestion = (message, meal)
             },
@@ -188,6 +195,14 @@ struct ChatView: View {
             onReviewPlan: handlePlanReviewRequest,
             onDismissPlanRecommendation: handleDismissPlanRecommendation
         )
+    }
+
+    func mealSuggestionKey(for meal: SuggestedFoodEntry, in message: ChatMessage) -> MealSuggestionKey {
+        MealSuggestionKey(messageId: message.id, mealId: meal.id)
+    }
+
+    private func isMealSuggestionProcessing(_ meal: SuggestedFoodEntry, for message: ChatMessage) -> Bool {
+        processingMealSuggestionKeys.contains(mealSuggestionKey(for: meal, in: message))
     }
 
     var body: some View {
@@ -479,6 +494,7 @@ private struct ChatContentSection: View {
     let planRecommendation: PlanRecommendation?
     let planRecommendationMessage: String?
     let onAcceptMeal: (SuggestedFoodEntry, ChatMessage) -> Void
+    let isMealLogging: (SuggestedFoodEntry, ChatMessage) -> Bool
     let onEditMeal: (ChatMessage, SuggestedFoodEntry) -> Void
     let onDismissMeal: (SuggestedFoodEntry, ChatMessage) -> Void
     let onViewLoggedMeal: (UUID) -> Void
@@ -518,6 +534,9 @@ private struct ChatContentSection: View {
             planRecommendationMessage: planRecommendationMessage,
             onAcceptMeal: { meal, message in
                 onAcceptMeal(meal, message)
+            },
+            isMealLogging: { meal, message in
+                isMealLogging(meal, message)
             },
             onEditMeal: { message, meal in
                 onEditMeal(message, meal)
