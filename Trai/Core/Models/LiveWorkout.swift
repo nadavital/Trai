@@ -131,6 +131,7 @@ extension LiveWorkout {
         static var pushMuscles: [MuscleGroup] { [.chest, .shoulders, .triceps] }
         static var pullMuscles: [MuscleGroup] { [.back, .biceps, .forearms] }
         static var legMuscles: [MuscleGroup] { [.quads, .hamstrings, .glutes, .calves] }
+        static var upperBodyMuscles: [MuscleGroup] { [.chest, .back, .shoulders, .biceps, .triceps, .forearms] }
 
         /// Convert to Exercise.MuscleGroup for exercise list filtering
         var toExerciseMuscleGroup: Exercise.MuscleGroup {
@@ -148,13 +149,68 @@ extension LiveWorkout {
             case .forearms: .biceps
             }
         }
+
+        /// Normalize persisted/API muscle strings into app muscle groups.
+        static func fromTargetString(_ raw: String) -> [MuscleGroup] {
+            let token = raw
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: " ", with: "")
+
+            switch token {
+            case "chest": return [.chest]
+            case "back": return [.back]
+            case "shoulders", "shoulder": return [.shoulders]
+            case "biceps", "bicep": return [.biceps]
+            case "triceps", "tricep": return [.triceps]
+            case "forearms", "forearm": return [.forearms]
+            case "core", "abs", "abdominals": return [.core]
+            case "quads", "quad": return [.quads]
+            case "hamstrings", "hamstring": return [.hamstrings]
+            case "glutes", "glute": return [.glutes]
+            case "calves", "calf": return [.calves]
+            case "legs", "lowerbody", "lower": return legMuscles
+            case "upperbody", "upper": return upperBodyMuscles
+            case "arms", "arm": return [.biceps, .triceps, .forearms]
+            case "fullbody": return [.fullBody]
+            default:
+                return []
+            }
+        }
+
+        static func fromTargetStrings(_ rawGroups: [String]) -> [MuscleGroup] {
+            var groups: [MuscleGroup] = []
+            var seen: Set<MuscleGroup> = []
+
+            for raw in rawGroups {
+                for group in fromTargetString(raw) where !seen.contains(group) {
+                    groups.append(group)
+                    seen.insert(group)
+                }
+            }
+
+            if groups.isEmpty {
+                return [.fullBody]
+            }
+
+            if groups.count > 1 {
+                return groups.filter { $0 != .fullBody }
+            }
+
+            return groups
+        }
     }
 
     var muscleGroups: [MuscleGroup] {
         get {
             guard !targetMuscleGroups.isEmpty else { return [] }
-            return targetMuscleGroups.split(separator: ",")
-                .compactMap { MuscleGroup(rawValue: String($0)) }
+            return MuscleGroup.fromTargetStrings(
+                targetMuscleGroups
+                    .split(separator: ",")
+                    .map(String.init)
+            )
         }
         set {
             targetMuscleGroups = newValue.map(\.rawValue).joined(separator: ",")

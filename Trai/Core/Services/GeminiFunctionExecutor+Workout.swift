@@ -41,7 +41,7 @@ extension GeminiFunctionExecutor {
             targetMuscles = recoveryService.getRecommendedMuscleGroups(modelContext: modelContext)
         } else {
             // Use specified muscles
-            targetMuscles = targetMuscleStrings.compactMap { LiveWorkout.MuscleGroup(rawValue: $0) }
+            targetMuscles = LiveWorkout.MuscleGroup.fromTargetStrings(targetMuscleStrings)
         }
 
         // Build workout suggestion based on target muscles

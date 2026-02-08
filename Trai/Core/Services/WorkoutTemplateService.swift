@@ -29,10 +29,7 @@ final class WorkoutTemplateService {
         progressionStrategy: WorkoutPlan.ProgressionStrategy,
         modelContext: ModelContext
     ) -> LiveWorkout {
-        // Map template muscle groups to LiveWorkout.MuscleGroup
-        let muscleGroups = template.targetMuscleGroups.compactMap { name in
-            LiveWorkout.MuscleGroup(rawValue: name)
-        }
+        let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
 
         let workout = LiveWorkout(
             name: template.name,
@@ -151,23 +148,30 @@ final class WorkoutTemplateService {
             )
 
         case .doubleProgression:
-            // Increase reps first, then weight
-            if let repsTrigger = progressionStrategy.repsTrigger, lastReps >= repsTrigger {
+            // Increase weight only after all working sets hit the rep trigger (e.g. true 3x12).
+            let repsTrigger = progressionStrategy.repsTrigger ?? targetReps
+            let minimumWorkingSets = max(1, lastPerformance.totalSets)
+            if hasMetRepTrigger(
+                lastPerformance,
+                repsTrigger: repsTrigger,
+                minimumWorkingSets: minimumWorkingSets
+            ) {
                 let newWeight = lastWeight + progressionStrategy.weightIncrementKg
                 return ProgressionSuggestion(
                     suggestedWeight: newWeight,
                     previousWeight: lastWeight,
                     previousReps: lastReps,
-                    reason: "Hit \(lastReps) reps - time to add weight!",
+                    reason: "Hit \(repsTrigger) reps across working sets - time to add weight!",
                     isNewRecord: true
                 )
             } else {
                 // Maintain weight, try for more reps
+                let repSummary = formattedRepSummary(from: lastPerformance)
                 return ProgressionSuggestion(
                     suggestedWeight: lastWeight,
                     previousWeight: lastWeight,
                     previousReps: lastReps,
-                    reason: "Last: \(lastReps) reps @ \(Int(lastWeight))kg",
+                    reason: repSummary.map { "Last: \($0) @ \(Int(lastWeight))kg" } ?? "Last: \(lastReps) reps @ \(Int(lastWeight))kg",
                     isNewRecord: false
                 )
             }
@@ -206,7 +210,7 @@ final class WorkoutTemplateService {
 
         // Check if user hit target reps in all sessions
         let allHitTargetReps = history.allSatisfy { entry in
-            entry.bestSetReps >= 10 // Assume 10 is good performance
+            hasMetRepTrigger(entry, repsTrigger: 10, minimumWorkingSets: 2)
         }
 
         return allSameWeight && allHitTargetReps
@@ -233,7 +237,13 @@ final class WorkoutTemplateService {
 
         case .doubleProgression:
             // Check if we should increase weight
-            if let trigger = strategy.repsTrigger, last.bestSetReps >= trigger {
+            let trigger = strategy.repsTrigger ?? template.defaultReps
+            let minimumWorkingSets = max(1, template.defaultSets)
+            if hasMetRepTrigger(
+                last,
+                repsTrigger: trigger,
+                minimumWorkingSets: minimumWorkingSets
+            ) {
                 let newWeight = last.bestSetWeightKg + strategy.weightIncrementKg
                 // Reset to lower end of rep range
                 let lowerReps = parseLowerRepRange(template.repRange) ?? template.defaultReps
@@ -258,5 +268,37 @@ final class WorkoutTemplateService {
             return lower
         }
         return nil
+    }
+
+    private func hasMetRepTrigger(
+        _ performance: ExerciseHistory,
+        repsTrigger: Int,
+        minimumWorkingSets: Int
+    ) -> Bool {
+        let repPattern = performance.repPatternArray.filter { $0 > 0 }
+
+        if !repPattern.isEmpty {
+            if repPattern.count < minimumWorkingSets {
+                // Single-set movements can still progress from one successful set.
+                return minimumWorkingSets <= 1 && repPattern[0] >= repsTrigger
+            }
+            return repPattern.allSatisfy { $0 >= repsTrigger }
+        }
+
+        // Fallback for older history rows that don't have pattern data.
+        if minimumWorkingSets <= 1 {
+            return performance.bestSetReps >= repsTrigger
+        }
+        return false
+    }
+
+    private func formattedRepSummary(from performance: ExerciseHistory) -> String? {
+        let repPattern = performance.repPatternArray.filter { $0 > 0 }
+        guard !repPattern.isEmpty else { return nil }
+
+        if Set(repPattern).count == 1, let reps = repPattern.first {
+            return "\(repPattern.count)x\(reps)"
+        }
+        return repPattern.map(String.init).joined(separator: ",")
     }
 }

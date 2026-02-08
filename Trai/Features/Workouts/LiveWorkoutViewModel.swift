@@ -47,7 +47,7 @@ final class LiveWorkoutViewModel {
         return totalElapsed - pausedDuration - currentPauseDuration
     }
 
-    // Exercise suggestions from template (not pre-logged)
+    // Exercise suggestions generated from target muscles and user history
     var exerciseSuggestions: [ExerciseSuggestion] = []
 
     // Cache of last performances for exercises
@@ -102,6 +102,23 @@ final class LiveWorkoutViewModel {
     var lastCalorieUpdate: Date?
     var isHeartRateAvailable: Bool { currentHeartRate != nil }
     var isWatchConnected: Bool { healthKitService?.isWatchConnected ?? false }
+    var watchSetupErrorMessage: String?
+
+    var watchConnectionHint: String? {
+        if let watchSetupErrorMessage {
+            return watchSetupErrorMessage
+        }
+        if isWatchConnected {
+            return nil
+        }
+        if let lastHeartRateUpdate {
+            let ageSeconds = Int(Date().timeIntervalSince(lastHeartRateUpdate))
+            if ageSeconds >= 0 && ageSeconds <= 180 {
+                return "Latest Apple Watch sample was \(ageSeconds)s ago. Keep the Watch workout running."
+            }
+        }
+        return "Start or continue a workout on Apple Watch to stream live heart rate."
+    }
 
     private var modelContext: ModelContext?
     private var templateService = WorkoutTemplateService()
@@ -266,22 +283,10 @@ final class LiveWorkoutViewModel {
 
     /// Initialize with an existing workout and optional template for suggestions
     convenience init(workout: LiveWorkout, template: WorkoutPlan.WorkoutTemplate?) {
-        // Create suggestions from template exercises if provided
-        let suggestions: [ExerciseSuggestion]
-        if let template {
-            suggestions = template.exercises.sorted(by: { $0.order < $1.order }).map { exercise in
-                ExerciseSuggestion(
-                    exerciseName: exercise.exerciseName,
-                    muscleGroup: exercise.muscleGroup,
-                    defaultSets: exercise.defaultSets,
-                    defaultReps: exercise.defaultReps
-                )
-            }
-        } else {
-            suggestions = []
-        }
-
-        self.init(workout: workout, suggestions: suggestions)
+        // Template exercises are intentionally ignored so suggestions can adapt
+        // to the user's own exercise history and selected target muscles.
+        _ = template
+        self.init(workout: workout, suggestions: [])
     }
 
     // MARK: - Setup
@@ -374,9 +379,34 @@ final class LiveWorkoutViewModel {
     // MARK: - Apple Watch Monitoring
 
     func startHeartRateMonitoring() {
-        healthKitService?.startHeartRateStreaming()
-        healthKitService?.startCalorieStreaming(from: workout.startedAt)
-        updateWatchDataFromService()
+        guard let service = healthKitService else {
+            watchSetupErrorMessage = "HealthKit is unavailable on this device."
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                if !service.isAuthorized {
+                    try await service.requestAuthorization()
+                }
+
+                watchSetupErrorMessage = nil
+                service.startHeartRateStreaming(from: workout.startedAt)
+                service.startCalorieStreaming(from: workout.startedAt)
+
+                // Seed UI immediately with a recent sample while anchored queries warm up.
+                if let recentHeartRate = await service.fetchRecentHeartRate(),
+                   Date().timeIntervalSince(recentHeartRate.date) <= 120 {
+                    currentHeartRate = recentHeartRate.bpm
+                    lastHeartRateUpdate = recentHeartRate.date
+                }
+
+                updateWatchDataFromService()
+            } catch {
+                watchSetupErrorMessage = "Health access is disabled. In Health app, allow Trai to read Heart Rate, Active Energy, and Workouts."
+            }
+        }
     }
 
     func stopHeartRateMonitoring() {
@@ -384,6 +414,7 @@ final class LiveWorkoutViewModel {
         healthKitService?.stopCalorieStreaming()
         currentHeartRate = nil
         lastHeartRateUpdate = nil
+        watchSetupErrorMessage = nil
     }
 
     /// Updates heart rate and calories from the HealthKit service - called by the view
@@ -405,36 +436,23 @@ final class LiveWorkoutViewModel {
         guard let modelContext,
               !workout.targetMuscleGroups.isEmpty else { return }
 
-        // Parse target muscle groups from comma-separated string
-        let targetMuscles = workout.targetMuscleGroups
+        let targetMuscleTokens = workout.targetMuscleGroups
             .components(separatedBy: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
 
+        let targetMuscles = LiveWorkout.MuscleGroup.fromTargetStrings(targetMuscleTokens)
         guard !targetMuscles.isEmpty else { return }
 
-        // Map LiveWorkout.MuscleGroup to Exercise.MuscleGroup strings
-        let exerciseMuscleGroups = targetMuscles.flatMap { muscle -> [String] in
-            switch muscle {
-            case "chest", "back", "shoulders", "biceps", "triceps", "core":
-                return [muscle]
-            case "quads", "hamstrings", "glutes", "calves":
-                return ["legs"]  // Exercise model uses "legs" for all leg muscles
-            case "fullBody":
-                return ["chest", "back", "shoulders", "biceps", "triceps", "core", "legs"]
-            default:
-                return [muscle]
-            }
-        }
+        let exerciseMuscleGroups = Set(targetMuscles.map { $0.toExerciseMuscleGroup.rawValue })
 
         // Fetch exercises for target muscle groups
         let descriptor = FetchDescriptor<Exercise>()
         guard let exercises = try? modelContext.fetch(descriptor) else { return }
 
-        let uniqueMuscles = Set(exerciseMuscleGroups)
         let matchingExercises = exercises.filter { exercise in
             guard let muscleGroup = exercise.muscleGroup else { return false }
-            return uniqueMuscles.contains(muscleGroup)
+            return exerciseMuscleGroups.contains(muscleGroup)
         }
 
         // Sort by frequency (user's preferred exercises first)
@@ -1106,18 +1124,40 @@ final class LiveWorkoutViewModel {
         liveActivityUpdateTimer = nil
     }
 
+    private func hasLoggedSetData(_ set: LiveWorkoutEntry.SetData) -> Bool {
+        set.reps > 0
+    }
+
+    private func isEntryStartedForLiveActivity(_ entry: LiveWorkoutEntry) -> Bool {
+        if entry.isCardio {
+            return entry.completedAt != nil
+                || (entry.durationSeconds ?? 0) > 0
+                || (entry.distanceMeters ?? 0) > 0
+        }
+        return entry.sets.contains { hasLoggedSetData($0) }
+    }
+
+    private func isEntryCompleteForLiveActivity(_ entry: LiveWorkoutEntry) -> Bool {
+        if entry.isCardio {
+            return entry.completedAt != nil
+        }
+
+        let workingSets = entry.sets.filter { !$0.isWarmup }
+        guard !workingSets.isEmpty else { return false }
+        return workingSets.allSatisfy { hasLoggedSetData($0) }
+    }
+
     private func updateLiveActivity() {
-        // Get current exercise (first incomplete or last one)
-        let currentEntry = entries.first { entry in
-            entry.sets.isEmpty || entry.sets.contains { !$0.completed }
-        } ?? entries.last
+        // Track progression from logged data (or cardio completion), not the legacy set.completed flag.
+        let currentEntry = entries.first { !isEntryCompleteForLiveActivity($0) } ?? entries.last
 
         let currentExercise = currentEntry?.exerciseName
         let currentEquipment = currentEntry?.equipmentName
 
-        // Get current set data (last set with data from current entry)
+        // Prefer latest logged working set; if none, fall back to the latest logged set.
         // Use both kg and lbs values to avoid rounding errors (200 lbs → 199 bug)
-        let currentSet = currentEntry?.sets.last { $0.reps > 0 }
+        let currentSet = currentEntry?.sets.last { !$0.isWarmup && hasLoggedSetData($0) }
+            ?? currentEntry?.sets.last { hasLoggedSetData($0) }
         let currentWeightKg = currentSet?.weightKg
         let currentWeightLbs = currentSet?.weightLbs
         let currentReps = currentSet?.reps
@@ -1128,7 +1168,9 @@ final class LiveWorkoutViewModel {
 
         // Find next exercise (first after current that isn't started yet)
         let currentIndex = entries.firstIndex { $0.id == currentEntry?.id } ?? -1
-        let nextExercise = entries.dropFirst(currentIndex + 1).first?.exerciseName
+        let nextExercise = entries.dropFirst(currentIndex + 1)
+            .first { !isEntryStartedForLiveActivity($0) }?
+            .exerciseName
 
         liveActivityManager.updateActivity(
             elapsedSeconds: Int(elapsedTime),

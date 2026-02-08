@@ -33,6 +33,7 @@ struct ProfileView: View {
 
     // For navigating to Trai tab with plan review
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
+    @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest = false
     @AppStorage("selectedTab") var selectedTabRaw: String = AppTab.dashboard.rawValue
 
     var profile: UserProfile? { profiles.first }

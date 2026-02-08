@@ -317,8 +317,9 @@ private struct MuscleButton: View {
                     .fontWeight(.medium)
                     .lineLimit(1)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            // Keep chip height consistent across varying SF Symbol bounding boxes.
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .padding(.vertical, 10)
             .background(isSelected ? Color.accentColor.opacity(0.15) : Color(.secondarySystemGroupedBackground))
             .foregroundStyle(isSelected ? .accent : .primary)
             .clipShape(.rect(cornerRadius: 10))

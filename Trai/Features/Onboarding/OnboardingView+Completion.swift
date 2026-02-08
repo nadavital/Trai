@@ -60,6 +60,15 @@ extension OnboardingView {
         profile.hasCompletedOnboarding = true
         modelContext.insert(profile)
 
+        if let workoutPlan = generatedWorkoutPlan {
+            WorkoutPlanHistoryService.archivePlan(
+                workoutPlan,
+                profile: profile,
+                reason: .onboarding,
+                modelContext: modelContext
+            )
+        }
+
         // Parse and create categorized memories from user notes (async)
         Task {
             await parseAndCreateMemories()

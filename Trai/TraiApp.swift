@@ -44,6 +44,7 @@ struct TraiApp: App {
                 ExerciseHistory.self,
                 CoachMemory.self,
                 NutritionPlanVersion.self,
+                WorkoutPlanVersion.self,
                 CustomReminder.self,
                 ReminderCompletion.self,
                 SuggestionUsage.self

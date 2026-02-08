@@ -101,6 +101,7 @@ extension GeminiService {
         return try await parseStreamingFunctionResponse(
             bytes: bytes,
             startTime: startTime,
+            userMessage: message,
             context: context,
             modelContext: modelContext,
             contents: contents,
@@ -114,6 +115,7 @@ extension GeminiService {
     private func parseStreamingFunctionResponse(
         bytes: URLSession.AsyncBytes,
         startTime: Date,
+        userMessage: String,
         context: ChatFunctionContext,
         modelContext: ModelContext,
         contents: [[String: Any]],
@@ -360,7 +362,7 @@ extension GeminiService {
         // Fallback: If functions were called but no text was generated, ask the model to summarize
         if textResponse.isEmpty && !functionsCalled.isEmpty {
             let dataFunctions = ["get_user_plan", "get_food_log", "get_todays_food_log", "get_recent_workouts",
-                                 "get_muscle_recovery_status", "get_weight_history", "get_activity_summary"]
+                                 "get_muscle_recovery_status", "get_weight_history", "log_weight", "get_activity_summary"]
             let calledDataFunctions = functionsCalled.filter { dataFunctions.contains($0) }
 
             if !calledDataFunctions.isEmpty {
@@ -382,6 +384,46 @@ extension GeminiService {
             }
         }
 
+        // Quick fallback: if the model returned nothing and the user clearly provided a weight,
+        // execute log_weight directly to avoid silent failures.
+        if textResponse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           !functionsCalled.contains("log_weight"),
+           let quickLogArgs = quickWeightLogArgs(from: userMessage, profile: context.profile) {
+            onFunctionCall?("log_weight")
+            functionsCalled.append("log_weight")
+            let call = GeminiFunctionExecutor.FunctionCall(name: "log_weight", arguments: quickLogArgs)
+            if case .dataResponse(let functionResult) = executor.execute(call) {
+                pendingFunctionResults.append(functionResult)
+            }
+        }
+
+        // Final safety fallback: confirm successful weight logs even if model follow-up text is empty.
+        if textResponse.isEmpty,
+           functionsCalled.contains("log_weight"),
+           let weightResult = pendingFunctionResults.last(where: { $0.name == "log_weight" }),
+           let success = weightResult.response["success"] as? Bool,
+           success {
+            let date = (weightResult.response["date"] as? String) ?? "today"
+            if let lbs = weightResult.response["weight_lbs"] as? Double {
+                textResponse = "Logged \(Int(lbs.rounded())) lbs for \(date)."
+            } else if let kg = weightResult.response["weight_kg"] as? Double {
+                textResponse = "Logged \(String(format: "%.1f", kg)) kg for \(date)."
+            } else {
+                textResponse = "Logged your weight for \(date)."
+            }
+            onTextChunk?(textResponse)
+        }
+
+        // If weight logging failed and model produced no follow-up, surface the error explicitly.
+        if textResponse.isEmpty,
+           functionsCalled.contains("log_weight"),
+           let weightResult = pendingFunctionResults.last(where: { $0.name == "log_weight" }),
+           let error = weightResult.response["error"] as? String,
+           !error.isEmpty {
+            textResponse = "I couldn't log your weight: \(error)"
+            onTextChunk?(textResponse)
+        }
+
         log("✅ Complete: \(textResponse.count) chars, functions: \(functionsCalled.joined(separator: ", "))", type: .info)
 
         return ChatFunctionResult(
@@ -395,5 +437,76 @@ extension GeminiService {
             functionsCalled: functionsCalled,
             savedMemories: savedMemories
         )
+    }
+
+    private func quickWeightLogArgs(from message: String, profile: UserProfile?) -> [String: Any]? {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let lower = trimmed.lowercased()
+        guard !lower.contains("?") else { return nil }
+        guard lower.contains("weight") || lower.contains("weigh") || lower.contains("lb") || lower.contains("kg") else {
+            return nil
+        }
+        guard !lower.contains("lost"), !lower.contains("gain"), !lower.contains("history"), !lower.contains("trend") else {
+            return nil
+        }
+
+        let unitFromProfile = (profile?.usesMetricWeight ?? true) ? "kg" : "lbs"
+        var inferredUnit: String = unitFromProfile
+        var parsedWeight: Double?
+
+        if let unitMatch = firstRegexMatch(
+            pattern: #"([-+]?\d+(?:[.,]\d+)?)\s*(kg|kgs|kilogram|kilograms|lb|lbs|pound|pounds)"#,
+            in: lower
+        ) {
+            let valueString = unitMatch.0.replacingOccurrences(of: ",", with: ".")
+            parsedWeight = Double(valueString)
+            let unitToken = unitMatch.1
+            inferredUnit = unitToken.contains("kg") || unitToken.contains("kilo") ? "kg" : "lbs"
+        } else if let value = firstReasonableWeightNumber(in: lower) {
+            parsedWeight = value
+            if lower.contains("kg") || lower.contains("kilo") {
+                inferredUnit = "kg"
+            } else if lower.contains("lb") || lower.contains("pound") {
+                inferredUnit = "lbs"
+            }
+        }
+
+        guard let parsedWeight, parsedWeight > 0 else { return nil }
+        return [
+            "weight": parsedWeight,
+            "unit": inferredUnit
+        ]
+    }
+
+    private func firstReasonableWeightNumber(in text: String) -> Double? {
+        guard let regex = try? NSRegularExpression(pattern: #"[-+]?\d+(?:[.,]\d+)?"#) else {
+            return nil
+        }
+
+        let nsRange = NSRange(text.startIndex..., in: text)
+        let matches = regex.matches(in: text, range: nsRange)
+        for match in matches {
+            guard let range = Range(match.range, in: text) else { continue }
+            let valueString = text[range].replacingOccurrences(of: ",", with: ".")
+            guard let value = Double(valueString) else { continue }
+            if value >= 30, value <= 400 {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private func firstRegexMatch(pattern: String, in text: String) -> (String, String)? {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let nsRange = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, range: nsRange),
+              match.numberOfRanges >= 3,
+              let valueRange = Range(match.range(at: 1), in: text),
+              let unitRange = Range(match.range(at: 2), in: text) else {
+            return nil
+        }
+        return (String(text[valueRange]), String(text[unitRange]))
     }
 }

@@ -200,6 +200,13 @@ struct LiveWorkoutView: View {
                         calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
                     )
 
+                    if let watchHint = viewModel.watchConnectionHint {
+                        Text(watchHint)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
                     // Target muscles selector (editable for custom workouts)
                     MuscleGroupSelector(
                         selectedMuscles: Binding(
@@ -299,8 +306,8 @@ struct LiveWorkoutView: View {
     }
 
     private func startHeartRateUpdates() {
-        // Update heart rate from HealthKit service every 5 seconds (reduces re-renders for better typing performance)
-        heartRateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+        // Poll every 2 seconds for a snappier live-data UI without per-sample view churn.
+        heartRateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
             Task { @MainActor in
                 viewModel.updateHeartRateFromService()
             }

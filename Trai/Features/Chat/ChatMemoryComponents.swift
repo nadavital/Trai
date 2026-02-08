@@ -32,7 +32,7 @@ struct MemorySavedBadge: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "brain.head.profile")
+                Image(systemName: "circle.hexagongrid.circle")
                     .font(.caption)
                 Text(displayText)
                     .font(.caption)

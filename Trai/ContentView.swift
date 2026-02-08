@@ -117,7 +117,6 @@ struct MainTabView: View {
 
     // App Intent / Deep link triggered states
     @State private var showingFoodCamera = false
-    @State private var showingLogFood = false
     @State private var showingLogWeight = false
     @State private var intentTriggeredWorkout: LiveWorkout?
 
@@ -182,9 +181,6 @@ struct MainTabView: View {
         .fullScreenCover(isPresented: $showingFoodCamera) {
             FoodCameraView()
         }
-        .sheet(isPresented: $showingLogFood) {
-            TraiLensView()
-        }
         .sheet(isPresented: $showingLogWeight) {
             LogWeightSheet()
         }
@@ -195,6 +191,8 @@ struct MainTabView: View {
         }
         .onAppear {
             checkForAppIntentTriggers()
+            // Handle deep links that may have been set before this view appeared (cold launch from widget).
+            handleDeepLink(deepLinkDestination)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             checkForAppIntentTriggers()
@@ -216,7 +214,7 @@ struct MainTabView: View {
 
         switch destination {
         case .logFood:
-            showingLogFood = true
+            showingFoodCamera = true
         case .logWeight:
             showingLogWeight = true
         case .workout(let templateName):
@@ -266,7 +264,7 @@ struct MainTabView: View {
             if let profile = try? modelContext.fetch(profileDescriptor).first,
                let plan = profile.workoutPlan,
                let template = plan.templates.first(where: { $0.name.localizedCaseInsensitiveContains(name) }) {
-                let muscleGroups = template.targetMuscleGroups.compactMap { LiveWorkout.MuscleGroup(rawValue: $0) }
+                let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
                 workout = LiveWorkout(
                     name: template.name,
                     workoutType: .strength,

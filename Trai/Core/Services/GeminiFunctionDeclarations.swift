@@ -435,7 +435,7 @@ enum GeminiFunctionDeclarations {
                     ],
                     "unit": [
                         "type": "string",
-                        "description": "The unit of the weight value",
+                        "description": "The unit of the weight value (optional if user said it in text; defaults to profile preference)",
                         "enum": ["kg", "lbs"]
                     ],
                     "date": [
@@ -447,7 +447,7 @@ enum GeminiFunctionDeclarations {
                         "description": "Optional notes about the weight measurement"
                     ]
                 ],
-                "required": ["weight", "unit"]
+                "required": ["weight"]
             ]
         ]
     }

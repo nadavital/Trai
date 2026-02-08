@@ -498,10 +498,7 @@ struct DashboardView: View {
             return
         }
 
-        // Map template muscle groups to LiveWorkout.MuscleGroup
-        let muscleGroups = template.targetMuscleGroups.compactMap { name in
-            LiveWorkout.MuscleGroup(rawValue: name)
-        }
+        let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
 
         let workout = LiveWorkout(
             name: template.name,

@@ -6,10 +6,12 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct WorkoutDetailSheet: View {
     let workout: WorkoutSession
     @Environment(\.dismiss) private var dismiss
+    @Query(sort: \ExerciseHistory.performedAt, order: .reverse) private var allExerciseHistory: [ExerciseHistory]
 
     var body: some View {
         NavigationStack {
@@ -20,6 +22,11 @@ struct WorkoutDetailSheet: View {
 
                     // Stats summary
                     statsSection
+
+                    // PR highlights (if any)
+                    if !prHighlights.isEmpty {
+                        prSection
+                    }
 
                     // Workout details
                     detailsSection
@@ -150,6 +157,94 @@ struct WorkoutDetailSheet: View {
 
                 DetailRow(label: "Logged", value: workout.loggedAt.formatted(date: .abbreviated, time: .shortened))
             }
+            .background(Color(.secondarySystemBackground))
+            .clipShape(.rect(cornerRadius: 12))
+        }
+    }
+
+    // MARK: - PR Section
+
+    private struct PRHighlight: Identifiable {
+        let id = UUID()
+        let label: String
+        let value: String
+        let icon: String
+        let color: Color
+    }
+
+    private var prHighlights: [PRHighlight] {
+        guard workout.isStrengthTraining else { return [] }
+
+        let exerciseName = workout.displayName
+        let previousEntries = allExerciseHistory.filter {
+            $0.exerciseName == exerciseName && $0.performedAt < workout.loggedAt
+        }
+        guard !previousEntries.isEmpty else { return [] }
+
+        var highlights: [PRHighlight] = []
+
+        if let weight = workout.weightKg,
+           weight > 0,
+           weight > (previousEntries.map(\.bestSetWeightKg).max() ?? 0) {
+            highlights.append(PRHighlight(
+                label: "Weight PR",
+                value: "\(Int(weight.rounded())) kg",
+                icon: "scalemass.fill",
+                color: .orange
+            ))
+        }
+
+        if workout.reps > 0,
+           workout.reps > (previousEntries.map(\.bestSetReps).max() ?? 0) {
+            highlights.append(PRHighlight(
+                label: "Rep PR",
+                value: "\(workout.reps) reps",
+                icon: "repeat",
+                color: .green
+            ))
+        }
+
+        if let volume = workout.totalVolume,
+           volume > 0,
+           volume > (previousEntries.map(\.totalVolume).max() ?? 0) {
+            highlights.append(PRHighlight(
+                label: "Volume PR",
+                value: "\(Int(volume.rounded())) kg",
+                icon: "chart.bar.fill",
+                color: .blue
+            ))
+        }
+
+        return highlights
+    }
+
+    private var prSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "trophy.fill")
+                    .foregroundStyle(.yellow)
+                Text("Personal Records")
+                    .font(.headline)
+            }
+
+            VStack(spacing: 8) {
+                ForEach(prHighlights) { pr in
+                    HStack(spacing: 10) {
+                        Image(systemName: pr.icon)
+                            .foregroundStyle(pr.color)
+                        Text(pr.label)
+                            .fontWeight(.medium)
+                        Spacer()
+                        Text(pr.value)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color(.tertiarySystemBackground))
+                    .clipShape(.rect(cornerRadius: 10))
+                }
+            }
+            .padding(4)
             .background(Color(.secondarySystemBackground))
             .clipShape(.rect(cornerRadius: 12))
         }

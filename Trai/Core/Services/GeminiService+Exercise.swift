@@ -140,6 +140,10 @@ extension GeminiService {
         3. A brief description of what the equipment is for
         4. Any setup tips or key things to know
         \(existingExercisesContext)
+        IMPORTANT:
+        - Be specific when similar machines exist. Prefer precise variants (e.g., "Converging Chest Press Machine" vs "Chest Press Machine", "Hack Squat" vs "Leg Press").
+        - If brand/model text is visible on the machine, include that in equipmentName (e.g., "Life Fitness Seated Row Machine").
+        - Prioritize what is clearly visible in the image over generic guesses.
         If this isn't gym equipment, still try to identify what it is and suggest any exercises that could be done with it.
         """
 

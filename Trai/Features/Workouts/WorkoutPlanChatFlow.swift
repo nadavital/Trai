@@ -611,8 +611,25 @@ struct WorkoutPlanChatFlow: View {
             onComplete?(plan)
         } else {
             guard let profile = userProfile else { return }
+            let hadExistingPlan = profile.workoutPlan != nil
+
+            WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
+                profile: profile,
+                reason: .chatAdjustment,
+                modelContext: modelContext,
+                replacingWith: plan
+            )
 
             profile.workoutPlan = plan
+
+            if !hadExistingPlan {
+                WorkoutPlanHistoryService.archivePlan(
+                    plan,
+                    profile: profile,
+                    reason: .chatCreate,
+                    modelContext: modelContext
+                )
+            }
 
             // Save schedule preferences
             if let days = parseDays(from: collectedAnswers.answers(for: "schedule")) {

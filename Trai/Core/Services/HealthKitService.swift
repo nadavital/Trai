@@ -19,15 +19,18 @@ final class HealthKitService {
     // Heart rate streaming
     var currentHeartRate: Double?
     var lastHeartRateUpdate: Date?
+    private var lastWatchHeartRateUpdate: Date?
     private var heartRateQuery: HKAnchoredObjectQuery?
     private var heartRateAnchor: HKQueryAnchor?
 
     // Active calories streaming (during workout)
     var workoutCalories: Double = 0
     var lastCalorieUpdate: Date?
+    private var lastWatchCalorieUpdate: Date?
     private var calorieQuery: HKAnchoredObjectQuery?
     private var calorieAnchor: HKQueryAnchor?
     private var workoutStartTime: Date?
+    private var hasSeenWatchSamples = false
 
     var isHealthKitAvailable: Bool {
         HKHealthStore.isHealthDataAvailable()
@@ -323,16 +326,20 @@ final class HealthKitService {
 
     /// Start streaming heart rate updates from Apple Watch
     /// Uses HKAnchoredObjectQuery to receive updates as they sync from Watch
-    func startHeartRateStreaming() {
+    func startHeartRateStreaming(from workoutStart: Date? = nil) {
         guard isHealthKitAvailable else { return }
 
         // Stop any existing query
         stopHeartRateStreaming()
+        heartRateAnchor = nil
 
         let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
 
-        // Only look at heart rate samples from the last hour
-        let startDate = Date().addingTimeInterval(-3600)
+        // Include a short pre-workout buffer to catch already-running Watch workouts.
+        // Clamp to a 2-hour window to avoid unnecessarily broad scans.
+        let twoHoursAgo = Date().addingTimeInterval(-7200)
+        let requestedStart = workoutStart?.addingTimeInterval(-20 * 60) ?? Date().addingTimeInterval(-3600)
+        let startDate = max(twoHoursAgo, requestedStart)
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: nil, options: .strictStartDate)
 
         let query = HKAnchoredObjectQuery(
@@ -342,6 +349,10 @@ final class HealthKitService {
             limit: HKObjectQueryNoLimit
         ) { [weak self] _, samples, _, newAnchor, error in
             Task { @MainActor in
+                if let error {
+                    print("Heart rate query error: \(error.localizedDescription)")
+                    return
+                }
                 self?.heartRateAnchor = newAnchor
                 self?.processHeartRateSamples(samples)
             }
@@ -350,6 +361,10 @@ final class HealthKitService {
         // Update handler for continuous monitoring
         query.updateHandler = { [weak self] _, samples, _, newAnchor, error in
             Task { @MainActor in
+                if let error {
+                    print("Heart rate update error: \(error.localizedDescription)")
+                    return
+                }
                 self?.heartRateAnchor = newAnchor
                 self?.processHeartRateSamples(samples)
             }
@@ -365,8 +380,11 @@ final class HealthKitService {
             healthStore.stop(query)
             heartRateQuery = nil
         }
+        heartRateAnchor = nil
         currentHeartRate = nil
         lastHeartRateUpdate = nil
+        lastWatchHeartRateUpdate = nil
+        hasSeenWatchSamples = false
     }
 
     /// Get the most recent heart rate from the last few minutes (one-time fetch)
@@ -398,14 +416,23 @@ final class HealthKitService {
     }
 
     private func processHeartRateSamples(_ samples: [HKSample]?) {
-        guard let heartRateSamples = samples as? [HKQuantitySample],
-              let mostRecent = heartRateSamples.max(by: { $0.startDate < $1.startDate }) else {
+        guard let allHeartRateSamples = samples as? [HKQuantitySample], !allHeartRateSamples.isEmpty else {
             return
         }
+
+        let watchHeartRateSamples = allHeartRateSamples.filter { isLikelyFromAppleWatch($0) }
+        if !watchHeartRateSamples.isEmpty {
+            hasSeenWatchSamples = true
+        }
+        let heartRateSamples = watchHeartRateSamples.isEmpty ? allHeartRateSamples : watchHeartRateSamples
+        guard let mostRecent = heartRateSamples.max(by: { $0.startDate < $1.startDate }) else { return }
 
         let bpm = mostRecent.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
         currentHeartRate = bpm
         lastHeartRateUpdate = mostRecent.startDate
+        if isLikelyFromAppleWatch(mostRecent) {
+            lastWatchHeartRateUpdate = mostRecent.startDate
+        }
     }
 
     // MARK: - Calorie Streaming
@@ -433,6 +460,10 @@ final class HealthKitService {
             limit: HKObjectQueryNoLimit
         ) { [weak self] _, samples, _, newAnchor, error in
             Task { @MainActor in
+                if let error {
+                    print("Calorie query error: \(error.localizedDescription)")
+                    return
+                }
                 self?.calorieAnchor = newAnchor
                 self?.processCalorieSamples(samples)
             }
@@ -441,6 +472,10 @@ final class HealthKitService {
         // Update handler for continuous monitoring
         query.updateHandler = { [weak self] _, samples, _, newAnchor, error in
             Task { @MainActor in
+                if let error {
+                    print("Calorie update error: \(error.localizedDescription)")
+                    return
+                }
                 self?.calorieAnchor = newAnchor
                 self?.processCalorieSamples(samples)
             }
@@ -458,13 +493,20 @@ final class HealthKitService {
         }
         calorieAnchor = nil
         workoutStartTime = nil
+        lastWatchCalorieUpdate = nil
         // Don't reset workoutCalories - keep final value for summary
     }
 
     private func processCalorieSamples(_ samples: [HKSample]?) {
-        guard let calorieSamples = samples as? [HKQuantitySample], !calorieSamples.isEmpty else {
+        guard let allCalorieSamples = samples as? [HKQuantitySample], !allCalorieSamples.isEmpty else {
             return
         }
+
+        let watchCalorieSamples = allCalorieSamples.filter { isLikelyFromAppleWatch($0) }
+        if !watchCalorieSamples.isEmpty {
+            hasSeenWatchSamples = true
+        }
+        let calorieSamples = watchCalorieSamples.isEmpty ? allCalorieSamples : watchCalorieSamples
 
         // Sum all new calorie samples
         let newCalories = calorieSamples.reduce(0.0) { total, sample in
@@ -475,6 +517,9 @@ final class HealthKitService {
 
         if let mostRecent = calorieSamples.max(by: { $0.endDate < $1.endDate }) {
             lastCalorieUpdate = mostRecent.endDate
+            if isLikelyFromAppleWatch(mostRecent) {
+                lastWatchCalorieUpdate = mostRecent.endDate
+            }
         }
     }
 
@@ -484,6 +529,17 @@ final class HealthKitService {
         let threshold: TimeInterval = 30
         let now = Date()
 
+        if hasSeenWatchSamples {
+            if let hrUpdate = lastWatchHeartRateUpdate, now.timeIntervalSince(hrUpdate) < threshold {
+                return true
+            }
+            if let calUpdate = lastWatchCalorieUpdate, now.timeIntervalSince(calUpdate) < threshold {
+                return true
+            }
+            return false
+        }
+
+        // Fallback when HealthKit does not expose Watch device metadata.
         if let hrUpdate = lastHeartRateUpdate, now.timeIntervalSince(hrUpdate) < threshold {
             return true
         }
@@ -532,5 +588,18 @@ final class HealthKitService {
             }
             healthStore.execute(query)
         }
+    }
+
+    private func isLikelyFromAppleWatch(_ sample: HKSample) -> Bool {
+        if let productType = sample.sourceRevision.productType?.lowercased(), productType.hasPrefix("watch") {
+            return true
+        }
+        if let model = sample.device?.model?.lowercased(), model.contains("watch") {
+            return true
+        }
+        if let name = sample.device?.name?.lowercased(), name.contains("watch") {
+            return true
+        }
+        return false
     }
 }

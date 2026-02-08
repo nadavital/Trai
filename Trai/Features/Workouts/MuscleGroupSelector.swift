@@ -17,12 +17,10 @@ struct MuscleGroupSelector: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header - tap to expand if custom workout
+            // Header - tap to expand/collapse target muscles.
             Button {
-                if isCustomWorkout || selectedMuscles.isEmpty {
-                    withAnimation(.snappy) { isExpanded.toggle() }
-                    HapticManager.lightTap()
-                }
+                withAnimation(.snappy) { isExpanded.toggle() }
+                HapticManager.lightTap()
             } label: {
                 HStack {
                     if selectedMuscles.isEmpty {
@@ -53,11 +51,9 @@ struct MuscleGroupSelector: View {
 
                     Spacer()
 
-                    if isCustomWorkout || selectedMuscles.isEmpty {
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
                 .font(.subheadline)
             }

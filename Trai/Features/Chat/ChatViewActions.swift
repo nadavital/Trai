@@ -425,16 +425,17 @@ extension ChatView {
 
     /// Check for pending plan review request from Profile (cross-tab navigation)
     func checkForPendingPlanReview() {
-        guard pendingPlanReviewRequest else { return }
+        if pendingPlanReviewRequest {
+            pendingPlanReviewRequest = false
+            startNewSession(silent: true)
+            sendMessage("Can you review my nutrition plan and check if any updates are needed based on my progress?")
+            return
+        }
 
-        // Reset the flag immediately
-        pendingPlanReviewRequest = false
-
-        // Start a fresh session for the plan review
+        guard pendingWorkoutPlanReviewRequest else { return }
+        pendingWorkoutPlanReviewRequest = false
         startNewSession(silent: true)
-
-        // Send the review request message
-        sendMessage("Can you review my nutrition plan and check if any updates are needed based on my progress?")
+        sendMessage("Can you review my workout split and suggest any updates based on my recovery and recent workouts?")
     }
 }
 

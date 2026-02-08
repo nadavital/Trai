@@ -86,6 +86,32 @@ struct ExerciseListView: View {
         return allRecent
     }
 
+    private var usageFrequencyByExerciseName: [String: Int] {
+        Dictionary(grouping: exerciseHistory) { $0.exerciseName }
+            .mapValues { $0.count }
+    }
+
+    private var mostRecentUsageByExerciseName: [String: Date] {
+        exerciseHistory.reduce(into: [String: Date]()) { result, history in
+            if let current = result[history.exerciseName], current >= history.performedAt {
+                return
+            }
+            result[history.exerciseName] = history.performedAt
+        }
+    }
+
+    private var targetMusclePriority: [Exercise.MuscleGroup: Int] {
+        var priority: [Exercise.MuscleGroup: Int] = [:]
+        for (index, muscle) in targetMuscleGroups.enumerated() {
+            priority[muscle] = min(priority[muscle] ?? index, index)
+        }
+        return priority
+    }
+
+    private var muscleGroupDefaultOrder: [Exercise.MuscleGroup: Int] {
+        Dictionary(uniqueKeysWithValues: Exercise.MuscleGroup.allCases.enumerated().map { ($1, $0) })
+    }
+
     private var filteredExercises: [Exercise] {
         var result = exercises
 
@@ -107,24 +133,27 @@ struct ExerciseListView: View {
             result = result.filter { $0.targetMuscleGroup == muscleGroup }
         }
 
-        // Sort: target muscle groups first, then by usage frequency
-        let usageFrequency = Dictionary(grouping: exerciseHistory) { $0.exerciseName }
-            .mapValues { $0.count }
-
         result.sort { a, b in
-            let aIsTarget = targetMuscleGroups.contains(where: { $0 == a.targetMuscleGroup })
-            let bIsTarget = targetMuscleGroups.contains(where: { $0 == b.targetMuscleGroup })
+            let aTargetPriority = a.targetMuscleGroup.flatMap { targetMusclePriority[$0] } ?? Int.max
+            let bTargetPriority = b.targetMuscleGroup.flatMap { targetMusclePriority[$0] } ?? Int.max
+            if aTargetPriority != bTargetPriority { return aTargetPriority < bTargetPriority }
 
-            // Target muscles first
-            if aIsTarget && !bIsTarget { return true }
-            if !aIsTarget && bIsTarget { return false }
+            // Keep section ordering stable by using muscle default order.
+            let aMuscleOrder = a.targetMuscleGroup.flatMap { muscleGroupDefaultOrder[$0] } ?? Int.max
+            let bMuscleOrder = b.targetMuscleGroup.flatMap { muscleGroupDefaultOrder[$0] } ?? Int.max
+            if aMuscleOrder != bMuscleOrder { return aMuscleOrder < bMuscleOrder }
 
-            // Then by usage frequency
-            let aFreq = usageFrequency[a.name] ?? 0
-            let bFreq = usageFrequency[b.name] ?? 0
+            // Then prioritize most recently performed exercises.
+            let aRecent = mostRecentUsageByExerciseName[a.name] ?? .distantPast
+            let bRecent = mostRecentUsageByExerciseName[b.name] ?? .distantPast
+            if aRecent != bRecent { return aRecent > bRecent }
+
+            // Then by usage frequency.
+            let aFreq = usageFrequencyByExerciseName[a.name] ?? 0
+            let bFreq = usageFrequencyByExerciseName[b.name] ?? 0
             if aFreq != bFreq { return aFreq > bFreq }
 
-            // Finally alphabetically
+            // Finally alphabetically.
             return a.name < b.name
         }
 
@@ -148,24 +177,32 @@ struct ExerciseListView: View {
     private var sortedMuscleGroups: [Exercise.MuscleGroup] {
         let allGroups = Array(exercisesByMuscleGroup.keys)
 
-        // Sort with target muscle groups first, then alphabetically
+        // Sort with targeted muscles first (in workout-provided order), then canonical order.
         return allGroups.sorted { a, b in
-            let aIsTarget = targetMuscleGroups.contains(a)
-            let bIsTarget = targetMuscleGroups.contains(b)
+            let aPriority = targetMusclePriority[a] ?? Int.max
+            let bPriority = targetMusclePriority[b] ?? Int.max
+            if aPriority != bPriority { return aPriority < bPriority }
 
-            if aIsTarget && !bIsTarget {
-                return true // a comes first
-            } else if !aIsTarget && bIsTarget {
-                return false // b comes first
-            } else {
-                return a.displayName < b.displayName // alphabetical
-            }
+            let aOrder = muscleGroupDefaultOrder[a] ?? Int.max
+            let bOrder = muscleGroupDefaultOrder[b] ?? Int.max
+            if aOrder != bOrder { return aOrder < bOrder }
+
+            return a.displayName < b.displayName
         }
     }
 
     /// Whether to search for custom exercises (when search yields no results)
     private var showCustomOption: Bool {
         !searchText.isEmpty && filteredExercises.isEmpty
+    }
+
+    private var quickAddCategory: Exercise.Category {
+        selectedCategory ?? .strength
+    }
+
+    private var quickAddMuscleGroup: Exercise.MuscleGroup? {
+        guard quickAddCategory == .strength else { return nil }
+        return selectedMuscleGroup ?? targetMuscleGroups.first
     }
 
     // MARK: - Body
@@ -223,7 +260,11 @@ struct ExerciseListView: View {
                         if showCustomOption {
                             Section {
                                 Button {
-                                    addCustomExercise(name: searchText)
+                                    addCustomExercise(
+                                        name: searchText,
+                                        muscleGroup: quickAddMuscleGroup,
+                                        category: quickAddCategory
+                                    )
                                 } label: {
                                     HStack {
                                         Image(systemName: "plus.circle")
@@ -519,9 +560,17 @@ struct ExerciseListView: View {
     ) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        let normalizedMuscleGroup = category == .strength ? muscleGroup : nil
 
         // Check if exercise already exists
         if let existing = exercises.first(where: { $0.name.lowercased() == trimmed.lowercased() }) {
+            // Backfill missing muscle group for existing strength entries when we now have context.
+            if existing.exerciseCategory == .strength,
+               existing.targetMuscleGroup == nil,
+               let normalizedMuscleGroup {
+                existing.targetMuscleGroup = normalizedMuscleGroup
+                try? modelContext.save()
+            }
             selectExercise(existing)
             return
         }
@@ -530,7 +579,7 @@ struct ExerciseListView: View {
         let exercise = Exercise(
             name: trimmed,
             category: category,
-            muscleGroup: muscleGroup
+            muscleGroup: normalizedMuscleGroup
         )
         exercise.isCustom = true
         exercise.equipmentName = equipmentName

@@ -155,20 +155,29 @@ private struct CalorieRing: View {
             VStack(spacing: 2) {
                 Text("\(consumed)")
                     .font(.system(size: 36, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.7)
+                    .minimumScaleFactor(0.55)
                     .lineLimit(1)
+                    .allowsTightening(true)
 
                 Text("of \(goal) kcal")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .allowsTightening(true)
 
                 if remaining > 0 {
                     Text("\(remaining) left")
                         .font(.caption2)
                         .foregroundStyle(.green)
                         .padding(.top, 2)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .allowsTightening(true)
                 }
             }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: 120)
             .padding(.horizontal, 8)
         }
         .padding(24)

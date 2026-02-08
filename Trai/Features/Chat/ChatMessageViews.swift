@@ -603,6 +603,9 @@ struct SuggestionRowsView: View {
 
 struct ChatBubble: View {
     let message: ChatMessage
+    var isStreaming: Bool = false
+    var enableTextSelection: Bool = true
+    var enableStateAnimations: Bool = true
     var currentCalories: Int?
     var currentProtein: Int?
     var currentCarbs: Int?
@@ -629,6 +632,8 @@ struct ChatBubble: View {
     var onRetry: (() -> Void)?
     var onImageTapped: ((UIImage) -> Void)?
     var onViewAppliedPlan: ((PlanUpdateSuggestionEntry) -> Void)?
+    @State private var formattedContentCacheKey = ""
+    @State private var formattedParagraphCache: [AttributedString] = []
 
     var body: some View {
         HStack {
@@ -663,152 +668,179 @@ struct ChatBubble: View {
                     }
                 }
             } else {
-                // AI messages - no bubble, just formatted text
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(Array(formattedParagraphs.enumerated()), id: \.offset) { _, paragraph in
+                aiContentView
+            }
+
+            if !message.isFromUser { Spacer() }
+        }
+        .onAppear {
+            refreshFormattedParagraphCache(for: message.content)
+        }
+        .onChange(of: message.content) { _, newContent in
+            refreshFormattedParagraphCache(for: newContent)
+        }
+    }
+
+    @ViewBuilder
+    private var aiContentView: some View {
+        let base = VStack(alignment: .leading, spacing: 12) {
+            if isStreaming {
+                Text(message.content)
+            } else {
+                ForEach(Array(formattedParagraphs.enumerated()), id: \.offset) { _, paragraph in
+                    if enableTextSelection {
                         Text(paragraph)
                             .textSelection(.enabled)
-                    }
-
-                    // Show meal suggestion cards for all pending meals
-                    ForEach(message.pendingMealSuggestions, id: \.meal.id) { _, meal in
-                        SuggestedMealCard(
-                            meal: meal,
-                            enabledMacros: enabledMacros,
-                            isLogging: isMealLogging?(meal) ?? false,
-                            onAccept: { onAcceptMeal?(meal) },
-                            onEdit: { onEditMeal?(meal) },
-                            onDismiss: { onDismissMeal?(meal) }
-                        )
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.9).combined(with: .opacity),
-                            removal: .scale(scale: 0.95).combined(with: .opacity)
-                        ))
-                    }
-
-                    // Show plan update suggestion card if pending
-                    if message.hasPendingPlanSuggestion, let plan = message.suggestedPlan {
-                        PlanUpdateSuggestionCard(
-                            suggestion: plan,
-                            currentCalories: currentCalories,
-                            currentProtein: currentProtein,
-                            currentCarbs: currentCarbs,
-                            currentFat: currentFat,
-                            enabledMacros: enabledMacros,
-                            onAccept: { onAcceptPlan?(plan) },
-                            onEdit: { onEditPlan?(plan) },
-                            onDismiss: { onDismissPlan?() }
-                        )
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.9).combined(with: .opacity),
-                            removal: .scale(scale: 0.95).combined(with: .opacity)
-                        ))
-                    }
-
-                    // Show logged meal badges for all logged meals
-                    ForEach(message.loggedMealSuggestions, id: \.meal.id) { _, meal in
-                        if let entryId = message.foodEntryId(for: meal.id) {
-                            LoggedMealBadge(
-                                meal: meal,
-                                foodEntryId: entryId,
-                                onTap: { onViewLoggedMeal?(entryId) }
-                            )
-                            .transition(.scale.combined(with: .opacity))
-                        }
-                    }
-
-                    // Show food edit suggestion card if pending
-                    if message.hasPendingFoodEdit, let edit = message.suggestedFoodEdit {
-                        SuggestedEditCard(
-                            edit: edit,
-                            onAccept: { onAcceptFoodEdit?(edit) },
-                            onDismiss: { onDismissFoodEdit?() }
-                        )
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.9).combined(with: .opacity),
-                            removal: .scale(scale: 0.95).combined(with: .opacity)
-                        ))
-                    }
-
-                    // Show applied edit badge
-                    if message.hasAppliedFoodEdit, let edit = message.suggestedFoodEdit {
-                        AppliedEditBadge(edit: edit)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-
-                    // Show workout suggestion card if pending
-                    if message.hasPendingWorkoutSuggestion, let workout = message.suggestedWorkout {
-                        SuggestedWorkoutCard(
-                            workout: workout,
-                            onAccept: { onAcceptWorkout?(workout) },
-                            onDismiss: { onDismissWorkout?() }
-                        )
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.9).combined(with: .opacity),
-                            removal: .scale(scale: 0.95).combined(with: .opacity)
-                        ))
-                    }
-
-                    // Show workout started badge
-                    if message.hasStartedWorkout, let workout = message.suggestedWorkout {
-                        WorkoutStartedBadge(workoutName: workout.name)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-
-                    // Show workout log suggestion card if pending
-                    if message.hasPendingWorkoutLogSuggestion, let workoutLog = message.suggestedWorkoutLog {
-                        SuggestedWorkoutLogCard(
-                            workoutLog: workoutLog,
-                            useLbs: useExerciseWeightLbs,
-                            onAccept: { onAcceptWorkoutLog?(workoutLog) },
-                            onDismiss: { onDismissWorkoutLog?() }
-                        )
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.9).combined(with: .opacity),
-                            removal: .scale(scale: 0.95).combined(with: .opacity)
-                        ))
-                    }
-
-                    // Show workout log saved badge
-                    if message.hasSavedWorkoutLog, let workoutLog = message.suggestedWorkoutLog {
-                        WorkoutLogSavedBadge(workoutType: workoutLog.displayName)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-
-                    // Show reminder suggestion card if pending
-                    if message.hasPendingReminderSuggestion, let reminder = message.suggestedReminder {
-                        ReminderSuggestionCard(
-                            suggestion: reminder,
-                            onConfirm: { onAcceptReminder?(reminder) },
-                            onEdit: { onEditReminder?(reminder) },
-                            onDismiss: { onDismissReminder?() }
-                        )
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.9).combined(with: .opacity),
-                            removal: .scale(scale: 0.95).combined(with: .opacity)
-                        ))
-                    }
-
-                    // Show reminder created badge
-                    if message.hasCreatedReminder, let reminder = message.suggestedReminder {
-                        CreatedReminderChip(suggestion: reminder)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-
-                    // Show plan update applied indicator (tappable to view details)
-                    if message.planUpdateApplied, let plan = message.suggestedPlan {
-                        PlanUpdateAppliedBadge(plan: plan) {
-                            onViewAppliedPlan?(plan)
-                        }
-                        .transition(.scale.combined(with: .opacity))
-                    }
-
-                    // Show memory saved indicator
-                    if message.hasSavedMemories {
-                        MemorySavedBadge(memories: message.savedMemories)
-                            .transition(.scale.combined(with: .opacity))
+                    } else {
+                        Text(paragraph)
+                            .textSelection(.disabled)
                     }
                 }
+            }
+
+            // Show meal suggestion cards for all pending meals
+            ForEach(message.pendingMealSuggestions, id: \.meal.id) { _, meal in
+                SuggestedMealCard(
+                    meal: meal,
+                    enabledMacros: enabledMacros,
+                    isLogging: isMealLogging?(meal) ?? false,
+                    onAccept: { onAcceptMeal?(meal) },
+                    onEdit: { onEditMeal?(meal) },
+                    onDismiss: { onDismissMeal?(meal) }
+                )
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.9).combined(with: .opacity),
+                    removal: .scale(scale: 0.95).combined(with: .opacity)
+                ))
+            }
+
+            // Show plan update suggestion card if pending
+            if message.hasPendingPlanSuggestion, let plan = message.suggestedPlan {
+                PlanUpdateSuggestionCard(
+                    suggestion: plan,
+                    currentCalories: currentCalories,
+                    currentProtein: currentProtein,
+                    currentCarbs: currentCarbs,
+                    currentFat: currentFat,
+                    enabledMacros: enabledMacros,
+                    onAccept: { onAcceptPlan?(plan) },
+                    onEdit: { onEditPlan?(plan) },
+                    onDismiss: { onDismissPlan?() }
+                )
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.9).combined(with: .opacity),
+                    removal: .scale(scale: 0.95).combined(with: .opacity)
+                ))
+            }
+
+            // Show logged meal badges for all logged meals
+            ForEach(message.loggedMealSuggestions, id: \.meal.id) { _, meal in
+                if let entryId = message.foodEntryId(for: meal.id) {
+                    LoggedMealBadge(
+                        meal: meal,
+                        foodEntryId: entryId,
+                        onTap: { onViewLoggedMeal?(entryId) }
+                    )
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+
+            // Show food edit suggestion card if pending
+            if message.hasPendingFoodEdit, let edit = message.suggestedFoodEdit {
+                SuggestedEditCard(
+                    edit: edit,
+                    onAccept: { onAcceptFoodEdit?(edit) },
+                    onDismiss: { onDismissFoodEdit?() }
+                )
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.9).combined(with: .opacity),
+                    removal: .scale(scale: 0.95).combined(with: .opacity)
+                ))
+            }
+
+            // Show applied edit badge
+            if message.hasAppliedFoodEdit, let edit = message.suggestedFoodEdit {
+                AppliedEditBadge(edit: edit)
+                    .transition(.scale.combined(with: .opacity))
+            }
+
+            // Show workout suggestion card if pending
+            if message.hasPendingWorkoutSuggestion, let workout = message.suggestedWorkout {
+                SuggestedWorkoutCard(
+                    workout: workout,
+                    onAccept: { onAcceptWorkout?(workout) },
+                    onDismiss: { onDismissWorkout?() }
+                )
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.9).combined(with: .opacity),
+                    removal: .scale(scale: 0.95).combined(with: .opacity)
+                ))
+            }
+
+            // Show workout started badge
+            if message.hasStartedWorkout, let workout = message.suggestedWorkout {
+                WorkoutStartedBadge(workoutName: workout.name)
+                    .transition(.scale.combined(with: .opacity))
+            }
+
+            // Show workout log suggestion card if pending
+            if message.hasPendingWorkoutLogSuggestion, let workoutLog = message.suggestedWorkoutLog {
+                SuggestedWorkoutLogCard(
+                    workoutLog: workoutLog,
+                    useLbs: useExerciseWeightLbs,
+                    onAccept: { onAcceptWorkoutLog?(workoutLog) },
+                    onDismiss: { onDismissWorkoutLog?() }
+                )
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.9).combined(with: .opacity),
+                    removal: .scale(scale: 0.95).combined(with: .opacity)
+                ))
+            }
+
+            // Show workout log saved badge
+            if message.hasSavedWorkoutLog, let workoutLog = message.suggestedWorkoutLog {
+                WorkoutLogSavedBadge(workoutType: workoutLog.displayName)
+                    .transition(.scale.combined(with: .opacity))
+            }
+
+            // Show reminder suggestion card if pending
+            if message.hasPendingReminderSuggestion, let reminder = message.suggestedReminder {
+                ReminderSuggestionCard(
+                    suggestion: reminder,
+                    onConfirm: { onAcceptReminder?(reminder) },
+                    onEdit: { onEditReminder?(reminder) },
+                    onDismiss: { onDismissReminder?() }
+                )
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.9).combined(with: .opacity),
+                    removal: .scale(scale: 0.95).combined(with: .opacity)
+                ))
+            }
+
+            // Show reminder created badge
+            if message.hasCreatedReminder, let reminder = message.suggestedReminder {
+                CreatedReminderChip(suggestion: reminder)
+                    .transition(.scale.combined(with: .opacity))
+            }
+
+            // Show plan update applied indicator (tappable to view details)
+            if message.planUpdateApplied, let plan = message.suggestedPlan {
+                PlanUpdateAppliedBadge(plan: plan) {
+                    onViewAppliedPlan?(plan)
+                }
+                .transition(.scale.combined(with: .opacity))
+            }
+
+            // Show memory saved indicator
+            if message.hasSavedMemories {
+                MemorySavedBadge(memories: message.savedMemories)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+        if enableStateAnimations {
+            base
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasPendingMealSuggestion)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasPendingPlanSuggestion)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.loggedFoodEntryId)
@@ -822,16 +854,27 @@ struct ChatBubble: View {
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasSavedWorkoutLog)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasPendingReminderSuggestion)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasCreatedReminder)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            if !message.isFromUser { Spacer() }
+        } else {
+            base
         }
     }
 
     /// Split content into paragraphs and format each one
     private var formattedParagraphs: [AttributedString] {
-        let paragraphs = message.content.components(separatedBy: "\n\n")
+        guard !isStreaming else { return [AttributedString(message.content)] }
+        if formattedContentCacheKey == message.content {
+            return formattedParagraphCache
+        }
+        return parseFormattedParagraphs(from: message.content)
+    }
+
+    private func refreshFormattedParagraphCache(for content: String) {
+        formattedContentCacheKey = content
+        formattedParagraphCache = parseFormattedParagraphs(from: content)
+    }
+
+    private func parseFormattedParagraphs(from content: String) -> [AttributedString] {
+        let paragraphs = content.components(separatedBy: "\n\n")
         return paragraphs.compactMap { paragraph in
             let processed = processMarkdown(paragraph)
             if let attributed = try? AttributedString(markdown: processed, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {

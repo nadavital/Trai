@@ -45,6 +45,27 @@ struct ChatContentList: View {
     var onReviewPlan: (() -> Void)?
     var onDismissPlanRecommendation: (() -> Void)?
 
+    private var visibleMessages: [ChatMessage] {
+        messages.filter(shouldDisplayMessage(_:))
+    }
+
+    private var streamingMessageId: UUID? {
+        guard isLoading, isStreamingResponse else { return nil }
+        return visibleMessages.last?.id
+    }
+
+    private var latestVisibleMessageId: UUID? {
+        visibleMessages.last?.id
+    }
+
+    private var selectableMessageIDs: Set<UUID> {
+        let selectable = visibleMessages
+            .filter { !$0.isFromUser && !$0.content.isEmpty }
+            .suffix(3)
+            .map(\.id)
+        return Set(selectable)
+    }
+
     var body: some View {
         LazyVStack(spacing: 12) {
             // Plan review recommendation card (if triggered)
@@ -72,78 +93,79 @@ struct ChatContentList: View {
                     context: smartStarterContext
                 )
             } else {
-                ForEach(messages) { message in
-                    if !message.content.isEmpty || message.isFromUser || message.errorMessage != nil || message.hasPendingMealSuggestion || message.loggedFoodEntryId != nil || message.hasPendingPlanSuggestion || message.planUpdateApplied || message.hasPendingFoodEdit || message.hasAppliedFoodEdit || message.hasPendingWorkoutSuggestion || message.hasStartedWorkout || message.hasPendingWorkoutLogSuggestion || message.hasSavedWorkoutLog || message.hasPendingReminderSuggestion || message.hasCreatedReminder || message.hasSavedMemories {
-                        VStack(spacing: 0) {
-                            ChatBubble(
-                                message: message,
-                                currentCalories: currentCalories,
-                                currentProtein: currentProtein,
-                                currentCarbs: currentCarbs,
-                                currentFat: currentFat,
-                                enabledMacros: enabledMacros,
-                                onAcceptMeal: { meal in
-                                    onAcceptMeal(meal, message)
-                                },
-                                isMealLogging: { meal in
-                                    isMealLogging(meal, message)
-                                },
-                                onEditMeal: { meal in
-                                    onEditMeal(message, meal)
-                                },
-                                onDismissMeal: { meal in
-                                    onDismissMeal(meal, message)
-                                },
-                                onViewLoggedMeal: { entryId in
-                                    onViewLoggedMeal(entryId)
-                                },
-                                onAcceptPlan: { plan in
-                                    onAcceptPlan(plan, message)
-                                },
-                                onEditPlan: { plan in
-                                    onEditPlan(message, plan)
-                                },
-                                onDismissPlan: {
-                                    onDismissPlan(message)
-                                },
-                                onAcceptFoodEdit: { edit in
-                                    onAcceptFoodEdit(edit, message)
-                                },
-                                onDismissFoodEdit: {
-                                    onDismissFoodEdit(message)
-                                },
-                                onAcceptWorkout: { workout in
-                                    onAcceptWorkout(workout, message)
-                                },
-                                onDismissWorkout: {
-                                    onDismissWorkout(message)
-                                },
-                                onAcceptWorkoutLog: { workoutLog in
-                                    onAcceptWorkoutLog(workoutLog, message)
-                                },
-                                onDismissWorkoutLog: {
-                                    onDismissWorkoutLog(message)
-                                },
-                                onAcceptReminder: { reminder in
-                                    onAcceptReminder(reminder, message)
-                                },
-                                onEditReminder: { reminder in
-                                    onEditReminder(reminder, message)
-                                },
-                                onDismissReminder: {
-                                    onDismissReminder(message)
-                                },
-                                useExerciseWeightLbs: useExerciseWeightLbs,
-                                onRetry: {
-                                    onRetry(message)
-                                },
-                                onImageTapped: onImageTapped,
-                                onViewAppliedPlan: onViewAppliedPlan
-                            )
-                        }
-                        .padding(.horizontal)
-                        .id(message.id)
+                ForEach(visibleMessages) { message in
+                    VStack(spacing: 0) {
+                        ChatBubble(
+                            message: message,
+                            isStreaming: message.id == streamingMessageId,
+                            enableTextSelection: selectableMessageIDs.contains(message.id),
+                            enableStateAnimations: message.id == latestVisibleMessageId,
+                            currentCalories: currentCalories,
+                            currentProtein: currentProtein,
+                            currentCarbs: currentCarbs,
+                            currentFat: currentFat,
+                            enabledMacros: enabledMacros,
+                            onAcceptMeal: { meal in
+                                onAcceptMeal(meal, message)
+                            },
+                            isMealLogging: { meal in
+                                isMealLogging(meal, message)
+                            },
+                            onEditMeal: { meal in
+                                onEditMeal(message, meal)
+                            },
+                            onDismissMeal: { meal in
+                                onDismissMeal(meal, message)
+                            },
+                            onViewLoggedMeal: { entryId in
+                                onViewLoggedMeal(entryId)
+                            },
+                            onAcceptPlan: { plan in
+                                onAcceptPlan(plan, message)
+                            },
+                            onEditPlan: { plan in
+                                onEditPlan(message, plan)
+                            },
+                            onDismissPlan: {
+                                onDismissPlan(message)
+                            },
+                            onAcceptFoodEdit: { edit in
+                                onAcceptFoodEdit(edit, message)
+                            },
+                            onDismissFoodEdit: {
+                                onDismissFoodEdit(message)
+                            },
+                            onAcceptWorkout: { workout in
+                                onAcceptWorkout(workout, message)
+                            },
+                            onDismissWorkout: {
+                                onDismissWorkout(message)
+                            },
+                            onAcceptWorkoutLog: { workoutLog in
+                                onAcceptWorkoutLog(workoutLog, message)
+                            },
+                            onDismissWorkoutLog: {
+                                onDismissWorkoutLog(message)
+                            },
+                            onAcceptReminder: { reminder in
+                                onAcceptReminder(reminder, message)
+                            },
+                            onEditReminder: { reminder in
+                                onEditReminder(reminder, message)
+                            },
+                            onDismissReminder: {
+                                onDismissReminder(message)
+                            },
+                            useExerciseWeightLbs: useExerciseWeightLbs,
+                            onRetry: {
+                                onRetry(message)
+                            },
+                            onImageTapped: onImageTapped,
+                            onViewAppliedPlan: onViewAppliedPlan
+                        )
                     }
+                    .padding(.horizontal)
+                    .id(message.id)
                 }
             }
 
@@ -152,5 +174,24 @@ struct ChatContentList: View {
                     .padding(.horizontal)
             }
         }
+    }
+
+    private func shouldDisplayMessage(_ message: ChatMessage) -> Bool {
+        !message.content.isEmpty ||
+        message.isFromUser ||
+        message.errorMessage != nil ||
+        message.hasPendingMealSuggestion ||
+        message.loggedFoodEntryId != nil ||
+        message.hasPendingPlanSuggestion ||
+        message.planUpdateApplied ||
+        message.hasPendingFoodEdit ||
+        message.hasAppliedFoodEdit ||
+        message.hasPendingWorkoutSuggestion ||
+        message.hasStartedWorkout ||
+        message.hasPendingWorkoutLogSuggestion ||
+        message.hasSavedWorkoutLog ||
+        message.hasPendingReminderSuggestion ||
+        message.hasCreatedReminder ||
+        message.hasSavedMemories
     }
 }

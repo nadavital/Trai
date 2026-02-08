@@ -38,6 +38,7 @@ extension GeminiPromptBuilder {
         - Something else: Respond appropriately
 
         ONLY include suggestMealLog if this is clearly food the user wants to track.
+        When estimating nutrition, focus on the intended meal and ignore incidental/background items not clearly part of what they ate.
         IMPORTANT: You are SUGGESTING a meal to log - the user must confirm before it's saved. So say things like "Here's what I found" or "Want me to log this?" - NOT "I've logged this for you".
         If the user mentions they ate at a specific time, include loggedAtTime in HH:mm 24-hour format.
         Include a relevant emoji for the food (e.g., ☕ for coffee, 🥗 for salad, 🍳 for eggs).

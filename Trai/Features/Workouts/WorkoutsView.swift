@@ -50,6 +50,7 @@ struct WorkoutsView: View {
     @State private var showingWorkoutDetail: WorkoutSession?
     @State private var showingLiveWorkoutDetail: LiveWorkout?
     @State private var showingWorkoutSheet = false
+    @State private var showingCustomWorkoutSetup = false
     @State private var showingPersonalRecords = false
     @State private var pendingWorkout: LiveWorkout?
     @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
@@ -113,7 +114,7 @@ struct WorkoutsView: View {
 
                     // 3b. Quick start custom workout option
                     QuickStartCard {
-                        startCustomWorkout()
+                        showingCustomWorkoutSetup = true
                     }
 
                     // 4. Muscle recovery card (compact view)
@@ -182,6 +183,11 @@ struct WorkoutsView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showingCustomWorkoutSetup) {
+                CustomWorkoutSetupSheet { name, type, muscles in
+                    startCustomWorkout(name: name, type: type, muscles: muscles)
+                }
+            }
             .onChange(of: showingWorkoutSheet) { _, isShowing in
                 if !isShowing {
                     // Clear template when sheet is dismissed
@@ -204,10 +210,7 @@ struct WorkoutsView: View {
     }
 
     private func startWorkoutFromTemplate(_ template: WorkoutPlan.WorkoutTemplate) {
-        // Map template muscle groups to LiveWorkout.MuscleGroup
-        let muscleGroups = template.targetMuscleGroups.compactMap { name in
-            LiveWorkout.MuscleGroup(rawValue: name)
-        }
+        let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
 
         let workout = LiveWorkout(
             name: template.name,
@@ -224,11 +227,15 @@ struct WorkoutsView: View {
         HapticManager.selectionChanged()
     }
 
-    private func startCustomWorkout() {
+    private func startCustomWorkout(
+        name: String = "Custom Workout",
+        type: LiveWorkout.WorkoutType = .strength,
+        muscles: [LiveWorkout.MuscleGroup] = []
+    ) {
         let workout = LiveWorkout(
-            name: "Custom Workout",
-            workoutType: .strength,
-            targetMuscleGroups: []
+            name: name,
+            workoutType: type,
+            targetMuscleGroups: muscles
         )
         modelContext.insert(workout)
         try? modelContext.save()

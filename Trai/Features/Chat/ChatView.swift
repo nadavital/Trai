@@ -42,7 +42,6 @@ struct ChatView: View {
     @Environment(\.modelContext) var modelContext
     @State var geminiService = GeminiService()
     @State var healthKitService = HealthKitService()
-    @State var messageText = ""
     @State var isLoading = false
     @State var currentActivity: String?
     @State var selectedImage: UIImage?
@@ -57,6 +56,7 @@ struct ChatView: View {
     @AppStorage("currentChatSessionId") var currentSessionIdString: String = ""
     @AppStorage("lastChatActivityDate") var lastActivityTimestamp: Double = 0
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest: Bool = false
+    @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest: Bool = false
     @State var isTemporarySession = false
     @State var temporaryMessages: [ChatMessage] = []
     @State var processingMealSuggestionKeys: Set<MealSuggestionKey> = []
@@ -285,11 +285,10 @@ struct ChatView: View {
             }
 
             ChatInputBar(
-                text: $messageText,
                 selectedImage: $selectedImage,
                 selectedPhotoItem: $selectedPhotoItem,
                 isLoading: isLoading,
-                onSend: { sendMessage(messageText) },
+                onSend: { text in sendMessage(text) },
                 onStop: stopGenerating,
                 onTakePhoto: { showingCamera = true },
                 onImageTapped: { image in enlargedImage = image },

@@ -10,6 +10,20 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
+private enum LiveActivityTheme {
+    static let traiSymbol = "circle.hexagongrid.circle"
+    static let accent = Color.red
+    static let muted = Color.secondary
+
+    static func statusIcon(isPaused: Bool) -> String {
+        isPaused ? "pause.fill" : traiSymbol
+    }
+
+    static func statusColor(isPaused: Bool) -> Color {
+        isPaused ? muted : accent
+    }
+}
+
 // MARK: - Activity Attributes
 
 /// Attributes for the Trai workout Live Activity
@@ -159,12 +173,13 @@ struct TraiWidgetsLiveActivity: Widget {
             } compactTrailing: {
                 CompactTrailingView(context: context)
             } minimal: {
-                Image(systemName: context.state.isPaused ? "pause.fill" : "figure.run")
+                Image(systemName: LiveActivityTheme.statusIcon(isPaused: context.state.isPaused))
                     .font(.caption)
-                    .foregroundStyle(context.state.isPaused ? .orange : .green)
+                    .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
             }
             .widgetURL(URL(string: "trai://workout"))
         }
+        .supplementalActivityFamilies([.small, .medium])
     }
 }
 
@@ -172,6 +187,14 @@ struct TraiWidgetsLiveActivity: Widget {
 
 private struct LockScreenWorkoutView: View {
     let context: ActivityViewContext<TraiWorkoutAttributes>
+    @Environment(\.activityFamily) private var activityFamily
+
+    private var isSmallFamily: Bool {
+        if #available(iOS 18.0, *) {
+            return activityFamily == .small
+        }
+        return false
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -179,12 +202,12 @@ private struct LockScreenWorkoutView: View {
                 // Status (no timer per user feedback)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        Image(systemName: context.state.isPaused ? "pause.fill" : "figure.run")
+                        Image(systemName: LiveActivityTheme.statusIcon(isPaused: context.state.isPaused))
                             .font(.caption)
-                            .foregroundStyle(context.state.isPaused ? .orange : .green)
+                            .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
 
                         Text(context.attributes.workoutName)
-                            .font(.headline)
+                            .font(isSmallFamily ? .subheadline : .headline)
                             .lineLimit(1)
                     }
 
@@ -196,7 +219,7 @@ private struct LockScreenWorkoutView: View {
                                 .lineLimit(1)
 
                             // Show equipment if available
-                            if let equipment = context.state.currentEquipment {
+                            if !isSmallFamily, let equipment = context.state.currentEquipment {
                                 Text("•")
                                     .font(.caption2)
                                     .foregroundStyle(.tertiary)
@@ -213,13 +236,13 @@ private struct LockScreenWorkoutView: View {
                                     .foregroundStyle(.tertiary)
                                 Text(setDisplay)
                                     .font(.caption)
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(LiveActivityTheme.accent)
                             }
                         }
                     }
 
                     // Show next exercise if available
-                    if let nextExercise = context.state.nextExercise {
+                    if !isSmallFamily, let nextExercise = context.state.nextExercise {
                         HStack(spacing: 4) {
                             Text("Next:")
                                 .font(.caption2)
@@ -240,16 +263,16 @@ private struct LockScreenWorkoutView: View {
                     ZStack {
                         Circle()
                             .stroke(Color.secondary.opacity(0.2), lineWidth: 4)
-                            .frame(width: 44, height: 44)
+                            .frame(width: isSmallFamily ? 36 : 44, height: isSmallFamily ? 36 : 44)
 
                         Circle()
                             .trim(from: 0, to: context.state.progress)
-                            .stroke(Color.orange, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                            .frame(width: 44, height: 44)
+                            .stroke(LiveActivityTheme.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .frame(width: isSmallFamily ? 36 : 44, height: isSmallFamily ? 36 : 44)
                             .rotationEffect(.degrees(-90))
 
                         Text("\(context.state.completedSets)")
-                            .font(.system(.caption, design: .rounded, weight: .bold))
+                            .font(.system(isSmallFamily ? .caption2 : .caption, design: .rounded, weight: .bold))
                     }
 
                     Text(context.state.setsDisplay)
@@ -260,51 +283,56 @@ private struct LockScreenWorkoutView: View {
                     if let volume = context.state.volumeDisplay {
                         Text(volume)
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(LiveActivityTheme.accent)
                     }
 
                     // Heart rate display (shows "--" when unavailable)
-                    HStack(spacing: 2) {
-                        Image(systemName: "heart.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.red)
-                        if let hr = context.state.heartRate {
-                            Text("\(hr)")
+                    if !isSmallFamily {
+                        HStack(spacing: 2) {
+                            Image(systemName: "heart.fill")
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("--")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.red)
+                            if let hr = context.state.heartRate {
+                                Text("\(hr)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("--")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
                     }
                 }
             }
             
             // Action buttons
-            HStack(spacing: 12) {
-                Button(intent: AddSetIntent()) {
-                    Label("Add Set", systemImage: "plus.circle.fill")
+            if !isSmallFamily {
+                HStack(spacing: 12) {
+                    Button(intent: AddSetIntent()) {
+                        Label("Add Set", systemImage: "plus.circle.fill")
+                            .font(.caption)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(LiveActivityTheme.accent)
+
+                    Button(intent: TogglePauseIntent()) {
+                        Label(
+                            context.state.isPaused ? "Resume" : "Pause",
+                            systemImage: context.state.isPaused ? "play.fill" : "pause.fill"
+                        )
                         .font(.caption)
                         .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(context.state.isPaused ? LiveActivityTheme.accent : LiveActivityTheme.muted)
                 }
-                .buttonStyle(.bordered)
-                .tint(.orange)
-
-                Button(intent: TogglePauseIntent()) {
-                    Label(
-                        context.state.isPaused ? "Resume" : "Pause",
-                        systemImage: context.state.isPaused ? "play.fill" : "pause.fill"
-                    )
-                    .font(.caption)
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .tint(context.state.isPaused ? .green : .secondary)
             }
         }
         .padding()
         .activityBackgroundTint(Color(.systemBackground))
+        .activitySystemActionForegroundColor(LiveActivityTheme.accent)
     }
 }
 
@@ -315,9 +343,9 @@ private struct ExpandedLeadingView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Image(systemName: context.state.isPaused ? "pause.fill" : "figure.run")
+            Image(systemName: LiveActivityTheme.statusIcon(isPaused: context.state.isPaused))
                 .font(.title2)
-                .foregroundStyle(context.state.isPaused ? .orange : .green)
+                .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
 
             // Heart rate display (shows "--" when unavailable)
             HStack(spacing: 2) {
@@ -346,7 +374,7 @@ private struct ExpandedTrailingView: View {
             if let volume = context.state.volumeDisplay {
                 Text(volume)
                     .font(.system(.title3, design: .rounded, weight: .bold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(LiveActivityTheme.accent)
             }
 
             Text(context.state.setsDisplay)
@@ -368,7 +396,7 @@ private struct ExpandedBottomView: View {
                         .fill(Color.secondary.opacity(0.2))
 
                     Capsule()
-                        .fill(Color.orange)
+                        .fill(LiveActivityTheme.accent)
                         .frame(width: geometry.size.width * context.state.progress)
                 }
             }
@@ -390,7 +418,7 @@ private struct ExpandedBottomView: View {
                         if let setDisplay = context.state.currentSetDisplay {
                             Text(setDisplay)
                                 .font(.caption2)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(LiveActivityTheme.accent)
                         }
                     }
                 }
@@ -405,7 +433,7 @@ private struct ExpandedBottomView: View {
                             .foregroundStyle(.secondary)
                         Text(volume)
                             .font(.caption)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(LiveActivityTheme.accent)
                     }
                 }
             }
@@ -418,9 +446,9 @@ private struct CompactLeadingView: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: context.state.isPaused ? "pause.fill" : "figure.run")
+            Image(systemName: LiveActivityTheme.statusIcon(isPaused: context.state.isPaused))
                 .font(.caption)
-                .foregroundStyle(context.state.isPaused ? .orange : .green)
+                .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
 
             // Show current exercise instead of timer
             if let exercise = context.state.currentExercise {
@@ -438,7 +466,7 @@ private struct CompactTrailingView: View {
     var body: some View {
         Text("\(context.state.completedSets)/\(context.state.totalSets)")
             .font(.system(.caption, design: .rounded, weight: .semibold))
-            .foregroundStyle(.orange)
+            .foregroundStyle(LiveActivityTheme.accent)
     }
 }
 

@@ -89,13 +89,13 @@ extension ProfileView {
                     HapticManager.lightTap()
                 } label: {
                     HStack {
-                        Image(systemName: "sparkles")
+                        Image(systemName: "circle.hexagongrid.circle")
                         Text("Review with Trai")
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .tint(.purple)
+                .tint(.accentColor)
 
                 // Plan History link
                 NavigationLink {
@@ -225,20 +225,28 @@ extension ProfileView {
                     }
                 }
 
-                // Action buttons
                 HStack(spacing: 12) {
-                    NavigationLink {
-                        WorkoutPlanDetailView(
-                            plan: plan,
-                            usesMetricExerciseWeight: profile.usesMetricExerciseWeight,
-                            onEditPlan: { showPlanEditSheet = true }
-                        )
+                    Button {
+                        pendingWorkoutPlanReviewRequest = true
+                        selectedTabRaw = AppTab.trai.rawValue
+                        HapticManager.lightTap()
                     } label: {
                         HStack {
-                            Image(systemName: "list.bullet.rectangle")
-                            Text("View Details")
+                            Image(systemName: "circle.hexagongrid.circle")
+                            Text("Review with Trai")
                         }
                         .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.accentColor)
+
+                    NavigationLink {
+                        WorkoutPlanHistoryView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "clock.arrow.circlepath")
+                            Text("History")
+                        }
                     }
                     .buttonStyle(.bordered)
                 }
@@ -352,11 +360,11 @@ extension ProfileView {
             AllMemoriesView()
         } label: {
             HStack {
-                Image(systemName: "brain.head.profile")
+                Image(systemName: "circle.hexagongrid.circle")
                     .font(.title2)
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(.red)
                     .frame(width: 40, height: 40)
-                    .background(Color.purple.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Trai Memories")
@@ -484,9 +492,9 @@ extension ProfileView {
             HStack {
                 Image(systemName: "bell.fill")
                     .font(.title2)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(.purple)
                     .frame(width: 40, height: 40)
-                    .background(Color.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color.purple.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Reminders")
@@ -514,6 +522,14 @@ extension ProfileView {
     }
 
     // MARK: - Helpers
+
+    private var traiReviewButtonForeground: Color {
+        .red
+    }
+
+    private var traiReviewButtonBackground: Color {
+        Color.red.opacity(0.15)
+    }
 
     func remindersSummary(_ profile: UserProfile, customCount: Int) -> String {
         var builtInCount = 0

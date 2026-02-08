@@ -29,6 +29,7 @@ extension GeminiService {
         - Viewing and updating the user's nutrition plan (get_user_plan, update_user_plan)
         - Checking workout history (get_recent_workouts)
         - Logging workouts (log_workout)
+        - Checking and logging body weight (get_weight_history, log_weight)
         - Remembering facts about the user (save_memory, delete_memory)
 
         Current date/time: \(context.currentDateTime)
@@ -165,6 +166,11 @@ extension GeminiService {
         2. Recalculate TDEE from current weight using Mifflin-St Jeor + activity multiplier
         3. Compare to current plan and their actual progress
         4. Explain your reasoning with the data
+
+        WEIGHT LOGGING:
+        - If user provides a body weight ("I'm 182 lbs", "log 79.8 kg"), call log_weight
+        - Include unit from user message when available; default to profile preference only if not explicit
+        - After calling log_weight, confirm success and repeat what was logged
 
         MEMORY:
         Save important persistent facts (preferences, restrictions, habits, goals) with save_memory. Be proactive - if they mention something useful for future conversations, save it.

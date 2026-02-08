@@ -9,20 +9,20 @@ import SwiftUI
 import PhotosUI
 
 struct ChatInputBar: View {
-    @Binding var text: String
     @Binding var selectedImage: UIImage?
     @Binding var selectedPhotoItem: PhotosPickerItem?
     let isLoading: Bool
-    let onSend: () -> Void
+    let onSend: (String) -> Void
     let onStop: (() -> Void)?
     let onTakePhoto: () -> Void
     let onImageTapped: (UIImage) -> Void
     var isFocused: FocusState<Bool>.Binding
 
     @State private var showingPhotoPicker = false
+    @State private var draftText = ""
 
     private var canSend: Bool {
-        (!text.trimmingCharacters(in: .whitespaces).isEmpty || selectedImage != nil) && !isLoading
+        (!draftText.trimmingCharacters(in: .whitespaces).isEmpty || selectedImage != nil) && !isLoading
     }
 
     private let minInputHeight: CGFloat = 36
@@ -78,7 +78,7 @@ struct ChatInputBar: View {
                     }
                 }
 
-                TextField("Message", text: $text, axis: .vertical)
+                TextField("Message", text: $draftText, axis: .vertical)
                     .lineLimit(1...6)
                     .focused(isFocused)
             }
@@ -102,7 +102,9 @@ struct ChatInputBar: View {
                 .transition(.scale.combined(with: .opacity))
             } else {
                 Button {
-                    onSend()
+                    let outgoingText = draftText
+                    draftText = ""
+                    onSend(outgoingText)
                     isFocused.wrappedValue = false
                 } label: {
                     Image(systemName: "arrow.up")

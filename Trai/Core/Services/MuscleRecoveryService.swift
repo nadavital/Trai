@@ -355,10 +355,7 @@ final class MuscleRecoveryService {
         _ template: WorkoutPlan.WorkoutTemplate,
         recoveryInfo: [MuscleRecoveryInfo]
     ) -> (score: Double, reason: String) {
-        // Map template muscle groups to LiveWorkout.MuscleGroup
-        let templateMuscles = template.targetMuscleGroups.compactMap { name in
-            LiveWorkout.MuscleGroup(rawValue: name)
-        }
+        let templateMuscles = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
 
         guard !templateMuscles.isEmpty else {
             return (0.5, "Unknown muscle groups")

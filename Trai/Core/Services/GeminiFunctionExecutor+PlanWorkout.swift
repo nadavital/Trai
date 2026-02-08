@@ -105,18 +105,21 @@ extension GeminiFunctionExecutor {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "MMM d, h:mm a"
 
-        // Format WorkoutSession entries
-        var formattedWorkouts: [[String: Any]] = workoutSessions.map { workout -> [String: Any] in
-            return [
-                "id": workout.id.uuidString,
-                "name": workout.displayName,
-                "type": workout.isStrengthTraining ? "strength" : "cardio",
-                "date": dateFormatter.string(from: workout.loggedAt),
-                "duration_minutes": workout.durationMinutes ?? 0,
-                "sets": workout.sets,
-                "reps": workout.reps,
-                "weight_kg": workout.weightKg ?? 0
-            ]
+        // Keep sort date separate from the formatted date string so ordering is chronologically correct.
+        var workoutsWithDate: [(sortDate: Date, payload: [String: Any])] = workoutSessions.map { workout in
+            (
+                sortDate: workout.loggedAt,
+                payload: [
+                    "id": workout.id.uuidString,
+                    "name": workout.displayName,
+                    "type": workout.isStrengthTraining ? "strength" : "cardio",
+                    "date": dateFormatter.string(from: workout.loggedAt),
+                    "duration_minutes": workout.durationMinutes ?? 0,
+                    "sets": workout.sets,
+                    "reps": workout.reps,
+                    "weight_kg": workout.weightKg ?? 0
+                ]
+            )
         }
 
         // Format LiveWorkout entries with full exercise details
@@ -166,18 +169,14 @@ extension GeminiFunctionExecutor {
                 workoutData["exercises"] = exercises
             }
 
-            formattedWorkouts.append(workoutData)
+            workoutsWithDate.append((sortDate: liveWorkout.startedAt, payload: workoutData))
         }
 
-        // Sort all workouts by date descending
-        formattedWorkouts.sort { lhs, rhs in
-            guard let lhsDate = lhs["date"] as? String,
-                  let rhsDate = rhs["date"] as? String else { return false }
-            return lhsDate > rhsDate
-        }
+        // Sort all workouts by actual date descending.
+        workoutsWithDate.sort { $0.sortDate > $1.sortDate }
 
-        // Apply limit
-        formattedWorkouts = Array(formattedWorkouts.prefix(limit))
+        // Apply limit and strip sort metadata.
+        let formattedWorkouts = Array(workoutsWithDate.prefix(limit).map(\.payload))
 
         return .dataResponse(FunctionResult(
             name: "get_recent_workouts",
@@ -409,13 +408,24 @@ extension GeminiFunctionExecutor {
 
     /// Log a new body weight entry
     func executeLogWeight(_ args: [String: Any]) -> ExecutionResult {
-        guard let weight = args["weight"] as? Double,
-              let unit = args["unit"] as? String else {
+        let explicitUnit = (args["unit"] as? String).flatMap(normalizeWeightUnit)
+        let fallbackUnit = defaultWeightUnit()
+
+        guard let rawWeight = args["weight"],
+              let parsedInput = parseWeightInput(
+                rawWeight,
+                explicitUnit: explicitUnit,
+                fallbackUnit: fallbackUnit
+              ),
+              parsedInput.weight > 0 else {
             return .dataResponse(FunctionResult(
                 name: "log_weight",
-                response: ["error": "Missing required parameters: weight and unit"]
+                response: ["error": "Missing or invalid parameters: weight and unit"]
             ))
         }
+
+        let weight = parsedInput.weight
+        let unit = parsedInput.unit
 
         // Convert to kg if needed
         let weightKg: Double
@@ -428,9 +438,7 @@ extension GeminiFunctionExecutor {
         // Parse optional date (defaults to now)
         var logDate = Date()
         if let dateString = args["date"] as? String {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            if let parsedDate = formatter.date(from: dateString) {
+            if let parsedDate = parseWeightLogDate(dateString) {
                 logDate = parsedDate
             }
         }
@@ -468,6 +476,7 @@ extension GeminiFunctionExecutor {
                 "message": "Weight logged successfully",
                 "weight_kg": weightKg,
                 "weight_lbs": weightKg * 2.20462,
+                "unit_used": unit,
                 "date": dateFormatter.string(from: logDate)
             ]
         ))
@@ -522,5 +531,116 @@ extension GeminiFunctionExecutor {
         let startDateString = dateFormatter.string(from: startDate)
         let endDateString = dateFormatter.string(from: calendar.startOfDay(for: today))
         return (startDate, endOfRange, "\(startDateString) to \(endDateString)")
+    }
+
+    private func parseWeightValue(_ rawValue: Any) -> Double? {
+        if let number = rawValue as? Double {
+            return number
+        }
+        if let number = rawValue as? Int {
+            return Double(number)
+        }
+        if let number = rawValue as? NSNumber {
+            return number.doubleValue
+        }
+        if let string = rawValue as? String {
+            return Double(string.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return nil
+    }
+
+    private func parseWeightInput(
+        _ rawValue: Any,
+        explicitUnit: String?,
+        fallbackUnit: String
+    ) -> (weight: Double, unit: String)? {
+        if let value = parseWeightValue(rawValue) {
+            let unit = explicitUnit ?? fallbackUnit
+            return (value, unit)
+        }
+
+        guard let stringValue = rawValue as? String else {
+            return nil
+        }
+
+        let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let inferredUnit = inferWeightUnit(from: trimmed)
+        guard let numericComponent = extractLeadingNumber(from: trimmed),
+              let numericValue = Double(numericComponent) else {
+            return nil
+        }
+
+        let unit = explicitUnit ?? inferredUnit ?? fallbackUnit
+        return (numericValue, unit)
+    }
+
+    private func extractLeadingNumber(from input: String) -> String? {
+        let pattern = #"[-+]?\d+(?:[.,]\d+)?"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(
+                in: input,
+                range: NSRange(input.startIndex..., in: input)
+              ),
+              let range = Range(match.range, in: input) else {
+            return nil
+        }
+
+        return String(input[range]).replacingOccurrences(of: ",", with: ".")
+    }
+
+    private func inferWeightUnit(from input: String) -> String? {
+        let normalized = input.lowercased()
+        if normalized.contains("lb") || normalized.contains("pound") {
+            return "lbs"
+        }
+        if normalized.contains("kg") || normalized.contains("kilo") {
+            return "kg"
+        }
+        return nil
+    }
+
+    private func defaultWeightUnit() -> String {
+        guard let userProfile else { return "kg" }
+        return userProfile.usesMetricWeight ? "kg" : "lbs"
+    }
+
+    private func normalizeWeightUnit(_ rawUnit: String) -> String? {
+        switch rawUnit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "kg", "kgs", "kilogram", "kilograms":
+            return "kg"
+        case "lb", "lbs", "pound", "pounds":
+            return "lbs"
+        default:
+            return nil
+        }
+    }
+
+    private func parseWeightLogDate(_ dateString: String) -> Date? {
+        let trimmed = dateString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let dayFormatter = DateFormatter()
+        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dayFormatter.timeZone = .current
+        dayFormatter.dateFormat = "yyyy-MM-dd"
+        if let day = dayFormatter.date(from: trimmed) {
+            return day
+        }
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let isoDate = isoFormatter.date(from: trimmed) {
+            return isoDate
+        }
+
+        let fallbackISOFormatter = ISO8601DateFormatter()
+        fallbackISOFormatter.formatOptions = [.withInternetDateTime]
+        if let isoDate = fallbackISOFormatter.date(from: trimmed) {
+            return isoDate
+        }
+
+        return nil
     }
 }

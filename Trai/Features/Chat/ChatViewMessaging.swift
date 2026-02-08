@@ -93,6 +93,8 @@ extension ChatView {
             return "Starting workout..."
         case "get_weight_history":
             return "Getting weight history..."
+        case "log_weight":
+            return "Logging weight..."
         case "get_activity_summary":
             return "Getting activity..."
         case "save_memory":
@@ -136,7 +138,6 @@ extension ChatView {
             modelContext.insert(aiMessage)
         }
 
-        messageText = ""
         let capturedImage = selectedImage
         selectedImage = nil
         selectedPhotoItem = nil
@@ -166,6 +167,8 @@ extension ChatView {
         aiMessage: ChatMessage
     ) async {
         isLoading = true
+        var latestStreamedText = ""
+        var lastStreamRenderAt = Date.distantPast
 
         do {
             let dateFormatter = DateFormatter()
@@ -202,13 +205,23 @@ extension ChatView {
                 conversationHistory: previousMessages,
                 modelContext: modelContext,
                 onTextChunk: { chunk in
-                    aiMessage.content = chunk
+                    latestStreamedText = chunk
+                    let now = Date()
+                    if now.timeIntervalSince(lastStreamRenderAt) >= 0.05 {
+                        lastStreamRenderAt = now
+                        Task { @MainActor in
+                            aiMessage.content = latestStreamedText
+                        }
+                    }
                 },
                 onFunctionCall: { functionName in
                     currentActivity = friendlyFunctionName(functionName)
                 }
             )
 
+            if !latestStreamedText.isEmpty {
+                aiMessage.content = latestStreamedText
+            }
             handleChatResult(result, aiMessage: aiMessage)
         } catch is CancellationError {
             // User cancelled - don't show error, keep partial content

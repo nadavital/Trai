@@ -18,7 +18,9 @@ enum GeminiPromptBuilder {
         Analyze this food and provide accurate nutritional information.
 
         Be accurate with calorie and macro estimates based on typical portion sizes.
-        If you see multiple items, estimate the total for everything visible.
+        Focus on the food the user most likely intends to log (main/foreground item or plated meal).
+        Ignore incidental/background foods, nearby items, other people's meals, and unopened packaging unless clearly part of what they ate.
+        If one meal contains multiple clear components (e.g., plate + side), include those components together.
         """
 
         if let description {
