@@ -359,12 +359,10 @@ final class LiveWorkoutViewModel {
     
     /// Handle "Add Set" button tap from Live Activity
     private func handleAddSetFromLiveActivity() {
-        // Find the current exercise (first incomplete or last one)
-        guard let currentEntry = entries.first(where: { entry in
-            entry.sets.isEmpty || entry.sets.contains { !$0.completed }
-        }) ?? entries.last else { return }
-        
-        addSet(to: currentEntry)
+        let targetEntry = liveActivityEntryForAddSet()
+        guard let targetEntry else { return }
+
+        addSet(to: targetEntry)
         HapticManager.mediumTap()
     }
     
@@ -1169,9 +1167,23 @@ final class LiveWorkoutViewModel {
         return workingSets.allSatisfy { hasLoggedSetData($0) }
     }
 
+    private func liveActivityCurrentEntry() -> LiveWorkoutEntry? {
+        entries.first { !isEntryCompleteForLiveActivity($0) } ?? entries.last
+    }
+
+    private func liveActivityEntryForAddSet() -> LiveWorkoutEntry? {
+        if let currentEntry = liveActivityCurrentEntry(), !currentEntry.isCardio {
+            return currentEntry
+        }
+
+        // If the current item is cardio, route "Add Set" to the next unresolved strength exercise.
+        return entries.first { !$0.isCardio && !isEntryCompleteForLiveActivity($0) }
+            ?? entries.last(where: { !$0.isCardio })
+    }
+
     private func updateLiveActivity() {
         // Track progression from logged data (or cardio completion), not the legacy set.completed flag.
-        let currentEntry = entries.first { !isEntryCompleteForLiveActivity($0) } ?? entries.last
+        let currentEntry = liveActivityCurrentEntry()
 
         let currentExercise = currentEntry?.exerciseName
         let currentEquipment = currentEntry?.equipmentName
