@@ -283,10 +283,27 @@ extension UserProfile {
         return dailyCalorieGoal
     }
 
+    /// Get the effective calorie goal for a specific day context.
+    /// This allows UI surfaces to drive training/rest behavior from computed activity.
+    func effectiveCalorieGoal(hasWorkoutToday: Bool) -> Int {
+        if hasWorkoutToday, let trainingCals = trainingDayCalories {
+            return trainingCals
+        } else if !hasWorkoutToday, let restCals = restDayCalories {
+            return restCals
+        }
+        return dailyCalorieGoal
+    }
+
     /// Check if weight has changed significantly since plan was created
     func shouldPromptForRecalculation(currentWeight: Double, threshold: Double = 2.0) -> Bool {
         guard let lastWeight = lastWeightForPlanKg else { return false }
         return abs(currentWeight - lastWeight) >= threshold
+    }
+
+    /// Return weight change from the plan baseline, if available.
+    func weightDifferenceSincePlan(currentWeight: Double) -> Double? {
+        guard let lastWeight = lastWeightForPlanKg else { return nil }
+        return currentWeight - lastWeight
     }
 }
 

@@ -42,7 +42,7 @@ extension ProfileView {
                 .controlSize(.small)
             }
 
-            let effectiveCalories = planService.getEffectiveCalories(for: profile, hasWorkoutToday: hasWorkoutToday)
+            let effectiveCalories = profile.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutToday)
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("\(effectiveCalories)")
@@ -110,8 +110,8 @@ extension ProfileView {
             }
 
             if let currentWeight = weightEntries.first?.weightKg,
-               planService.shouldPromptForRecalculation(profile: profile, currentWeight: currentWeight),
-               let diff = planService.getWeightDifference(profile: profile, currentWeight: currentWeight) {
+               profile.shouldPromptForRecalculation(currentWeight: currentWeight),
+               let diff = profile.weightDifferenceSincePlan(currentWeight: currentWeight) {
                 HStack(spacing: 12) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.title3)

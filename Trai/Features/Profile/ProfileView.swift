@@ -22,7 +22,6 @@ struct ProfileView: View {
     var allChatMessages: [ChatMessage]
 
     @Environment(\.modelContext) var modelContext
-    @State var planService = PlanService()
     @State var showPlanSheet = false
     @State var showSettingsSheet = false
     @State var customRemindersCount = 0
