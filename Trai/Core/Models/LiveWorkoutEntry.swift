@@ -47,6 +47,12 @@ final class LiveWorkoutEntry {
 
     /// Parent workout
     var workout: LiveWorkout?
+    
+    @Transient
+    private var cachedSetsDataSnapshot: String?
+    
+    @Transient
+    private var cachedSets: [SetData] = []
 
     init() {}
 
@@ -154,13 +160,27 @@ extension LiveWorkoutEntry {
     /// Parsed sets from JSON
     var sets: [SetData] {
         get {
-            guard let data = setsData.data(using: .utf8) else { return [] }
-            return (try? JSONDecoder().decode([SetData].self, from: data)) ?? []
+            if cachedSetsDataSnapshot == setsData {
+                return cachedSets
+            }
+            guard let data = setsData.data(using: .utf8),
+                  let decodedSets = try? JSONDecoder().decode([SetData].self, from: data) else {
+                cachedSets = []
+                cachedSetsDataSnapshot = setsData
+                return []
+            }
+            cachedSets = decodedSets
+            cachedSetsDataSnapshot = setsData
+            return decodedSets
         }
         set {
             guard let data = try? JSONEncoder().encode(newValue),
                   let json = String(data: data, encoding: .utf8) else { return }
-            setsData = json
+            if setsData != json {
+                setsData = json
+            }
+            cachedSets = newValue
+            cachedSetsDataSnapshot = json
         }
     }
 

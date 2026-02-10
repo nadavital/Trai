@@ -235,8 +235,8 @@ struct LiveWorkoutView: View {
                         } else {
                             ExerciseCard(
                                 entry: entry,
-                                lastPerformance: viewModel.getLastPerformance(for: entry.exerciseName),
-                                personalRecord: viewModel.getPersonalRecord(for: entry.exerciseName),
+                                lastPerformance: viewModel.lastPerformances[entry.exerciseName],
+                                personalRecord: viewModel.personalRecords[entry.exerciseName],
                                 usesMetricWeight: usesMetricExerciseWeight,
                                 onAddSet: { viewModel.addSet(to: entry) },
                                 onRemoveSet: { setIndex in viewModel.removeSet(at: setIndex, from: entry) },
@@ -257,7 +257,7 @@ struct LiveWorkoutView: View {
                     if let upNext {
                         UpNextSuggestionCard(
                             suggestion: upNext,
-                            lastPerformance: viewModel.getLastPerformance(for: upNext.exerciseName),
+                            lastPerformance: viewModel.lastPerformances[upNext.exerciseName],
                             usesMetricWeight: usesMetricExerciseWeight
                         ) {
                             viewModel.addUpNextExercise()

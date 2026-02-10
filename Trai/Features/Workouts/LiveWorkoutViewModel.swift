@@ -123,6 +123,7 @@ final class LiveWorkoutViewModel {
     private var modelContext: ModelContext?
     private var templateService = WorkoutTemplateService()
     private var healthKitService: HealthKitService?
+    private var usesMetricWeightPreference = true
 
     // MARK: - Exercise Suggestion Model
 
@@ -294,6 +295,7 @@ final class LiveWorkoutViewModel {
     func setup(with modelContext: ModelContext, healthKitService: HealthKitService? = nil) {
         self.modelContext = modelContext
         self.healthKitService = healthKitService
+        usesMetricWeightPreference = getUserUsesMetricWeight()
 
         // Insert workout if not already persisted
         if workout.modelContext == nil {
@@ -420,10 +422,25 @@ final class LiveWorkoutViewModel {
     /// Updates heart rate and calories from the HealthKit service - called by the view
     func updateWatchDataFromService() {
         guard let service = healthKitService else { return }
-        currentHeartRate = service.currentHeartRate
-        lastHeartRateUpdate = service.lastHeartRateUpdate
-        workoutCalories = service.workoutCalories
-        lastCalorieUpdate = service.lastCalorieUpdate
+        let latestHeartRate = service.currentHeartRate
+        if Int(currentHeartRate ?? -1) != Int(latestHeartRate ?? -1) {
+            currentHeartRate = latestHeartRate
+        }
+
+        let latestHeartRateUpdate = service.lastHeartRateUpdate
+        if lastHeartRateUpdate != latestHeartRateUpdate {
+            lastHeartRateUpdate = latestHeartRateUpdate
+        }
+
+        let latestCalories = service.workoutCalories
+        if Int(workoutCalories) != Int(latestCalories) {
+            workoutCalories = latestCalories
+        }
+
+        let latestCalorieUpdate = service.lastCalorieUpdate
+        if lastCalorieUpdate != latestCalorieUpdate {
+            lastCalorieUpdate = latestCalorieUpdate
+        }
     }
 
     /// Legacy method for backwards compatibility
@@ -630,6 +647,9 @@ final class LiveWorkoutViewModel {
             pauseStartTime = nil
         }
         isTimerRunning = false
+        if pendingSaveTask != nil {
+            try? modelContext?.save()
+        }
         pendingSaveTask?.cancel()
         pendingLiveActivityUpdateTask?.cancel()
         stopHeartRateMonitoring()
@@ -650,6 +670,7 @@ final class LiveWorkoutViewModel {
 
         // Get last performance to pre-fill first set
         let lastPerformance = getLastPerformance(for: suggestion.exerciseName)
+        _ = getPersonalRecord(for: suggestion.exerciseName)
 
         // Use first value from user's rep/weight pattern, or fall back to user's default
         let patternReps = lastPerformance?.repPatternArray.first
@@ -687,6 +708,7 @@ final class LiveWorkoutViewModel {
 
         // Get last performance to pre-fill first set
         let lastPerformance = getLastPerformance(for: exercise.name)
+        _ = getPersonalRecord(for: exercise.name)
 
         // Use first value from user's rep/weight pattern
         let patternReps = lastPerformance?.repPatternArray.first
@@ -716,6 +738,7 @@ final class LiveWorkoutViewModel {
 
         // Get last performance to pre-fill first set
         let lastPerformance = getLastPerformance(for: name)
+        _ = getPersonalRecord(for: name)
 
         // Use first value from user's rep/weight pattern
         let patternReps = lastPerformance?.repPatternArray.first
@@ -762,6 +785,7 @@ final class LiveWorkoutViewModel {
 
         // Get last performance to pre-fill first set
         let lastPerformance = getLastPerformance(for: newExercise.name)
+        _ = getPersonalRecord(for: newExercise.name)
         let patternReps = lastPerformance?.repPatternArray.first
         let patternWeight = lastPerformance?.weightPatternArray.first
 
@@ -855,7 +879,7 @@ final class LiveWorkoutViewModel {
             completed: false,
             isWarmup: false
         ))
-        saveImmediately()
+        saveDebounced(updateLiveActivity: true)
     }
 
     func updateSet(at index: Int, in entry: LiveWorkoutEntry, reps: Int? = nil, weightKg: Double? = nil, weightLbs: Double? = nil, notes: String? = nil) {
@@ -1186,7 +1210,7 @@ final class LiveWorkoutViewModel {
             totalVolumeKg: totalVolumeKg,
             totalVolumeLbs: totalVolumeLbs,
             nextExercise: nextExercise,
-            usesMetricWeight: getUserUsesMetricWeight()
+            usesMetricWeight: usesMetricWeightPreference
         )
     }
 }
