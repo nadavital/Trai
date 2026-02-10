@@ -1,5 +1,5 @@
 //
-//  TraiWorkoutAttributes.swift
+//  LiveActivityManager.swift
 //  Trai
 //
 //  Live Activity manager for workout tracking.

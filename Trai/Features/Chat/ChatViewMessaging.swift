@@ -341,6 +341,10 @@ extension ChatView {
     }
 
     private func fetchActivityData() async -> GeminiService.ActivityData {
+        guard let healthKitService else {
+            return .empty
+        }
+
         do {
             async let steps = healthKitService.fetchTodayStepCount()
             async let calories = healthKitService.fetchTodayActiveEnergy()

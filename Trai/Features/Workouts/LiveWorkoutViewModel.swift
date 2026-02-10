@@ -134,7 +134,6 @@ final class LiveWorkoutViewModel {
         let muscleGroup: String
         let defaultSets: Int
         let defaultReps: Int
-        var isAdded: Bool = false
 
         static func == (lhs: ExerciseSuggestion, rhs: ExerciseSuggestion) -> Bool {
             lhs.exerciseName == rhs.exerciseName
@@ -188,9 +187,13 @@ final class LiveWorkoutViewModel {
         workout.muscleGroups.map(\.rawValue)
     }
 
-    /// Suggestions that haven't been added yet
+    private var currentExerciseNameSet: Set<String> {
+        Set(entries.map { $0.exerciseName.lowercased() })
+    }
+
+    /// Suggestions that are not currently in this workout
     var availableSuggestions: [ExerciseSuggestion] {
-        exerciseSuggestions.filter { !$0.isAdded }
+        exerciseSuggestions.filter { !currentExerciseNameSet.contains($0.exerciseName.lowercased()) }
     }
 
     /// Smart "Up Next" suggestion - rotates through muscle groups, prioritizes user's exercises
@@ -200,10 +203,10 @@ final class LiveWorkoutViewModel {
         guard !available.isEmpty else { return nil }
 
         // Get all exercise names currently in this workout
-        let currentExerciseNames = Set(entries.map { $0.exerciseName })
+        let currentExerciseNames = currentExerciseNameSet
 
         // Filter out exercises already in the workout
-        let notInWorkout = available.filter { !currentExerciseNames.contains($0.exerciseName) }
+        let notInWorkout = available.filter { !currentExerciseNames.contains($0.exerciseName.lowercased()) }
         guard !notInWorkout.isEmpty else { return nil }
 
         // Split into exercises user has used before vs never used
@@ -642,13 +645,8 @@ final class LiveWorkoutViewModel {
 
     // MARK: - Suggestion Management
 
-    /// Add an exercise from a suggestion - marks suggestion as added and creates entry
+    /// Add an exercise from a suggestion
     func addExerciseFromSuggestion(_ suggestion: ExerciseSuggestion) {
-        // Mark suggestion as added
-        if let index = exerciseSuggestions.firstIndex(where: { $0.exerciseName == suggestion.exerciseName }) {
-            exerciseSuggestions[index].isAdded = true
-        }
-
         let entry = LiveWorkoutEntry(exerciseName: suggestion.exerciseName, orderIndex: entries.count)
 
         // Get last performance to pre-fill first set
