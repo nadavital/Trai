@@ -17,9 +17,7 @@ struct LogFoodCameraIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        // The app will open to the food camera view
-        // Set a flag that the camera intent triggered this launch
-        UserDefaults.standard.set(true, forKey: SharedStorageKeys.LaunchIntents.openFoodCamera)
+        PendingAppRouteStore.setPendingRoute(.logFood)
         return .result()
     }
 }

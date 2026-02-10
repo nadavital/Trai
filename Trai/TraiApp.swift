@@ -19,16 +19,8 @@ struct TraiApp: App {
     @State private var healthKitService = HealthKitService()
     @State private var notificationDelegate: NotificationDelegate?
     @State private var showRemindersFromNotification = false
-    @State private var deepLinkDestination: DeepLinkDestination?
+    @State private var deepLinkDestination: AppRoute?
     @Environment(\.scenePhase) private var scenePhase
-
-    /// Deep link destinations for URL scheme handling
-    enum DeepLinkDestination: Equatable {
-        case logFood
-        case logWeight
-        case workout(templateName: String?)
-        case chat
-    }
 
     init() {
         do {
@@ -107,23 +99,8 @@ struct TraiApp: App {
     }
 
     private func handleDeepLink(_ url: URL) {
-        guard url.scheme == "trai" else { return }
-
-        switch url.host {
-        case "logfood":
-            deepLinkDestination = .logFood
-        case "logweight":
-            deepLinkDestination = .logWeight
-        case "workout":
-            // Parse optional template parameter
-            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            let templateName = components?.queryItems?.first(where: { $0.name == "template" })?.value
-            deepLinkDestination = .workout(templateName: templateName)
-        case "chat":
-            deepLinkDestination = .chat
-        default:
-            break
-        }
+        guard let route = AppRoute(url: url) else { return }
+        deepLinkDestination = route
     }
 
     private func setupNotificationDelegate() {

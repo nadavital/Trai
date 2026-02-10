@@ -25,9 +25,9 @@ struct ContentView: View {
     @Query private var profiles: [UserProfile]
     @Environment(\.modelContext) private var modelContext
     @State private var isWaitingForSync = true
-    @Binding var deepLinkDestination: TraiApp.DeepLinkDestination?
+    @Binding var deepLinkDestination: AppRoute?
 
-    init(deepLinkDestination: Binding<TraiApp.DeepLinkDestination?> = .constant(nil)) {
+    init(deepLinkDestination: Binding<AppRoute?> = .constant(nil)) {
         self._deepLinkDestination = deepLinkDestination
     }
 
@@ -95,9 +95,9 @@ struct MainTabView: View {
     @AppStorage("selectedTab") private var selectedTabRaw: String = AppTab.dashboard.rawValue
     @Environment(\.showRemindersFromNotification) private var showRemindersFromNotification
     @Environment(\.modelContext) private var modelContext
-    @Binding var deepLinkDestination: TraiApp.DeepLinkDestination?
+    @Binding var deepLinkDestination: AppRoute?
 
-    init(deepLinkDestination: Binding<TraiApp.DeepLinkDestination?> = .constant(nil)) {
+    init(deepLinkDestination: Binding<AppRoute?> = .constant(nil)) {
         self._deepLinkDestination = deepLinkDestination
     }
 
@@ -190,21 +190,21 @@ struct MainTabView: View {
             }
         }
         .onAppear {
-            checkForAppIntentTriggers()
+            consumePendingRoute()
             // Handle deep links that may have been set before this view appeared (cold launch from widget).
-            handleDeepLink(deepLinkDestination)
+            handleRoute(deepLinkDestination)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            checkForAppIntentTriggers()
+            consumePendingRoute()
         }
         .onChange(of: deepLinkDestination) { _, destination in
-            handleDeepLink(destination)
+            handleRoute(destination)
         }
     }
 
     // MARK: - Deep Link Handling
 
-    private func handleDeepLink(_ destination: TraiApp.DeepLinkDestination?) {
+    private func handleRoute(_ destination: AppRoute?) {
         guard let destination else { return }
 
         // Reset the deep link after handling
@@ -226,19 +226,9 @@ struct MainTabView: View {
 
     // MARK: - App Intent Handling
 
-    private func checkForAppIntentTriggers() {
-        // Check for food camera intent
-        if UserDefaults.standard.bool(forKey: SharedStorageKeys.LaunchIntents.openFoodCamera) {
-            UserDefaults.standard.removeObject(forKey: SharedStorageKeys.LaunchIntents.openFoodCamera)
-            showingFoodCamera = true
-            return
-        }
-
-        // Check for start workout intent
-        if let workoutName = UserDefaults.standard.string(forKey: SharedStorageKeys.LaunchIntents.startWorkout) {
-            UserDefaults.standard.removeObject(forKey: SharedStorageKeys.LaunchIntents.startWorkout)
-            startWorkoutFromIntent(name: workoutName)
-        }
+    private func consumePendingRoute() {
+        guard let route = PendingAppRouteStore.consumePendingRoute() else { return }
+        handleRoute(route)
     }
 
     private func startWorkoutFromIntent(name: String) {

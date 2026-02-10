@@ -110,9 +110,9 @@ struct SmallWidgetView: View {
 
             // Larger icon-only action buttons
             HStack(spacing: 12) {
-                SmallWidgetActionButton(icon: "fork.knife", url: "trai://logfood", color: .green)
-                SmallWidgetActionButton(icon: "figure.run", url: "trai://workout", color: .orange)
-                SmallWidgetActionButton(icon: "circle.hexagongrid.circle", url: "trai://chat", color: .calorieColor)
+                SmallWidgetActionButton(icon: "fork.knife", url: AppRoute.logFood.urlString, color: .green)
+                SmallWidgetActionButton(icon: "figure.run", url: AppRoute.workout(templateName: nil).urlString, color: .orange)
+                SmallWidgetActionButton(icon: "circle.hexagongrid.circle", url: AppRoute.chat.urlString, color: .calorieColor)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -173,9 +173,9 @@ struct MediumWidgetView: View {
 
             // Right: Action buttons column
             VStack(spacing: 6) {
-                MediumActionButton(icon: "fork.knife", url: "trai://logfood", color: .green)
-                MediumActionButton(icon: "figure.run", url: "trai://workout", color: .orange)
-                MediumActionButton(icon: "circle.hexagongrid.circle", url: "trai://chat", color: .calorieColor)
+                MediumActionButton(icon: "fork.knife", url: AppRoute.logFood.urlString, color: .green)
+                MediumActionButton(icon: "figure.run", url: AppRoute.workout(templateName: nil).urlString, color: .orange)
+                MediumActionButton(icon: "circle.hexagongrid.circle", url: AppRoute.chat.urlString, color: .calorieColor)
             }
             .frame(width: 40)
         }
@@ -190,11 +190,7 @@ struct LargeWidgetView: View {
     let entry: TraiWidgetEntry
 
     private var workoutURL: URL {
-        if let workout = entry.data.recommendedWorkout,
-           let encoded = workout.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
-            return URL(string: "trai://workout?template=\(encoded)")!
-        }
-        return URL(string: "trai://workout")!
+        AppRoute.workout(templateName: entry.data.recommendedWorkout).url
     }
 
     var body: some View {
@@ -277,9 +273,9 @@ struct LargeWidgetView: View {
 
             // Action buttons (clean, no heavy backgrounds)
             HStack(spacing: 10) {
-                ActionButton(label: "Log Food", icon: "fork.knife", url: "trai://logfood", color: .green)
-                ActionButton(label: "Log Weight", icon: "scalemass.fill", url: "trai://logweight", color: .blue)
-                ActionButton(label: "Trai", icon: "circle.hexagongrid.circle", url: "trai://chat", color: .calorieColor)
+                ActionButton(label: "Log Food", icon: "fork.knife", url: AppRoute.logFood.urlString, color: .green)
+                ActionButton(label: "Log Weight", icon: "scalemass.fill", url: AppRoute.logWeight.urlString, color: .blue)
+                ActionButton(label: "Trai", icon: "circle.hexagongrid.circle", url: AppRoute.chat.urlString, color: .calorieColor)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

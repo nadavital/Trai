@@ -25,12 +25,9 @@ struct StartWorkoutIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        // Store the workout name to start when app opens
-        if let name = workoutName, !name.isEmpty {
-            UserDefaults.standard.set(name, forKey: SharedStorageKeys.LaunchIntents.startWorkout)
-        } else {
-            UserDefaults.standard.set("custom", forKey: SharedStorageKeys.LaunchIntents.startWorkout)
-        }
+        let templateName = workoutName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let route = AppRoute.workout(templateName: (templateName?.isEmpty == false) ? templateName : nil)
+        PendingAppRouteStore.setPendingRoute(route)
 
         return .result()
     }

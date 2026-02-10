@@ -16,7 +16,11 @@ enum SharedStorageKeys {
         static let liveActivityTogglePauseTimestamp = "liveActivityTogglePauseTimestamp"
     }
 
-    enum LaunchIntents {
+    enum AppRouting {
+        static let pendingRoute = "pendingAppRoute"
+    }
+
+    enum LegacyLaunchIntents {
         static let openFoodCamera = "openFoodCameraFromIntent"
         static let startWorkout = "startWorkoutFromIntent"
     }

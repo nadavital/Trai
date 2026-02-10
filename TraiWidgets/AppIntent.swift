@@ -22,7 +22,7 @@ struct OpenURLIntent: AppIntent {
     var url: URL
 
     init() {
-        self.url = URL(string: "trai://")!
+        self.url = AppRoute.appURL
     }
 
     init(_ url: URL) {
