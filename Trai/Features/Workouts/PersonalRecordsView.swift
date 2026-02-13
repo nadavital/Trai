@@ -18,49 +18,45 @@ struct PersonalRecordsView: View {
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Query private var profiles: [UserProfile]
 
-    @State private var selectedMuscleGroup: Exercise.MuscleGroup?
     @State private var searchText = ""
     @State private var selectedExercise: ExercisePR?
     @State private var exerciseToDelete: ExercisePR?
     @State private var showingDeleteConfirmation = false
+    @State private var selectedSort: PRSortOption = .recentActivity
 
     /// Whether to use metric (kg) or imperial (lbs) for weight display
     private var useLbs: Bool {
         !(profiles.first?.usesMetricExerciseWeight ?? true)
     }
 
-    private var weightUnit: String {
-        useLbs ? "lbs" : "kg"
+    private var historyByExerciseName: [String: [ExerciseHistory]] {
+        Dictionary(grouping: allHistory, by: \.exerciseName)
     }
 
-    /// Convert kg to display weight (lbs or kg) with proper rounding
-    private func displayWeight(_ kg: Double) -> Int {
-        let unit = WeightUnit(usesMetric: !useLbs)
-        return WeightUtility.displayInt(kg, displayUnit: unit)
+    private var muscleGroupByExerciseName: [String: Exercise.MuscleGroup] {
+        var result: [String: Exercise.MuscleGroup] = [:]
+        for exercise in exercises {
+            guard result[exercise.name] == nil else { continue }
+            guard let muscleGroup = exercise.targetMuscleGroup else { continue }
+            result[exercise.name] = muscleGroup
+        }
+        return result
     }
 
     // MARK: - Computed Properties
 
     /// Group history by exercise and compute PRs
     private var exercisePRs: [ExercisePR] {
-        let grouped = Dictionary(grouping: allHistory) { $0.exerciseName }
-
-        return grouped.compactMap { (name, history) -> ExercisePR? in
-            guard !history.isEmpty else { return nil }
-
-            let exercise = exercises.first { $0.name == name }
-            let muscleGroup = exercise?.targetMuscleGroup
-
-            return ExercisePR.from(
-                exerciseName: name,
-                history: history,
-                muscleGroup: muscleGroup
+        let snapshotsByExercise = ExercisePerformanceService.snapshots(from: allHistory)
+        return snapshotsByExercise.values.map { snapshot in
+            ExercisePR.from(
+                snapshot: snapshot,
+                muscleGroup: muscleGroupByExerciseName[snapshot.exerciseName]
             )
         }
-        .sorted { $0.exerciseName < $1.exerciseName }
     }
 
-    /// Filtered PRs based on search and muscle group
+    /// Filtered PRs based on search query
     private var filteredPRs: [ExercisePR] {
         var result = exercisePRs
 
@@ -68,11 +64,7 @@ struct PersonalRecordsView: View {
             result = result.filter { $0.exerciseName.localizedStandardContains(searchText) }
         }
 
-        if let muscleGroup = selectedMuscleGroup {
-            result = result.filter { $0.muscleGroup == muscleGroup }
-        }
-
-        return result
+        return sortPRs(result)
     }
 
     /// PRs grouped by muscle group
@@ -84,11 +76,6 @@ struct PersonalRecordsView: View {
             }
         }
         return grouped
-    }
-
-    /// Muscle groups that have PRs
-    private var availableMuscleGroups: [Exercise.MuscleGroup] {
-        Array(Set(exercisePRs.compactMap { $0.muscleGroup })).sorted { $0.displayName < $1.displayName }
     }
 
     // MARK: - Body
@@ -111,11 +98,28 @@ struct PersonalRecordsView: View {
                         dismiss()
                     }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        ForEach(PRSortOption.allCases) { option in
+                            Button {
+                                selectedSort = option
+                            } label: {
+                                if selectedSort == option {
+                                    Label(option.label, systemImage: "checkmark")
+                                } else {
+                                    Text(option.label)
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("Sort", systemImage: "arrow.up.arrow.down")
+                    }
+                }
             }
             .sheet(item: $selectedExercise) { pr in
                 PRDetailSheet(
                     pr: pr,
-                    history: allHistory.filter { $0.exerciseName == pr.exerciseName },
+                    history: historyByExerciseName[pr.exerciseName] ?? [],
                     useLbs: useLbs,
                     onDeleteAll: {
                         exerciseToDelete = pr
@@ -150,83 +154,94 @@ struct PersonalRecordsView: View {
     }
 
     private var prListView: some View {
-        VStack(spacing: 0) {
-            // Filter chips
-            filterSection
+        let visiblePRs = filteredPRs
+        let visibleMuscleGroups = Array(Set(visiblePRs.compactMap(\.muscleGroup)))
+            .sorted { $0.displayName < $1.displayName }
 
+        return VStack(spacing: 0) {
             List {
                 // Summary stats
                 Section {
                     HStack {
                         StatBox(
                             title: "Exercises",
-                            value: "\(exercisePRs.count)",
+                            value: "\(visiblePRs.count)",
                             icon: "dumbbell.fill"
                         )
 
                         StatBox(
                             title: "Total Sessions",
-                            value: "\(exercisePRs.reduce(0) { $0 + $1.totalSessions })",
+                            value: "\(visiblePRs.reduce(0) { $0 + $1.totalSessions })",
                             icon: "calendar"
                         )
 
                         StatBox(
                             title: "Muscle Groups",
-                            value: "\(availableMuscleGroups.count)",
+                            value: "\(visibleMuscleGroups.count)",
                             icon: "figure.strengthtraining.traditional"
                         )
                     }
-                    .listRowInsets(EdgeInsets())
+                    .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 6, trailing: 12))
                     .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
+                .listSectionSeparator(.hidden, edges: .all)
 
                 // PRs by muscle group
-                if selectedMuscleGroup == nil {
-                    ForEach(availableMuscleGroups) { muscleGroup in
+                if visiblePRs.isEmpty {
+                    Section {
+                        ContentUnavailableView(
+                            "No Matching Records",
+                            systemImage: "line.3.horizontal.decrease.circle",
+                            description: Text("Try a different search term")
+                        )
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .listRowBackground(Color.clear)
+                    }
+                } else {
+                    ForEach(visibleMuscleGroups) { muscleGroup in
                         if let prs = prsByMuscleGroup[muscleGroup], !prs.isEmpty {
                             Section {
-                                ForEach(prs) { pr in
-                                    ExercisePRRow(pr: pr, useLbs: useLbs) {
-                                        selectedExercise = pr
-                                    }
+                                PRCardRow(prs: prs, useLbs: useLbs) { pr in
+                                    selectedExercise = pr
                                 }
+                                .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 4, trailing: 0))
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
                             } header: {
-                                Label(muscleGroup.displayName, systemImage: muscleGroup.iconName)
+                                PRSectionHeader(title: muscleGroup.displayName, iconName: muscleGroup.iconName)
                             }
                         }
                     }
 
-                    // Exercises without muscle group
-                    let noMuscleGroup = filteredPRs.filter { $0.muscleGroup == nil }
+                    // Exercises without mapped muscle group
+                    let noMuscleGroup = visiblePRs.filter { $0.muscleGroup == nil }
                     if !noMuscleGroup.isEmpty {
                         Section {
-                            ForEach(noMuscleGroup) { pr in
-                                ExercisePRRow(pr: pr, useLbs: useLbs) {
-                                    selectedExercise = pr
-                                }
-                            }
-                        } header: {
-                            Label("Other", systemImage: "figure.run")
-                        }
-                    }
-                } else {
-                    // Show filtered list without sections
-                    Section {
-                        ForEach(filteredPRs) { pr in
-                            ExercisePRRow(pr: pr, useLbs: useLbs) {
+                            PRCardRow(prs: noMuscleGroup, useLbs: useLbs) { pr in
                                 selectedExercise = pr
                             }
+                            .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 4, trailing: 0))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                        } header: {
+                            PRSectionHeader(title: "Other", iconName: "figure.run")
                         }
                     }
                 }
             }
+            .listStyle(.plain)
+            .listSectionSpacing(.compact)
+            .scrollContentBackground(.hidden)
+            .contentMargins(.horizontal, 0, for: .scrollContent)
         }
+        .background(Color(.systemBackground))
     }
 
     // MARK: - Actions
 
     private func deleteAllRecords(for exerciseName: String) {
-        let historyToDelete = allHistory.filter { $0.exerciseName == exerciseName }
+        let historyToDelete = historyByExerciseName[exerciseName] ?? []
         for history in historyToDelete {
             modelContext.delete(history)
         }
@@ -234,35 +249,56 @@ struct PersonalRecordsView: View {
         HapticManager.success()
     }
 
-    private var filterSection: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) {
-                FilterChip(
-                    label: "All",
-                    isSelected: selectedMuscleGroup == nil
-                ) {
-                    selectedMuscleGroup = nil
+    private func sortPRs(_ prs: [ExercisePR]) -> [ExercisePR] {
+        switch selectedSort {
+        case .recentActivity:
+            return prs.sorted { lhs, rhs in
+                if lhs.lastPerformed != rhs.lastPerformed {
+                    return lhs.lastPerformed > rhs.lastPerformed
                 }
-
-                ForEach(availableMuscleGroups) { muscleGroup in
-                    FilterChip(
-                        label: muscleGroup.displayName,
-                        icon: muscleGroup.iconName,
-                        isSelected: selectedMuscleGroup == muscleGroup
-                    ) {
-                        if selectedMuscleGroup == muscleGroup {
-                            selectedMuscleGroup = nil
-                        } else {
-                            selectedMuscleGroup = muscleGroup
-                        }
-                    }
-                }
+                return lhs.exerciseName.localizedStandardCompare(rhs.exerciseName) == .orderedAscending
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+        case .weightPR:
+            return prs.sorted { lhs, rhs in
+                if lhs.maxWeightKg != rhs.maxWeightKg {
+                    return lhs.maxWeightKg > rhs.maxWeightKg
+                }
+                return lhs.exerciseName.localizedStandardCompare(rhs.exerciseName) == .orderedAscending
+            }
+        case .volumePR:
+            return prs.sorted { lhs, rhs in
+                if lhs.maxVolume != rhs.maxVolume {
+                    return lhs.maxVolume > rhs.maxVolume
+                }
+                return lhs.exerciseName.localizedStandardCompare(rhs.exerciseName) == .orderedAscending
+            }
+        case .alphabetical:
+            return prs.sorted { lhs, rhs in
+                lhs.exerciseName.localizedStandardCompare(rhs.exerciseName) == .orderedAscending
+            }
         }
-        .scrollIndicators(.hidden)
-        .background(Color(.secondarySystemBackground))
+    }
+}
+
+private enum PRSortOption: String, CaseIterable, Identifiable {
+    case recentActivity
+    case weightPR
+    case volumePR
+    case alphabetical
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .recentActivity:
+            return "Recent Activity"
+        case .weightPR:
+            return "Heaviest Weight"
+        case .volumePR:
+            return "Highest Volume"
+        case .alphabetical:
+            return "A-Z"
+        }
     }
 }
 
@@ -329,13 +365,16 @@ private struct StatBox: View {
     let icon: String
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.title2)
+                .font(.headline)
                 .foregroundStyle(Color.accentColor)
+                .frame(width: 30, height: 30)
+                .background(Color.accentColor.opacity(0.16))
+                .clipShape(.circle)
 
             Text(value)
-                .font(.title2)
+                .font(.title3)
                 .bold()
 
             Text(title)
@@ -343,14 +382,49 @@ private struct StatBox: View {
                 .foregroundStyle(.secondary)
         }
         .frame(minWidth: 0, maxWidth: .infinity)
-        .frame(minHeight: 100)
+        .frame(minHeight: 96)
         .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 12))
+        .background(.ultraThinMaterial)
+        .clipShape(.rect(cornerRadius: 14))
     }
 }
 
-private struct ExercisePRRow: View {
+private struct PRSectionHeader: View {
+    let title: String
+    let iconName: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: iconName)
+                .foregroundStyle(.accent)
+            Text(title)
+                .foregroundStyle(.primary)
+        }
+    }
+}
+
+private struct PRCardRow: View {
+    let prs: [ExercisePR]
+    let useLbs: Bool
+    let onSelect: (ExercisePR) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            LazyHStack(spacing: 12) {
+                ForEach(prs) { pr in
+                    ExercisePRCard(pr: pr, useLbs: useLbs) {
+                        onSelect(pr)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 2)
+        }
+        .scrollIndicators(.hidden)
+    }
+}
+
+private struct ExercisePRCard: View {
     let pr: ExercisePR
     let useLbs: Bool
     let onTap: () -> Void
@@ -362,94 +436,67 @@ private struct ExercisePRRow: View {
         return WeightUtility.displayInt(kg, displayUnit: unit)
     }
 
+    private func formatVolume(_ volumeKg: Double) -> String {
+        let displayVolume = useLbs ? volumeKg * WeightUtility.kgToLbs : volumeKg
+        if displayVolume >= 1000 {
+            return String(format: "%.1fk", displayVolume / 1000)
+        }
+        return "\(Int(displayVolume.rounded()))"
+    }
+
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(pr.exerciseName)
-                        .font(.headline)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .frame(minHeight: 36, maxHeight: 36, alignment: .topLeading)
+                        .layoutPriority(1)
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
 
-                // Use Grid for consistent column alignment
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 2) {
-                    GridRow {
-                        // Max Weight
-                        HStack(spacing: 4) {
-                            Image(systemName: "scalemass.fill")
-                                .font(.caption2)
-                                .foregroundStyle(.orange)
-                            Text("Weight")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
+                Text("\(displayWeight(pr.maxWeightKg)) \(weightUnit) × \(pr.maxWeightReps)")
+                    .font(.title3)
+                    .bold()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
 
-                        // Max Reps
-                        HStack(spacing: 4) {
-                            Image(systemName: "number.circle.fill")
-                                .font(.caption2)
-                                .foregroundStyle(.blue)
-                            Text("Reps")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        // Estimated 1RM (always show column)
-                        HStack(spacing: 4) {
-                            Image(systemName: "trophy.fill")
-                                .font(.caption2)
-                                .foregroundStyle(.yellow)
-                            Text("Est. 1RM")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    GridRow {
-                        Text("\(displayWeight(pr.maxWeightKg)) \(weightUnit) × \(pr.maxWeightReps)")
-                            .font(.subheadline)
-                            .bold()
-
-                        Text("\(pr.maxReps) @ \(displayWeight(pr.maxRepsWeight)) \(weightUnit)")
-                            .font(.subheadline)
-                            .bold()
-
-                        // Show value or "--" for consistency
-                        if let oneRM = pr.estimated1RM {
-                            Text("\(displayWeight(oneRM)) \(weightUnit)")
-                                .font(.subheadline)
-                                .bold()
-                        } else {
-                            Text("--")
-                                .font(.subheadline)
-                                .bold()
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                }
-
-                // Last performed
                 HStack {
-                    Text("\(pr.totalSessions) sessions")
+                    HStack(spacing: 4) {
+                        Image(systemName: PRMetricKind.reps.iconName)
+                            .foregroundStyle(PRMetricKind.reps.color)
+                        Text("\(pr.maxReps) reps")
+                    }
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Text("•")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                    Spacer()
 
-                    Text("Last: \(pr.lastPerformed.formatted(date: .abbreviated, time: .omitted))")
+                    HStack(spacing: 4) {
+                        Image(systemName: PRMetricKind.volume.iconName)
+                            .foregroundStyle(PRMetricKind.volume.color)
+                        Text("\(formatVolume(pr.maxVolume)) \(weightUnit)")
+                    }
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(.ultraThinMaterial)
+            .clipShape(.rect(cornerRadius: 14))
+            .shadow(color: Color.black.opacity(0.04), radius: 4, y: 2)
         }
+        .frame(height: 126)
+        .frame(width: 214, alignment: .leading)
         .foregroundStyle(.primary)
     }
 }
@@ -468,6 +515,14 @@ struct PRDetailSheet: View {
     @State private var historyToEdit: ExerciseHistory?
     @State private var showingDeleteConfirmation = false
     @State private var historyToDelete: ExerciseHistory?
+    @State private var showingFullHistory = false
+
+    private var displayedHistory: [ExerciseHistory] {
+        if showingFullHistory {
+            return history
+        }
+        return Array(history.prefix(20))
+    }
 
     var body: some View {
         NavigationStack {
@@ -490,7 +545,7 @@ struct PRDetailSheet: View {
 
                 // History with swipe-to-delete
                 Section {
-                    ForEach(history.prefix(20)) { entry in
+                    ForEach(displayedHistory) { entry in
                         HistoryRow(entry: entry, useLbs: useLbs)
                             .contentShape(Rectangle())
                             .contextMenu {
@@ -511,23 +566,25 @@ struct PRDetailSheet: View {
                     }
 
                     if history.count > 20 {
-                        Text("+ \(history.count - 20) more sessions")
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showingFullHistory.toggle()
+                            }
+                        } label: {
+                            HStack {
+                                Text(showingFullHistory ? "Show Less" : "Show All \(history.count) Sessions")
+                                Spacer()
+                                Image(systemName: showingFullHistory ? "chevron.up" : "chevron.down")
+                            }
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
                 } header: {
                     Text("Recent History")
                 }
 
-                // Delete all section
-                Section {
-                    Button("Delete All Records", role: .destructive) {
-                        dismiss()
-                        onDeleteAll()
-                    }
-                } footer: {
-                    Text("This will permanently delete all \(history.count) workout records for this exercise.")
-                }
             }
             .navigationTitle(pr.exerciseName)
             .navigationBarTitleDisplayMode(.inline)
@@ -535,6 +592,16 @@ struct PRDetailSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
                         dismiss()
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button("Delete All Records", systemImage: "trash", role: .destructive) {
+                            dismiss()
+                            onDeleteAll()
+                        }
+                    } label: {
+                        Label("Manage", systemImage: "ellipsis.circle")
                     }
                 }
             }
@@ -575,52 +642,52 @@ struct PRStatsGrid: View {
     }
 
     private func formatVolume(_ volume: Double) -> String {
-        let displayVolume = useLbs ? volume * 2.20462 : volume
+        let displayVolume = useLbs ? volume * WeightUtility.kgToLbs : volume
         if displayVolume >= 1000 {
             return String(format: "%.1fk", displayVolume / 1000)
         }
-        return "\(Int(displayVolume))"
+        return "\(Int(displayVolume.rounded()))"
     }
 
     var body: some View {
         Grid(horizontalSpacing: 16, verticalSpacing: 12) {
             GridRow {
                 PRStatCell(
-                    icon: "scalemass.fill",
-                    iconColor: .orange,
-                    label: "Max Weight",
+                    icon: PRMetricKind.weight.iconName,
+                    iconColor: PRMetricKind.weight.color,
+                    label: PRMetricKind.weight.label,
                     value: "\(displayWeight(pr.maxWeightKg)) \(weightUnit)",
                     detail: "× \(pr.maxWeightReps)"
                 )
                 PRStatCell(
-                    icon: "number.circle.fill",
-                    iconColor: .blue,
-                    label: "Max Reps",
+                    icon: PRMetricKind.reps.iconName,
+                    iconColor: PRMetricKind.reps.color,
+                    label: PRMetricKind.reps.label,
                     value: "\(pr.maxReps)",
-                    detail: "@ \(displayWeight(pr.maxRepsWeight))"
+                    detail: "@ \(displayWeight(pr.maxRepsWeight)) \(weightUnit)"
                 )
             }
             GridRow {
                 PRStatCell(
-                    icon: "chart.bar.fill",
-                    iconColor: .green,
-                    label: "Volume",
+                    icon: PRMetricKind.volume.iconName,
+                    iconColor: PRMetricKind.volume.color,
+                    label: PRMetricKind.volume.label,
                     value: formatVolume(pr.maxVolume),
                     detail: weightUnit
                 )
                 if let oneRM = pr.estimated1RM {
                     PRStatCell(
-                        icon: "trophy.fill",
-                        iconColor: .yellow,
-                        label: "Est. 1RM",
+                        icon: PRMetricKind.estimatedOneRepMax.iconName,
+                        iconColor: PRMetricKind.estimatedOneRepMax.color,
+                        label: PRMetricKind.estimatedOneRepMax.label,
                         value: "\(displayWeight(oneRM))",
                         detail: weightUnit
                     )
                 } else {
                     PRStatCell(
-                        icon: "trophy.fill",
+                        icon: PRMetricKind.estimatedOneRepMax.iconName,
                         iconColor: .secondary,
-                        label: "Est. 1RM",
+                        label: PRMetricKind.estimatedOneRepMax.label,
                         value: "--",
                         detail: ""
                     )
@@ -712,14 +779,14 @@ private struct EditHistorySheet: View {
 
     /// Convert display weight to kg for storage
     private var weightKg: Double {
-        useLbs ? weightDisplay / 2.20462 : weightDisplay
+        useLbs ? weightDisplay / WeightUtility.kgToLbs : weightDisplay
     }
 
     init(history: ExerciseHistory, useLbs: Bool) {
         self.history = history
         self.useLbs = useLbs
         // Convert stored kg to display units
-        let displayValue = useLbs ? history.bestSetWeightKg * 2.20462 : history.bestSetWeightKg
+        let displayValue = useLbs ? history.bestSetWeightKg * WeightUtility.kgToLbs : history.bestSetWeightKg
         _weightDisplay = State(initialValue: displayValue)
         _reps = State(initialValue: history.bestSetReps)
         _date = State(initialValue: history.performedAt)
@@ -760,7 +827,7 @@ private struct EditHistorySheet: View {
                         Spacer()
                         if reps > 0 && reps <= 12 {
                             let oneRM = weightKg * (36.0 / (37.0 - Double(reps)))
-                            let displayOneRM = useLbs ? oneRM * 2.20462 : oneRM
+                            let displayOneRM = useLbs ? oneRM * WeightUtility.kgToLbs : oneRM
                             Text(displayOneRM, format: .number.precision(.fractionLength(1)))
                             Text(weightUnit)
                                 .foregroundStyle(.secondary)
@@ -774,7 +841,7 @@ private struct EditHistorySheet: View {
                         Text("Volume")
                         Spacer()
                         let volumeKg = weightKg * Double(reps)
-                        let displayVolume = useLbs ? volumeKg * 2.20462 : volumeKg
+                        let displayVolume = useLbs ? volumeKg * WeightUtility.kgToLbs : volumeKg
                         Text(displayVolume, format: .number.precision(.fractionLength(0)))
                         Text(weightUnit)
                             .foregroundStyle(.secondary)

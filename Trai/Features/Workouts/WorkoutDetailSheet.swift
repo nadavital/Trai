@@ -12,6 +12,25 @@ struct WorkoutDetailSheet: View {
     let workout: WorkoutSession
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \ExerciseHistory.performedAt, order: .reverse) private var allExerciseHistory: [ExerciseHistory]
+    @Query private var profiles: [UserProfile]
+
+    private var usesMetricExerciseWeight: Bool {
+        profiles.first?.usesMetricExerciseWeight ?? true
+    }
+
+    private var weightUnit: String {
+        usesMetricExerciseWeight ? "kg" : "lbs"
+    }
+
+    private func displayWeight(_ kg: Double) -> Int {
+        let unit = WeightUnit(usesMetric: usesMetricExerciseWeight)
+        return WeightUtility.displayInt(kg, displayUnit: unit)
+    }
+
+    private func displayVolume(_ volumeKg: Double) -> Int {
+        let display = usesMetricExerciseWeight ? volumeKg : (volumeKg * WeightUtility.kgToLbs)
+        return Int(display.rounded())
+    }
 
     var body: some View {
         NavigationStack {
@@ -99,8 +118,8 @@ struct WorkoutDetailSheet: View {
                 )
                 if let weight = workout.weightKg {
                     WorkoutStatCard(
-                        value: "\(Int(weight))",
-                        label: "kg",
+                        value: "\(displayWeight(weight))",
+                        label: weightUnit,
                         icon: "scalemass.fill",
                         color: .orange
                     )
@@ -146,7 +165,7 @@ struct WorkoutDetailSheet: View {
                 if workout.isStrengthTraining {
                     DetailRow(label: "Type", value: "Strength Training")
                     if let volume = workout.totalVolume {
-                        DetailRow(label: "Total Volume", value: "\(Int(volume)) kg")
+                        DetailRow(label: "Total Volume", value: "\(displayVolume(volume)) \(weightUnit)")
                     }
                 } else {
                     DetailRow(label: "Type", value: workout.healthKitWorkoutType?.capitalized ?? "Cardio")
@@ -166,10 +185,9 @@ struct WorkoutDetailSheet: View {
 
     private struct PRHighlight: Identifiable {
         let id = UUID()
+        let kind: PRMetricKind
         let label: String
         let value: String
-        let icon: String
-        let color: Color
     }
 
     private var prHighlights: [PRHighlight] {
@@ -187,20 +205,18 @@ struct WorkoutDetailSheet: View {
            weight > 0,
            weight > (previousEntries.map(\.bestSetWeightKg).max() ?? 0) {
             highlights.append(PRHighlight(
-                label: "Weight PR",
-                value: "\(Int(weight.rounded())) kg",
-                icon: "scalemass.fill",
-                color: .orange
+                kind: .weight,
+                label: PRMetricKind.weight.label,
+                value: "\(displayWeight(weight)) \(weightUnit)",
             ))
         }
 
         if workout.reps > 0,
            workout.reps > (previousEntries.map(\.bestSetReps).max() ?? 0) {
             highlights.append(PRHighlight(
-                label: "Rep PR",
+                kind: .reps,
+                label: PRMetricKind.reps.label,
                 value: "\(workout.reps) reps",
-                icon: "repeat",
-                color: .green
             ))
         }
 
@@ -208,10 +224,9 @@ struct WorkoutDetailSheet: View {
            volume > 0,
            volume > (previousEntries.map(\.totalVolume).max() ?? 0) {
             highlights.append(PRHighlight(
-                label: "Volume PR",
-                value: "\(Int(volume.rounded())) kg",
-                icon: "chart.bar.fill",
-                color: .blue
+                kind: .volume,
+                label: PRMetricKind.volume.label,
+                value: "\(displayVolume(volume)) \(weightUnit)",
             ))
         }
 
@@ -230,8 +245,8 @@ struct WorkoutDetailSheet: View {
             VStack(spacing: 8) {
                 ForEach(prHighlights) { pr in
                     HStack(spacing: 10) {
-                        Image(systemName: pr.icon)
-                            .foregroundStyle(pr.color)
+                        Image(systemName: pr.kind.iconName)
+                            .foregroundStyle(pr.kind.color)
                         Text(pr.label)
                             .fontWeight(.medium)
                         Spacer()

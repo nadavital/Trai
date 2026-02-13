@@ -338,6 +338,8 @@ struct PRRow: View {
     }
 
     var body: some View {
+        let metric = prValue.type.metricKind
+
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(prValue.exerciseName)
@@ -363,13 +365,17 @@ struct PRRow: View {
 
             Spacer()
 
-            Text(prValue.type.rawValue)
-                .font(.caption)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.accentColor)
-                .clipShape(.capsule)
+            HStack(spacing: 4) {
+                Image(systemName: metric.iconName)
+                    .font(.caption2)
+                Text(metric.label)
+                    .font(.caption)
+            }
+            .foregroundStyle(metric.color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(metric.color.opacity(0.15))
+            .clipShape(.capsule)
         }
     }
 }
