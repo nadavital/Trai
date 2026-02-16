@@ -430,20 +430,22 @@ struct TraiPulseHeroCard: View {
         PulsePromptContainer(prompt: question.prompt, style: style) {
             switch question.mode {
             case .singleChoice:
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(question.options) { option in
-                            PulseChoiceChip(
-                                title: option.title,
-                                isSelected: false,
-                                emphasized: true,
-                                action: { submitQuestion(question, answer: option.title) }
-                            )
-                        }
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 120), spacing: 8, alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    ForEach(question.options) { option in
+                        PulseChoiceChip(
+                            title: option.title,
+                            isSelected: false,
+                            emphasized: true,
+                            action: { submitQuestion(question, answer: option.title) }
+                        )
                     }
-                    .padding(.vertical, 1)
                 }
-                .scrollIndicators(.hidden)
+                .padding(.vertical, 1)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 customAnswerToggle
 
@@ -459,26 +461,28 @@ struct TraiPulseHeroCard: View {
                 }
 
             case .multipleChoice:
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(question.options) { option in
-                            PulseChoiceChip(
-                                title: option.title,
-                                isSelected: selectedQuestionOptions.contains(option.id),
-                                emphasized: false,
-                                action: {
-                                    if selectedQuestionOptions.contains(option.id) {
-                                        selectedQuestionOptions.remove(option.id)
-                                    } else {
-                                        selectedQuestionOptions.insert(option.id)
-                                    }
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 120), spacing: 8, alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    ForEach(question.options) { option in
+                        PulseChoiceChip(
+                            title: option.title,
+                            isSelected: selectedQuestionOptions.contains(option.id),
+                            emphasized: false,
+                            action: {
+                                if selectedQuestionOptions.contains(option.id) {
+                                    selectedQuestionOptions.remove(option.id)
+                                } else {
+                                    selectedQuestionOptions.insert(option.id)
                                 }
-                            )
-                        }
+                            }
+                        )
                     }
-                    .padding(.vertical, 1)
                 }
-                .scrollIndicators(.hidden)
+                .padding(.vertical, 1)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Button("Save Response") {
                     let selectedTitles = question.options

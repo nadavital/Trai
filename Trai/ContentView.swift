@@ -124,6 +124,7 @@ struct MainTabView: View {
     @State private var showingFoodCamera = false
     @State private var showingLogWeight = false
     @State private var intentTriggeredWorkout: LiveWorkout?
+    @State private var workoutTemplateService = WorkoutTemplateService()
 
     private var activeWorkout: LiveWorkout? {
         activeWorkouts.first
@@ -147,6 +148,7 @@ struct MainTabView: View {
                 ProfileView()
             }
         }
+        .scrollIndicators(.hidden)
         .onChange(of: showRemindersFromNotification.wrappedValue) { _, shouldShow in
             if shouldShow {
                 // Switch to dashboard and show reminders
@@ -244,39 +246,11 @@ struct MainTabView: View {
             return
         }
 
-        // Create workout - if "custom", create empty; otherwise try to match template
-        let workout: LiveWorkout
-
-        if name == "custom" {
-            workout = LiveWorkout(
-                name: "Custom Workout",
-                workoutType: .strength,
-                targetMuscleGroups: []
-            )
-        } else {
-            // Try to find matching template from user's workout plan
-            let profileDescriptor = FetchDescriptor<UserProfile>()
-            if let profile = try? modelContext.fetch(profileDescriptor).first,
-               let plan = profile.workoutPlan,
-               let template = plan.templates.first(where: { $0.name.localizedCaseInsensitiveContains(name) }) {
-                let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
-                workout = LiveWorkout(
-                    name: template.name,
-                    workoutType: .strength,
-                    targetMuscleGroups: muscleGroups
-                )
-            } else {
-                // Fallback to custom workout with the provided name
-                workout = LiveWorkout(
-                    name: name,
-                    workoutType: .strength,
-                    targetMuscleGroups: []
-                )
-            }
-        }
-
-        modelContext.insert(workout)
-        try? modelContext.save()
+        let workout = workoutTemplateService.createWorkoutForIntent(
+            name: name,
+            modelContext: modelContext
+        )
+        _ = workoutTemplateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,
             domain: .workout,

@@ -229,15 +229,8 @@ struct WorkoutsView: View {
     }
 
     private func startWorkoutFromTemplate(_ template: WorkoutPlan.WorkoutTemplate) {
-        let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
-
-        let workout = LiveWorkout(
-            name: template.name,
-            workoutType: .strength,
-            targetMuscleGroups: muscleGroups
-        )
-        modelContext.insert(workout)
-        try? modelContext.save()
+        let workout = templateService.createStartWorkout(from: template)
+        _ = templateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,
             domain: .workout,
@@ -262,13 +255,12 @@ struct WorkoutsView: View {
         type: LiveWorkout.WorkoutType = .strength,
         muscles: [LiveWorkout.MuscleGroup] = []
     ) {
-        let workout = LiveWorkout(
+        let workout = templateService.createCustomWorkout(
             name: name,
-            workoutType: type,
-            targetMuscleGroups: muscles
+            type: type,
+            muscles: muscles
         )
-        modelContext.insert(workout)
-        try? modelContext.save()
+        _ = templateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,
             domain: .workout,

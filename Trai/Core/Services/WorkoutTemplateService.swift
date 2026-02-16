@@ -22,6 +22,56 @@ final class WorkoutTemplateService {
         let isNewRecord: Bool
     }
 
+    // MARK: - Workout Start Surface
+
+    /// Create a startable custom workout matching current app defaults.
+    func createCustomWorkout(
+        name: String = "Custom Workout",
+        type: LiveWorkout.WorkoutType = .strength,
+        muscles: [LiveWorkout.MuscleGroup] = []
+    ) -> LiveWorkout {
+        LiveWorkout(name: name, workoutType: type, targetMuscleGroups: muscles)
+    }
+
+    /// Create a startable workout from a plan template (without pre-filled entries).
+    func createStartWorkout(from template: WorkoutPlan.WorkoutTemplate) -> LiveWorkout {
+        let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
+        return LiveWorkout(
+            name: template.name,
+            workoutType: .strength,
+            targetMuscleGroups: muscleGroups
+        )
+    }
+
+    /// Resolve app-intent/deep-link workout names into concrete workout instances.
+    func createWorkoutForIntent(name: String, modelContext: ModelContext) -> LiveWorkout {
+        if name == "custom" {
+            return createCustomWorkout()
+        }
+
+        let profileDescriptor = FetchDescriptor<UserProfile>()
+        if let profile = try? modelContext.fetch(profileDescriptor).first,
+           let plan = profile.workoutPlan,
+           let template = plan.templates.first(where: { $0.name.localizedCaseInsensitiveContains(name) }) {
+            return createStartWorkout(from: template)
+        }
+
+        // Preserve prior fallback behavior for unmatched names.
+        return createCustomWorkout(name: name)
+    }
+
+    /// Persist a newly created workout in SwiftData.
+    @discardableResult
+    func persistWorkout(_ workout: LiveWorkout, modelContext: ModelContext) -> Bool {
+        modelContext.insert(workout)
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            return false
+        }
+    }
+
     // MARK: - Create Workout from Template
 
     /// Create a LiveWorkout from a template, pre-filling with last used weights

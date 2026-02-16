@@ -33,6 +33,7 @@ struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @State private var recoveryService = MuscleRecoveryService()
+    @State private var workoutTemplateService = WorkoutTemplateService()
 
     // Custom reminders (fetched manually to avoid @Query freeze)
     @State private var customReminders: [CustomReminder] = []
@@ -235,114 +236,116 @@ struct DashboardView: View {
                 }
 
                 ScrollViewReader { scrollProxy in
-                    ScrollView {
-                    VStack(spacing: 18) {
-                        // Date Navigation
-                        DateNavigationBar(
-                            selectedDate: $selectedDate,
-                            isToday: isViewingToday
-                        )
+                    ScrollView(.vertical) {
+                        VStack(spacing: 18) {
+                            // Date Navigation
+                            DateNavigationBar(
+                                selectedDate: $selectedDate,
+                                isToday: isViewingToday
+                            )
 
-                        if isViewingToday, profile != nil {
-                            if let coachContext = dailyCoachContext {
-                                TraiPulseHeroCard(
-                                    context: coachContext,
-                                    onAction: handleCoachAction,
-                                    onQuestionAnswer: handleCoachQuestionAnswer,
-                                    onPlanProposalDecision: handlePlanProposalDecision,
-                                    onQuickChat: handlePulseQuickChat,
-                                    onPromptPresented: handlePulsePromptPresented
+                            if isViewingToday, profile != nil {
+                                if let coachContext = dailyCoachContext {
+                                    TraiPulseHeroCard(
+                                        context: coachContext,
+                                        onAction: handleCoachAction,
+                                        onQuestionAnswer: handleCoachQuestionAnswer,
+                                        onPlanProposalDecision: handlePlanProposalDecision,
+                                        onQuickChat: handlePulseQuickChat,
+                                        onPromptPresented: handlePulsePromptPresented
+                                    )
+                                }
+
+                                // Quick action buttons (only on today)
+                                QuickActionsCard(
+                                    onLogFood: { openFoodCameraFromDashboard(source: "quick_actions") },
+                                    onAddWorkout: { startWorkout() },
+                                    onLogWeight: { openLogWeightFromDashboard(source: "quick_actions") },
+                                    workoutName: quickAddWorkoutName
                                 )
+                                .traiEntrance(index: 0)
+
+                                // Today's reminders
+                                if !todaysReminderItems.isEmpty {
+                                    TodaysRemindersCard(
+                                        reminders: todaysReminderItems,
+                                        onReminderTap: { _ in /* Tap to expand/interact */ },
+                                        onComplete: completeReminder,
+                                        onViewAll: { /* Already viewing on dashboard */ }
+                                    )
+                                    .id("reminders-section")
+                                    .traiEntrance(index: 1)
+                                }
                             }
 
-                            // Quick action buttons (only on today)
-                            QuickActionsCard(
-                                onLogFood: { openFoodCameraFromDashboard(source: "quick_actions") },
-                                onAddWorkout: { startWorkout() },
-                                onLogWeight: { openLogWeightFromDashboard(source: "quick_actions") },
-                                workoutName: quickAddWorkoutName
+                            CalorieProgressCard(
+                                consumed: totalCalories,
+                                goal: profile?.dailyCalorieGoal ?? 2000,
+                                onTap: { openCalorieDetailFromDashboard(source: "calorie_progress_card") }
                             )
-                            .traiEntrance(index: 0)
+                            .traiEntrance(index: 2)
 
-                            // Today's reminders
-                            if !todaysReminderItems.isEmpty {
-                                TodaysRemindersCard(
-                                    reminders: todaysReminderItems,
-                                    onReminderTap: { _ in /* Tap to expand/interact */ },
-                                    onComplete: completeReminder,
-                                    onViewAll: { /* Already viewing on dashboard */ }
+                            MacroBreakdownCard(
+                                protein: totalProtein,
+                                carbs: totalCarbs,
+                                fat: totalFat,
+                                fiber: totalFiber,
+                                sugar: totalSugar,
+                                proteinGoal: profile?.dailyProteinGoal ?? 150,
+                                carbsGoal: profile?.dailyCarbsGoal ?? 200,
+                                fatGoal: profile?.dailyFatGoal ?? 65,
+                                fiberGoal: profile?.dailyFiberGoal ?? 30,
+                                sugarGoal: profile?.dailySugarGoal ?? 50,
+                                enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
+                                onTap: { openMacroDetailFromDashboard(source: "macro_breakdown_card") }
+                            )
+                            .traiEntrance(index: 3)
+
+                            DailyFoodTimeline(
+                                entries: selectedDayFoodEntries,
+                                enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
+                                onAddFood: isViewingToday ? { openFoodCameraFromDashboard(source: "food_timeline_add") } : nil,
+                                onAddToSession: isViewingToday ? { sessionId in
+                                    sessionIdToAddTo = sessionId
+                                    openFoodCameraFromDashboard(source: "food_timeline_add_to_session")
+                                } : nil,
+                                onEditEntry: { entryToEdit = $0 },
+                                onDeleteEntry: deleteFoodEntry
+                            )
+                            .traiEntrance(index: 4)
+
+                            TodaysActivityCard(
+                                steps: todaySteps,
+                                activeCalories: todayActiveCalories,
+                                exerciseMinutes: todayExerciseMinutes,
+                                workoutCount: todayTotalWorkoutCount,
+                                isLoading: isLoadingActivity
+                            )
+                            .traiEntrance(index: 5)
+
+                            if isViewingToday, let latestWeight = weightEntries.first {
+                                NavigationLink {
+                                    WeightTrackingView()
+                                } label: {
+                                    WeightTrendCard(
+                                        currentWeight: latestWeight.weightKg,
+                                        targetWeight: profile?.targetWeightKg,
+                                        useLbs: !(profile?.usesMetricWeight ?? true)
+                                    )
+                                }
+                                .simultaneousGesture(
+                                    TapGesture().onEnded {
+                                        trackOpenWeightFromDashboard(source: "weight_trend_card")
+                                    }
                                 )
-                                .id("reminders-section")
-                                .traiEntrance(index: 1)
+                                .buttonStyle(.plain)
+                                .traiEntrance(index: 6)
                             }
                         }
-
-                    CalorieProgressCard(
-                        consumed: totalCalories,
-                        goal: profile?.dailyCalorieGoal ?? 2000,
-                        onTap: { openCalorieDetailFromDashboard(source: "calorie_progress_card") }
-                    )
-                    .traiEntrance(index: 2)
-
-                    MacroBreakdownCard(
-                        protein: totalProtein,
-                        carbs: totalCarbs,
-                        fat: totalFat,
-                        fiber: totalFiber,
-                        sugar: totalSugar,
-                        proteinGoal: profile?.dailyProteinGoal ?? 150,
-                        carbsGoal: profile?.dailyCarbsGoal ?? 200,
-                        fatGoal: profile?.dailyFatGoal ?? 65,
-                        fiberGoal: profile?.dailyFiberGoal ?? 30,
-                        sugarGoal: profile?.dailySugarGoal ?? 50,
-                        enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
-                        onTap: { openMacroDetailFromDashboard(source: "macro_breakdown_card") }
-                    )
-                    .traiEntrance(index: 3)
-
-                    DailyFoodTimeline(
-                        entries: selectedDayFoodEntries,
-                        enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
-                        onAddFood: isViewingToday ? { openFoodCameraFromDashboard(source: "food_timeline_add") } : nil,
-                        onAddToSession: isViewingToday ? { sessionId in
-                            sessionIdToAddTo = sessionId
-                            openFoodCameraFromDashboard(source: "food_timeline_add_to_session")
-                        } : nil,
-                        onEditEntry: { entryToEdit = $0 },
-                        onDeleteEntry: deleteFoodEntry
-                    )
-                    .traiEntrance(index: 4)
-
-                    TodaysActivityCard(
-                        steps: todaySteps,
-                        activeCalories: todayActiveCalories,
-                        exerciseMinutes: todayExerciseMinutes,
-                        workoutCount: todayTotalWorkoutCount,
-                        isLoading: isLoadingActivity
-                    )
-                    .traiEntrance(index: 5)
-
-                    if isViewingToday, let latestWeight = weightEntries.first {
-                        NavigationLink {
-                            WeightTrackingView()
-                        } label: {
-                            WeightTrendCard(
-                                currentWeight: latestWeight.weightKg,
-                                targetWeight: profile?.targetWeightKg,
-                                useLbs: !(profile?.usesMetricWeight ?? true)
-                            )
-                        }
-                        .simultaneousGesture(
-                            TapGesture().onEnded {
-                                trackOpenWeightFromDashboard(source: "weight_trend_card")
-                            }
-                        )
-                        .buttonStyle(.plain)
-                        .traiEntrance(index: 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
                     }
-                    }
-                    .padding()
-                }
+                    .scrollBounceBehavior(.basedOnSize, axes: .vertical)
                 .onChange(of: showRemindersBinding) { _, isShowing in
                     // Scroll to reminders section when triggered by notification
                     if isShowing {
@@ -1069,15 +1072,8 @@ struct DashboardView: View {
     }
 
     private func startWorkoutFromTemplate(_ template: WorkoutPlan.WorkoutTemplate) {
-        let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
-
-        let workout = LiveWorkout(
-            name: template.name,
-            workoutType: .strength,
-            targetMuscleGroups: muscleGroups
-        )
-        modelContext.insert(workout)
-        try? modelContext.save()
+        let workout = workoutTemplateService.createStartWorkout(from: template)
+        _ = workoutTemplateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,
             domain: .workout,
@@ -1097,13 +1093,8 @@ struct DashboardView: View {
     }
 
     private func startCustomWorkout() {
-        let workout = LiveWorkout(
-            name: "Custom Workout",
-            workoutType: .strength,
-            targetMuscleGroups: []
-        )
-        modelContext.insert(workout)
-        try? modelContext.save()
+        let workout = workoutTemplateService.createCustomWorkout()
+        _ = workoutTemplateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,
             domain: .workout,
@@ -1134,15 +1125,8 @@ struct DashboardView: View {
             return
         }
 
-        let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
-
-        let workout = LiveWorkout(
-            name: template.name,
-            workoutType: .strength,
-            targetMuscleGroups: muscleGroups
-        )
-        modelContext.insert(workout)
-        try? modelContext.save()
+        let workout = workoutTemplateService.createStartWorkout(from: template)
+        _ = workoutTemplateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,
             domain: .workout,
