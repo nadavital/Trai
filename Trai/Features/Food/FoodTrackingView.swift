@@ -27,45 +27,52 @@ struct FoodTrackingView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                // Date selector
-                Section {
-                    DatePicker(
-                        "Date",
-                        selection: $selectedDate,
-                        displayedComponents: .date
-                    )
-                    .datePickerStyle(.compact)
-                }
+            ScrollView {
+                VStack(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Date", systemImage: "calendar")
+                            .font(.headline)
+                        DatePicker(
+                            "Date",
+                            selection: $selectedDate,
+                            displayedComponents: .date
+                        )
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
+                    }
+                    .traiCard(cornerRadius: 16)
 
-                // Daily summary
-                Section {
                     DailySummaryRow(entries: todaysEntries)
-                }
+                        .traiCard(cornerRadius: 16)
 
-                // Meals by type
-                ForEach(FoodEntry.MealType.allCases) { mealType in
-                    Section {
-                        if let entries = entriesByMeal[mealType], !entries.isEmpty {
-                            ForEach(entries) { entry in
-                                FoodEntryRow(entry: entry)
-                            }
-                            .onDelete { indexSet in
-                                deleteEntries(entries: entries, at: indexSet)
-                            }
-                        } else {
-                            Button {
-                                // Add food for this meal type
-                                showingAddFood = true
-                            } label: {
-                                Label("Add \(mealType.displayName)", systemImage: "plus")
-                                    .foregroundStyle(.secondary)
+                    ForEach(FoodEntry.MealType.allCases) { mealType in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label(mealType.displayName, systemImage: mealType.iconName)
+                                .font(.headline)
+
+                            if let entries = entriesByMeal[mealType], !entries.isEmpty {
+                                VStack(spacing: 8) {
+                                    ForEach(entries) { entry in
+                                        FoodEntryRow(entry: entry) {
+                                            deleteEntry(entry)
+                                        }
+                                    }
+                                }
+                            } else {
+                                Button {
+                                    showingAddFood = true
+                                } label: {
+                                    Label("Add \(mealType.displayName)", systemImage: "plus")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.traiTertiary(fullWidth: true))
                             }
                         }
-                    } header: {
-                        Label(mealType.displayName, systemImage: mealType.iconName)
+                        .traiCard(cornerRadius: 16)
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
             }
             .navigationTitle("Food")
             .toolbar {
@@ -73,6 +80,8 @@ struct FoodTrackingView: View {
                     Button("Add Food", systemImage: "plus") {
                         showingAddFood = true
                     }
+                    .buttonStyle(.traiPrimary(size: .compact, width: 36, height: 36))
+                    .labelStyle(.iconOnly)
                 }
             }
             .sheet(isPresented: $showingAddFood) {
@@ -81,10 +90,8 @@ struct FoodTrackingView: View {
         }
     }
 
-    private func deleteEntries(entries: [FoodEntry], at offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(entries[index])
-        }
+    private func deleteEntry(_ entry: FoodEntry) {
+        modelContext.delete(entry)
     }
 }
 
@@ -121,9 +128,9 @@ struct DailySummaryRow: View {
             }
 
             HStack(spacing: 16) {
-                MacroLabel(name: "Protein", value: totalProtein, color: .blue)
-                MacroLabel(name: "Carbs", value: totalCarbs, color: .orange)
-                MacroLabel(name: "Fat", value: totalFat, color: .purple)
+                MacroLabel(name: "Protein", value: totalProtein, color: MacroType.protein.color)
+                MacroLabel(name: "Carbs", value: totalCarbs, color: MacroType.carbs.color)
+                MacroLabel(name: "Fat", value: totalFat, color: MacroType.fat.color)
             }
         }
         .padding(.vertical, 4)
@@ -154,6 +161,7 @@ struct MacroLabel: View {
 
 struct FoodEntryRow: View {
     let entry: FoodEntry
+    var onDelete: (() -> Void)? = nil
 
     var body: some View {
         HStack {
@@ -195,8 +203,19 @@ struct FoodEntryRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            if let onDelete {
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.caption)
+                        .foregroundStyle(.red.opacity(0.8))
+                        .padding(8)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .padding(.vertical, 4)
+        .padding(12)
+        .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
