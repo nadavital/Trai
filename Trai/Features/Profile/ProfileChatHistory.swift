@@ -173,6 +173,7 @@ struct AllChatSessionsView: View {
     private func deleteSession(_ sessionId: UUID) {
         let messagesToDelete = chatMessages.filter { $0.sessionId == sessionId }
         for message in messagesToDelete {
+            message.imageData = nil
             modelContext.delete(message)
         }
         HapticManager.lightTap()

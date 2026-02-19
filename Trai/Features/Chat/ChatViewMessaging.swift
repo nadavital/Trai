@@ -65,6 +65,7 @@ extension ChatView {
         let descriptor = FetchDescriptor<ChatMessage>()
         let messages = (try? modelContext.fetch(descriptor)) ?? allMessages
         for message in messages {
+            message.imageData = nil
             modelContext.delete(message)
         }
         try? modelContext.save()
