@@ -22,6 +22,10 @@ struct WorkoutDetailSheet: View {
         usesMetricExerciseWeight ? "kg" : "lbs"
     }
 
+    private var volumePRMode: UserProfile.VolumePRMode {
+        profiles.first?.volumePRModeValue ?? .perSet
+    }
+
     private func displayWeight(_ kg: Double) -> Int {
         let unit = WeightUnit(usesMetric: usesMetricExerciseWeight)
         return WeightUtility.displayInt(kg, displayUnit: unit)
@@ -30,6 +34,15 @@ struct WorkoutDetailSheet: View {
     private func displayVolume(_ volumeKg: Double) -> Int {
         let display = usesMetricExerciseWeight ? volumeKg : (volumeKg * WeightUtility.kgToLbs)
         return Int(display.rounded())
+    }
+
+    private func formatVolumePRValue(_ volumeKg: Double) -> String {
+        let base = "\(displayVolume(volumeKg)) \(weightUnit)"
+        let suffix = volumePRMode.unitSuffix
+        if suffix.isEmpty {
+            return base
+        }
+        return "\(base)\(suffix)"
     }
 
     var body: some View {
@@ -218,13 +231,13 @@ struct WorkoutDetailSheet: View {
             ))
         }
 
-        if let volume = workout.totalVolume,
+        if let volume = workout.volumeValue(for: volumePRMode),
            volume > 0,
-           volume > (previousEntries.map(\.totalVolume).max() ?? 0) {
+           volume > (previousEntries.map { $0.volumeValue(for: volumePRMode) }.max() ?? 0) {
             highlights.append(PRHighlight(
                 kind: .volume,
-                label: PRMetricKind.volume.label,
-                value: "\(displayVolume(volume)) \(weightUnit)",
+                label: PRMetricKind.volume.label(for: volumePRMode),
+                value: formatVolumePRValue(volume),
             ))
         }
 

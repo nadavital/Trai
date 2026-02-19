@@ -35,6 +35,10 @@ struct WorkoutSummarySheet: View {
         profiles.first?.usesMetricExerciseWeight ?? true
     }
 
+    private var volumePRMode: UserProfile.VolumePRMode {
+        profiles.first?.volumePRModeValue ?? .perSet
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -156,12 +160,14 @@ struct WorkoutSummarySheet: View {
         if let pr = ExercisePR.from(
             exerciseName: exerciseName,
             history: history,
-            muscleGroup: exercise?.targetMuscleGroup
+            muscleGroup: exercise?.targetMuscleGroup,
+            volumePRMode: volumePRMode
         ) {
             PRDetailSheet(
                 pr: pr,
                 history: history,
                 useLbs: !usesMetric,
+                volumePRMode: volumePRMode,
                 onDeleteAll: {}
             )
         } else {
@@ -329,8 +335,10 @@ struct PRRow: View {
     /// Formatted new value respecting user's unit preference
     private var formattedNewValue: String {
         switch prValue.type {
-        case .weight, .volume:
+        case .weight:
             return formatWeight(prValue.newValue)
+        case .volume:
+            return formatWeight(prValue.newValue) + prValue.volumePRMode.unitSuffix
         case .reps:
             return "\(Int(prValue.newValue)) reps"
         }
@@ -340,8 +348,10 @@ struct PRRow: View {
     private var formattedImprovement: String {
         guard !prValue.isFirstTime && prValue.improvement > 0 else { return "" }
         switch prValue.type {
-        case .weight, .volume:
+        case .weight:
             return formatImprovement(prValue.improvement)
+        case .volume:
+            return formatImprovement(prValue.improvement) + prValue.volumePRMode.unitSuffix
         case .reps:
             return "+\(Int(prValue.improvement)) reps"
         }
@@ -378,7 +388,7 @@ struct PRRow: View {
             HStack(spacing: 4) {
                 Image(systemName: metric.iconName)
                     .font(.caption2)
-                Text(metric.label)
+                Text(metric.label(for: prValue.volumePRMode))
                     .font(.caption)
             }
             .foregroundStyle(metric.color)

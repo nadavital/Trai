@@ -126,6 +126,9 @@ final class UserProfile {
     /// Default rep count when adding new exercises (typically 8-12 for hypertrophy)
     var defaultRepCount: Int = 10
 
+    /// Volume PR tracking mode: "perSet" (normalized) or "totalVolume"
+    var volumePRMode: String = "perSet"
+
     var createdAt: Date = Date()
     var hasCompletedOnboarding: Bool = false
 
@@ -539,6 +542,74 @@ extension UserProfile {
 }
 
 // MARK: - Default Workout Action
+
+extension UserProfile {
+    enum VolumePRMode: String, CaseIterable, Identifiable {
+        case perSet = "perSet"
+        case totalVolume = "totalVolume"
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .perSet:
+                return "Per Set"
+            case .totalVolume:
+                return "Total Volume"
+            }
+        }
+
+        var description: String {
+            switch self {
+            case .perSet:
+                return "Normalizes volume by set count so sessions are comparable"
+            case .totalVolume:
+                return "Uses full session volume and rewards additional completed sets"
+            }
+        }
+
+        var chartLabel: String {
+            switch self {
+            case .perSet:
+                return "Vol/Set"
+            case .totalVolume:
+                return "Volume"
+            }
+        }
+
+        var prLabel: String {
+            switch self {
+            case .perSet:
+                return "Volume/Set PR"
+            case .totalVolume:
+                return "Volume PR"
+            }
+        }
+
+        var sortLabel: String {
+            switch self {
+            case .perSet:
+                return "Best Volume/Set"
+            case .totalVolume:
+                return "Best Volume"
+            }
+        }
+
+        var unitSuffix: String {
+            switch self {
+            case .perSet:
+                return "/set"
+            case .totalVolume:
+                return ""
+            }
+        }
+    }
+
+    var volumePRModeValue: VolumePRMode {
+        get { VolumePRMode(rawValue: volumePRMode) ?? .perSet }
+        set { volumePRMode = newValue.rawValue }
+    }
+}
 
 extension UserProfile {
     enum DefaultWorkoutAction: String, CaseIterable, Identifiable {

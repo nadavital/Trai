@@ -147,13 +147,24 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                Picker(selection: Binding(
+                    get: { profile.volumePRModeValue },
+                    set: { profile.volumePRModeValue = $0 }
+                )) {
+                    ForEach(UserProfile.VolumePRMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                } label: {
+                    Label("Volume PR Mode", systemImage: "chart.bar.xaxis")
+                }
             } header: {
                 Text("Workouts")
             } footer: {
                 if profile.defaultWorkoutActionValue == .recommendedWorkout && !profile.hasWorkoutPlan {
                     Text("Create a workout plan to use the recommended workout option.")
                 } else {
-                    Text("Default reps when adding new exercises. \(profile.defaultWorkoutActionValue.description)")
+                    Text("Default reps when adding new exercises. \(profile.defaultWorkoutActionValue.description) Volume PR mode: \(profile.volumePRModeValue.description).")
                 }
             }
 

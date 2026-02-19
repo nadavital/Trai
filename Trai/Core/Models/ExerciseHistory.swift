@@ -101,6 +101,23 @@ extension ExerciseHistory {
         bestSetWeightKg * Double(bestSetReps)
     }
 
+    /// Normalized session volume to make records comparable across different set counts.
+    /// Using per-set volume prevents one-off high-set sessions from permanently dominating PRs.
+    var volumePerSet: Double {
+        let setCount = max(totalSets, 1)
+        return totalVolume / Double(setCount)
+    }
+
+    /// Returns the volume metric value using the selected PR mode.
+    func volumeValue(for mode: UserProfile.VolumePRMode) -> Double {
+        switch mode {
+        case .perSet:
+            return volumePerSet
+        case .totalVolume:
+            return totalVolume
+        }
+    }
+
     /// Formatted date
     var formattedDate: String {
         performedAt.formatted(date: .abbreviated, time: .omitted)
@@ -175,7 +192,7 @@ extension ExerciseHistory {
             switch self {
             case .weight: "Heaviest Weight"
             case .reps: "Most Reps"
-            case .volume: "Highest Volume"
+            case .volume: "Best Volume/Set"
             case .oneRepMax: "Best Estimated 1RM"
             }
         }
@@ -191,7 +208,11 @@ extension ExerciseHistory {
     }
 
     /// Check if this entry sets a new record compared to previous best
-    func isNewRecord(_ type: RecordType, comparedTo previous: ExerciseHistory?) -> Bool {
+    func isNewRecord(
+        _ type: RecordType,
+        comparedTo previous: ExerciseHistory?,
+        volumePRMode: UserProfile.VolumePRMode = .perSet
+    ) -> Bool {
         guard let previous else { return true }
 
         switch type {
@@ -200,7 +221,7 @@ extension ExerciseHistory {
         case .reps:
             return bestSetReps > previous.bestSetReps
         case .volume:
-            return totalVolume > previous.totalVolume
+            return volumeValue(for: volumePRMode) > previous.volumeValue(for: volumePRMode)
         case .oneRepMax:
             guard let current1RM = estimatedOneRepMax,
                   let previous1RM = previous.estimatedOneRepMax else { return false }
@@ -240,17 +261,29 @@ enum ExercisePerformanceService {
 
     static func snapshot(
         for exerciseName: String,
-        modelContext: ModelContext
+        modelContext: ModelContext,
+        volumePRMode: UserProfile.VolumePRMode = .perSet
     ) -> ExercisePerformanceSnapshot? {
         let history = history(for: exerciseName, modelContext: modelContext)
-        return Self.snapshot(exerciseName: exerciseName, history: history)
+        return Self.snapshot(
+            exerciseName: exerciseName,
+            history: history,
+            volumePRMode: volumePRMode
+        )
     }
 
-    static func snapshots(from history: [ExerciseHistory]) -> [String: ExercisePerformanceSnapshot] {
+    static func snapshots(
+        from history: [ExerciseHistory],
+        volumePRMode: UserProfile.VolumePRMode = .perSet
+    ) -> [String: ExercisePerformanceSnapshot] {
         let grouped = Dictionary(grouping: history, by: { $0.exerciseName })
         return grouped.reduce(into: [:]) { result, item in
             let (exerciseName, exerciseHistory) = item
-            if let snapshot = snapshot(exerciseName: exerciseName, history: exerciseHistory) {
+            if let snapshot = snapshot(
+                exerciseName: exerciseName,
+                history: exerciseHistory,
+                volumePRMode: volumePRMode
+            ) {
                 result[exerciseName] = snapshot
             }
         }
@@ -258,7 +291,8 @@ enum ExercisePerformanceService {
 
     static func snapshot(
         exerciseName: String,
-        history: [ExerciseHistory]
+        history: [ExerciseHistory],
+        volumePRMode: UserProfile.VolumePRMode = .perSet
     ) -> ExercisePerformanceSnapshot? {
         guard !history.isEmpty else { return nil }
 
@@ -267,7 +301,7 @@ enum ExercisePerformanceService {
             lastSession: mostRecentRecord(in: history),
             weightPR: bestWeightRecord(in: history),
             repsPR: bestRepsRecord(in: history),
-            volumePR: bestVolumeRecord(in: history),
+            volumePR: bestVolumeRecord(in: history, mode: volumePRMode),
             estimatedOneRepMax: history
                 .compactMap { entry in
                     entry.estimatedOneRepMax ??
@@ -300,10 +334,15 @@ enum ExercisePerformanceService {
             .max(by: isRepsRecordWorse(_:_:))
     }
 
-    static func bestVolumeRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
+    static func bestVolumeRecord(
+        in history: [ExerciseHistory],
+        mode: UserProfile.VolumePRMode = .perSet
+    ) -> ExerciseHistory? {
         history
             .filter { $0.totalVolume > 0 }
-            .max(by: isVolumeRecordWorse(_:_:))
+            .max { lhs, rhs in
+                isVolumeRecordWorse(lhs, rhs, mode: mode)
+            }
     }
 
     private static func mostRecentRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
@@ -342,7 +381,17 @@ enum ExercisePerformanceService {
         return lhs.id.uuidString < rhs.id.uuidString
     }
 
-    nonisolated private static func isVolumeRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+    nonisolated private static func isVolumeRecordWorse(
+        _ lhs: ExerciseHistory,
+        _ rhs: ExerciseHistory,
+        mode: UserProfile.VolumePRMode
+    ) -> Bool {
+        let lhsVolume = lhs.volumeValue(for: mode)
+        let rhsVolume = rhs.volumeValue(for: mode)
+
+        if lhsVolume != rhsVolume {
+            return lhsVolume < rhsVolume
+        }
         if lhs.totalVolume != rhs.totalVolume {
             return lhs.totalVolume < rhs.totalVolume
         }
