@@ -639,7 +639,14 @@ final class LiveWorkoutViewModel {
             return
         }
 
-        let exerciseMuscleGroups = Set(targetMuscles.map { $0.toExerciseMuscleGroup.rawValue })
+        let exerciseMuscleGroups: Set<String>
+        if targetMuscles.contains(.fullBody) {
+            // Full-body sessions should suggest across the complete strength catalog,
+            // not only exercises explicitly tagged as "fullBody".
+            exerciseMuscleGroups = Set(Exercise.MuscleGroup.allCases.map(\.rawValue))
+        } else {
+            exerciseMuscleGroups = Set(targetMuscles.map { $0.toExerciseMuscleGroup.rawValue })
+        }
         var descriptor = FetchDescriptor<Exercise>()
         descriptor.fetchLimit = suggestionExerciseFetchLimit
         guard let exercises = try? modelContext.fetch(descriptor) else { return }
