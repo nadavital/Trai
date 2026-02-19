@@ -13,6 +13,11 @@
 		50550A7A2F2067D000068DCD /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 50550A792F2067D000068DCD /* SwiftUI.framework */; };
 		50550A8B2F2067D100068DCD /* TraiWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 50550A752F2067D000068DCD /* TraiWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A2C961AB7A8B0C439B9FB78A /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 21244ABFE007089D0AC73493 /* XCTest.framework */; };
+		A30000012B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000022B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift */; };
+		A30000032B00000100A30001 /* ActiveWorkoutRuntimeStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000042B00000100A30001 /* ActiveWorkoutRuntimeStateTests.swift */; };
+		A30000052B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000062B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift */; };
+		A30000072B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000082B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift */; };
+		A30000092B00000100A30001 /* LiveWorkoutPerformanceGuardrailsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A300000A2B00000100A30001 /* LiveWorkoutPerformanceGuardrailsTests.swift */; };
 		D10000012A00000100D10001 /* TraiUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000052A00000100D10001 /* TraiUITests.swift */; };
 		D10000022A00000100D10001 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 21244ABFE007089D0AC73493 /* XCTest.framework */; };
 		F20000012A00000100F20001 /* AppRouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000022A00000100F20001 /* AppRouteTests.swift */; };
@@ -71,6 +76,11 @@
 		507B71222EFDE03E00DE636E /* Trai.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Trai.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7888F9EC3466C3F845899CD8 /* TraiTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TraiTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		798CA7F0428F6892AAAA2CE4 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		A30000022B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveWorkoutPerformanceDataSeederTests.swift; sourceTree = "<group>"; };
+		A30000042B00000100A30001 /* ActiveWorkoutRuntimeStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActiveWorkoutRuntimeStateTests.swift; sourceTree = "<group>"; };
+		A30000062B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveWorkoutUpdatePolicyTests.swift; sourceTree = "<group>"; };
+		A30000082B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveWorkoutPersistenceCoordinatorTests.swift; sourceTree = "<group>"; };
+		A300000A2B00000100A30001 /* LiveWorkoutPerformanceGuardrailsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveWorkoutPerformanceGuardrailsTests.swift; sourceTree = "<group>"; };
 		C60829DC4A73FC429F2BCAC0 /* TraiPulseContextAssemblerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiPulseContextAssemblerTests.swift; sourceTree = "<group>"; };
 		D10000042A00000100D10001 /* TraiUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TraiUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D10000052A00000100D10001 /* TraiUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiUITests.swift; sourceTree = "<group>"; };
@@ -198,10 +208,15 @@
 		BD0EB4BE4273B147615FCF00 /* TraiTests */ = {
 			isa = PBXGroup;
 			children = (
+				A30000042B00000100A30001 /* ActiveWorkoutRuntimeStateTests.swift */,
 				F20000022A00000100F20001 /* AppRouteTests.swift */,
 				F20000042A00000100F20001 /* BehaviorProfileServiceTests.swift */,
 				F200000A2A00000100F20001 /* BehaviorTrackerTests.swift */,
 				F200000E2A00000100F20001 /* DailyCoachEngineTests.swift */,
+				A300000A2B00000100A30001 /* LiveWorkoutPerformanceGuardrailsTests.swift */,
+				A30000022B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift */,
+				A30000082B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift */,
+				A30000062B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift */,
 				C60829DC4A73FC429F2BCAC0 /* TraiPulseContextAssemblerTests.swift */,
 				F20000082A00000100F20001 /* TraiPulseActionRankerTests.swift */,
 				F200000C2A00000100F20001 /* TraiPulsePatternServiceTests.swift */,
@@ -396,10 +411,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A30000032B00000100A30001 /* ActiveWorkoutRuntimeStateTests.swift in Sources */,
 				F20000012A00000100F20001 /* AppRouteTests.swift in Sources */,
 				F20000032A00000100F20001 /* BehaviorProfileServiceTests.swift in Sources */,
 				F20000092A00000100F20001 /* BehaviorTrackerTests.swift in Sources */,
 				F200000D2A00000100F20001 /* DailyCoachEngineTests.swift in Sources */,
+				A30000092B00000100A30001 /* LiveWorkoutPerformanceGuardrailsTests.swift in Sources */,
+				A30000012B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift in Sources */,
+				A30000072B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift in Sources */,
+				A30000052B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift in Sources */,
 				090355E73CD8CE91D184469F /* TraiPulseContextAssemblerTests.swift in Sources */,
 				F20000072A00000100F20001 /* TraiPulseActionRankerTests.swift in Sources */,
 				F200000B2A00000100F20001 /* TraiPulsePatternServiceTests.swift in Sources */,

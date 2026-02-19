@@ -69,6 +69,13 @@ extension OnboardingView {
             )
         }
 
+        do {
+            try modelContext.save()
+            UserDefaults.standard.set(true, forKey: AppLaunchArguments.onboardingCompletedCacheKey)
+        } catch {
+            print("Failed to persist onboarding profile: \(error)")
+        }
+
         // Parse and create categorized memories from user notes (async)
         Task {
             await parseAndCreateMemories()

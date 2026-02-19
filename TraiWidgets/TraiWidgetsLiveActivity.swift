@@ -80,9 +80,189 @@ private struct LockScreenWorkoutView: View {
         return false
     }
 
+    private var isMediumFamily: Bool {
+        if #available(iOS 18.0, *) {
+            return activityFamily == .medium
+        }
+        return false
+    }
+
+    private var isSupplementalFamily: Bool {
+        isSmallFamily || isMediumFamily
+    }
+
     var body: some View {
+        if isSmallFamily {
+            smallFamilyBody
+        } else if isMediumFamily {
+            mediumFamilyBody
+        } else {
+            regularBody
+        }
+    }
+
+    private var shortenedWorkoutName: String {
+        let firstWord = context.attributes.workoutName
+            .split(separator: " ")
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let firstWord, !firstWord.isEmpty, firstWord.count <= 14 {
+            return firstWord
+        }
+
+        return "Workout"
+    }
+
+    private func compactExerciseName(_ exercise: String) -> String {
+        let firstWord = exercise
+            .split(separator: " ")
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let firstWord, !firstWord.isEmpty, firstWord.count <= 14 {
+            return firstWord
+        }
+
+        return "Current set"
+    }
+
+    private var mediumFamilyBody: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: LiveActivityTheme.statusIcon(isPaused: context.state.isPaused))
+                    .font(.caption)
+                    .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    ViewThatFits(in: .horizontal) {
+                        Text(context.attributes.workoutName)
+                            .font(.subheadline)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.9)
+                        Text(shortenedWorkoutName)
+                            .font(.subheadline)
+                            .lineLimit(1)
+                        Text("Workout")
+                            .font(.subheadline)
+                            .lineLimit(1)
+                    }
+
+                    if let exercise = context.state.currentExercise {
+                        ViewThatFits(in: .horizontal) {
+                            Text(exercise)
+                                .font(.caption2)
+                                .foregroundStyle(LiveActivityTheme.textSecondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.9)
+                            Text(compactExerciseName(exercise))
+                                .font(.caption2)
+                                .foregroundStyle(LiveActivityTheme.textSecondary)
+                                .lineLimit(1)
+                            Text("Current set")
+                                .font(.caption2)
+                                .foregroundStyle(LiveActivityTheme.textSecondary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+                .layoutPriority(1)
+
+                Spacer(minLength: 8)
+
+                Text("\(context.state.completedSets)/\(context.state.totalSets)")
+                    .font(.system(.headline, design: .rounded, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(LiveActivityTheme.accent)
+                    .lineLimit(1)
+            }
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(LiveActivityTheme.textPrimary.opacity(0.2))
+                    Capsule()
+                        .fill(LiveActivityTheme.accent)
+                        .frame(width: geometry.size.width * context.state.progress)
+                }
+            }
+            .frame(height: 5)
+        }
+        .foregroundStyle(LiveActivityTheme.textPrimary)
+        .padding(12)
+        .traiLiveActivityContainerBackground()
+        .activityBackgroundTint(LiveActivityTheme.background)
+        .activitySystemActionForegroundColor(LiveActivityTheme.actionForeground)
+    }
+
+    private var smallFamilyBody: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: LiveActivityTheme.statusIcon(isPaused: context.state.isPaused))
+                    .font(.caption)
+                    .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
+
+                ViewThatFits(in: .horizontal) {
+                    Text(context.attributes.workoutName)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .truncationMode(.tail)
+                    Text(shortenedWorkoutName)
+                        .font(.caption)
+                        .lineLimit(1)
+                    Image(systemName: LiveActivityTheme.traiSymbol)
+                        .font(.caption)
+                }
+            }
+
+            if let exercise = context.state.currentExercise {
+                ViewThatFits(in: .horizontal) {
+                    Text(exercise)
+                        .font(.caption2)
+                        .foregroundStyle(LiveActivityTheme.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Text(compactExerciseName(exercise))
+                        .font(.caption2)
+                        .foregroundStyle(LiveActivityTheme.textSecondary)
+                        .lineLimit(1)
+                    Text("Current")
+                        .font(.caption2)
+                        .foregroundStyle(LiveActivityTheme.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(LiveActivityTheme.textPrimary.opacity(0.2))
+                    Capsule()
+                        .fill(LiveActivityTheme.accent)
+                        .frame(width: geometry.size.width * context.state.progress)
+                }
+            }
+            .frame(height: 5)
+
+            Text("\(context.state.completedSets)/\(context.state.totalSets)")
+                .font(.caption2)
+                .monospacedDigit()
+                .foregroundStyle(LiveActivityTheme.textSecondary)
+                .lineLimit(1)
+        }
+        .foregroundStyle(LiveActivityTheme.textPrimary)
+        .padding(12)
+        .traiLiveActivityContainerBackground()
+        .activityBackgroundTint(LiveActivityTheme.background)
+        .activitySystemActionForegroundColor(LiveActivityTheme.actionForeground)
+    }
+
+    private var regularBody: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 16) {
+            HStack(spacing: isMediumFamily ? 12 : 16) {
                 // Status (no timer per user feedback)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
@@ -91,8 +271,9 @@ private struct LockScreenWorkoutView: View {
                             .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
 
                         Text(context.attributes.workoutName)
-                            .font(isSmallFamily ? .subheadline : .headline)
+                            .font(isMediumFamily ? .subheadline : .headline)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
 
                     if let exercise = context.state.currentExercise {
@@ -101,9 +282,10 @@ private struct LockScreenWorkoutView: View {
                                 .font(.caption)
                                 .foregroundStyle(LiveActivityTheme.textSecondary)
                                 .lineLimit(1)
+                                .minimumScaleFactor(0.8)
 
                             // Show equipment if available
-                            if !isSmallFamily, let equipment = context.state.currentEquipment {
+                            if !isSupplementalFamily, let equipment = context.state.currentEquipment {
                                 Text("•")
                                     .font(.caption2)
                                     .foregroundStyle(LiveActivityTheme.textTertiary)
@@ -111,22 +293,25 @@ private struct LockScreenWorkoutView: View {
                                     .font(.caption2)
                                     .foregroundStyle(LiveActivityTheme.textTertiary)
                                     .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
                             }
 
                             // Show current weight × reps if available
                             if let setDisplay = context.state.currentSetDisplay {
                                 Text("•")
-                                    .font(.caption2)
-                                    .foregroundStyle(LiveActivityTheme.textTertiary)
+                                .font(.caption2)
+                                .foregroundStyle(LiveActivityTheme.textTertiary)
                                 Text(setDisplay)
-                                    .font(.caption)
-                                    .foregroundStyle(LiveActivityTheme.accent)
+                                .font(.caption)
+                                .foregroundStyle(LiveActivityTheme.accent)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                             }
                         }
                     }
 
                     // Show next exercise if available
-                    if !isSmallFamily, let nextExercise = context.state.nextExercise {
+                    if !isSupplementalFamily, let nextExercise = context.state.nextExercise {
                         HStack(spacing: 4) {
                             Text("Next:")
                                 .font(.caption2)
@@ -135,9 +320,11 @@ private struct LockScreenWorkoutView: View {
                                 .font(.caption2)
                                 .foregroundStyle(LiveActivityTheme.textSecondary)
                                 .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
                     }
                 }
+                .layoutPriority(1)
 
                 Spacer()
 
@@ -147,31 +334,36 @@ private struct LockScreenWorkoutView: View {
                     ZStack {
                         Circle()
                             .stroke(LiveActivityTheme.textPrimary.opacity(0.2), lineWidth: 4)
-                            .frame(width: isSmallFamily ? 36 : 44, height: isSmallFamily ? 36 : 44)
+                            .frame(width: isMediumFamily ? 36 : 44, height: isMediumFamily ? 36 : 44)
 
                         Circle()
                             .trim(from: 0, to: context.state.progress)
                             .stroke(LiveActivityTheme.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                            .frame(width: isSmallFamily ? 36 : 44, height: isSmallFamily ? 36 : 44)
+                            .frame(width: isMediumFamily ? 36 : 44, height: isMediumFamily ? 36 : 44)
                             .rotationEffect(.degrees(-90))
 
                         Text("\(context.state.completedSets)")
-                            .font(.system(isSmallFamily ? .caption2 : .caption, design: .rounded, weight: .bold))
+                            .font(.system(isMediumFamily ? .caption2 : .caption, design: .rounded, weight: .bold))
+                            .monospacedDigit()
                     }
 
-                    Text(context.state.setsDisplay)
+                    Text("\(context.state.completedSets)/\(context.state.totalSets)")
                         .font(.caption2)
+                        .monospacedDigit()
                         .foregroundStyle(LiveActivityTheme.textSecondary)
+                        .lineLimit(1)
 
                     // Volume if available
                     if let volume = context.state.volumeDisplay {
                         Text(volume)
                             .font(.caption2)
                             .foregroundStyle(LiveActivityTheme.accent)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
 
                     // Heart rate display (shows "--" when unavailable)
-                    if !isSmallFamily {
+                    if !isSupplementalFamily {
                         HStack(spacing: 2) {
                             Image(systemName: "heart.fill")
                                 .font(.caption2)
@@ -179,6 +371,7 @@ private struct LockScreenWorkoutView: View {
                             if let hr = context.state.heartRate {
                                 Text("\(hr)")
                                     .font(.caption2)
+                                    .monospacedDigit()
                                     .foregroundStyle(LiveActivityTheme.textSecondary)
                             } else {
                                 Text("--")
@@ -191,7 +384,7 @@ private struct LockScreenWorkoutView: View {
             }
             
             // Action buttons
-            if !isSmallFamily {
+            if !isSupplementalFamily {
                 HStack(spacing: 12) {
                     Button(intent: AddSetIntent()) {
                         Label("Add Set", systemImage: "plus.circle.fill")

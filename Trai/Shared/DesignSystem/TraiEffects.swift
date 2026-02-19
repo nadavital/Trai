@@ -12,6 +12,7 @@ import SwiftUI
 
 struct TraiEntranceModifier: ViewModifier {
     let index: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isVisible = false
 
     func body(content: Content) -> some View {
@@ -19,12 +20,22 @@ struct TraiEntranceModifier: ViewModifier {
             .opacity(isVisible ? 1 : 0)
             .offset(y: isVisible ? 0 : 12)
             .onAppear {
+                guard shouldAnimate else {
+                    isVisible = true
+                    return
+                }
                 withAnimation(
                     TraiAnimation.standard.delay(Double(index) * 0.06)
                 ) {
                     isVisible = true
                 }
             }
+    }
+
+    private var shouldAnimate: Bool {
+        !reduceMotion
+            && !AppLaunchArguments.isUITesting
+            && !AppLaunchArguments.shouldSuppressStartupAnimations
     }
 }
 

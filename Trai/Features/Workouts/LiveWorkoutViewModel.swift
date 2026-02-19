@@ -9,6 +9,7 @@ import ActivityKit
 import Foundation
 import SwiftData
 import SwiftUI
+import UIKit
 
 @MainActor @Observable
 final class LiveWorkoutViewModel {
@@ -20,15 +21,20 @@ final class LiveWorkoutViewModel {
     // Live Activity manager (shared singleton to prevent duplicates)
     private var liveActivityManager: LiveActivityManager { LiveActivityManager.shared }
     private var liveActivityUpdateTimer: Timer?
-    private var pendingSaveTask: Task<Void, Never>?
+    private var persistenceCoordinator: LiveWorkoutPersistenceCoordinator?
     private var pendingLiveActivityUpdateTask: Task<Void, Never>?
-    private let saveDebounceDelay: Duration = .milliseconds(500)
+    private var deferredPerformanceHydrationTask: Task<Void, Never>?
+    private var deferredSuggestionHydrationTask: Task<Void, Never>?
     private let liveActivityDebounceDelay: Duration = .milliseconds(300)
+    private let updatePolicy = LiveWorkoutUpdatePolicy()
     
     // Live Activity intent handling via App Groups
     private var liveActivityIntentTimer: Timer?
     private var lastAddSetTimestamp: TimeInterval = 0
     private var lastTogglePauseTimestamp: TimeInterval = 0
+    private var lastLiveActivityIntentInteractionAt: Date?
+    private var lastPublishedWatchPayload: LiveWorkoutUpdatePolicy.WatchPayload?
+    private var backgroundFlushObserver: NSObjectProtocol?
 
     // Timer state - use date calculation for accuracy
     private(set) var pausedDuration: TimeInterval = 0
@@ -103,10 +109,14 @@ final class LiveWorkoutViewModel {
 
     private var cachedEntries: [LiveWorkoutEntry] = []
     private var cachedMetrics: WorkoutMetrics = .zero
+    private var cachedCurrentExerciseNameSet: Set<String> = []
     private var cachedMuscleGroupByExerciseName: [String: String] = [:]
 
     // User preferences cache (exercise usage frequency)
     var exerciseUsageFrequency: [String: Int] = [:]
+    var availableSuggestions: [ExerciseSuggestion] = []
+    var upNextSuggestion: ExerciseSuggestion?
+    var suggestionsByMuscle: [String: [ExerciseSuggestion]] = [:]
 
     // Apple Watch data (via HealthKit)
     var currentHeartRate: Double?
@@ -135,10 +145,12 @@ final class LiveWorkoutViewModel {
     }
 
     private var modelContext: ModelContext?
-    private var performanceService = ExercisePerformanceService()
     private(set) var healthKitService: HealthKitService?
     private var usesMetricWeightPreference = true
     private let maxSuggestionPoolSize = 12
+    private let exerciseUsageHistoryLookbackDays = 365
+    private let exerciseUsageHistoryFetchLimit = 900
+    private let suggestionExerciseFetchLimit = 320
 
     // MARK: - Exercise Suggestion Model
 
@@ -205,48 +217,6 @@ final class LiveWorkoutViewModel {
         workout.muscleGroups.map(\.rawValue)
     }
 
-    private var currentExerciseNameSet: Set<String> {
-        Set(entries.map { $0.exerciseName.lowercased() })
-    }
-
-    /// Suggestions that are not currently in this workout, ranked for next-best fit.
-    var availableSuggestions: [ExerciseSuggestion] {
-        let filtered = exerciseSuggestions.filter { !currentExerciseNameSet.contains($0.exerciseName.lowercased()) }
-        guard !filtered.isEmpty else { return [] }
-
-        let recentMuscleGroups = recentMuscleGroupsFromCurrentWorkout(limit: 2)
-        let targetMuscleCounts = currentTargetMuscleCounts()
-
-        return filtered.sorted { lhs, rhs in
-            let lhsScore = suggestionScore(
-                lhs,
-                targetMuscleCounts: targetMuscleCounts,
-                recentMuscleGroups: recentMuscleGroups
-            )
-            let rhsScore = suggestionScore(
-                rhs,
-                targetMuscleCounts: targetMuscleCounts,
-                recentMuscleGroups: recentMuscleGroups
-            )
-            if lhsScore != rhsScore {
-                return lhsScore > rhsScore
-            }
-
-            let lhsUsage = exerciseUsageFrequency[lhs.exerciseName, default: 0]
-            let rhsUsage = exerciseUsageFrequency[rhs.exerciseName, default: 0]
-            if lhsUsage != rhsUsage {
-                return lhsUsage > rhsUsage
-            }
-
-            return lhs.exerciseName.localizedStandardCompare(rhs.exerciseName) == .orderedAscending
-        }
-    }
-
-    /// Smart "Up Next" suggestion is the top-ranked available suggestion.
-    var upNextSuggestion: ExerciseSuggestion? {
-        availableSuggestions.first
-    }
-
     /// Get the muscle group for a workout entry (checks suggestions first, then database)
     private func getMuscleGroup(for entry: LiveWorkoutEntry) -> String? {
         if let cachedMuscle = cachedMuscleGroupByExerciseName[entry.exerciseName] {
@@ -273,11 +243,6 @@ final class LiveWorkoutViewModel {
         }
 
         return nil
-    }
-
-    /// Group available suggestions by muscle group
-    var suggestionsByMuscle: [String: [ExerciseSuggestion]] {
-        Dictionary(grouping: availableSuggestions) { $0.muscleGroup }
     }
 
     private var targetExerciseMuscleGroups: Set<String> {
@@ -332,13 +297,57 @@ final class LiveWorkoutViewModel {
         return preferenceScore + coverageScore - diversityPenalty
     }
 
+    private func applyRankedSuggestions(_ rankedSuggestions: [ExerciseSuggestion]) {
+        availableSuggestions = rankedSuggestions
+        upNextSuggestion = rankedSuggestions.first
+        suggestionsByMuscle = Dictionary(grouping: rankedSuggestions) { $0.muscleGroup }
+    }
+
+    /// Recomputes ranked suggestions only when source data changes (entries/suggestions/frequencies).
+    private func recomputeSuggestionRankings() {
+        let filtered = exerciseSuggestions.filter { !cachedCurrentExerciseNameSet.contains($0.exerciseName.lowercased()) }
+        guard !filtered.isEmpty else {
+            applyRankedSuggestions([])
+            return
+        }
+
+        let recentMuscleGroups = recentMuscleGroupsFromCurrentWorkout(limit: 2)
+        let targetMuscleCounts = currentTargetMuscleCounts()
+
+        let ranked = filtered.sorted { lhs, rhs in
+            let lhsScore = suggestionScore(
+                lhs,
+                targetMuscleCounts: targetMuscleCounts,
+                recentMuscleGroups: recentMuscleGroups
+            )
+            let rhsScore = suggestionScore(
+                rhs,
+                targetMuscleCounts: targetMuscleCounts,
+                recentMuscleGroups: recentMuscleGroups
+            )
+            if lhsScore != rhsScore {
+                return lhsScore > rhsScore
+            }
+
+            let lhsUsage = exerciseUsageFrequency[lhs.exerciseName, default: 0]
+            let rhsUsage = exerciseUsageFrequency[rhs.exerciseName, default: 0]
+            if lhsUsage != rhsUsage {
+                return lhsUsage > rhsUsage
+            }
+
+            return lhs.exerciseName.localizedStandardCompare(rhs.exerciseName) == .orderedAscending
+        }
+
+        applyRankedSuggestions(ranked)
+    }
+
     // MARK: - Initialization
 
     init(workout: LiveWorkout, suggestions: [ExerciseSuggestion] = []) {
         self.workout = workout
         // elapsedTime is now computed from workout.startedAt
         self.exerciseSuggestions = suggestions
-        refreshEntriesAndMetrics()
+        refreshEntriesAndMetrics(forceSuggestionRefresh: true)
     }
 
     /// Initialize with an existing workout and optional template for suggestions
@@ -355,6 +364,8 @@ final class LiveWorkoutViewModel {
         self.modelContext = modelContext
         self.healthKitService = healthKitService
         usesMetricWeightPreference = getUserUsesMetricWeight()
+        configurePersistenceCoordinatorIfNeeded()
+        registerBackgroundFlushObserverIfNeeded()
 
         // Insert workout if not already persisted
         if workout.modelContext == nil {
@@ -375,9 +386,7 @@ final class LiveWorkoutViewModel {
 
         refreshEntriesAndMetrics()
         startTimer()
-        loadLastPerformances()
-        loadExerciseUsageFrequency()
-        rebuildSuggestionPool(reason: .workoutStart)
+        scheduleDeferredStartupHydration()
 
         // Start heart rate streaming from Apple Watch
         startHeartRateMonitoring()
@@ -390,11 +399,21 @@ final class LiveWorkoutViewModel {
     }
     
     private func setupLiveActivityObservers() {
-        // Poll App Groups UserDefaults for Live Activity button taps
-        // This is needed because LiveActivityIntent runs in the widget extension
-        liveActivityIntentTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        // Poll App Group intents with adaptive intervals:
+        // slower while app is foregrounded, faster during intent interactions/background.
+        scheduleNextLiveActivityIntentPoll()
+    }
+
+    private func scheduleNextLiveActivityIntentPoll() {
+        liveActivityIntentTimer?.invalidate()
+        let interval = updatePolicy.intentPollingInterval(
+            appState: currentAppState(),
+            lastInteractionAt: lastLiveActivityIntentInteractionAt
+        )
+        liveActivityIntentTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.checkLiveActivityIntents()
+                self?.scheduleNextLiveActivityIntentPoll()
             }
         }
     }
@@ -406,6 +425,7 @@ final class LiveWorkoutViewModel {
         let addSetTimestamp = defaults.double(forKey: LiveActivityIntentKeys.addSetTimestamp)
         if addSetTimestamp > lastAddSetTimestamp {
             lastAddSetTimestamp = addSetTimestamp
+            lastLiveActivityIntentInteractionAt = Date()
             handleAddSetFromLiveActivity()
         }
         
@@ -413,13 +433,75 @@ final class LiveWorkoutViewModel {
         let togglePauseTimestamp = defaults.double(forKey: LiveActivityIntentKeys.togglePauseTimestamp)
         if togglePauseTimestamp > lastTogglePauseTimestamp {
             lastTogglePauseTimestamp = togglePauseTimestamp
+            lastLiveActivityIntentInteractionAt = Date()
             handleTogglePauseFromLiveActivity()
+        }
+    }
+
+    private func currentAppState() -> LiveWorkoutAppState {
+        switch UIApplication.shared.applicationState {
+        case .active:
+            return .active
+        case .inactive:
+            return .inactive
+        case .background:
+            return .background
+        @unknown default:
+            return .inactive
         }
     }
     
     private func removeLiveActivityObservers() {
         liveActivityIntentTimer?.invalidate()
         liveActivityIntentTimer = nil
+        lastLiveActivityIntentInteractionAt = nil
+    }
+
+    private func scheduleDeferredStartupHydration() {
+        deferredPerformanceHydrationTask?.cancel()
+        deferredSuggestionHydrationTask?.cancel()
+
+        deferredPerformanceHydrationTask = Task(priority: .utility) { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .milliseconds(140))
+            guard !Task.isCancelled else { return }
+            self.loadLastPerformances()
+        }
+
+        deferredSuggestionHydrationTask = Task(priority: .utility) { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .milliseconds(460))
+            guard !Task.isCancelled else { return }
+            self.loadExerciseUsageFrequency()
+            self.rebuildSuggestionPool(reason: .workoutStart)
+        }
+    }
+
+    private func configurePersistenceCoordinatorIfNeeded() {
+        guard persistenceCoordinator == nil else { return }
+        persistenceCoordinator = LiveWorkoutPersistenceCoordinator { [weak self] in
+            guard let self, let modelContext = self.modelContext else { return }
+            try modelContext.save()
+        }
+    }
+
+    private func registerBackgroundFlushObserverIfNeeded() {
+        guard backgroundFlushObserver == nil else { return }
+        backgroundFlushObserver = NotificationCenter.default.addObserver(
+            forName: .liveWorkoutForceFlush,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.saveImmediately(updateLiveActivity: false, trigger: .appBackground)
+            }
+        }
+    }
+
+    private func unregisterBackgroundFlushObserver() {
+        guard let backgroundFlushObserver else { return }
+        NotificationCenter.default.removeObserver(backgroundFlushObserver)
+        self.backgroundFlushObserver = nil
     }
     
     /// Handle "Add Set" button tap from Live Activity
@@ -486,31 +568,32 @@ final class LiveWorkoutViewModel {
         healthKitService?.stopCalorieStreaming()
         currentHeartRate = nil
         lastHeartRateUpdate = nil
+        lastPublishedWatchPayload = nil
         watchSetupErrorMessage = nil
     }
 
     /// Updates heart rate and calories from the HealthKit service - called by the view
     func updateWatchDataFromService() {
         guard let service = healthKitService else { return }
-        let latestHeartRate = service.currentHeartRate
-        if Int(currentHeartRate ?? -1) != Int(latestHeartRate ?? -1) {
-            currentHeartRate = latestHeartRate
+        let nextPayload = LiveWorkoutUpdatePolicy.WatchPayload(
+            roundedHeartRate: service.currentHeartRate.map { Int($0.rounded()) },
+            heartRateUpdatedAt: service.lastHeartRateUpdate,
+            roundedCalories: Int(service.workoutCalories.rounded()),
+            caloriesUpdatedAt: service.lastCalorieUpdate
+        )
+
+        guard updatePolicy.shouldPublishWatchPayload(
+            previous: lastPublishedWatchPayload,
+            next: nextPayload
+        ) else {
+            return
         }
 
-        let latestHeartRateUpdate = service.lastHeartRateUpdate
-        if lastHeartRateUpdate != latestHeartRateUpdate {
-            lastHeartRateUpdate = latestHeartRateUpdate
-        }
-
-        let latestCalories = service.workoutCalories
-        if Int(workoutCalories) != Int(latestCalories) {
-            workoutCalories = latestCalories
-        }
-
-        let latestCalorieUpdate = service.lastCalorieUpdate
-        if lastCalorieUpdate != latestCalorieUpdate {
-            lastCalorieUpdate = latestCalorieUpdate
-        }
+        lastPublishedWatchPayload = nextPayload
+        currentHeartRate = service.currentHeartRate
+        lastHeartRateUpdate = service.lastHeartRateUpdate
+        workoutCalories = service.workoutCalories
+        lastCalorieUpdate = service.lastCalorieUpdate
     }
 
     /// Legacy method for backwards compatibility
@@ -541,6 +624,7 @@ final class LiveWorkoutViewModel {
         guard let modelContext else { return }
         guard !workout.targetMuscleGroups.isEmpty else {
             exerciseSuggestions = []
+            applyRankedSuggestions([])
             return
         }
 
@@ -551,11 +635,13 @@ final class LiveWorkoutViewModel {
         let targetMuscles = LiveWorkout.MuscleGroup.fromTargetStrings(targetMuscleTokens)
         guard !targetMuscles.isEmpty else {
             exerciseSuggestions = []
+            applyRankedSuggestions([])
             return
         }
 
         let exerciseMuscleGroups = Set(targetMuscles.map { $0.toExerciseMuscleGroup.rawValue })
-        let descriptor = FetchDescriptor<Exercise>()
+        var descriptor = FetchDescriptor<Exercise>()
+        descriptor.fetchLimit = suggestionExerciseFetchLimit
         guard let exercises = try? modelContext.fetch(descriptor) else { return }
 
         // Exclude custom exercises created in this workout session:
@@ -594,6 +680,7 @@ final class LiveWorkoutViewModel {
         }
         cachedMuscleGroupByExerciseName.removeAll(keepingCapacity: true)
         loadSuggestionPerformances()
+        recomputeSuggestionRankings()
     }
 
     func refreshSuggestions() {
@@ -604,7 +691,18 @@ final class LiveWorkoutViewModel {
     private func loadExerciseUsageFrequency() {
         guard let modelContext else { return }
 
-        let descriptor = FetchDescriptor<ExerciseHistory>()
+        let historyCutoff = Calendar.current.date(
+            byAdding: .day,
+            value: -exerciseUsageHistoryLookbackDays,
+            to: Date()
+        ) ?? .distantPast
+        var descriptor = FetchDescriptor<ExerciseHistory>(
+            predicate: #Predicate<ExerciseHistory> { history in
+                history.performedAt >= historyCutoff
+            },
+            sortBy: [SortDescriptor(\ExerciseHistory.performedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = exerciseUsageHistoryFetchLimit
         guard let history = try? modelContext.fetch(descriptor) else { return }
 
         // Count occurrences of each exercise
@@ -613,6 +711,7 @@ final class LiveWorkoutViewModel {
             frequency[record.exerciseName, default: 0] += 1
         }
         exerciseUsageFrequency = frequency
+        recomputeSuggestionRankings()
     }
 
     /// Load last performances for suggested exercises
@@ -668,7 +767,7 @@ final class LiveWorkoutViewModel {
             return cached
         }
         guard let modelContext else { return nil }
-        guard let snapshot = performanceService.snapshot(for: exerciseName, modelContext: modelContext) else {
+        guard let snapshot = ExercisePerformanceService.snapshot(for: exerciseName, modelContext: modelContext) else {
             clearPerformanceCache(for: exerciseName)
             return nil
         }
@@ -744,14 +843,15 @@ final class LiveWorkoutViewModel {
             pauseStartTime = nil
         }
         isTimerRunning = false
-        if pendingSaveTask != nil {
-            try? modelContext?.save()
-        }
-        pendingSaveTask?.cancel()
+        persistenceCoordinator?.flushNow(trigger: .stopWorkout)
+        persistenceCoordinator?.cancelPending()
         pendingLiveActivityUpdateTask?.cancel()
+        deferredPerformanceHydrationTask?.cancel()
+        deferredSuggestionHydrationTask?.cancel()
         stopHeartRateMonitoring()
         stopLiveActivityUpdates()
         removeLiveActivityObservers()
+        unregisterBackgroundFlushObserver()
     }
 
     // MARK: - Suggestion Management
@@ -1006,7 +1106,7 @@ final class LiveWorkoutViewModel {
         guard didChange else { return }
         entry.updateSet(at: index, with: set)
         refreshEntriesAndMetrics()
-        saveDebounced(updateLiveActivity: true)
+        saveDebounced(updateLiveActivity: false)
     }
 
     func removeSet(at index: Int, from entry: LiveWorkoutEntry) {
@@ -1030,12 +1130,12 @@ final class LiveWorkoutViewModel {
 
     func updateCardioDuration(for entry: LiveWorkoutEntry, seconds: Int) {
         entry.durationSeconds = seconds
-        saveDebounced(updateLiveActivity: true)
+        saveDebounced(updateLiveActivity: false)
     }
 
     func updateCardioDistance(for entry: LiveWorkoutEntry, meters: Double) {
         entry.distanceMeters = meters
-        saveDebounced(updateLiveActivity: true)
+        saveDebounced(updateLiveActivity: false)
     }
 
     func toggleCardioCompletion(for entry: LiveWorkoutEntry) {
@@ -1121,13 +1221,14 @@ final class LiveWorkoutViewModel {
             )
         }
 
-        save()
+        saveImmediately(updateLiveActivity: false, trigger: .finishWorkout)
     }
 
     /// Get user's preferred default rep count from their profile
     private func getUserDefaultRepCount() -> Int {
         guard let modelContext else { return 10 }
-        let descriptor = FetchDescriptor<UserProfile>()
+        var descriptor = FetchDescriptor<UserProfile>()
+        descriptor.fetchLimit = 1
         if let profile = try? modelContext.fetch(descriptor).first {
             return profile.defaultRepCount
         }
@@ -1137,7 +1238,8 @@ final class LiveWorkoutViewModel {
     /// Get user's weight unit preference from their profile
     private func getUserUsesMetricWeight() -> Bool {
         guard let modelContext else { return true }
-        let descriptor = FetchDescriptor<UserProfile>()
+        var descriptor = FetchDescriptor<UserProfile>()
+        descriptor.fetchLimit = 1
         if let profile = try? modelContext.fetch(descriptor).first {
             return profile.usesMetricExerciseWeight
         }
@@ -1154,10 +1256,17 @@ final class LiveWorkoutViewModel {
 
     // MARK: - Private Methods
 
-    private func refreshEntriesAndMetrics() {
+    private func refreshEntriesAndMetrics(forceSuggestionRefresh: Bool = false) {
         let sortedEntries = (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
         cachedEntries = sortedEntries
         cachedMetrics = calculateMetrics(for: sortedEntries)
+        let updatedExerciseNameSet = Set(sortedEntries.map { $0.exerciseName.lowercased() })
+        let exerciseListChanged = updatedExerciseNameSet != cachedCurrentExerciseNameSet
+        cachedCurrentExerciseNameSet = updatedExerciseNameSet
+
+        if forceSuggestionRefresh || exerciseListChanged {
+            recomputeSuggestionRankings()
+        }
     }
 
     private func calculateMetrics(for entries: [LiveWorkoutEntry]) -> WorkoutMetrics {
@@ -1237,23 +1346,28 @@ final class LiveWorkoutViewModel {
         saveImmediately()
     }
 
-    private func saveImmediately(updateLiveActivity: Bool = true) {
-        pendingSaveTask?.cancel()
-        try? modelContext?.save()
+    private func saveImmediately(
+        updateLiveActivity: Bool = true,
+        trigger: LiveWorkoutPersistenceCoordinator.FlushTrigger = .manual
+    ) {
+        if let persistenceCoordinator {
+            persistenceCoordinator.flushNow(trigger: trigger)
+        } else {
+            try? modelContext?.save()
+        }
         if updateLiveActivity {
             scheduleLiveActivityUpdate()
         }
     }
 
     private func saveDebounced(updateLiveActivity: Bool = true) {
-        pendingSaveTask?.cancel()
-        pendingSaveTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            try? await Task.sleep(for: self.saveDebounceDelay)
-            try? self.modelContext?.save()
-            if updateLiveActivity {
-                self.scheduleLiveActivityUpdate()
-            }
+        if let persistenceCoordinator {
+            persistenceCoordinator.requestSave()
+        } else {
+            try? modelContext?.save()
+        }
+        if updateLiveActivity {
+            scheduleLiveActivityUpdate()
         }
     }
 

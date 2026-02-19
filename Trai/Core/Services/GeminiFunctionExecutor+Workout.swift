@@ -13,7 +13,7 @@ extension GeminiFunctionExecutor {
     // MARK: - Muscle Recovery
 
     func executeGetMuscleRecoveryStatus() -> ExecutionResult {
-        let recoveryService = MuscleRecoveryService()
+        let recoveryService = MuscleRecoveryService.shared
         let summary = recoveryService.getRecoverySummary(modelContext: modelContext)
 
         return .dataResponse(FunctionResult(
@@ -25,7 +25,7 @@ extension GeminiFunctionExecutor {
     // MARK: - Workout Suggestions
 
     func executeSuggestWorkout(_ args: [String: Any]) -> ExecutionResult {
-        let recoveryService = MuscleRecoveryService()
+        let recoveryService = MuscleRecoveryService.shared
 
         // Get workout preferences from args
         let workoutTypeString = args["workout_type"] as? String
@@ -255,7 +255,7 @@ extension GeminiFunctionExecutor {
         }
 
         // Build rationale from recovery status
-        let recoveryService = MuscleRecoveryService()
+        let recoveryService = MuscleRecoveryService.shared
         let muscleNames = muscleStrings.map { $0.capitalized }.joined(separator: ", ")
         let rationale: String
         if !muscleStrings.isEmpty {

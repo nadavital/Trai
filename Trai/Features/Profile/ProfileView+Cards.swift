@@ -85,7 +85,7 @@ extension ProfileView {
                 // Review with Trai button
                 Button {
                     pendingPlanReviewRequest = true
-                    selectedTabRaw = AppTab.trai.rawValue
+                    onSelectTab?(.trai)
                     HapticManager.lightTap()
                 } label: {
                     HStack {
@@ -109,7 +109,7 @@ extension ProfileView {
                 .buttonStyle(.bordered)
             }
 
-            if let currentWeight = weightEntries.first?.weightKg,
+            if let currentWeight = latestWeightForPlanPrompt,
                profile.shouldPromptForRecalculation(currentWeight: currentWeight),
                let diff = profile.weightDifferenceSincePlan(currentWeight: currentWeight) {
                 HStack(spacing: 12) {
@@ -225,7 +225,7 @@ extension ProfileView {
                 HStack(spacing: 12) {
                     Button {
                         pendingWorkoutPlanReviewRequest = true
-                        selectedTabRaw = AppTab.trai.rawValue
+                        onSelectTab?(.trai)
                         HapticManager.lightTap()
                     } label: {
                         HStack {
@@ -362,7 +362,7 @@ extension ProfileView {
                         .font(.headline)
                         .foregroundStyle(.primary)
 
-                    Text(memories.isEmpty ? "No memories yet" : "\(memories.count) memories saved")
+                    Text(memoryCount == 0 ? "No memories yet" : "\(memoryCount) memories saved")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -398,7 +398,7 @@ extension ProfileView {
                         .font(.headline)
                         .foregroundStyle(.primary)
 
-                    Text(chatSessions.isEmpty ? "No conversations yet" : "\(chatSessions.count) conversations")
+                    Text(conversationCount == 0 ? "No conversations yet" : "\(conversationCount) conversations")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

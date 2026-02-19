@@ -14,13 +14,9 @@ struct WorkoutsView: View {
     @Query private var profiles: [UserProfile]
     private var userProfile: UserProfile? { profiles.first }
 
-    @Query(sort: \WorkoutSession.loggedAt, order: .reverse)
-    private var allWorkouts: [WorkoutSession]
+    @Query private var allWorkouts: [WorkoutSession]
 
-    @Query(sort: \LiveWorkout.startedAt, order: .reverse)
-    private var allLiveWorkouts: [LiveWorkout]
-
-    @Query private var allExerciseHistory: [ExerciseHistory]
+    @Query private var allLiveWorkouts: [LiveWorkout]
 
     /// Completed in-app workouts (LiveWorkout with completedAt set)
     private var completedLiveWorkouts: [LiveWorkout] {
@@ -31,10 +27,11 @@ struct WorkoutsView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
+    @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
 
     // MARK: - Services
 
-    @State private var recoveryService = MuscleRecoveryService()
+    @State private var recoveryService = MuscleRecoveryService.shared
     @State private var templateService = WorkoutTemplateService()
 
     // MARK: - Computed State
@@ -42,6 +39,8 @@ struct WorkoutsView: View {
     @State private var recoveryInfo: [MuscleRecoveryService.MuscleRecoveryInfo] = []
     @State private var templateScores: [UUID: (score: Double, reason: String)] = [:]
     @State private var recommendedTemplateId: UUID?
+    @State private var cachedWorkoutsByDate: [(date: Date, workouts: [WorkoutSession])] = []
+    @State private var cachedLiveWorkoutsByDate: [(date: Date, workouts: [LiveWorkout])] = []
 
     // MARK: - Sheet States
 
@@ -55,6 +54,66 @@ struct WorkoutsView: View {
     @State private var pendingWorkout: LiveWorkout?
     @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
     @State private var lastOpenTrackedAt: Date?
+    @State private var historyRefreshTask: Task<Void, Never>?
+    @State private var deferredRecoveryRefreshTask: Task<Void, Never>?
+    @State private var cloudKitHistoryReconciliationTask: Task<Void, Never>?
+    @State private var hasPendingHistoryRefresh = true
+    @State private var hasPendingRecoveryRefresh = true
+    @State private var pendingRecoveryRefreshShouldForce = true
+    @State private var hasExecutedInitialHeavyRefresh = false
+    @State private var isWorkoutsTabVisible = false
+    @State private var latencyProbeEntries: [String] = []
+    @State private var tabActivationPolicy = TabActivationPolicy(minimumDwellMilliseconds: 0)
+    private static let workoutHistoryWindowDays = 120
+    private static let workoutHistoryFetchLimit = 48
+    private static let maxHistoryDayGroups = 56
+    private static var initialHistoryRefreshDelayMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 2300 : 420
+    }
+    private static var initialRecoveryRefreshDelayMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 2600 : 520
+    }
+    private static var tabDwellHistoryRefreshDelayMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 2600 : 620
+    }
+    private static var tabDwellRecoveryRefreshDelayMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 2900 : 720
+    }
+    private static var tabHeavyRefreshMinimumDwellMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1400 : 320
+    }
+    private static var cloudKitHistoryReconciliationDelaysSeconds: [Int] {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork
+            ? [4, 10, 18]
+            : [2, 6, 12]
+    }
+
+    init() {
+        let now = Date()
+        let historyCutoff = Calendar.current.date(
+            byAdding: .day,
+            value: -Self.workoutHistoryWindowDays,
+            to: now
+        ) ?? .distantPast
+
+        var profileDescriptor = FetchDescriptor<UserProfile>()
+        profileDescriptor.fetchLimit = 1
+        _profiles = Query(profileDescriptor)
+
+        var workoutDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate<WorkoutSession> { $0.loggedAt >= historyCutoff },
+            sortBy: [SortDescriptor(\WorkoutSession.loggedAt, order: .reverse)]
+        )
+        workoutDescriptor.fetchLimit = Self.workoutHistoryFetchLimit
+        _allWorkouts = Query(workoutDescriptor)
+
+        var liveWorkoutDescriptor = FetchDescriptor<LiveWorkout>(
+            predicate: #Predicate<LiveWorkout> { $0.startedAt >= historyCutoff },
+            sortBy: [SortDescriptor(\LiveWorkout.startedAt, order: .reverse)]
+        )
+        liveWorkoutDescriptor.fetchLimit = Self.workoutHistoryFetchLimit
+        _allLiveWorkouts = Query(liveWorkoutDescriptor)
+    }
 
     // MARK: - Computed Properties
 
@@ -66,36 +125,51 @@ struct WorkoutsView: View {
         allLiveWorkouts.first { $0.isInProgress }
     }
 
-    /// HealthKit workout IDs that have been merged into LiveWorkouts (exclude from display)
-    private var mergedHealthKitIDs: Set<String> {
-        Set(allLiveWorkouts.compactMap { $0.mergedHealthKitWorkoutID })
-    }
-
-    /// Filter out HealthKit workouts that have been merged into in-app workouts
-    private var filteredWorkouts: [WorkoutSession] {
-        allWorkouts.filter { workout in
-            guard let hkID = workout.healthKitWorkoutID else { return true }
-            return !mergedHealthKitIDs.contains(hkID)
-        }
-    }
-
-    private var workoutsByDate: [(date: Date, workouts: [WorkoutSession])] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: filteredWorkouts) { workout in
-            calendar.startOfDay(for: workout.loggedAt)
-        }
-        return grouped.map { ($0.key, $0.value) }
-            .sorted { $0.date > $1.date }
-    }
+    private var workoutsByDate: [(date: Date, workouts: [WorkoutSession])] { cachedWorkoutsByDate }
 
     /// Completed in-app workouts grouped by date
-    private var liveWorkoutsByDate: [(date: Date, workouts: [LiveWorkout])] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: completedLiveWorkouts) { workout in
-            calendar.startOfDay(for: workout.startedAt)
+    private var liveWorkoutsByDate: [(date: Date, workouts: [LiveWorkout])] { cachedLiveWorkoutsByDate }
+
+    private var isWorkoutsTabActive: Bool {
+        isWorkoutsTabVisible
+    }
+
+    private var workoutsRefreshFingerprint: String {
+        let count = allWorkouts.count
+        guard let newest = allWorkouts.first else {
+            return "0"
         }
-        return grouped.map { ($0.key, $0.value) }
-            .sorted { $0.date > $1.date }
+        let oldest = allWorkouts.last ?? newest
+        return [
+            String(count),
+            newest.id.uuidString,
+            String(newest.loggedAt.timeIntervalSinceReferenceDate),
+            oldest.id.uuidString,
+            String(oldest.loggedAt.timeIntervalSinceReferenceDate)
+        ].joined(separator: "|")
+    }
+
+    private var liveWorkoutsRefreshFingerprint: String {
+        guard !allLiveWorkouts.isEmpty else {
+            return "0"
+        }
+
+        var parts: [String] = []
+        parts.reserveCapacity(1 + (allLiveWorkouts.count * 4))
+        parts.append(String(allLiveWorkouts.count))
+
+        for workout in allLiveWorkouts {
+            parts.append(workout.id.uuidString)
+            parts.append(String(workout.startedAt.timeIntervalSinceReferenceDate))
+            if let completedAt = workout.completedAt {
+                parts.append(String(completedAt.timeIntervalSinceReferenceDate))
+            } else {
+                parts.append("nil")
+            }
+            parts.append(workout.mergedHealthKitWorkoutID ?? "nil")
+        }
+
+        return parts.joined(separator: "|")
     }
 
     // MARK: - Body
@@ -150,16 +224,50 @@ struct WorkoutsView: View {
             }
             .refreshable {
                 await syncHealthKit()
-                loadRecoveryAndScores()
+                markHistoryRefreshNeeded(delayMilliseconds: 80)
+                markRecoveryRefreshNeeded(
+                    forceRefresh: true,
+                    delayMilliseconds: 120
+                )
             }
             .onAppear {
+                if tabActivationPolicy.activeSince == nil {
+                    tabActivationPolicy = TabActivationPolicy(
+                        minimumDwellMilliseconds: Self.tabHeavyRefreshMinimumDwellMilliseconds
+                    )
+                }
+                tabActivationPolicy.activate()
+                isWorkoutsTabVisible = true
                 trackOpenWorkoutsIfNeeded()
-            }
-            .task {
-                loadRecoveryAndScores()
+                schedulePendingRefreshesIfNeeded()
+                scheduleCloudKitHistoryReconciliationIfNeeded()
             }
             .onChange(of: workoutPlan) {
-                loadRecoveryAndScores()
+                markRecoveryRefreshNeeded(delayMilliseconds: 140)
+            }
+            .onChange(of: workoutsRefreshFingerprint) {
+                markHistoryRefreshNeeded()
+                markRecoveryRefreshNeeded()
+            }
+            .onChange(of: liveWorkoutsRefreshFingerprint) {
+                markHistoryRefreshNeeded()
+                markRecoveryRefreshNeeded(forceRefresh: true)
+            }
+            .onChange(of: activeWorkoutRuntimeState.isLiveWorkoutPresented) { _, isPresented in
+                if !isPresented {
+                    guard activeWorkout == nil else { return }
+                    markRecoveryRefreshNeeded(
+                        forceRefresh: true,
+                        delayMilliseconds: 140
+                    )
+                }
+            }
+            .onDisappear {
+                isWorkoutsTabVisible = false
+                tabActivationPolicy.deactivate()
+                historyRefreshTask?.cancel()
+                deferredRecoveryRefreshTask?.cancel()
+                cloudKitHistoryReconciliationTask?.cancel()
             }
             .sheet(isPresented: $showingPlanSetup) {
                 WorkoutPlanChatFlow()
@@ -199,18 +307,408 @@ struct WorkoutsView: View {
             }
         }
         .traiBackground()
+        .overlay(alignment: .topLeading) {
+            Text("ready")
+                .font(.system(size: 1))
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .accessibilityElement(children: .ignore)
+                .accessibilityIdentifier("workoutsRootReady")
+        }
+        .overlay(alignment: .topLeading) {
+            Text(workoutsLatencyProbeLabel)
+                .font(.system(size: 1))
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(workoutsLatencyProbeLabel)
+                .accessibilityIdentifier("workoutsLatencyProbe")
+        }
     }
 
     // MARK: - Actions
 
-    private func loadRecoveryAndScores() {
-        recoveryInfo = recoveryService.getRecoveryStatus(modelContext: modelContext)
+    private var workoutsLatencyProbeLabel: String {
+        guard AppLaunchArguments.shouldEnableLatencyProbe else { return "disabled" }
+        return latencyProbeEntries.isEmpty ? "pending" : latencyProbeEntries.joined(separator: " | ")
+    }
+
+    private func recordWorkoutsLatencyProbe(
+        _ operation: String,
+        startedAt: UInt64,
+        counts: [String: Int] = [:]
+    ) {
+        guard AppLaunchArguments.shouldEnableLatencyProbe else { return }
+        let entry = LatencyProbe.makeEntry(
+            operation: operation,
+            durationMilliseconds: LatencyProbe.elapsedMilliseconds(since: startedAt),
+            counts: counts
+        )
+        LatencyProbe.append(entry: entry, to: &latencyProbeEntries)
+    }
+
+    private func loadRecoveryAndScores(forceRefresh: Bool = false) {
+        let startedAt = LatencyProbe.timerStart()
+        if activeWorkout != nil, !forceRefresh, !recoveryInfo.isEmpty {
+            recordWorkoutsLatencyProbe(
+                "loadRecoveryAndScoresSkipped",
+                startedAt: startedAt,
+                counts: [
+                    "activeWorkout": 1,
+                    "force": forceRefresh ? 1 : 0,
+                    "cachedRecovery": recoveryInfo.count
+                ]
+            )
+            return
+        }
+
+        guard forceRefresh || DashboardRefreshPolicy.shouldRefreshRecovery(
+            isWorkoutRuntimeActive: activeWorkoutRuntimeState.isLiveWorkoutPresented
+        ) else {
+            recordWorkoutsLatencyProbe(
+                "loadRecoveryAndScoresGuarded",
+                startedAt: startedAt,
+                counts: [
+                    "force": forceRefresh ? 1 : 0,
+                    "runtimeActive": activeWorkoutRuntimeState.isLiveWorkoutPresented ? 1 : 0
+                ]
+            )
+            return
+        }
+
+        let interval = PerformanceTrace.begin("workouts_recovery_scores_refresh", category: .dataLoad)
+        defer { PerformanceTrace.end("workouts_recovery_scores_refresh", interval, category: .dataLoad) }
+
+        let latestRecoveryInfo = recoveryService.getRecoveryStatus(
+            modelContext: modelContext,
+            forceRefresh: forceRefresh
+        )
+        recoveryInfo = latestRecoveryInfo
 
         // Score templates if user has a plan
-        if let plan = workoutPlan {
-            templateScores = recoveryService.scoreTemplates(plan.templates, modelContext: modelContext)
-            recommendedTemplateId = recoveryService.getRecommendedTemplateId(plan: plan, modelContext: modelContext)
+        guard let plan = workoutPlan else {
+            templateScores = [:]
+            recommendedTemplateId = nil
+            hasPendingRecoveryRefresh = false
+            pendingRecoveryRefreshShouldForce = false
+            recordWorkoutsLatencyProbe(
+                "loadRecoveryAndScoresNoPlan",
+                startedAt: startedAt,
+                counts: [
+                    "recoveryItems": recoveryInfo.count,
+                    "force": forceRefresh ? 1 : 0
+                ]
+            )
+            return
         }
+
+        var scores: [UUID: (score: Double, reason: String)] = [:]
+        var bestTemplateId: UUID?
+        var bestScore = -Double.greatestFiniteMagnitude
+
+        for template in plan.templates {
+            let scoredTemplate = recoveryService.scoreTemplate(template, recoveryInfo: latestRecoveryInfo)
+            scores[template.id] = scoredTemplate
+            if scoredTemplate.score > bestScore {
+                bestScore = scoredTemplate.score
+                bestTemplateId = template.id
+            }
+        }
+
+        templateScores = scores
+        recommendedTemplateId = bestTemplateId ?? plan.templates.first?.id
+        hasPendingRecoveryRefresh = false
+        pendingRecoveryRefreshShouldForce = false
+        recordWorkoutsLatencyProbe(
+            "loadRecoveryAndScores",
+            startedAt: startedAt,
+            counts: [
+                "recoveryItems": recoveryInfo.count,
+                "templates": plan.templates.count,
+                "scoredTemplates": templateScores.count,
+                "force": forceRefresh ? 1 : 0
+            ]
+        )
+    }
+
+    private func refreshWorkoutHistoryCaches() {
+        let interval = PerformanceTrace.begin("workouts_history_cache_refresh", category: .dataLoad)
+        let startedAt = LatencyProbe.timerStart()
+        defer { PerformanceTrace.end("workouts_history_cache_refresh", interval, category: .dataLoad) }
+
+        let workoutsForHistory = loadWorkoutHistorySource()
+        let liveWorkoutsForHistory = loadLiveWorkoutHistorySource()
+        let mergedHealthKitIDs = Set(liveWorkoutsForHistory.compactMap(\.mergedHealthKitWorkoutID))
+        let filteredWorkouts = workoutsForHistory.filter { workout in
+            guard let healthKitWorkoutID = workout.healthKitWorkoutID else { return true }
+            return !mergedHealthKitIDs.contains(healthKitWorkoutID)
+        }
+        let filteredLiveWorkouts = liveWorkoutsForHistory.filter { $0.completedAt != nil }
+
+        cachedWorkoutsByDate = groupWorkoutsByDay(
+            filteredWorkouts,
+            maxGroups: Self.maxHistoryDayGroups
+        )
+        cachedLiveWorkoutsByDate = groupLiveWorkoutsByDay(
+            filteredLiveWorkouts,
+            maxGroups: Self.maxHistoryDayGroups
+        )
+        hasPendingHistoryRefresh = false
+        recordWorkoutsLatencyProbe(
+            "refreshWorkoutHistoryCaches",
+            startedAt: startedAt,
+            counts: [
+                "queryWorkouts": allWorkouts.count,
+                "queryLive": allLiveWorkouts.count,
+                "historyWorkouts": workoutsForHistory.count,
+                "historyLive": liveWorkoutsForHistory.count,
+                "filteredWorkouts": filteredWorkouts.count,
+                "filteredLive": filteredLiveWorkouts.count,
+                "groupedWorkoutDays": cachedWorkoutsByDate.count,
+                "groupedLiveDays": cachedLiveWorkoutsByDate.count
+            ]
+        )
+    }
+
+    private func historyWindowStartDate(now: Date = Date()) -> Date {
+        Calendar.current.date(
+            byAdding: .day,
+            value: -Self.workoutHistoryWindowDays,
+            to: now
+        ) ?? .distantPast
+    }
+
+    private func loadWorkoutHistorySource() -> [WorkoutSession] {
+        guard hasWorkoutHistoryOverflowBeyondQueryWindow() else {
+            return allWorkouts
+        }
+
+        let historyCutoff = historyWindowStartDate()
+        let descriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate<WorkoutSession> { workout in
+                workout.loggedAt >= historyCutoff
+            },
+            sortBy: [SortDescriptor(\WorkoutSession.loggedAt, order: .reverse)]
+        )
+        return (try? modelContext.fetch(descriptor)) ?? allWorkouts
+    }
+
+    private func loadLiveWorkoutHistorySource() -> [LiveWorkout] {
+        guard hasLiveWorkoutHistoryOverflowBeyondQueryWindow() else {
+            return allLiveWorkouts
+        }
+
+        let historyCutoff = historyWindowStartDate()
+        let descriptor = FetchDescriptor<LiveWorkout>(
+            predicate: #Predicate<LiveWorkout> { workout in
+                workout.startedAt >= historyCutoff
+            },
+            sortBy: [SortDescriptor(\LiveWorkout.startedAt, order: .reverse)]
+        )
+        return (try? modelContext.fetch(descriptor)) ?? allLiveWorkouts
+    }
+
+    private func hasWorkoutHistoryOverflowBeyondQueryWindow() -> Bool {
+        guard allWorkouts.count >= Self.workoutHistoryFetchLimit else { return false }
+        let historyCutoff = historyWindowStartDate()
+        var overflowDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate<WorkoutSession> { workout in
+                workout.loggedAt >= historyCutoff
+            },
+            sortBy: [SortDescriptor(\WorkoutSession.loggedAt, order: .reverse)]
+        )
+        overflowDescriptor.fetchOffset = Self.workoutHistoryFetchLimit
+        overflowDescriptor.fetchLimit = 1
+        let overflow = (try? modelContext.fetch(overflowDescriptor)) ?? []
+        return !overflow.isEmpty
+    }
+
+    private func hasLiveWorkoutHistoryOverflowBeyondQueryWindow() -> Bool {
+        guard allLiveWorkouts.count >= Self.workoutHistoryFetchLimit else { return false }
+        let historyCutoff = historyWindowStartDate()
+        var overflowDescriptor = FetchDescriptor<LiveWorkout>(
+            predicate: #Predicate<LiveWorkout> { workout in
+                workout.startedAt >= historyCutoff
+            },
+            sortBy: [SortDescriptor(\LiveWorkout.startedAt, order: .reverse)]
+        )
+        overflowDescriptor.fetchOffset = Self.workoutHistoryFetchLimit
+        overflowDescriptor.fetchLimit = 1
+        let overflow = (try? modelContext.fetch(overflowDescriptor)) ?? []
+        return !overflow.isEmpty
+    }
+
+    private func scheduleWorkoutHistoryRefresh(delayMilliseconds: Int = 120) {
+        historyRefreshTask?.cancel()
+        let activationToken = tabActivationPolicy.activationToken
+        let effectiveDelayMilliseconds = tabActivationPolicy.effectiveDelayMilliseconds(
+            requested: delayMilliseconds
+        )
+        historyRefreshTask = Task(priority: .utility) {
+            if effectiveDelayMilliseconds > 0 {
+                try? await Task.sleep(for: .milliseconds(effectiveDelayMilliseconds))
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
+                guard isWorkoutsTabActive, hasPendingHistoryRefresh else { return }
+                refreshWorkoutHistoryCaches()
+            }
+        }
+    }
+
+    private func scheduleRecoveryAndScoresRefresh(
+        forceRefresh: Bool = false,
+        delayMilliseconds: Int = 120
+    ) {
+        deferredRecoveryRefreshTask?.cancel()
+        let activationToken = tabActivationPolicy.activationToken
+        let effectiveDelayMilliseconds = tabActivationPolicy.effectiveDelayMilliseconds(
+            requested: delayMilliseconds
+        )
+        deferredRecoveryRefreshTask = Task(priority: .utility) {
+            if effectiveDelayMilliseconds > 0 {
+                try? await Task.sleep(for: .milliseconds(effectiveDelayMilliseconds))
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
+                guard isWorkoutsTabActive, hasPendingRecoveryRefresh else { return }
+                if activeWorkout != nil, !forceRefresh, !recoveryInfo.isEmpty {
+                    return
+                }
+                loadRecoveryAndScores(forceRefresh: forceRefresh)
+            }
+        }
+    }
+
+    private func markHistoryRefreshNeeded(delayMilliseconds: Int = 120) {
+        hasPendingHistoryRefresh = true
+        guard isWorkoutsTabActive else { return }
+        scheduleWorkoutHistoryRefresh(delayMilliseconds: delayMilliseconds)
+    }
+
+    private func markRecoveryRefreshNeeded(
+        forceRefresh: Bool = false,
+        delayMilliseconds: Int = 120
+    ) {
+        hasPendingRecoveryRefresh = true
+        pendingRecoveryRefreshShouldForce = pendingRecoveryRefreshShouldForce || forceRefresh
+        guard isWorkoutsTabActive else { return }
+        scheduleRecoveryAndScoresRefresh(
+            forceRefresh: pendingRecoveryRefreshShouldForce,
+            delayMilliseconds: delayMilliseconds
+        )
+    }
+
+    private func schedulePendingRefreshesIfNeeded() {
+        guard isWorkoutsTabActive else { return }
+
+        let isInitialHeavyRefresh = !hasExecutedInitialHeavyRefresh
+        if hasPendingHistoryRefresh {
+            scheduleWorkoutHistoryRefresh(
+                delayMilliseconds: isInitialHeavyRefresh
+                    ? Self.initialHistoryRefreshDelayMilliseconds
+                    : Self.tabDwellHistoryRefreshDelayMilliseconds
+            )
+        }
+        if hasPendingRecoveryRefresh {
+            scheduleRecoveryAndScoresRefresh(
+                forceRefresh: pendingRecoveryRefreshShouldForce || isInitialHeavyRefresh,
+                delayMilliseconds: isInitialHeavyRefresh
+                    ? Self.initialRecoveryRefreshDelayMilliseconds
+                    : Self.tabDwellRecoveryRefreshDelayMilliseconds
+            )
+        }
+        if isInitialHeavyRefresh, hasPendingHistoryRefresh || hasPendingRecoveryRefresh {
+            hasExecutedInitialHeavyRefresh = true
+        }
+    }
+
+    private func scheduleCloudKitHistoryReconciliationIfNeeded() {
+        cloudKitHistoryReconciliationTask?.cancel()
+        let activationToken = tabActivationPolicy.activationToken
+        let delays = Self.cloudKitHistoryReconciliationDelaysSeconds
+        cloudKitHistoryReconciliationTask = Task(priority: .utility) {
+            for delaySeconds in delays {
+                if delaySeconds > 0 {
+                    try? await Task.sleep(for: .seconds(delaySeconds))
+                }
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
+                    guard isWorkoutsTabActive else { return }
+                    // Reconcile history after launch in case CloudKit rows arrive after first paint.
+                    markHistoryRefreshNeeded(delayMilliseconds: 80)
+                }
+            }
+        }
+    }
+
+    private func groupWorkoutsByDay(
+        _ workouts: [WorkoutSession],
+        maxGroups: Int
+    ) -> [(date: Date, workouts: [WorkoutSession])] {
+        guard !workouts.isEmpty, maxGroups > 0 else { return [] }
+
+        let calendar = Calendar.current
+        var grouped: [(date: Date, workouts: [WorkoutSession])] = []
+        var currentDate = calendar.startOfDay(for: workouts[0].loggedAt)
+        var currentItems: [WorkoutSession] = []
+
+        for workout in workouts {
+            let day = calendar.startOfDay(for: workout.loggedAt)
+            if day == currentDate {
+                currentItems.append(workout)
+                continue
+            }
+
+            grouped.append((date: currentDate, workouts: currentItems))
+            if grouped.count >= maxGroups {
+                return grouped
+            }
+
+            currentDate = day
+            currentItems = [workout]
+        }
+
+        if !currentItems.isEmpty, grouped.count < maxGroups {
+            grouped.append((date: currentDate, workouts: currentItems))
+        }
+        return grouped
+    }
+
+    private func groupLiveWorkoutsByDay(
+        _ workouts: [LiveWorkout],
+        maxGroups: Int
+    ) -> [(date: Date, workouts: [LiveWorkout])] {
+        guard !workouts.isEmpty, maxGroups > 0 else { return [] }
+
+        let calendar = Calendar.current
+        var grouped: [(date: Date, workouts: [LiveWorkout])] = []
+        var currentDate = calendar.startOfDay(for: workouts[0].startedAt)
+        var currentItems: [LiveWorkout] = []
+
+        for workout in workouts {
+            let day = calendar.startOfDay(for: workout.startedAt)
+            if day == currentDate {
+                currentItems.append(workout)
+                continue
+            }
+
+            grouped.append((date: currentDate, workouts: currentItems))
+            if grouped.count >= maxGroups {
+                return grouped
+            }
+
+            currentDate = day
+            currentItems = [workout]
+        }
+
+        if !currentItems.isEmpty, grouped.count < maxGroups {
+            grouped.append((date: currentDate, workouts: currentItems))
+        }
+        return grouped
     }
 
     private func trackOpenWorkoutsIfNeeded() {
@@ -224,7 +722,8 @@ struct WorkoutsView: View {
             domain: .workout,
             surface: .workouts,
             outcome: .opened,
-            metadata: ["source": "workouts_tab"]
+            metadata: ["source": "workouts_tab"],
+            saveImmediately: false
         )
     }
 
@@ -288,9 +787,13 @@ struct WorkoutsView: View {
         // Delete associated ExerciseHistory entries
         if let entries = workout.entries {
             for entry in entries {
-                let historyToDelete = allExerciseHistory.filter {
-                    $0.sourceWorkoutEntryId == entry.id
-                }
+                let entryId = entry.id
+                let descriptor = FetchDescriptor<ExerciseHistory>(
+                    predicate: #Predicate<ExerciseHistory> { history in
+                        history.sourceWorkoutEntryId == entryId
+                    }
+                )
+                let historyToDelete = (try? modelContext.fetch(descriptor)) ?? []
                 for history in historyToDelete {
                     modelContext.delete(history)
                 }
@@ -309,8 +812,11 @@ struct WorkoutsView: View {
             let healthKitWorkouts = try await healthKitService.fetchWorkoutsAuthorized(from: oneMonthAgo, to: Date())
 
             // Filter out already imported workouts
-            let existingIDs = Set(allWorkouts.compactMap { $0.healthKitWorkoutID })
-            let newWorkouts = healthKitWorkouts.filter { !existingIDs.contains($0.healthKitWorkoutID ?? "") }
+            let existingIDs = fetchExistingHealthKitWorkoutIDs(from: oneMonthAgo)
+            let newWorkouts = healthKitWorkouts.filter { workout in
+                guard let id = workout.healthKitWorkoutID, !id.isEmpty else { return true }
+                return !existingIDs.contains(id)
+            }
 
             for workout in newWorkouts {
                 modelContext.insert(workout)
@@ -327,13 +833,32 @@ struct WorkoutsView: View {
         }
     }
 
+    private func fetchExistingHealthKitWorkoutIDs(from startDate: Date) -> Set<String> {
+        let descriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate<WorkoutSession> { workout in
+                workout.loggedAt >= startDate && workout.healthKitWorkoutID != nil
+            }
+        )
+        let existingWorkouts = (try? modelContext.fetch(descriptor)) ?? []
+        return Set(existingWorkouts.compactMap(\.healthKitWorkoutID))
+    }
+
     /// Retroactively merge completed in-app workouts with HealthKit data
     private func mergeUnmergedWorkouts(
         healthKitWorkouts: [WorkoutSession],
         healthKitService: HealthKitService
     ) async {
-        // Find completed workouts without HealthKit merge
-        let unmergedWorkouts = completedLiveWorkouts.filter { $0.mergedHealthKitWorkoutID == nil }
+        // Find completed workouts without HealthKit merge inside the sync window.
+        let oneMonthAgo = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? .distantPast
+        let descriptor = FetchDescriptor<LiveWorkout>(
+            predicate: #Predicate<LiveWorkout> { workout in
+                workout.completedAt != nil &&
+                workout.mergedHealthKitWorkoutID == nil &&
+                workout.startedAt >= oneMonthAgo
+            },
+            sortBy: [SortDescriptor(\LiveWorkout.startedAt, order: .reverse)]
+        )
+        let unmergedWorkouts = (try? modelContext.fetch(descriptor)) ?? []
 
         guard !unmergedWorkouts.isEmpty else { return }
 

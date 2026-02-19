@@ -30,25 +30,25 @@ final class ChatMessage {
     var wasManuallyStopped: Bool = false
 
     /// Image data attached to this message (for food logging via chat)
-    var imageData: Data?
+    @Attribute(.externalStorage) var imageData: Data?
 
     /// Food entry logged from this message (AI response with logMeal action)
     var loggedFoodEntryId: UUID?
 
     /// Suggested meals data (JSON encoded array) - for confirmation before logging
-    var suggestedMealsData: Data?
+    @Attribute(.externalStorage) var suggestedMealsData: Data?
 
     /// IDs of meals that have been logged from this message (string UUIDs)
     var loggedMealIds: [String] = []
 
     /// Mapping from meal ID to actual FoodEntry ID (JSON encoded dictionary)
-    var loggedFoodEntryIdsData: Data?
+    @Attribute(.externalStorage) var loggedFoodEntryIdsData: Data?
 
     /// IDs of meals that have been dismissed (string UUIDs)
     var dismissedMealIds: [String] = []
 
     /// Suggested plan update data (JSON encoded) - for confirmation before applying
-    var suggestedPlanData: Data?
+    @Attribute(.externalStorage) var suggestedPlanData: Data?
 
     /// Whether the user has dismissed the plan suggestion
     var suggestedPlanDismissed: Bool = false
@@ -57,10 +57,10 @@ final class ChatMessage {
     var planUpdateApplied: Bool = false
 
     /// Memories saved during this response (JSON encoded array of strings)
-    var savedMemoriesData: Data?
+    @Attribute(.externalStorage) var savedMemoriesData: Data?
 
     /// Food edit confirmation data (JSON encoded) - shows changes made to existing food entry
-    var foodEditData: Data?
+    @Attribute(.externalStorage) var foodEditData: Data?
 
     init() {}
 

@@ -151,6 +151,78 @@ ScrollView {
 
 ---
 
+## 6. Live Workout Is Smooth In Simulator But Slow On Phone
+
+### Symptom
+Live workout interactions (typing reps/weight, add set, switching cards) feel fine on simulator but stall on a physical device.
+
+### Why It Happens
+- Device traces include real scheduling, thermal behavior, and sync pressure that simulator often hides.
+- Large local/CloudKit history can amplify SwiftData and view invalidation work.
+
+### Repro + Profiling Commands
+1. Seed deterministic heavy workout data in simulator/device build:
+```bash
+xcrun simctl launch booted Nadav.Trai --seed-live-workout-perf-data
+```
+
+2. Capture a fresh-data trace from a connected phone:
+```bash
+./scripts/profile_live_workout_device.sh --udid <DEVICE_UDID> --bundle-id Nadav.Trai --duration 90 --tag fresh
+```
+
+3. Capture a heavy-data trace:
+```bash
+./scripts/profile_live_workout_device.sh --udid <DEVICE_UDID> --bundle-id Nadav.Trai --duration 90 --tag heavy --launch-arg --seed-live-workout-perf-data
+```
+
+### Output Artifacts
+- `/tmp/Trai-liveworkout-<tag>-<timestamp>.trace`
+- `/tmp/Trai-liveworkout-<tag>-time-sample.xml`
+- `/tmp/Trai-liveworkout-<tag>-hotspots.csv`
+
+### Phone-Only Latency Troubleshooting Matrix
+| Trace Signal | Likely Cause | What To Verify | Mitigation |
+|---------|---------|---------|---------|
+| `WorkoutsView.loadRecoveryAndScores` / `MuscleRecoveryService` samples during live workout | Background tab recomputation still running while sheet is open | `ActiveWorkoutRuntimeState` is wired in `ContentView`, `LiveWorkoutView`, `DashboardView`, and `WorkoutsView` | Keep runtime gating enabled and refresh deferred work only after workout sheet closes |
+| Dominant `AG::Graph::*` / `find1` on Main Thread | Excessive SwiftUI invalidation and list filtering work | Whether expensive getters/filters run per keystroke | Cache derived values and avoid broad recomputation on each set edit |
+| Frequent `SetRow` / live row body reevaluation hitches | UI update churn from timers/polling | Poll cadence and watch payload update frequency | Keep adaptive polling + payload-delta publishing; avoid adding high-frequency timers |
+| Spikes around save/merge/CloudKit frames | Save pressure from rapid edits | Save frequency during typing/add-set bursts | Route edits through `LiveWorkoutPersistenceCoordinator` and flush only on critical events |
+| Simulator smooth, phone stutters | Device-only scheduling, thermal, and sync pressure | Compare fresh vs heavy traces on physical iPhone | Always baseline on device with both data states before/after optimization |
+
+---
+
+## 7. App Launch / Reopen / Tab Latency Regression Workflow
+
+### When to Use
+Use this when launch, reopen, or tab transitions feel slower than expected, or before merging larger UI/data-loading changes.
+
+### Primary Guardrail Command
+```bash
+./scripts/run_app_latency_regression.sh --sim-id <SIM_UDID>
+```
+
+### What It Produces
+- JSON summary: `/tmp/trai-app-latency-summary-<timestamp>.json`
+- Markdown report: `/Users/nadav/Desktop/Trai/.agent/done/app-latency-regression-report.md`
+- Raw xcodebuild log: `/tmp/trai-app-latency-<timestamp>.log`
+
+### Baseline Source of Truth
+- `scripts/latency_baseline_simulator.json`
+- If baseline budgets are updated, also update `/Users/nadav/Desktop/Trai/.agent/app-latency-issues.md` with rationale and latest measured values.
+
+### Extractor Fixture Validation
+```bash
+python3 scripts/test_extract_ui_latency_metrics.py
+```
+
+### Optional Combined Stability + App Latency Run
+```bash
+./scripts/run_live_workout_stability.sh --mode sim --with-app-latency
+```
+
+---
+
 ## Quick Reference: Navigation Destination Safety
 
 When creating a view that will be a NavigationLink destination:

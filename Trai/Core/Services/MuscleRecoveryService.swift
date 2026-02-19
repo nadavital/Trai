@@ -7,8 +7,26 @@ import Foundation
 import SwiftData
 
 /// Service to calculate muscle group recovery status based on workout history
-@MainActor @Observable
+@MainActor
 final class MuscleRecoveryService {
+    static let shared = MuscleRecoveryService()
+
+    private var recoveryCacheGeneratedAt: Date?
+    private var recoveryCacheValues: [MuscleRecoveryInfo]?
+    private var exerciseLookupCacheGeneratedAt: Date?
+    private var exerciseLookupById: [UUID: String] = [:]
+    private var exerciseLookupByName: [String: String] = [:]
+    private let recoveryCacheTTL: TimeInterval = 90
+    private let exerciseLookupCacheTTL: TimeInterval = 6 * 60
+    private let recoveryHistoryLookbackDays = 90
+    private let workoutScanFetchLimit = 320
+    private let historyScanFetchLimit = 420
+#if DEBUG
+    private(set) var debugRecoveryComputationCount = 0
+    private(set) var debugExerciseLookupBuildCount = 0
+#endif
+
+    private init() {}
 
     // MARK: - Recovery Status
 
@@ -75,11 +93,26 @@ final class MuscleRecoveryService {
     // MARK: - Public Methods
 
     /// Get recovery status for all muscle groups
-    func getRecoveryStatus(modelContext: ModelContext) -> [MuscleRecoveryInfo] {
+    func getRecoveryStatus(modelContext: ModelContext, forceRefresh: Bool = false) -> [MuscleRecoveryInfo] {
+        if forceRefresh {
+            recoveryCacheGeneratedAt = nil
+            recoveryCacheValues = nil
+        }
+
+        if !forceRefresh,
+           let generatedAt = recoveryCacheGeneratedAt,
+           let cachedValues = recoveryCacheValues,
+           Date().timeIntervalSince(generatedAt) < recoveryCacheTTL {
+            return cachedValues
+        }
+
+#if DEBUG
+        debugRecoveryComputationCount += 1
+#endif
         let lastTrainedDates = getLastTrainedDates(modelContext: modelContext)
 
         // Exclude fullBody - it's not a real muscle group for recovery tracking
-        return LiveWorkout.MuscleGroup.allCases.filter { $0 != .fullBody }.map { muscleGroup in
+        let values = LiveWorkout.MuscleGroup.allCases.filter { $0 != .fullBody }.map { muscleGroup in
             let lastTrained = lastTrainedDates[muscleGroup]
             let hoursSince = lastTrained.map { Date().timeIntervalSince($0) / 3600 }
             let status = calculateStatus(hoursSinceTraining: hoursSince)
@@ -91,6 +124,9 @@ final class MuscleRecoveryService {
                 hoursSinceTraining: hoursSince
             )
         }
+        recoveryCacheGeneratedAt = Date()
+        recoveryCacheValues = values
+        return values
     }
 
     /// Get only muscle groups that are ready to train
@@ -154,18 +190,26 @@ final class MuscleRecoveryService {
     /// Note: Derives muscle groups from actual exercises performed, not user-selected targets
     private func getLastTrainedDates(modelContext: ModelContext) -> [LiveWorkout.MuscleGroup: Date] {
         var lastTrained: [LiveWorkout.MuscleGroup: Date] = [:]
+        let trackedMuscleGroups = Set(LiveWorkout.MuscleGroup.allCases.filter { $0 != .fullBody })
+        let trackedCount = trackedMuscleGroups.count
+        let historyWindowStart = Calendar.current.date(
+            byAdding: .day,
+            value: -recoveryHistoryLookbackDays,
+            to: Date()
+        ) ?? .distantPast
 
-        // Get all exercises for muscle group lookup
-        let exerciseDescriptor = FetchDescriptor<Exercise>()
-        let exercises = (try? modelContext.fetch(exerciseDescriptor)) ?? []
-        let exerciseById = Dictionary(uniqueKeysWithValues: exercises.map { ($0.id, $0) })
-        let exerciseByName = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name.lowercased(), $0) })
+        let exerciseLookup = cachedExerciseLookup(modelContext: modelContext)
+        let exerciseById = exerciseLookup.byId
+        let exerciseByName = exerciseLookup.byName
 
-        // Query completed LiveWorkouts and derive muscles from actual exercises
-        let workoutDescriptor = FetchDescriptor<LiveWorkout>(
-            predicate: #Predicate { $0.completedAt != nil },
+        // Scan recent completed LiveWorkouts first; older sessions are effectively "ready".
+        var workoutDescriptor = FetchDescriptor<LiveWorkout>(
+            predicate: #Predicate<LiveWorkout> { workout in
+                workout.completedAt != nil && workout.startedAt >= historyWindowStart
+            },
             sortBy: [SortDescriptor(\.completedAt, order: .reverse)]
         )
+        workoutDescriptor.fetchLimit = workoutScanFetchLimit
 
         if let workouts = try? modelContext.fetch(workoutDescriptor) {
             for workout in workouts {
@@ -180,10 +224,10 @@ final class MuscleRecoveryService {
                     // Try to find the exercise by ID first, then by name
                     var muscleGroupString: String?
                     if let exerciseId = entry.exerciseId,
-                       let exercise = exerciseById[exerciseId] {
-                        muscleGroupString = exercise.muscleGroup
-                    } else if let exercise = exerciseByName[entry.exerciseName.lowercased()] {
-                        muscleGroupString = exercise.muscleGroup
+                       let cachedMuscleGroup = exerciseById[exerciseId] {
+                        muscleGroupString = cachedMuscleGroup
+                    } else if let cachedMuscleGroup = exerciseByName[entry.exerciseName.lowercased()] {
+                        muscleGroupString = cachedMuscleGroup
                     }
 
                     guard let muscleGroup = muscleGroupString else { continue }
@@ -194,20 +238,32 @@ final class MuscleRecoveryService {
                             lastTrained[group] = completionDate
                         }
                     }
+                    if lastTrained.count >= trackedCount {
+                        return lastTrained
+                    }
                 }
             }
         }
 
-        // Also check ExerciseHistory for additional exercise data
-        let historyDescriptor = FetchDescriptor<ExerciseHistory>(
+        // Fallback to recent ExerciseHistory entries for coverage.
+        var historyDescriptor = FetchDescriptor<ExerciseHistory>(
+            predicate: #Predicate<ExerciseHistory> { history in
+                history.performedAt >= historyWindowStart
+            },
             sortBy: [SortDescriptor(\.performedAt, order: .reverse)]
         )
+        historyDescriptor.fetchLimit = historyScanFetchLimit
 
         if let histories = try? modelContext.fetch(historyDescriptor) {
             for history in histories {
-                guard let exerciseId = history.exerciseId,
-                      let exercise = exerciseById[exerciseId],
-                      let muscleGroupString = exercise.muscleGroup else { continue }
+                let muscleGroupString: String?
+                if let exerciseId = history.exerciseId {
+                    muscleGroupString = exerciseById[exerciseId]
+                } else {
+                    muscleGroupString = exerciseByName[history.exerciseName.lowercased()]
+                }
+
+                guard let muscleGroupString else { continue }
 
                 // Map Exercise.MuscleGroup to LiveWorkout.MuscleGroup
                 let mappedGroups = mapExerciseMuscleGroup(muscleGroupString)
@@ -217,10 +273,40 @@ final class MuscleRecoveryService {
                         lastTrained[muscleGroup] = history.performedAt
                     }
                 }
+                if lastTrained.count >= trackedCount {
+                    break
+                }
             }
         }
 
         return lastTrained
+    }
+
+    private func cachedExerciseLookup(modelContext: ModelContext) -> (byId: [UUID: String], byName: [String: String]) {
+        if let generatedAt = exerciseLookupCacheGeneratedAt,
+           Date().timeIntervalSince(generatedAt) < exerciseLookupCacheTTL {
+            return (exerciseLookupById, exerciseLookupByName)
+        }
+
+        let exerciseDescriptor = FetchDescriptor<Exercise>()
+        let exercises = (try? modelContext.fetch(exerciseDescriptor)) ?? []
+        let byId: [UUID: String] = Dictionary(uniqueKeysWithValues: exercises.compactMap { exercise -> (UUID, String)? in
+            guard let muscleGroup = exercise.muscleGroup else { return nil }
+            return (exercise.id, muscleGroup)
+        })
+        let byName: [String: String] = Dictionary(uniqueKeysWithValues: exercises.compactMap { exercise -> (String, String)? in
+            guard let muscleGroup = exercise.muscleGroup else { return nil }
+            return (exercise.name.lowercased(), muscleGroup)
+        })
+#if DEBUG
+        debugExerciseLookupBuildCount += 1
+#endif
+
+        exerciseLookupCacheGeneratedAt = Date()
+        exerciseLookupById = byId
+        exerciseLookupByName = byName
+
+        return (byId, byName)
     }
 
     /// Map Exercise muscle group string to LiveWorkout MuscleGroups
@@ -417,3 +503,29 @@ final class MuscleRecoveryService {
         getBestTemplateForToday(plan: plan, modelContext: modelContext)?.template.id
     }
 }
+
+#if DEBUG
+extension MuscleRecoveryService {
+    func debugSeedRecoveryCacheForTests(generatedAt: Date = Date()) {
+        recoveryCacheGeneratedAt = generatedAt
+        recoveryCacheValues = []
+    }
+
+    func debugSeedExerciseLookupCacheForTests(generatedAt: Date = Date()) {
+        exerciseLookupCacheGeneratedAt = generatedAt
+        exerciseLookupById = [:]
+        exerciseLookupByName = [:]
+    }
+
+    func debugShouldUseRecoveryCache(forceRefresh: Bool, now: Date = Date()) -> Bool {
+        guard !forceRefresh else { return false }
+        guard let generatedAt = recoveryCacheGeneratedAt, recoveryCacheValues != nil else { return false }
+        return now.timeIntervalSince(generatedAt) < recoveryCacheTTL
+    }
+
+    func debugShouldUseExerciseLookupCache(now: Date = Date()) -> Bool {
+        guard let generatedAt = exerciseLookupCacheGeneratedAt else { return false }
+        return now.timeIntervalSince(generatedAt) < exerciseLookupCacheTTL
+    }
+}
+#endif

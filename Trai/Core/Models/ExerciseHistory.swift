@@ -221,9 +221,9 @@ struct ExercisePerformanceSnapshot {
     let totalSessions: Int
 }
 
-final class ExercisePerformanceService {
+enum ExercisePerformanceService {
     /// Fetch exercise history sorted by most-recent session first.
-    func history(
+    static func history(
         for exerciseName: String,
         limit: Int? = nil,
         modelContext: ModelContext
@@ -238,7 +238,7 @@ final class ExercisePerformanceService {
         return (try? modelContext.fetch(descriptor)) ?? []
     }
 
-    func snapshot(
+    static func snapshot(
         for exerciseName: String,
         modelContext: ModelContext
     ) -> ExercisePerformanceSnapshot? {
@@ -295,7 +295,7 @@ final class ExercisePerformanceService {
         history.max(by: isRecentRecordWorse(_:_:))
     }
 
-    private static func isWeightRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+    nonisolated private static func isWeightRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
         if lhs.bestSetWeightKg != rhs.bestSetWeightKg {
             return lhs.bestSetWeightKg < rhs.bestSetWeightKg
         }
@@ -311,7 +311,7 @@ final class ExercisePerformanceService {
         return lhs.id.uuidString < rhs.id.uuidString
     }
 
-    private static func isRepsRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+    nonisolated private static func isRepsRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
         if lhs.bestSetReps != rhs.bestSetReps {
             return lhs.bestSetReps < rhs.bestSetReps
         }
@@ -327,7 +327,7 @@ final class ExercisePerformanceService {
         return lhs.id.uuidString < rhs.id.uuidString
     }
 
-    private static func isVolumeRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+    nonisolated private static func isVolumeRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
         if lhs.totalVolume != rhs.totalVolume {
             return lhs.totalVolume < rhs.totalVolume
         }
@@ -343,7 +343,7 @@ final class ExercisePerformanceService {
         return lhs.id.uuidString < rhs.id.uuidString
     }
 
-    private static func isRecentRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+    nonisolated private static func isRecentRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
         if lhs.performedAt != rhs.performedAt {
             return lhs.performedAt < rhs.performedAt
         }

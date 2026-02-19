@@ -1,0 +1,13 @@
+{
+  "updated_at_utc": "2026-02-17T06:00:00Z",
+  "notes": "Recalibrated after startup/tab activation policy and query-budget reductions; retains modest safety headroom.",
+  "budgets_seconds": {
+    "startup_to_tabbar": 5.8,
+    "reopen_to_tabbar": 1.8,
+    "tab_switch_dashboard_ready": 2.0,
+    "tab_switch_profile_ready": 1.9,
+    "tab_switch_trai_ready": 1.9,
+    "tab_switch_workouts_ready": 2.5,
+    "live_workout_add_exercise_sheet": 3.0
+  }
+}

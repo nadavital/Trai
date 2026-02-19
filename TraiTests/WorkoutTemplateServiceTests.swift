@@ -4,28 +4,27 @@ import SwiftData
 
 @MainActor
 final class WorkoutTemplateServiceTests: XCTestCase {
-    private var container: ModelContainer!
-    private var context: ModelContext!
     private var service: WorkoutTemplateService!
 
     override func setUpWithError() throws {
         try super.setUpWithError()
-        container = try ModelContainer(
-            for: UserProfile.self,
-            LiveWorkout.self,
-            LiveWorkoutEntry.self,
-            ExerciseHistory.self,
-            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-        )
-        context = ModelContext(container)
         service = WorkoutTemplateService()
     }
 
     override func tearDownWithError() throws {
         service = nil
-        context = nil
-        container = nil
         try super.tearDownWithError()
+    }
+
+    private func makeInMemoryContext() throws -> ModelContext {
+        let container = try ModelContainer(
+            for: UserProfile.self,
+            configurations: ModelConfiguration(
+                isStoredInMemoryOnly: true,
+                cloudKitDatabase: .none
+            )
+        )
+        return ModelContext(container)
     }
 
     func testCreateCustomWorkoutUsesProvidedValues() {
@@ -57,6 +56,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
     }
 
     func testCreateWorkoutForIntentMatchesTemplateByCaseInsensitiveContains() throws {
+        let context = try makeInMemoryContext()
         let profile = UserProfile()
         profile.workoutPlan = WorkoutPlan(
             splitType: .upperLower,
@@ -88,7 +88,8 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.muscleGroups, [.chest, .back, .shoulders])
     }
 
-    func testCreateWorkoutForIntentFallsBackToCustomNamedWorkout() {
+    func testCreateWorkoutForIntentFallsBackToCustomNamedWorkout() throws {
+        let context = try makeInMemoryContext()
         let workout = service.createWorkoutForIntent(
             name: "Fight Camp",
             modelContext: context
@@ -99,7 +100,8 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.muscleGroups, [])
     }
 
-    func testCreateWorkoutForIntentCustomCreatesDefaultWorkout() {
+    func testCreateWorkoutForIntentCustomCreatesDefaultWorkout() throws {
+        let context = try makeInMemoryContext()
         let workout = service.createWorkoutForIntent(
             name: "custom",
             modelContext: context
@@ -108,5 +110,41 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.name, "Custom Workout")
         XCTAssertEqual(workout.type, .strength)
         XCTAssertEqual(workout.muscleGroups, [])
+    }
+}
+
+@MainActor
+final class MuscleRecoveryServicePerformanceTests: XCTestCase {
+    private var service: MuscleRecoveryService!
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        service = .shared
+    }
+
+    override func tearDownWithError() throws {
+        service = nil
+        try super.tearDownWithError()
+    }
+
+    func testRecoveryCacheHitBehaviorUsesFreshTTLWindow() {
+        let now = Date()
+
+        service.debugSeedRecoveryCacheForTests(generatedAt: now.addingTimeInterval(-45))
+        XCTAssertTrue(service.debugShouldUseRecoveryCache(forceRefresh: false, now: now))
+        XCTAssertFalse(service.debugShouldUseRecoveryCache(forceRefresh: true, now: now))
+
+        service.debugSeedRecoveryCacheForTests(generatedAt: now.addingTimeInterval(-100))
+        XCTAssertFalse(service.debugShouldUseRecoveryCache(forceRefresh: false, now: now))
+    }
+
+    func testExerciseLookupCacheExpiresWithinBoundedWindow() {
+        let now = Date()
+
+        service.debugSeedExerciseLookupCacheForTests(generatedAt: now.addingTimeInterval(-120))
+        XCTAssertTrue(service.debugShouldUseExerciseLookupCache(now: now))
+
+        service.debugSeedExerciseLookupCacheForTests(generatedAt: now.addingTimeInterval(-400))
+        XCTAssertFalse(service.debugShouldUseExerciseLookupCache(now: now))
     }
 }

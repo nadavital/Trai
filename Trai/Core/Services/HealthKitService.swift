@@ -11,7 +11,8 @@ import HealthKit
 /// Service for interacting with HealthKit
 @MainActor @Observable
 final class HealthKitService {
-    private let healthStore = HKHealthStore()
+    @ObservationIgnored
+    private lazy var healthStore = HKHealthStore()
 
     struct ActivitySummary: Sendable {
         let steps: Int

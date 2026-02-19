@@ -183,6 +183,7 @@ struct ExerciseCard: View {
                         .font(.subheadline)
                         .foregroundStyle(.tint)
                     }
+                    .accessibilityIdentifier("liveWorkoutAddSetButton")
                     .padding(.top, 4)
                 }
             }

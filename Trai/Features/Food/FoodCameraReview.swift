@@ -138,14 +138,12 @@ struct FoodCameraReviewView: View {
                                 Text("Analyzing...")
                             }
                             .frame(maxWidth: .infinity)
-                            .padding()
                         } else {
                             Label("Analyze with AI", systemImage: "sparkles")
                                 .frame(maxWidth: .infinity)
-                                .padding()
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.traiPillProminent)
                     .disabled(isAnalyzing)
                 }
             }
@@ -273,9 +271,8 @@ struct FoodCameraSuggestionCard: View {
                                 .fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.traiPillSubtle)
 
                     Button(action: onSave) {
                         HStack(spacing: 6) {
@@ -286,9 +283,8 @@ struct FoodCameraSuggestionCard: View {
                                 .fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
                     }
-                    .buttonStyle(.traiPrimary)
+                    .buttonStyle(.traiPillProminent)
                 }
             }
         }
@@ -397,7 +393,7 @@ struct FoodCameraErrorCard: View {
                 .multilineTextAlignment(.center)
 
             Button("Try Again", action: onRetry)
-                .buttonStyle(.bordered)
+                .buttonStyle(.traiPillSubtle)
         }
         .frame(maxWidth: .infinity)
         .traiCard()

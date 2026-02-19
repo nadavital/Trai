@@ -8,31 +8,45 @@
 import SwiftUI
 import SwiftData
 
+private struct DashboardNutritionTotals {
+    var calories: Int = 0
+    var protein: Double = 0
+    var carbs: Double = 0
+    var fat: Double = 0
+    var fiber: Double = 0
+    var sugar: Double = 0
+
+    init() {}
+
+    init(entries: [FoodEntry]) {
+        calories = entries.reduce(0) { $0 + $1.calories }
+        protein = entries.reduce(0) { $0 + $1.proteinGrams }
+        carbs = entries.reduce(0) { $0 + $1.carbsGrams }
+        fat = entries.reduce(0) { $0 + $1.fatGrams }
+        fiber = entries.reduce(0) { $0 + ($1.fiberGrams ?? 0) }
+        sugar = entries.reduce(0) { $0 + ($1.sugarGrams ?? 0) }
+    }
+}
+
 struct DashboardView: View {
     /// Optional binding to control reminders sheet from parent (for notification taps)
     @Binding var showRemindersBinding: Bool
+    let onSelectTab: ((AppTab) -> Void)?
 
     @Query private var profiles: [UserProfile]
-    @Query(sort: \FoodEntry.loggedAt, order: .reverse)
-    private var allFoodEntries: [FoodEntry]
-
-    @Query(sort: \WorkoutSession.loggedAt, order: .reverse)
-    private var allWorkouts: [WorkoutSession]
-
-    @Query(sort: \LiveWorkout.startedAt, order: .reverse)
-    private var liveWorkouts: [LiveWorkout]
-
-    @Query(sort: \WeightEntry.loggedAt, order: .reverse)
-    private var weightEntries: [WeightEntry]
-    @Query(filter: #Predicate<CoachSignal> { !$0.isResolved }, sort: \CoachSignal.createdAt, order: .reverse)
-    private var coachSignals: [CoachSignal]
+    @Query private var allFoodEntries: [FoodEntry]
+    @Query private var insightFoodEntries: [FoodEntry]
+    @Query private var allWorkouts: [WorkoutSession]
+    @Query private var liveWorkouts: [LiveWorkout]
+    @Query private var weightEntries: [WeightEntry]
+    @Query private var coachSignals: [CoachSignal]
     @Query private var suggestionUsage: [SuggestionUsage]
-    @Query(sort: \BehaviorEvent.occurredAt, order: .reverse)
-    private var behaviorEvents: [BehaviorEvent]
+    @Query private var behaviorEvents: [BehaviorEvent]
 
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
-    @State private var recoveryService = MuscleRecoveryService()
+    @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
+    @State private var recoveryService = MuscleRecoveryService.shared
     @State private var workoutTemplateService = WorkoutTemplateService()
 
     // Custom reminders (fetched manually to avoid @Query freeze)
@@ -41,7 +55,19 @@ struct DashboardView: View {
     @State private var remindersLoaded = false
     @State private var pendingScrollToReminders = false
     @State private var reminderCompletionHistory: [ReminderCompletion] = []
-    private let reminderCompletionHistoryCapPerWindow = 400
+    @State private var cachedDailyCoachContext: DailyCoachContext?
+    @State private var cachedRecoveryInfo: [MuscleRecoveryService.MuscleRecoveryInfo] = []
+    @State private var didPrimeInitialData = false
+    @State private var coachContextRefreshTask: Task<Void, Never>?
+    @State private var deferredInitialLoadTask: Task<Void, Never>?
+    @State private var remindersLoadTask: Task<Void, Never>?
+    @State private var pulseHeroRevealTask: Task<Void, Never>?
+    @State private var hasPerformedDeferredStartupWork = false
+    @State private var shouldRenderPulseHero = false
+    @State private var isDashboardTabVisible = false
+    @State private var latencyProbeEntries: [String] = []
+    @State private var tabActivationPolicy = TabActivationPolicy(minimumDwellMilliseconds: 0)
+    private let reminderCompletionHistoryCapPerWindow = 180
 
     // Sheet presentation state
     @State private var showingLogFood = false
@@ -59,10 +85,135 @@ struct DashboardView: View {
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
     @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest = false
     @AppStorage("pendingPulseSeedPrompt") private var pendingPulseSeedPrompt: String = ""
-    @AppStorage("selectedTab") private var selectedTabRaw: String = AppTab.dashboard.rawValue
+    private static let dashboardHistoryWindowDays = 100
+    private static let dashboardFastFoodWindowDays = 2
+    private static let behaviorHistoryWindowDays = 90
+    private static let dashboardEntryFetchLimit = 48
+    private static let dashboardFastFoodFetchLimit = 72
+    private static let dashboardInsightFoodWindowDays = 45
+    private static let dashboardInsightFoodFetchLimit = 360
+    private static let dashboardLazyFoodTrendWindowDays = 7
+    private static let dashboardHistoricalFoodFetchLimit = 240
+    private static let behaviorEventFetchLimit = 90
+    private static let coachSignalFetchLimit = 48
+    private static let suggestionUsageFetchLimit = 64
+    private static var deferredStartupWorkDelayMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 2400 : 420
+    }
+    private static var dashboardResumeDeferredWorkDelayMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1800 : 220
+    }
+    private static var remindersInitialLoadDelayMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1400 : 120
+    }
+    private static var coachContextRefreshDelayMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1200 : 180
+    }
+    private static var dashboardHeavyRefreshMinimumDwellMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1600 : 320
+    }
+    private static var pulseHeroStartupRevealDelayMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 4200 : 900
+    }
+    private static var pulseHeroReactivationRevealDelayMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 2600 : 420
+    }
 
-    init(showRemindersBinding: Binding<Bool> = .constant(false)) {
+    init(
+        showRemindersBinding: Binding<Bool> = .constant(false),
+        onSelectTab: ((AppTab) -> Void)? = nil
+    ) {
         _showRemindersBinding = showRemindersBinding
+        self.onSelectTab = onSelectTab
+
+        let now = Date()
+        let calendar = Calendar.current
+        let historyCutoff = calendar.date(
+            byAdding: .day,
+            value: -Self.dashboardHistoryWindowDays,
+            to: now
+        ) ?? .distantPast
+        let foodFastWindowCutoff = calendar.date(
+            byAdding: .day,
+            value: -(Self.dashboardFastFoodWindowDays - 1),
+            to: calendar.startOfDay(for: now)
+        ) ?? historyCutoff
+        let insightFoodWindowCutoff = calendar.date(
+            byAdding: .day,
+            value: -Self.dashboardInsightFoodWindowDays,
+            to: now
+        ) ?? .distantPast
+        let behaviorCutoff = calendar.date(
+            byAdding: .day,
+            value: -Self.behaviorHistoryWindowDays,
+            to: now
+        ) ?? .distantPast
+        let coachSignalCutoff = calendar.date(
+            byAdding: .day,
+            value: -30,
+            to: now
+        ) ?? .distantPast
+
+        var profileDescriptor = FetchDescriptor<UserProfile>()
+        profileDescriptor.fetchLimit = 1
+        _profiles = Query(profileDescriptor)
+
+        var foodDescriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate<FoodEntry> { $0.loggedAt >= foodFastWindowCutoff },
+            sortBy: [SortDescriptor(\FoodEntry.loggedAt, order: .reverse)]
+        )
+        foodDescriptor.fetchLimit = Self.dashboardFastFoodFetchLimit
+        _allFoodEntries = Query(foodDescriptor)
+
+        var insightFoodDescriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate<FoodEntry> { $0.loggedAt >= insightFoodWindowCutoff },
+            sortBy: [SortDescriptor(\FoodEntry.loggedAt, order: .reverse)]
+        )
+        insightFoodDescriptor.fetchLimit = Self.dashboardInsightFoodFetchLimit
+        _insightFoodEntries = Query(insightFoodDescriptor)
+
+        var workoutDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate<WorkoutSession> { $0.loggedAt >= historyCutoff },
+            sortBy: [SortDescriptor(\WorkoutSession.loggedAt, order: .reverse)]
+        )
+        workoutDescriptor.fetchLimit = Self.dashboardEntryFetchLimit
+        _allWorkouts = Query(workoutDescriptor)
+
+        var liveWorkoutDescriptor = FetchDescriptor<LiveWorkout>(
+            predicate: #Predicate<LiveWorkout> { $0.startedAt >= historyCutoff },
+            sortBy: [SortDescriptor(\LiveWorkout.startedAt, order: .reverse)]
+        )
+        liveWorkoutDescriptor.fetchLimit = Self.dashboardEntryFetchLimit
+        _liveWorkouts = Query(liveWorkoutDescriptor)
+
+        var weightDescriptor = FetchDescriptor<WeightEntry>(
+            predicate: #Predicate<WeightEntry> { $0.loggedAt >= historyCutoff },
+            sortBy: [SortDescriptor(\WeightEntry.loggedAt, order: .reverse)]
+        )
+        weightDescriptor.fetchLimit = Self.dashboardEntryFetchLimit
+        _weightEntries = Query(weightDescriptor)
+
+        var behaviorDescriptor = FetchDescriptor<BehaviorEvent>(
+            predicate: #Predicate<BehaviorEvent> { $0.occurredAt >= behaviorCutoff },
+            sortBy: [SortDescriptor(\BehaviorEvent.occurredAt, order: .reverse)]
+        )
+        behaviorDescriptor.fetchLimit = Self.behaviorEventFetchLimit
+        _behaviorEvents = Query(behaviorDescriptor)
+
+        var coachSignalDescriptor = FetchDescriptor<CoachSignal>(
+            predicate: #Predicate<CoachSignal> {
+                !$0.isResolved && $0.createdAt >= coachSignalCutoff
+            },
+            sortBy: [SortDescriptor(\CoachSignal.createdAt, order: .reverse)]
+        )
+        coachSignalDescriptor.fetchLimit = Self.coachSignalFetchLimit
+        _coachSignals = Query(coachSignalDescriptor)
+
+        var suggestionDescriptor = FetchDescriptor<SuggestionUsage>(
+            sortBy: [SortDescriptor(\SuggestionUsage.tapCount, order: .reverse)]
+        )
+        suggestionDescriptor.fetchLimit = Self.suggestionUsageFetchLimit
+        _suggestionUsage = Query(suggestionDescriptor)
     }
 
     // Date navigation
@@ -73,44 +224,136 @@ struct DashboardView: View {
     @State private var todayActiveCalories = 0
     @State private var todayExerciseMinutes = 0
     @State private var isLoadingActivity = false
+    @State private var cachedSelectedDayFoodEntries: [FoodEntry] = []
+    @State private var cachedLast7DaysFoodEntries: [FoodEntry] = []
+    @State private var cachedOnDemandFoodTrendEntries: [FoodEntry] = []
+    @State private var cachedOnDemandFoodTrendAnchor: Date?
+    @State private var cachedSelectedDayWorkouts: [WorkoutSession] = []
+    @State private var cachedSelectedDayLiveWorkouts: [LiveWorkout] = []
+    @State private var selectedDayNutritionTotals = DashboardNutritionTotals()
 
     private let reminderHabitWindowDays = 30
 
     private var profile: UserProfile? { profiles.first }
 
+    private var isDashboardTabActive: Bool {
+        isDashboardTabVisible
+    }
+
+    private var shouldDeferCoachContextRefreshDuringStartup: Bool {
+        false
+    }
+
     private var isViewingToday: Bool {
         Calendar.current.isDateInToday(selectedDate)
     }
 
-    private var selectedDayFoodEntries: [FoodEntry] {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: selectedDate)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
-        return allFoodEntries.filter { $0.loggedAt >= startOfDay && $0.loggedAt < endOfDay }
+    private var foodEntriesRefreshFingerprint: String {
+        guard !allFoodEntries.isEmpty else { return "0" }
+        var parts: [String] = []
+        parts.reserveCapacity(1 + (allFoodEntries.count * 8))
+        parts.append(String(allFoodEntries.count))
+        for entry in allFoodEntries {
+            parts.append(entry.id.uuidString)
+            parts.append(String(entry.loggedAt.timeIntervalSinceReferenceDate))
+            parts.append(String(entry.calories))
+            parts.append(String(entry.proteinGrams))
+            parts.append(String(entry.carbsGrams))
+            parts.append(String(entry.fatGrams))
+            parts.append(String(entry.fiberGrams ?? -1))
+            parts.append(String(entry.sugarGrams ?? -1))
+        }
+        return parts.joined(separator: "|")
     }
+
+    private var coachContextRefreshFingerprint: String {
+        [
+            weightEntriesRefreshFingerprint,
+            coachSignalsRefreshFingerprint,
+            behaviorEventsRefreshFingerprint,
+            suggestionUsageRefreshFingerprint
+        ].joined(separator: "||")
+    }
+
+    private var weightEntriesRefreshFingerprint: String {
+        guard !weightEntries.isEmpty else { return "0" }
+        var parts: [String] = []
+        parts.reserveCapacity(1 + (weightEntries.count * 4))
+        parts.append(String(weightEntries.count))
+        for entry in weightEntries {
+            parts.append(entry.id.uuidString)
+            parts.append(String(entry.loggedAt.timeIntervalSinceReferenceDate))
+            parts.append(String(entry.weightKg))
+            parts.append(String(entry.bodyFatPercentage ?? -1))
+        }
+        return parts.joined(separator: "|")
+    }
+
+    private var coachSignalsRefreshFingerprint: String {
+        guard !coachSignals.isEmpty else { return "0" }
+        var parts: [String] = []
+        parts.reserveCapacity(1 + (coachSignals.count * 8))
+        parts.append(String(coachSignals.count))
+        for signal in coachSignals {
+            parts.append(signal.id.uuidString)
+            parts.append(String(signal.createdAt.timeIntervalSinceReferenceDate))
+            parts.append(String(signal.expiresAt.timeIntervalSinceReferenceDate))
+            parts.append(signal.title)
+            parts.append(signal.detail)
+            parts.append(String(signal.severity))
+            parts.append(String(signal.confidence))
+            parts.append(signal.isResolved ? "1" : "0")
+        }
+        return parts.joined(separator: "|")
+    }
+
+    private var behaviorEventsRefreshFingerprint: String {
+        guard !behaviorEvents.isEmpty else { return "0" }
+        var parts: [String] = []
+        parts.reserveCapacity(1 + (behaviorEvents.count * 5))
+        parts.append(String(behaviorEvents.count))
+        for event in behaviorEvents {
+            parts.append(event.id.uuidString)
+            parts.append(String(event.occurredAt.timeIntervalSinceReferenceDate))
+            parts.append(event.actionKey)
+            parts.append(event.domainRaw)
+            parts.append(event.outcomeRaw)
+        }
+        return parts.joined(separator: "|")
+    }
+
+    private var suggestionUsageRefreshFingerprint: String {
+        guard !suggestionUsage.isEmpty else { return "0" }
+        var parts: [String] = []
+        parts.reserveCapacity(1 + (suggestionUsage.count * 5))
+        parts.append(String(suggestionUsage.count))
+        for usage in suggestionUsage {
+            parts.append(usage.id.uuidString)
+            parts.append(usage.suggestionType)
+            parts.append(String(usage.tapCount))
+            parts.append(String(usage.lastTapped?.timeIntervalSinceReferenceDate ?? 0))
+            parts.append(String(usage.hourlyTapsData?.count ?? 0))
+        }
+        return parts.joined(separator: "|")
+    }
+
+    private var selectedDayFoodEntries: [FoodEntry] { cachedSelectedDayFoodEntries }
 
     /// Last 7 days of food entries for trend charts
-    private var last7DaysFoodEntries: [FoodEntry] {
-        let calendar = Calendar.current
-        let startDate = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: Date()))!
-        return allFoodEntries.filter { $0.loggedAt >= startDate }
-    }
+    private var last7DaysFoodEntries: [FoodEntry] { cachedLast7DaysFoodEntries }
 
-    private var selectedDayWorkouts: [WorkoutSession] {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: selectedDate)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
-        return allWorkouts.filter { $0.loggedAt >= startOfDay && $0.loggedAt < endOfDay }
-    }
-
-    private var selectedDayLiveWorkouts: [LiveWorkout] {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: selectedDate)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
-        return liveWorkouts.filter { workout in
-            workout.startedAt >= startOfDay && workout.startedAt < endOfDay
+    /// Detail sheets read a lazy-loaded 7-day history keyed to the selected date.
+    private var detailSheetHistoricalFoodEntries: [FoodEntry] {
+        let selectedStart = Calendar.current.startOfDay(for: selectedDate)
+        if cachedOnDemandFoodTrendAnchor == selectedStart {
+            return cachedOnDemandFoodTrendEntries
         }
+        return last7DaysFoodEntries
     }
+
+    private var selectedDayWorkouts: [WorkoutSession] { cachedSelectedDayWorkouts }
+
+    private var selectedDayLiveWorkouts: [LiveWorkout] { cachedSelectedDayLiveWorkouts }
 
     /// HealthKit workout IDs that have been merged into LiveWorkouts (to avoid double-counting)
     private var mergedHealthKitIDs: Set<String> {
@@ -131,21 +374,15 @@ struct DashboardView: View {
     /// Only shows a name when set to recommended workout and a plan exists
     private var quickAddWorkoutName: String? {
         guard let profile,
-              profile.defaultWorkoutActionValue == .recommendedWorkout,
-              let plan = profile.workoutPlan else {
+              profile.defaultWorkoutActionValue == .recommendedWorkout else {
             return nil
         }
 
-        let recommendedId = recoveryService.getRecommendedTemplateId(plan: plan, modelContext: modelContext)
-        let template = plan.templates.first { $0.id == recommendedId } ?? plan.templates.first
-        return template?.name
-    }
+        if let cachedName = cachedDailyCoachContext?.recommendedWorkoutName {
+            return cachedName
+        }
 
-    private var coachRecommendedWorkoutName: String? {
-        guard let plan = profile?.workoutPlan else { return nil }
-        let recommendedId = recoveryService.getRecommendedTemplateId(plan: plan, modelContext: modelContext)
-        let template = plan.templates.first { $0.id == recommendedId } ?? plan.templates.first
-        return template?.name
+        return profile.workoutPlan?.templates.first?.name
     }
 
     private var hasActiveLiveWorkout: Bool {
@@ -153,10 +390,36 @@ struct DashboardView: View {
     }
 
     private var dailyCoachContext: DailyCoachContext? {
-        guard isViewingToday, let profile else { return nil }
+        cachedDailyCoachContext
+    }
 
-        let recoveryInfo = recoveryService.getRecoveryStatus(modelContext: modelContext)
+    private func computeDailyCoachContext() -> DailyCoachContext? {
+        guard isViewingToday, let profile else { return nil }
+        let startedAt = LatencyProbe.timerStart()
+        defer {
+            recordDashboardLatencyProbe(
+                "computeDailyCoachContext",
+                startedAt: startedAt,
+                counts: [
+                    "food": allFoodEntries.count,
+                    "workouts": allWorkouts.count,
+                    "liveWorkouts": liveWorkouts.count,
+                    "weights": weightEntries.count,
+                    "signals": coachSignals.count,
+                    "behavior": behaviorEvents.count,
+                    "reminders": customReminders.count
+                ]
+            )
+        }
+
+        let recoveryInfo = cachedRecoveryInfo.isEmpty
+            ? recoveryService.getRecoveryStatus(modelContext: modelContext)
+            : cachedRecoveryInfo
         let readyMuscleCount = recoveryInfo.filter { $0.status == .ready }.count
+        let recommendedWorkoutName = recommendedWorkoutName(
+            in: profile.workoutPlan,
+            recoveryInfo: recoveryInfo
+        )
         let hasWorkout = todayTotalWorkoutCount > 0
         let calorieGoal = profile.effectiveCalorieGoal(hasWorkoutToday: hasWorkout || hasActiveLiveWorkout)
         let activeSignals = coachSignals.active(now: .now)
@@ -199,7 +462,7 @@ struct DashboardView: View {
             proteinConsumed: Int(totalProtein.rounded()),
             proteinGoal: profile.dailyProteinGoal,
             readyMuscleCount: readyMuscleCount,
-            recommendedWorkoutName: coachRecommendedWorkoutName,
+            recommendedWorkoutName: recommendedWorkoutName,
                 activeSignals: activeSignals,
                 trend: pulseTrendSnapshot,
                 patternProfile: pulsePatternProfile,
@@ -231,13 +494,16 @@ struct DashboardView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
-                if isViewingToday, profile != nil {
+                if isViewingToday,
+                   profile != nil,
+                   !AppLaunchArguments.shouldSuppressStartupAnimations {
                     DashboardPulseTopGradient()
                 }
 
                 ScrollViewReader { scrollProxy in
-                    ScrollView(.vertical) {
-                        VStack(spacing: 18) {
+                    GeometryReader { geometry in
+                        ScrollView(.vertical) {
+                            LazyVStack(spacing: 18) {
                             // Date Navigation
                             DateNavigationBar(
                                 selectedDate: $selectedDate,
@@ -245,7 +511,7 @@ struct DashboardView: View {
                             )
 
                             if isViewingToday, profile != nil {
-                                if let coachContext = dailyCoachContext {
+                                if shouldRenderPulseHero, let coachContext = dailyCoachContext {
                                     TraiPulseHeroCard(
                                         context: coachContext,
                                         onAction: handleCoachAction,
@@ -341,11 +607,13 @@ struct DashboardView: View {
                                 .buttonStyle(.plain)
                                 .traiEntrance(index: 6)
                             }
+                            }
+                            .frame(width: max(0, geometry.size.width - 32), alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 16)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
+                        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
                     }
-                    .scrollBounceBehavior(.basedOnSize, axes: .vertical)
                 .onChange(of: showRemindersBinding) { _, isShowing in
                     // Scroll to reminders section when triggered by notification
                     if isShowing {
@@ -375,19 +643,118 @@ struct DashboardView: View {
                 }
             }
             .task {
-                _ = CoachSignalService(modelContext: modelContext).pruneExpiredSignals()
-                fetchCustomReminders()
-                remindersLoaded = true
-                await loadActivityData()
+                guard !didPrimeInitialData else { return }
+                didPrimeInitialData = true
+                if showRemindersBinding {
+                    pendingScrollToReminders = true
+                }
+                await Task.yield()
+                refreshDateScopedCaches()
+                scheduleRemindersLoad(
+                    delayMilliseconds: Self.remindersInitialLoadDelayMilliseconds
+                )
+                scheduleDeferredStartupWork(
+                    delayMilliseconds: Self.deferredStartupWorkDelayMilliseconds
+                )
+                schedulePulseHeroReveal(
+                    delayMilliseconds: Self.pulseHeroStartupRevealDelayMilliseconds
+                )
             }
-            .onChange(of: selectedDate) { _, newDate in
-                if Calendar.current.isDateInToday(newDate) {
-                    Task { await loadActivityData() }
+            .onAppear {
+                if tabActivationPolicy.activeSince == nil {
+                    tabActivationPolicy = TabActivationPolicy(
+                        minimumDwellMilliseconds: Self.dashboardHeavyRefreshMinimumDwellMilliseconds
+                    )
+                }
+                tabActivationPolicy.activate()
+                isDashboardTabVisible = true
+                guard didPrimeInitialData else { return }
+
+                if showRemindersBinding {
+                    pendingScrollToReminders = true
+                }
+                if !remindersLoaded {
+                    scheduleRemindersLoad(delayMilliseconds: 0)
+                }
+
+                refreshDateScopedCaches()
+                if isViewingToday {
+                    Task {
+                        await loadActivityData()
+                        scheduleCoachContextRefresh(forceRefresh: true, immediate: true)
+                    }
+                    schedulePulseHeroReveal(
+                        delayMilliseconds: Self.pulseHeroReactivationRevealDelayMilliseconds
+                    )
+                } else {
+                    scheduleCoachContextRefresh(immediate: true)
+                }
+
+                if !hasPerformedDeferredStartupWork {
+                    scheduleDeferredStartupWork(
+                        delayMilliseconds: Self.dashboardResumeDeferredWorkDelayMilliseconds
+                    )
                 }
             }
+            .onChange(of: selectedDate) { _, newDate in
+                refreshDateScopedCaches()
+                if Calendar.current.isDateInToday(newDate) {
+                    schedulePulseHeroReveal(
+                        delayMilliseconds: Self.pulseHeroReactivationRevealDelayMilliseconds
+                    )
+                    Task {
+                        await loadActivityData()
+                        scheduleCoachContextRefresh(forceRefresh: true, immediate: true)
+                    }
+                } else {
+                    scheduleCoachContextRefresh(immediate: true)
+                }
+            }
+            .onChange(of: foodEntriesRefreshFingerprint) { _, _ in
+                guard isDashboardTabActive else { return }
+                refreshFoodDateCaches()
+                guard !shouldDeferCoachContextRefreshDuringStartup else { return }
+                scheduleCoachContextRefresh(forceRefresh: true)
+            }
+            .onChange(of: allWorkouts.count) {
+                guard isDashboardTabActive else { return }
+                refreshWorkoutDateCache()
+                guard !shouldDeferCoachContextRefreshDuringStartup else { return }
+                scheduleCoachContextRefresh(forceRefresh: true)
+            }
+            .onChange(of: liveWorkouts.count) {
+                guard isDashboardTabActive else { return }
+                refreshLiveWorkoutDateCache()
+                guard !shouldDeferCoachContextRefreshDuringStartup else { return }
+                scheduleCoachContextRefresh(forceRefresh: true)
+            }
             .onReceive(NotificationCenter.default.publisher(for: .workoutCompleted)) { _ in
+                guard isDashboardTabActive else { return }
                 // Refresh after workout completed to update muscle recovery
-                Task { await loadActivityData() }
+                Task {
+                    await loadActivityData()
+                    scheduleCoachContextRefresh(forceRefresh: true, immediate: true)
+                }
+            }
+            .onChange(of: activeWorkoutRuntimeState.isLiveWorkoutPresented) { _, isPresented in
+                guard isDashboardTabActive else { return }
+                if !isPresented {
+                    guard !hasActiveLiveWorkout else { return }
+                    scheduleCoachContextRefresh(forceRefresh: true)
+                }
+            }
+            .onChange(of: coachContextRefreshFingerprint) { _, _ in
+                guard isDashboardTabActive else { return }
+                guard !shouldDeferCoachContextRefreshDuringStartup else { return }
+                scheduleCoachContextRefresh(forceRefresh: true)
+            }
+            .onDisappear {
+                isDashboardTabVisible = false
+                tabActivationPolicy.deactivate()
+                coachContextRefreshTask?.cancel()
+                deferredInitialLoadTask?.cancel()
+                remindersLoadTask?.cancel()
+                pulseHeroRevealTask?.cancel()
             }
             .refreshable {
                 await refreshHealthData()
@@ -420,7 +787,7 @@ struct DashboardView: View {
                 CalorieDetailSheet(
                     entries: selectedDayFoodEntries,
                     goal: profile?.dailyCalorieGoal ?? 2000,
-                    historicalEntries: last7DaysFoodEntries,
+                    historicalEntries: detailSheetHistoricalFoodEntries,
                     onAddFood: isViewingToday ? {
                         showingCalorieDetail = false
                         Task {
@@ -447,7 +814,7 @@ struct DashboardView: View {
                     fiberGoal: profile?.dailyFiberGoal ?? 30,
                     sugarGoal: profile?.dailySugarGoal ?? 50,
                     enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
-                    historicalEntries: last7DaysFoodEntries,
+                    historicalEntries: detailSheetHistoricalFoodEntries,
                     onAddFood: isViewingToday ? {
                         showingMacroDetail = false
                         Task {
@@ -467,32 +834,271 @@ struct DashboardView: View {
             .sheet(item: $entryToEdit) { entry in
                 EditFoodEntrySheet(entry: entry)
             }
+            .overlay(alignment: .topLeading) {
+                Text("ready")
+                    .font(.system(size: 1))
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityIdentifier("dashboardRootReady")
+            }
+            .overlay(alignment: .topLeading) {
+                Text(dashboardLatencyProbeLabel)
+                    .font(.system(size: 1))
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(dashboardLatencyProbeLabel)
+                    .accessibilityIdentifier("dashboardLatencyProbe")
+            }
+            }
+        }
+        .traiBackground()
+    }
+
+    private var dashboardLatencyProbeLabel: String {
+        guard AppLaunchArguments.shouldEnableLatencyProbe else { return "disabled" }
+        return latencyProbeEntries.isEmpty ? "pending" : latencyProbeEntries.joined(separator: " | ")
+    }
+
+    private func recordDashboardLatencyProbe(
+        _ operation: String,
+        startedAt: UInt64,
+        counts: [String: Int] = [:]
+    ) {
+        guard AppLaunchArguments.shouldEnableLatencyProbe else { return }
+        let entry = LatencyProbe.makeEntry(
+            operation: operation,
+            durationMilliseconds: LatencyProbe.elapsedMilliseconds(since: startedAt),
+            counts: counts
+        )
+        LatencyProbe.append(entry: entry, to: &latencyProbeEntries)
+    }
+
+    private func refreshDateScopedCaches() {
+        let interval = PerformanceTrace.begin("dashboard_date_cache_refresh", category: .dataLoad)
+        let startedAt = LatencyProbe.timerStart()
+        defer {
+            PerformanceTrace.end("dashboard_date_cache_refresh", interval, category: .dataLoad)
+            recordDashboardLatencyProbe(
+                "refreshDateScopedCaches",
+                startedAt: startedAt,
+                counts: [
+                    "food": allFoodEntries.count,
+                    "workouts": allWorkouts.count,
+                    "liveWorkouts": liveWorkouts.count
+                ]
+            )
+        }
+        refreshFoodDateCaches()
+        refreshWorkoutDateCache()
+        refreshLiveWorkoutDateCache()
+    }
+
+    private func scheduleDeferredStartupWork(delayMilliseconds: Int) {
+        deferredInitialLoadTask?.cancel()
+        let activationToken = tabActivationPolicy.activationToken
+        let effectiveDelayMilliseconds = tabActivationPolicy.effectiveDelayMilliseconds(
+            requested: delayMilliseconds
+        )
+        deferredInitialLoadTask = Task(priority: .utility) {
+            if effectiveDelayMilliseconds > 0 {
+                try? await Task.sleep(for: .milliseconds(effectiveDelayMilliseconds))
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
+                runDeferredStartupWorkIfNeeded()
             }
         }
     }
 
+    private func schedulePulseHeroReveal(delayMilliseconds: Int) {
+        guard isDashboardTabActive else { return }
+        guard isViewingToday else { return }
+        guard !shouldRenderPulseHero else { return }
+
+        pulseHeroRevealTask?.cancel()
+        let activationToken = tabActivationPolicy.activationToken
+        let effectiveDelayMilliseconds = tabActivationPolicy.effectiveDelayMilliseconds(
+            requested: delayMilliseconds
+        )
+        pulseHeroRevealTask = Task(priority: .utility) {
+            if effectiveDelayMilliseconds > 0 {
+                try? await Task.sleep(for: .milliseconds(effectiveDelayMilliseconds))
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
+                guard isDashboardTabActive else { return }
+                guard isViewingToday else { return }
+                guard !shouldRenderPulseHero else { return }
+                shouldRenderPulseHero = true
+                scheduleCoachContextRefresh(forceRefresh: true, immediate: true)
+            }
+        }
+    }
+
+    @MainActor
+    private func runDeferredStartupWorkIfNeeded() {
+        guard !hasPerformedDeferredStartupWork else { return }
+        guard isDashboardTabActive else { return }
+
+        hasPerformedDeferredStartupWork = true
+        Task(priority: .utility) { @MainActor in
+            guard isDashboardTabActive else { return }
+            _ = CoachSignalService(modelContext: modelContext).pruneExpiredSignals()
+        }
+        Task { @MainActor in
+            guard isDashboardTabActive else { return }
+            await loadActivityData()
+        }
+        scheduleCoachContextRefresh(forceRefresh: true, immediate: true)
+    }
+
+    private func refreshFoodDateCaches() {
+        let startedAt = LatencyProbe.timerStart()
+        let calendar = Calendar.current
+        let selectedStart = calendar.startOfDay(for: selectedDate)
+        guard let selectedEnd = calendar.date(byAdding: .day, value: 1, to: selectedStart) else { return }
+        let fastWindowCutoff = calendar.date(
+            byAdding: .day,
+            value: -(Self.dashboardFastFoodWindowDays - 1),
+            to: calendar.startOfDay(for: .now)
+        ) ?? .distantPast
+        let selectedDateInFastWindow = selectedStart >= fastWindowCutoff
+
+        if selectedDateInFastWindow {
+            cachedSelectedDayFoodEntries = allFoodEntries.filter {
+                $0.loggedAt >= selectedStart && $0.loggedAt < selectedEnd
+            }
+        } else {
+            cachedSelectedDayFoodEntries = fetchFoodEntries(start: selectedStart, end: selectedEnd)
+        }
+        selectedDayNutritionTotals = DashboardNutritionTotals(entries: cachedSelectedDayFoodEntries)
+
+        let todayStart = calendar.startOfDay(for: Date())
+        if let sevenDayStart = calendar.date(byAdding: .day, value: -6, to: todayStart),
+           let tomorrowStart = calendar.date(byAdding: .day, value: 1, to: todayStart) {
+            cachedLast7DaysFoodEntries = fetchFoodEntries(start: sevenDayStart, end: tomorrowStart)
+        } else {
+            cachedLast7DaysFoodEntries = []
+        }
+        if cachedOnDemandFoodTrendAnchor != selectedStart {
+            cachedOnDemandFoodTrendEntries = []
+            cachedOnDemandFoodTrendAnchor = nil
+        }
+        recordDashboardLatencyProbe(
+            "refreshFoodDateCaches",
+            startedAt: startedAt,
+            counts: [
+                "allFood": allFoodEntries.count,
+                "fastWindow": selectedDateInFastWindow ? 1 : 0,
+                "selectedFood": cachedSelectedDayFoodEntries.count,
+                "last7Food": cachedLast7DaysFoodEntries.count
+            ]
+        )
+    }
+
+    private func fetchFoodEntries(start: Date, end: Date) -> [FoodEntry] {
+        let from = start
+        let to = end
+        var descriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate<FoodEntry> {
+                $0.loggedAt >= from && $0.loggedAt < to
+            },
+            sortBy: [SortDescriptor(\FoodEntry.loggedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = Self.dashboardHistoricalFoodFetchLimit
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    private func loadFoodTrendHistoryForSelectedDateIfNeeded() {
+        let calendar = Calendar.current
+        let selectedStart = calendar.startOfDay(for: selectedDate)
+        guard cachedOnDemandFoodTrendAnchor != selectedStart else { return }
+        guard
+            let selectedEnd = calendar.date(byAdding: .day, value: 1, to: selectedStart),
+            let trendStart = calendar.date(
+                byAdding: .day,
+                value: -(Self.dashboardLazyFoodTrendWindowDays - 1),
+                to: selectedStart
+            )
+        else { return }
+
+        let startedAt = LatencyProbe.timerStart()
+        cachedOnDemandFoodTrendEntries = fetchFoodEntries(start: trendStart, end: selectedEnd)
+        cachedOnDemandFoodTrendAnchor = selectedStart
+        recordDashboardLatencyProbe(
+            "loadFoodTrendHistoryForSelectedDate",
+            startedAt: startedAt,
+            counts: [
+                "trendFood": cachedOnDemandFoodTrendEntries.count,
+                "days": Self.dashboardLazyFoodTrendWindowDays
+            ]
+        )
+    }
+
+    private func refreshWorkoutDateCache() {
+        let startedAt = LatencyProbe.timerStart()
+        let calendar = Calendar.current
+        let selectedStart = calendar.startOfDay(for: selectedDate)
+        guard let selectedEnd = calendar.date(byAdding: .day, value: 1, to: selectedStart) else { return }
+
+        cachedSelectedDayWorkouts = allWorkouts.filter {
+            $0.loggedAt >= selectedStart && $0.loggedAt < selectedEnd
+        }
+        recordDashboardLatencyProbe(
+            "refreshWorkoutDateCache",
+            startedAt: startedAt,
+            counts: [
+                "allWorkouts": allWorkouts.count,
+                "selectedWorkouts": cachedSelectedDayWorkouts.count
+            ]
+        )
+    }
+
+    private func refreshLiveWorkoutDateCache() {
+        let startedAt = LatencyProbe.timerStart()
+        let calendar = Calendar.current
+        let selectedStart = calendar.startOfDay(for: selectedDate)
+        guard let selectedEnd = calendar.date(byAdding: .day, value: 1, to: selectedStart) else { return }
+
+        cachedSelectedDayLiveWorkouts = liveWorkouts.filter {
+            $0.startedAt >= selectedStart && $0.startedAt < selectedEnd
+        }
+        recordDashboardLatencyProbe(
+            "refreshLiveWorkoutDateCache",
+            startedAt: startedAt,
+            counts: [
+                "allLive": liveWorkouts.count,
+                "selectedLive": cachedSelectedDayLiveWorkouts.count
+            ]
+        )
+    }
+
     private var totalCalories: Int {
-        selectedDayFoodEntries.reduce(0) { $0 + $1.calories }
+        selectedDayNutritionTotals.calories
     }
 
     private var totalProtein: Double {
-        selectedDayFoodEntries.reduce(0) { $0 + $1.proteinGrams }
+        selectedDayNutritionTotals.protein
     }
 
     private var totalCarbs: Double {
-        selectedDayFoodEntries.reduce(0) { $0 + $1.carbsGrams }
+        selectedDayNutritionTotals.carbs
     }
 
     private var totalFat: Double {
-        selectedDayFoodEntries.reduce(0) { $0 + $1.fatGrams }
+        selectedDayNutritionTotals.fat
     }
 
     private var totalFiber: Double {
-        selectedDayFoodEntries.reduce(0) { $0 + ($1.fiberGrams ?? 0) }
+        selectedDayNutritionTotals.fiber
     }
 
     private var totalSugar: Double {
-        selectedDayFoodEntries.reduce(0) { $0 + ($1.sugarGrams ?? 0) }
+        selectedDayNutritionTotals.sugar
     }
 
     private var pulseTrendSnapshot: TraiPulseTrendSnapshot? {
@@ -500,7 +1106,7 @@ struct DashboardView: View {
 
         return TraiPulsePatternService.buildTrendSnapshot(
             now: .now,
-            foodEntries: allFoodEntries,
+            foodEntries: last7DaysFoodEntries,
             workouts: allWorkouts,
             liveWorkouts: liveWorkouts,
             profile: profile,
@@ -513,7 +1119,7 @@ struct DashboardView: View {
 
         return TraiPulsePatternService.buildProfile(
             now: .now,
-            foodEntries: allFoodEntries,
+            foodEntries: insightFoodEntries,
             workouts: allWorkouts,
             liveWorkouts: liveWorkouts,
             suggestionUsage: suggestionUsage,
@@ -523,7 +1129,7 @@ struct DashboardView: View {
     }
 
     private var todaysReminderItems: [TodaysRemindersCard.ReminderItem] {
-        guard let profile else { return [] }
+        guard remindersLoaded, let profile else { return [] }
 
         let enabledMeals = Set(profile.enabledMealReminders.split(separator: ",").map(String.init))
         let workoutDays = Set(profile.workoutReminderDays.split(separator: ",").compactMap { Int($0) })
@@ -543,7 +1149,7 @@ struct DashboardView: View {
     }
 
     private var todaysReminderItemsAll: [TodaysRemindersCard.ReminderItem] {
-        guard let profile else { return [] }
+        guard remindersLoaded, let profile else { return [] }
 
         return TodaysRemindersCard.buildReminderItems(
             from: customReminders,
@@ -811,7 +1417,7 @@ struct DashboardView: View {
         return PlanAssessmentService().checkForRecommendation(
             profile: profile,
             weightEntries: Array(weightEntries),
-            foodEntries: Array(allFoodEntries)
+            foodEntries: Array(insightFoodEntries)
         )
     }
 
@@ -840,6 +1446,7 @@ struct DashboardView: View {
     }
 
     private func fetchCustomReminders() {
+        let startedAt = LatencyProbe.timerStart()
         let descriptor = FetchDescriptor<CustomReminder>(
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
@@ -852,7 +1459,9 @@ struct DashboardView: View {
             predicate: #Predicate { $0.completedAt >= lookbackStart },
             sortBy: [SortDescriptor(\.completedAt, order: .reverse)]
         )
-        let completions = (try? modelContext.fetch(completionDescriptor)) ?? []
+        var limitedCompletionDescriptor = completionDescriptor
+        limitedCompletionDescriptor.fetchLimit = reminderCompletionHistoryCapPerWindow
+        let completions = (try? modelContext.fetch(limitedCompletionDescriptor)) ?? []
         reminderCompletionHistory = completions
         trimReminderCompletionHistory(to: now)
         todaysCompletedReminderIds = Set(
@@ -860,6 +1469,34 @@ struct DashboardView: View {
                 .filter { $0.completedAt >= startOfDay }
                 .map { $0.reminderId }
         )
+        recordDashboardLatencyProbe(
+            "fetchCustomReminders",
+            startedAt: startedAt,
+            counts: [
+                "customReminders": customReminders.count,
+                "completionHistory": reminderCompletionHistory.count,
+                "completedToday": todaysCompletedReminderIds.count
+            ]
+        )
+    }
+
+    private func scheduleRemindersLoad(delayMilliseconds: Int = 0) {
+        remindersLoadTask?.cancel()
+        let activationToken = tabActivationPolicy.activationToken
+        let effectiveDelayMilliseconds = tabActivationPolicy.effectiveDelayMilliseconds(
+            requested: delayMilliseconds
+        )
+        remindersLoadTask = Task(priority: .utility) {
+            if effectiveDelayMilliseconds > 0 {
+                try? await Task.sleep(for: .milliseconds(effectiveDelayMilliseconds))
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
+                fetchCustomReminders()
+                remindersLoaded = true
+            }
+        }
     }
 
     private func trimReminderCompletionHistory(to referenceDate: Date) {
@@ -912,10 +1549,14 @@ struct DashboardView: View {
             ]
         )
 
+        scheduleCoachContextRefresh(forceRefresh: true, immediate: true)
         HapticManager.success()
     }
 
     private func loadActivityData() async {
+        let interval = PerformanceTrace.begin("dashboard_activity_summary_load", category: .dataLoad)
+        defer { PerformanceTrace.end("dashboard_activity_summary_load", interval, category: .dataLoad) }
+
         guard isViewingToday else { return }
         isLoadingActivity = true
         defer { isLoadingActivity = false }
@@ -934,6 +1575,103 @@ struct DashboardView: View {
 
     private func refreshHealthData() async {
         await loadActivityData()
+        scheduleCoachContextRefresh(forceRefresh: true, immediate: true)
+    }
+
+    private func scheduleCoachContextRefresh(forceRefresh: Bool = false, immediate: Bool = false) {
+        guard shouldRenderPulseHero else { return }
+        coachContextRefreshTask?.cancel()
+        let requestedDelayMilliseconds = immediate ? 0 : Self.coachContextRefreshDelayMilliseconds
+        let activationToken = tabActivationPolicy.activationToken
+        let delayMilliseconds = tabActivationPolicy.effectiveDelayMilliseconds(
+            requested: requestedDelayMilliseconds
+        )
+        coachContextRefreshTask = Task(priority: .utility) {
+            if delayMilliseconds > 0 {
+                try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
+                guard isDashboardTabActive else { return }
+                refreshRecoveryInfoIfNeeded(forceRefresh: forceRefresh)
+                refreshDailyCoachContextCacheIfNeeded(forceRefresh: forceRefresh)
+            }
+        }
+    }
+
+    private func refreshRecoveryInfoIfNeeded(forceRefresh: Bool = false) {
+        let shouldRefresh = forceRefresh || DashboardRefreshPolicy.shouldRefreshRecovery(
+            isWorkoutRuntimeActive: activeWorkoutRuntimeState.isLiveWorkoutPresented || hasActiveLiveWorkout
+        )
+        guard shouldRefresh || cachedRecoveryInfo.isEmpty else {
+            return
+        }
+
+        let interval = PerformanceTrace.begin("dashboard_recovery_refresh", category: .dataLoad)
+        let startedAt = LatencyProbe.timerStart()
+        cachedRecoveryInfo = recoveryService.getRecoveryStatus(
+            modelContext: modelContext,
+            forceRefresh: forceRefresh
+        )
+        PerformanceTrace.end("dashboard_recovery_refresh", interval, category: .dataLoad)
+        recordDashboardLatencyProbe(
+            "refreshRecoveryInfo",
+            startedAt: startedAt,
+            counts: [
+                "recoveryItems": cachedRecoveryInfo.count,
+                "force": forceRefresh ? 1 : 0
+            ]
+        )
+    }
+
+    private func refreshDailyCoachContextCacheIfNeeded(forceRefresh: Bool = false) {
+        let shouldRefresh = forceRefresh || DashboardRefreshPolicy.shouldRefreshRecovery(
+            isWorkoutRuntimeActive: activeWorkoutRuntimeState.isLiveWorkoutPresented || hasActiveLiveWorkout
+        )
+        guard shouldRefresh || cachedDailyCoachContext == nil else {
+            return
+        }
+        let interval = PerformanceTrace.begin("dashboard_coach_context_refresh", category: .dataLoad)
+        let startedAt = LatencyProbe.timerStart()
+        cachedDailyCoachContext = computeDailyCoachContext()
+        PerformanceTrace.end("dashboard_coach_context_refresh", interval, category: .dataLoad)
+        recordDashboardLatencyProbe(
+            "refreshCoachContextCache",
+            startedAt: startedAt,
+            counts: [
+                "hasContext": cachedDailyCoachContext == nil ? 0 : 1,
+                "force": forceRefresh ? 1 : 0
+            ]
+        )
+    }
+
+    private func recommendedWorkoutName(
+        in plan: WorkoutPlan?,
+        recoveryInfo: [MuscleRecoveryService.MuscleRecoveryInfo]
+    ) -> String? {
+        guard let plan else { return nil }
+        return recommendedTemplate(in: plan, recoveryInfo: recoveryInfo)?.name
+    }
+
+    private func recommendedTemplate(
+        in plan: WorkoutPlan,
+        recoveryInfo: [MuscleRecoveryService.MuscleRecoveryInfo]
+    ) -> WorkoutPlan.WorkoutTemplate? {
+        guard !plan.templates.isEmpty else { return nil }
+
+        var bestTemplate: WorkoutPlan.WorkoutTemplate?
+        var bestScore = -Double.greatestFiniteMagnitude
+
+        for template in plan.templates {
+            let (score, _) = recoveryService.scoreTemplate(template, recoveryInfo: recoveryInfo)
+            if score > bestScore {
+                bestScore = score
+                bestTemplate = template
+            }
+        }
+
+        return bestTemplate ?? plan.templates.first
     }
 
     private func deleteFoodEntry(_ entry: FoodEntry) {
@@ -992,6 +1730,7 @@ struct DashboardView: View {
     }
 
     private func openCalorieDetailFromDashboard(source: String) {
+        loadFoodTrendHistoryForSelectedDateIfNeeded()
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.openCalorieDetail,
             domain: .nutrition,
@@ -1003,6 +1742,7 @@ struct DashboardView: View {
     }
 
     private func openMacroDetailFromDashboard(source: String) {
+        loadFoodTrendHistoryForSelectedDateIfNeeded()
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.openMacroDetail,
             domain: .nutrition,
@@ -1116,9 +1856,17 @@ struct DashboardView: View {
             return
         }
 
-        // Get recommended template based on muscle recovery
-        let recommendedId = recoveryService.getRecommendedTemplateId(plan: plan, modelContext: modelContext)
-        let template = plan.templates.first { $0.id == recommendedId } ?? plan.templates.first
+        let template: WorkoutPlan.WorkoutTemplate?
+        if let cachedRecommendedName = cachedDailyCoachContext?.recommendedWorkoutName {
+            template = plan.templates.first {
+                $0.name.caseInsensitiveCompare(cachedRecommendedName) == .orderedSame
+            } ?? plan.templates.first
+        } else {
+            let recoveryInfo = cachedRecoveryInfo.isEmpty
+                ? recoveryService.getRecoveryStatus(modelContext: modelContext)
+                : cachedRecoveryInfo
+            template = recommendedTemplate(in: plan, recoveryInfo: recoveryInfo)
+        }
 
         guard let template else {
             startCustomWorkout()
@@ -1190,34 +1938,34 @@ struct DashboardView: View {
         case .openProfile:
             trackPulseInteraction("pulse_action_open_profile")
             recordPulseActionExecution(action)
-            selectedTabRaw = AppTab.profile.rawValue
+            onSelectTab?(.profile)
             HapticManager.selectionChanged()
         case .openWorkouts:
             trackPulseInteraction("pulse_action_open_workouts")
             recordPulseActionExecution(action)
-            selectedTabRaw = AppTab.workouts.rawValue
+            onSelectTab?(.workouts)
             HapticManager.selectionChanged()
         case .openWorkoutPlan:
             trackPulseInteraction("pulse_action_open_workout_plan")
             recordPulseActionExecution(action)
-            selectedTabRaw = AppTab.workouts.rawValue
+            onSelectTab?(.workouts)
             HapticManager.selectionChanged()
         case .openRecovery:
             trackPulseInteraction("pulse_action_open_recovery")
             recordPulseActionExecution(action)
-            selectedTabRaw = AppTab.workouts.rawValue
+            onSelectTab?(.workouts)
             HapticManager.selectionChanged()
         case .reviewNutritionPlan:
             trackPulseInteraction("pulse_action_review_nutrition_plan")
             recordPulseActionExecution(action)
             pendingPlanReviewRequest = true
-            selectedTabRaw = AppTab.trai.rawValue
+            onSelectTab?(.trai)
             HapticManager.selectionChanged()
         case .reviewWorkoutPlan:
             trackPulseInteraction("pulse_action_review_workout_plan")
             recordPulseActionExecution(action)
             pendingWorkoutPlanReviewRequest = true
-            selectedTabRaw = AppTab.trai.rawValue
+            onSelectTab?(.trai)
             HapticManager.selectionChanged()
         case .completeReminder:
             trackPulseInteraction("pulse_action_complete_reminder")
@@ -1320,11 +2068,11 @@ struct DashboardView: View {
         case .apply:
             decisionTitle = "Plan adjustment approved"
             prompt = "Pulse plan proposal approved. Proposal: \(proposal.title). Changes: \(proposal.changes.joined(separator: "; ")). Rationale: \(proposal.rationale). Any plan mutation must still require explicit user confirmation."
-            selectedTabRaw = AppTab.trai.rawValue
+            onSelectTab?(.trai)
         case .review:
             decisionTitle = "Plan adjustment review requested"
             prompt = "Pulse plan proposal review requested. Proposal: \(proposal.title). Changes: \(proposal.changes.joined(separator: "; ")). Impact: \(proposal.impact)."
-            selectedTabRaw = AppTab.trai.rawValue
+            onSelectTab?(.trai)
         case .later:
             decisionTitle = "Plan adjustment deferred"
             prompt = "Pulse plan proposal deferred: \(proposal.title). Do not re-suggest daily; revisit later with lighter framing."
@@ -1367,7 +2115,7 @@ struct DashboardView: View {
             surface: .dashboard,
             outcome: .opened
         )
-        selectedTabRaw = AppTab.trai.rawValue
+        onSelectTab?(.trai)
         HapticManager.selectionChanged()
     }
 

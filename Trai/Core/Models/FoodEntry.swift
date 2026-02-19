@@ -31,7 +31,7 @@ final class FoodEntry {
     var servingQuantity: Double = 1.0
 
     /// Image data from photo taken of the food
-    var imageData: Data?
+    @Attribute(.externalStorage) var imageData: Data?
 
     /// User's text description of the food
     var userDescription: String?

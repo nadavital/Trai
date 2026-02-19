@@ -7,3 +7,7 @@ Trai/Core/Services/Secrets.swift
 xcuserdata/
 
 CONTINUITY.md
+
+# Python generated artifacts
+__pycache__/
+*.pyc

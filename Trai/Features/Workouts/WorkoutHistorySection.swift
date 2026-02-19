@@ -19,11 +19,9 @@ struct WorkoutHistorySection: View {
 
     @State private var showAllWorkouts = false
 
-    /// Merged and sorted list of all workout dates
-    private var allDates: [Date] {
-        let sessionDates = Set(workoutsByDate.map { $0.date })
-        let liveDates = Set(liveWorkoutsByDate.map { $0.date })
-        return sessionDates.union(liveDates).sorted(by: >)
+    /// Recent merged dates used for compact rendering.
+    private var previewDates: [Date] {
+        mergedDates(limit: 2)
     }
 
     /// Total workout count for "See All" button
@@ -39,6 +37,42 @@ struct WorkoutHistorySection: View {
 
     private func liveWorkouts(for date: Date) -> [LiveWorkout] {
         liveWorkoutsByDate.first { $0.date == date }?.workouts ?? []
+    }
+
+    private func mergedDates(limit: Int) -> [Date] {
+        guard limit > 0 else { return [] }
+
+        var dates: [Date] = []
+        var workoutIndex = 0
+        var liveIndex = 0
+
+        while dates.count < limit
+                && (workoutIndex < workoutsByDate.count || liveIndex < liveWorkoutsByDate.count) {
+            let nextWorkoutDate = workoutIndex < workoutsByDate.count
+                ? workoutsByDate[workoutIndex].date
+                : .distantPast
+            let nextLiveDate = liveIndex < liveWorkoutsByDate.count
+                ? liveWorkoutsByDate[liveIndex].date
+                : .distantPast
+
+            let candidate: Date
+            if nextWorkoutDate >= nextLiveDate {
+                candidate = nextWorkoutDate
+                workoutIndex += 1
+                if nextLiveDate == candidate {
+                    liveIndex += 1
+                }
+            } else {
+                candidate = nextLiveDate
+                liveIndex += 1
+            }
+
+            if dates.last != candidate {
+                dates.append(candidate)
+            }
+        }
+
+        return dates
     }
 
     var body: some View {
@@ -59,12 +93,12 @@ struct WorkoutHistorySection: View {
                 }
             }
 
-            if allDates.isEmpty {
+            if previewDates.isEmpty {
                 EmptyWorkoutHistory()
             } else {
                 // Show only most recent 2 dates (compact view)
                 VStack(spacing: 8) {
-                    ForEach(allDates.prefix(2), id: \.self) { date in
+                    ForEach(previewDates, id: \.self) { date in
                         CompactWorkoutDateGroup(
                             date: date,
                             sessions: sessions(for: date),

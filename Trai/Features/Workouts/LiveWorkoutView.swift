@@ -16,6 +16,7 @@ struct LiveWorkoutView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
+    @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
     @Query private var profiles: [UserProfile]
 
     private var usesMetricExerciseWeight: Bool {
@@ -67,6 +68,15 @@ struct LiveWorkoutView: View {
                         }
                     }
                 } else {
+                    if AppLaunchArguments.isUITesting && AppLaunchArguments.shouldUseLiveWorkoutUITestPreset {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Stress +4", systemImage: "bolt.fill") {
+                                applyUITestStressMutationBurst()
+                            }
+                            .accessibilityIdentifier("liveWorkoutStressAddSetBurst")
+                        }
+                    }
+
                     ToolbarItem(placement: .cancellationAction) {
                         Button {
                             showingCancelConfirmation = true
@@ -81,11 +91,13 @@ struct LiveWorkoutView: View {
                         Button("End", systemImage: "checkmark") {
                             showingEndConfirmation = true
                         }
+                        .accessibilityIdentifier("liveWorkoutEndButton")
                         .tint(.accentColor)
                     }
                 }
             }
             .onAppear {
+                activeWorkoutRuntimeState.beginLiveWorkoutPresentation()
                 viewModel.setup(with: modelContext, healthKitService: healthKitService)
                 startHeartRateUpdates()
 
@@ -95,6 +107,7 @@ struct LiveWorkoutView: View {
                 }
             }
             .onDisappear {
+                activeWorkoutRuntimeState.endLiveWorkoutPresentation()
                 viewModel.stopTimer()
                 stopHeartRateUpdates()
             }
@@ -172,6 +185,7 @@ struct LiveWorkoutView: View {
             }
         }
         .traiBackground()
+        .accessibilityIdentifier("liveWorkoutView")
     }
 
     // MARK: - Workout Content
@@ -182,7 +196,7 @@ struct LiveWorkoutView: View {
                 let entries = viewModel.entries
                 let upNext = viewModel.upNextSuggestion
                 let availableSuggestions = viewModel.availableSuggestions
-                let suggestionsByMuscle = Dictionary(grouping: availableSuggestions) { $0.muscleGroup }
+                let suggestionsByMuscle = viewModel.suggestionsByMuscle
                 let upNextSuggestionID = upNext?.id
 
                 LazyVStack(spacing: 16) {
@@ -225,7 +239,7 @@ struct LiveWorkoutView: View {
                                     }
                                 }
                                 .font(.caption)
-                                .buttonStyle(.bordered)
+                                .buttonStyle(.traiPillSubtle)
                                 .disabled(viewModel.isRetryingWatchSync)
                             }
                         }
@@ -350,6 +364,18 @@ struct LiveWorkoutView: View {
         dismiss()
     }
 
+    private func applyUITestStressMutationBurst() {
+        guard AppLaunchArguments.isUITesting,
+              AppLaunchArguments.shouldUseLiveWorkoutUITestPreset,
+              let entry = viewModel.entries.first(where: { !$0.isCardio }) else {
+            return
+        }
+
+        for _ in 0..<4 {
+            viewModel.addSet(to: entry)
+        }
+    }
+
     private func startHeartRateUpdates() {
         // Poll every 2 seconds for a snappier live-data UI without per-sample view churn.
         heartRateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
@@ -425,4 +451,5 @@ struct LiveWorkoutView: View {
         return workout
     }())
     .modelContainer(for: [LiveWorkout.self, LiveWorkoutEntry.self, Exercise.self], inMemory: true)
+    .environmentObject(ActiveWorkoutRuntimeState())
 }

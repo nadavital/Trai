@@ -246,7 +246,7 @@ struct LiveWorkoutDetailSheet: View {
             Label("Add Exercise", systemImage: "plus.circle.fill")
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.traiPillProminent)
     }
 
     // MARK: - Notes Section

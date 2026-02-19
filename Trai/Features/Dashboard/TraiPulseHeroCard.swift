@@ -37,7 +37,8 @@ struct TraiPulseHeroCard: View {
     @FocusState private var isQuestionInputFocused: Bool
 
     private let questionCooldownSeconds: TimeInterval = 6 * 60 * 60
-    private let pulseRefreshTTLSeconds: TimeInterval = 20 * 60
+    private let pulseRefreshTTLSeconds: TimeInterval = 2 * 60 * 60
+    private let startupDeferredRefreshMilliseconds = 450
 
     private struct CachedPulseBrief: Codable {
         let surfaceType: String
@@ -177,6 +178,18 @@ struct TraiPulseHeroCard: View {
             }
         }
         .task(id: refreshKey) {
+            let refreshDelayMilliseconds: Int
+            if AppLaunchArguments.shouldSuppressStartupAnimations {
+                refreshDelayMilliseconds = startupDeferredRefreshMilliseconds
+            } else if pulseContent == nil {
+                refreshDelayMilliseconds = 320
+            } else {
+                refreshDelayMilliseconds = 240
+            }
+            _ = await Task.detached(priority: .utility) {
+                try? await Task.sleep(for: .milliseconds(refreshDelayMilliseconds))
+            }.value
+            guard !Task.isCancelled else { return }
             await refreshPulseContent()
         }
         .onChange(of: displayedQuestion?.id) { _, newID in

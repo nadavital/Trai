@@ -62,9 +62,12 @@ extension ChatView {
     }
 
     func clearAllChats() {
-        for message in allMessages {
+        let descriptor = FetchDescriptor<ChatMessage>()
+        let messages = (try? modelContext.fetch(descriptor)) ?? allMessages
+        for message in messages {
             modelContext.delete(message)
         }
+        try? modelContext.save()
         startNewSession()
     }
 }
@@ -172,6 +175,7 @@ extension ChatView {
             modelContext.insert(userMessage)
             modelContext.insert(aiMessage)
         }
+        rebuildSessionMessages(preferLiveQueryData: true)
 
         let capturedImage = selectedImage
         selectedImage = nil
@@ -412,7 +416,7 @@ extension ChatView {
             ?? profile?.dailyCalorieGoal
             ?? 2000
         let proteinGoal = profile?.dailyProteinGoal ?? 150
-        let readyMuscleCount = MuscleRecoveryService()
+        let readyMuscleCount = recoveryService
             .getRecoveryStatus(modelContext: modelContext)
             .filter { $0.status == .ready }
             .count

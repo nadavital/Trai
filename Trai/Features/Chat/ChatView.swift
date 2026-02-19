@@ -19,12 +19,37 @@ struct ChatView: View {
 
     // Track if we've started a fresh session this app launch
     static var hasStartedFreshSession = false
+    private static let foodHistoryWindowDays = 120
+    private static let workoutHistoryWindowDays = 120
+    private static let weightHistoryWindowDays = 240
+    private static let behaviorHistoryWindowDays = 90
+    private static let chatMessageFetchLimit = 64
+    private static let foodFetchLimit = 48
+    private static let workoutFetchLimit = 48
+    private static let weightFetchLimit = 48
+    private static let behaviorFetchLimit = 48
+    private static let activeMemoriesFetchLimit = 48
+    private static let activeSignalsFetchLimit = 48
+    private static let suggestionUsageFetchLimit = 64
+    private static let initialSessionPreviewMessageLimit = 20
+    private static let startupMessageCacheDelayMilliseconds = 3200
+    private static let startupSmartStarterDelayMilliseconds = 2600
+    private static let chatReactivationCooldownSeconds: TimeInterval = 45
+    private static let chatRecommendationCooldownSeconds: TimeInterval = 90
+    private static var chatHeavyRefreshMinimumDwellMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1400 : 320
+    }
+    private static var chatActivationWorkDelayMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 2600 : 260
+    }
+    private static var startupFullHistoryHydrationDelayMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 3600 : 680
+    }
 
     /// Optional workout context for mid-workout chat
     var workoutContext: GeminiService.WorkoutContext?
 
-    @Query(sort: \ChatMessage.timestamp, order: .forward)
-    var allMessages: [ChatMessage]
+    @Query var allMessages: [ChatMessage]
 
     @Query var profiles: [UserProfile]
     @Query(sort: \FoodEntry.loggedAt, order: .reverse)
@@ -35,10 +60,8 @@ struct ChatView: View {
     var liveWorkouts: [LiveWorkout]
     @Query(sort: \WeightEntry.loggedAt, order: .reverse)
     var weightEntries: [WeightEntry]
-    @Query(filter: #Predicate<CoachMemory> { $0.isActive }, sort: \CoachMemory.importance, order: .reverse)
-    var activeMemories: [CoachMemory]
-    @Query(filter: #Predicate<CoachSignal> { !$0.isResolved }, sort: \CoachSignal.createdAt, order: .reverse)
-    var activeSignals: [CoachSignal]
+    @Query var activeMemories: [CoachMemory]
+    @Query var activeSignals: [CoachSignal]
     @Query var suggestionUsage: [SuggestionUsage]
     @Query(sort: \BehaviorEvent.occurredAt, order: .reverse)
     var behaviorEvents: [BehaviorEvent]
@@ -46,6 +69,7 @@ struct ChatView: View {
     @Environment(\.modelContext) var modelContext
     @Environment(HealthKitService.self) var healthKitService: HealthKitService?
     @State var geminiService = GeminiService()
+    @State var recoveryService = MuscleRecoveryService.shared
     @State var isLoading = false
     @State var currentActivity: String?
     @State var selectedImage: UIImage?
@@ -87,6 +111,136 @@ struct ChatView: View {
 
     @State private var cachedSessionMessages: [ChatMessage] = []
     @State private var cachedChatSessions: [(id: UUID, firstMessage: String, date: Date)] = []
+    @State private var cachedMessagesBySession: [UUID: [ChatMessage]] = [:]
+    @State private var messageCacheRebuildTask: Task<Void, Never>?
+    @State private var fullHistoryHydrationTask: Task<Void, Never>?
+    @State private var deferredRecommendationTask: Task<Void, Never>?
+    @State private var startupHydrationTask: Task<Void, Never>?
+    @State private var deferredActivationWorkTask: Task<Void, Never>?
+    @State private var suppressAutomaticMessageCacheRebuild = false
+    @State private var lastMessageCacheFingerprint: MessageCacheFingerprint?
+    @State private var activationWorkPolicy = ChatActivationWorkPolicy(
+        fullActivationCooldownSeconds: Self.chatReactivationCooldownSeconds,
+        recommendationCooldownSeconds: Self.chatRecommendationCooldownSeconds
+    )
+    @State private var smartStarterTodayFoodCount = 0
+    @State private var smartStarterTodayCalories = 0
+    @State private var smartStarterTodayProtein = 0
+    @State private var smartStarterLastWorkoutDate: Date?
+    @State private var isChatTabVisible = false
+    @State private var hasHydratedFullMessageHistory = false
+    @State private var latencyProbeEntries: [String] = []
+    @State private var tabActivationPolicy = TabActivationPolicy(minimumDwellMilliseconds: 0)
+
+    private struct MessageCacheFingerprint: Equatable {
+        let count: Int
+        let newestMessageId: UUID?
+        let newestTimestamp: Date?
+        let oldestMessageId: UUID?
+        let oldestTimestamp: Date?
+    }
+
+    init(workoutContext: GeminiService.WorkoutContext? = nil) {
+        self.workoutContext = workoutContext
+
+        let now = Date()
+        let calendar = Calendar.current
+        let foodCutoff = calendar.date(
+            byAdding: .day,
+            value: -Self.foodHistoryWindowDays,
+            to: now
+        ) ?? .distantPast
+        let workoutCutoff = calendar.date(
+            byAdding: .day,
+            value: -Self.workoutHistoryWindowDays,
+            to: now
+        ) ?? .distantPast
+        let weightCutoff = calendar.date(
+            byAdding: .day,
+            value: -Self.weightHistoryWindowDays,
+            to: now
+        ) ?? .distantPast
+        let behaviorCutoff = calendar.date(
+            byAdding: .day,
+            value: -Self.behaviorHistoryWindowDays,
+            to: now
+        ) ?? .distantPast
+        let signalCutoff = calendar.date(
+            byAdding: .day,
+            value: -30,
+            to: now
+        ) ?? .distantPast
+
+        var profileDescriptor = FetchDescriptor<UserProfile>()
+        profileDescriptor.fetchLimit = 1
+        _profiles = Query(profileDescriptor)
+
+        var activeMemoriesDescriptor = FetchDescriptor<CoachMemory>(
+            predicate: #Predicate<CoachMemory> { $0.isActive },
+            sortBy: [
+                SortDescriptor(\CoachMemory.importance, order: .reverse),
+                SortDescriptor(\CoachMemory.createdAt, order: .reverse)
+            ]
+        )
+        activeMemoriesDescriptor.fetchLimit = Self.activeMemoriesFetchLimit
+        _activeMemories = Query(activeMemoriesDescriptor)
+
+        var activeSignalsDescriptor = FetchDescriptor<CoachSignal>(
+            predicate: #Predicate<CoachSignal> {
+                !$0.isResolved && $0.createdAt >= signalCutoff
+            },
+            sortBy: [SortDescriptor(\CoachSignal.createdAt, order: .reverse)]
+        )
+        activeSignalsDescriptor.fetchLimit = Self.activeSignalsFetchLimit
+        _activeSignals = Query(activeSignalsDescriptor)
+
+        var suggestionUsageDescriptor = FetchDescriptor<SuggestionUsage>(
+            sortBy: [SortDescriptor(\SuggestionUsage.tapCount, order: .reverse)]
+        )
+        suggestionUsageDescriptor.fetchLimit = Self.suggestionUsageFetchLimit
+        _suggestionUsage = Query(suggestionUsageDescriptor)
+
+        var messageDescriptor = FetchDescriptor<ChatMessage>(
+            sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
+        )
+        messageDescriptor.fetchLimit = Self.chatMessageFetchLimit
+        _allMessages = Query(messageDescriptor)
+
+        var foodDescriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate<FoodEntry> { $0.loggedAt >= foodCutoff },
+            sortBy: [SortDescriptor(\FoodEntry.loggedAt, order: .reverse)]
+        )
+        foodDescriptor.fetchLimit = Self.foodFetchLimit
+        _allFoodEntries = Query(foodDescriptor)
+
+        var workoutDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate<WorkoutSession> { $0.loggedAt >= workoutCutoff },
+            sortBy: [SortDescriptor(\WorkoutSession.loggedAt, order: .reverse)]
+        )
+        workoutDescriptor.fetchLimit = Self.workoutFetchLimit
+        _recentWorkouts = Query(workoutDescriptor)
+
+        var liveWorkoutDescriptor = FetchDescriptor<LiveWorkout>(
+            predicate: #Predicate<LiveWorkout> { $0.startedAt >= workoutCutoff },
+            sortBy: [SortDescriptor(\LiveWorkout.startedAt, order: .reverse)]
+        )
+        liveWorkoutDescriptor.fetchLimit = Self.workoutFetchLimit
+        _liveWorkouts = Query(liveWorkoutDescriptor)
+
+        var weightDescriptor = FetchDescriptor<WeightEntry>(
+            predicate: #Predicate<WeightEntry> { $0.loggedAt >= weightCutoff },
+            sortBy: [SortDescriptor(\WeightEntry.loggedAt, order: .reverse)]
+        )
+        weightDescriptor.fetchLimit = Self.weightFetchLimit
+        _weightEntries = Query(weightDescriptor)
+
+        var behaviorDescriptor = FetchDescriptor<BehaviorEvent>(
+            predicate: #Predicate<BehaviorEvent> { $0.occurredAt >= behaviorCutoff },
+            sortBy: [SortDescriptor(\BehaviorEvent.occurredAt, order: .reverse)]
+        )
+        behaviorDescriptor.fetchLimit = Self.behaviorFetchLimit
+        _behaviorEvents = Query(behaviorDescriptor)
+    }
 
     var currentSessionId: UUID {
         if let uuid = UUID(uuidString: currentSessionIdString) {
@@ -135,24 +289,60 @@ struct ChatView: View {
     }
 
     private var smartStarterContext: SmartStarterContext {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
-        let todayEntries = allFoodEntries.filter { $0.loggedAt >= startOfDay }
-        let todayCalories = todayEntries.reduce(0) { $0 + $1.calories }
-        let todayProtein = todayEntries.reduce(0) { $0 + Int($1.proteinGrams) }
-        let lastWorkout = liveWorkouts.first?.startedAt ?? recentWorkouts.first?.loggedAt
-
         return SmartStarterContext(
             userName: profile?.name ?? "",
-            todayFoodCount: todayEntries.count,
-            todayCalories: todayCalories,
+            todayFoodCount: smartStarterTodayFoodCount,
+            todayCalories: smartStarterTodayCalories,
             calorieGoal: profile?.dailyCalorieGoal ?? 2000,
-            todayProtein: todayProtein,
+            todayProtein: smartStarterTodayProtein,
             proteinGoal: profile?.dailyProteinGoal ?? 150,
-            lastWorkoutDate: lastWorkout,
+            lastWorkoutDate: smartStarterLastWorkoutDate,
             hasActiveWorkout: workoutContext != nil,
             goalType: profile?.goal.rawValue ?? "maintenance"
         )
+    }
+
+    private var hasPendingStartupActions: Bool {
+        pendingPlanReviewRequest
+            || pendingWorkoutPlanReviewRequest
+            || !pendingPulseSeedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var isChatTabActive: Bool {
+        isChatTabVisible
+    }
+
+    private var smartStarterFoodRefreshFingerprint: String {
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let todayEntries = allFoodEntries.filter { $0.loggedAt >= startOfDay }
+        guard !todayEntries.isEmpty else { return "0" }
+
+        var parts: [String] = []
+        parts.reserveCapacity(1 + (todayEntries.count * 5))
+        parts.append(String(todayEntries.count))
+        for entry in todayEntries {
+            parts.append(entry.id.uuidString)
+            parts.append(String(entry.loggedAt.timeIntervalSinceReferenceDate))
+            parts.append(String(entry.calories))
+            parts.append(String(entry.proteinGrams))
+            parts.append(String(entry.carbsGrams))
+        }
+        return parts.joined(separator: "|")
+    }
+
+    private var allMessagesWindowFingerprint: String {
+        let count = allMessages.count
+        guard let newest = allMessages.first else {
+            return "0"
+        }
+        let oldest = allMessages.last ?? newest
+        return [
+            String(count),
+            newest.id.uuidString,
+            String(newest.timestamp.timeIntervalSinceReferenceDate),
+            oldest.id.uuidString,
+            String(oldest.timestamp.timeIntervalSinceReferenceDate)
+        ].joined(separator: "|")
     }
 
     private var chatContentList: some View {
@@ -224,11 +414,7 @@ struct ChatView: View {
                 selectedPhotoItem: selectedPhotoItem,
                 onPhotoSelected: handleSelectedPhotoItem,
                 onAppear: {
-                    rebuildMessageCaches()
-                    checkSessionTimeout()
-                    checkForPlanRecommendation()
-                    checkForPendingPlanReview()
-                    checkForPendingPulsePrompt()
+                    handleChatTabAppear()
                 },
                 onSessionIdChange: {
                     rebuildSessionMessages()
@@ -240,12 +426,16 @@ struct ChatView: View {
                     rebuildSessionMessages()
                 },
                 onAllMessagesChange: {
-                    rebuildMessageCaches()
+                    if suppressAutomaticMessageCacheRebuild {
+                        rebuildSessionMessages(preferLiveQueryData: true)
+                        return
+                    }
+                    scheduleMessageCacheRebuild()
                 },
                 currentSessionIdString: currentSessionIdString,
                 isTemporarySession: isTemporarySession,
                 temporaryMessagesCount: temporaryMessages.count,
-                allMessagesCount: allMessages.count,
+                allMessagesFingerprint: allMessagesWindowFingerprint,
                 chatSessions: chatSessions,
                 onToggleTemporaryMode: {
                     toggleTemporaryMode()
@@ -271,7 +461,65 @@ struct ChatView: View {
                 viewingAppliedPlan: $viewingAppliedPlan
             )
         }
+        .onDisappear {
+            isChatTabVisible = false
+            tabActivationPolicy.deactivate()
+            messageCacheRebuildTask?.cancel()
+            fullHistoryHydrationTask?.cancel()
+            deferredRecommendationTask?.cancel()
+            startupHydrationTask?.cancel()
+            deferredActivationWorkTask?.cancel()
+            suppressAutomaticMessageCacheRebuild = false
+        }
+        .onChange(of: smartStarterFoodRefreshFingerprint) { _, _ in
+            guard isChatTabActive else { return }
+            refreshSmartStarterCache()
+        }
+        .onChange(of: recentWorkouts.count) {
+            guard isChatTabActive else { return }
+            refreshSmartStarterCache()
+        }
+        .onChange(of: liveWorkouts.count) {
+            guard isChatTabActive else { return }
+            refreshSmartStarterCache()
+        }
         .traiBackground()
+        .overlay(alignment: .topLeading) {
+            Text("ready")
+                .font(.system(size: 1))
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .accessibilityElement(children: .ignore)
+                .accessibilityIdentifier("traiRootReady")
+        }
+        .overlay(alignment: .topLeading) {
+            Text(chatLatencyProbeLabel)
+                .font(.system(size: 1))
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(chatLatencyProbeLabel)
+                .accessibilityIdentifier("traiLatencyProbe")
+        }
+    }
+
+    private var chatLatencyProbeLabel: String {
+        guard AppLaunchArguments.shouldEnableLatencyProbe else { return "disabled" }
+        return latencyProbeEntries.isEmpty ? "pending" : latencyProbeEntries.joined(separator: " | ")
+    }
+
+    private func recordChatLatencyProbe(
+        _ operation: String,
+        startedAt: UInt64,
+        counts: [String: Int] = [:]
+    ) {
+        guard AppLaunchArguments.shouldEnableLatencyProbe else { return }
+        let entry = LatencyProbe.makeEntry(
+            operation: operation,
+            durationMilliseconds: LatencyProbe.elapsedMilliseconds(since: startedAt),
+            counts: counts
+        )
+        LatencyProbe.append(entry: entry, to: &latencyProbeEntries)
     }
 
     private var isInputFocusedBinding: Binding<Bool> {
@@ -316,28 +564,330 @@ struct ChatView: View {
         AnyView(chatInputBar)
     }
 
-    private func rebuildMessageCaches() {
-        rebuildSessionMessages()
+    private func rebuildMessageCaches(
+        force: Bool = false,
+        sourceMessages explicitSourceMessages: [ChatMessage]? = nil
+    ) {
+        let startedAt = LatencyProbe.timerStart()
+        let sourceMessages = explicitSourceMessages ?? messageCacheSourceMessages(forceFullFetch: force)
+        let fingerprint = makeMessageFingerprint(from: sourceMessages)
+        if !force, fingerprint == lastMessageCacheFingerprint, !cachedMessagesBySession.isEmpty {
+            rebuildSessionMessages()
+            recordChatLatencyProbe(
+                "rebuildMessageCachesReuse",
+                startedAt: startedAt,
+                counts: [
+                    "allMessages": sourceMessages.count,
+                    "sessions": cachedMessagesBySession.count,
+                    "currentSessionMessages": cachedSessionMessages.count
+                ]
+            )
+            return
+        }
+        lastMessageCacheFingerprint = fingerprint
 
         var sessions: [UUID: (firstMessage: String, date: Date)] = [:]
-        for message in allMessages {
+        var messagesBySession: [UUID: [ChatMessage]] = [:]
+        for message in sourceMessages.reversed() {
             guard let sessionId = message.sessionId else { continue }
+            messagesBySession[sessionId, default: []].append(message)
             if sessions[sessionId] == nil {
                 sessions[sessionId] = (message.content, message.timestamp)
             }
         }
 
+        cachedMessagesBySession = messagesBySession
         cachedChatSessions = sessions
             .map { (id: $0.key, firstMessage: $0.value.firstMessage, date: $0.value.date) }
             .sorted { $0.date > $1.date }
+        rebuildSessionMessages()
+        recordChatLatencyProbe(
+            "rebuildMessageCaches",
+            startedAt: startedAt,
+            counts: [
+                "allMessages": sourceMessages.count,
+                "windowMessages": allMessages.count,
+                "sessions": cachedMessagesBySession.count,
+                "chatSessions": cachedChatSessions.count,
+                "currentSessionMessages": cachedSessionMessages.count
+            ]
+        )
     }
 
-    private func rebuildSessionMessages() {
+    private func makeMessageFingerprint(from messages: [ChatMessage]) -> MessageCacheFingerprint {
+        MessageCacheFingerprint(
+            count: messages.count,
+            newestMessageId: messages.first?.id,
+            newestTimestamp: messages.first?.timestamp,
+            oldestMessageId: messages.last?.id,
+            oldestTimestamp: messages.last?.timestamp
+        )
+    }
+
+    private func messageCacheSourceMessages(forceFullFetch: Bool = false) -> [ChatMessage] {
+        guard forceFullFetch || hasHydratedFullMessageHistory else {
+            return allMessages
+        }
+        return fetchAllMessagesSortedDescending()
+    }
+
+    private func fetchAllMessagesSortedDescending() -> [ChatMessage] {
+        let descriptor = FetchDescriptor<ChatMessage>(
+            sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
+        )
+        return (try? modelContext.fetch(descriptor)) ?? allMessages
+    }
+
+    private func scheduleMessageCacheRebuild(
+        immediate: Bool = false,
+        delayMilliseconds: Int? = nil
+    ) {
+        messageCacheRebuildTask?.cancel()
+        let activationToken = tabActivationPolicy.activationToken
+        let defaultDelay = AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 900 : 220
+        let requestedDelay = immediate ? 0 : (delayMilliseconds ?? defaultDelay)
+        let effectiveDelayMilliseconds = tabActivationPolicy.effectiveDelayMilliseconds(
+            requested: requestedDelay
+        )
+        messageCacheRebuildTask = Task(priority: .utility) {
+            if effectiveDelayMilliseconds > 0 {
+                try? await Task.sleep(for: .milliseconds(effectiveDelayMilliseconds))
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
+                guard isChatTabActive else { return }
+                rebuildMessageCaches(force: immediate)
+            }
+        }
+    }
+
+    func rebuildSessionMessages(
+        previewLimit: Int? = nil,
+        preferLiveQueryData: Bool = false
+    ) {
+        let startedAt = LatencyProbe.timerStart()
         if isTemporarySession {
             cachedSessionMessages = temporaryMessages.sorted { $0.timestamp < $1.timestamp }
         } else {
-            cachedSessionMessages = allMessages.filter { $0.sessionId == currentSessionId }
+            if !preferLiveQueryData, let cached = cachedMessagesBySession[currentSessionId] {
+                if let previewLimit, previewLimit > 0 {
+                    cachedSessionMessages = Array(cached.suffix(previewLimit))
+                } else {
+                    cachedSessionMessages = cached
+                }
+            } else {
+                if let previewLimit, previewLimit > 0 {
+                    cachedSessionMessages = recentMessagesForCurrentSession(limit: previewLimit)
+                } else {
+                    cachedSessionMessages = allMessages
+                        .filter { $0.sessionId == currentSessionId }
+                        .sorted { $0.timestamp < $1.timestamp }
+                }
+            }
         }
+        recordChatLatencyProbe(
+            "rebuildSessionMessages",
+            startedAt: startedAt,
+            counts: [
+                "previewLimit": previewLimit ?? 0,
+                "allMessages": allMessages.count,
+                "cachedSessions": cachedMessagesBySession.count,
+                "sessionMessages": cachedSessionMessages.count,
+                "preferLive": preferLiveQueryData ? 1 : 0,
+                "temporary": isTemporarySession ? 1 : 0
+            ]
+        )
+    }
+
+    private func recentMessagesForCurrentSession(limit: Int) -> [ChatMessage] {
+        guard limit > 0 else { return [] }
+
+        let sessionId = currentSessionId
+        var result: [ChatMessage] = []
+        result.reserveCapacity(limit)
+
+        for message in allMessages {
+            guard message.sessionId == sessionId else { continue }
+            result.append(message)
+            if result.count >= limit {
+                break
+            }
+        }
+
+        return Array(result.reversed())
+    }
+
+    private func scheduleDeferredPlanRecommendationIfNeeded() {
+        deferredRecommendationTask?.cancel()
+        let activationToken = tabActivationPolicy.activationToken
+        let requestedDelay = AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 900 : 320
+        let delayMilliseconds = tabActivationPolicy.effectiveDelayMilliseconds(requested: requestedDelay)
+        deferredRecommendationTask = Task(priority: .utility) {
+            if delayMilliseconds > 0 {
+                try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
+                guard isChatTabActive else { return }
+                guard activationWorkPolicy.shouldRunRecommendationCheck() else { return }
+                activationWorkPolicy.markRecommendationCheckRun()
+                checkForPlanRecommendation()
+            }
+        }
+    }
+
+    private func scheduleStartupHydration() {
+        startupHydrationTask?.cancel()
+        let activationToken = tabActivationPolicy.activationToken
+        let delayMilliseconds = tabActivationPolicy.effectiveDelayMilliseconds(
+            requested: Self.startupSmartStarterDelayMilliseconds
+        )
+        startupHydrationTask = Task(priority: .utility) {
+            if delayMilliseconds > 0 {
+                try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
+                guard isChatTabActive else { return }
+                refreshSmartStarterCache()
+                suppressAutomaticMessageCacheRebuild = false
+                scheduleMessageCacheRebuild(
+                    delayMilliseconds: Self.startupMessageCacheDelayMilliseconds
+                )
+            }
+        }
+    }
+
+    private func handleChatTabAppear() {
+        let startedAt = LatencyProbe.timerStart()
+        if tabActivationPolicy.activeSince == nil {
+            tabActivationPolicy = TabActivationPolicy(
+                minimumDwellMilliseconds: Self.chatHeavyRefreshMinimumDwellMilliseconds
+            )
+        }
+        suppressAutomaticMessageCacheRebuild = false
+        tabActivationPolicy.activate()
+        isChatTabVisible = true
+        rebuildSessionMessages(previewLimit: Self.initialSessionPreviewMessageLimit)
+        scheduleFullMessageHistoryHydrationIfNeeded()
+
+        let shouldScheduleActivationWork = shouldRunFullActivationWork
+        if shouldScheduleActivationWork {
+            scheduleDeferredFullActivationWork()
+        }
+        recordChatLatencyProbe(
+            "handleChatTabAppear",
+            startedAt: startedAt,
+            counts: [
+                "allMessages": allMessages.count,
+                "sessionMessages": currentSessionMessages.count,
+                "hasPendingStartup": hasPendingStartupActions ? 1 : 0,
+                "scheduledActivation": shouldScheduleActivationWork ? 1 : 0
+            ]
+        )
+    }
+
+    private func scheduleFullMessageHistoryHydrationIfNeeded() {
+        guard !hasHydratedFullMessageHistory else { return }
+        fullHistoryHydrationTask?.cancel()
+        let activationToken = tabActivationPolicy.activationToken
+        let delayMilliseconds = tabActivationPolicy.effectiveDelayMilliseconds(
+            requested: Self.startupFullHistoryHydrationDelayMilliseconds
+        )
+        fullHistoryHydrationTask = Task(priority: .utility) {
+            if delayMilliseconds > 0 {
+                try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
+                guard isChatTabActive else { return }
+                let startedAt = LatencyProbe.timerStart()
+                let fullMessages = fetchAllMessagesSortedDescending()
+                hasHydratedFullMessageHistory = true
+                rebuildMessageCaches(force: true, sourceMessages: fullMessages)
+                recordChatLatencyProbe(
+                    "hydrateFullMessageHistory",
+                    startedAt: startedAt,
+                    counts: [
+                        "fullMessages": fullMessages.count,
+                        "windowMessages": allMessages.count
+                    ]
+                )
+            }
+        }
+    }
+
+    private var shouldRunFullActivationWork: Bool {
+        activationWorkPolicy.shouldRunFullActivation(
+            hasPendingStartupActions: hasPendingStartupActions
+        )
+    }
+
+    private func scheduleDeferredFullActivationWork() {
+        deferredActivationWorkTask?.cancel()
+        let activationToken = tabActivationPolicy.activationToken
+        let delayMilliseconds = tabActivationPolicy.effectiveDelayMilliseconds(
+            requested: Self.chatActivationWorkDelayMilliseconds
+        )
+        deferredActivationWorkTask = Task(priority: .utility) {
+            if delayMilliseconds > 0 {
+                try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                let startedAt = LatencyProbe.timerStart()
+                guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
+                guard isChatTabActive else { return }
+                guard shouldRunFullActivationWork else { return }
+
+                let hadPendingStartupActions = hasPendingStartupActions
+                suppressAutomaticMessageCacheRebuild = true
+                checkSessionTimeout()
+                checkForPendingPlanReview()
+                checkForPendingPulsePrompt()
+                if !hadPendingStartupActions {
+                    scheduleDeferredPlanRecommendationIfNeeded()
+                }
+                scheduleStartupHydration()
+                activationWorkPolicy.markFullActivationRun()
+                recordChatLatencyProbe(
+                    "fullActivationWork",
+                    startedAt: startedAt,
+                    counts: [
+                        "allMessages": allMessages.count,
+                        "sessionMessages": currentSessionMessages.count,
+                        "hadPendingStartup": hadPendingStartupActions ? 1 : 0
+                    ]
+                )
+            }
+        }
+    }
+
+    private func refreshSmartStarterCache() {
+        let interval = PerformanceTrace.begin("chat_smart_starter_cache_refresh", category: .dataLoad)
+        let startedAt = LatencyProbe.timerStart()
+        defer { PerformanceTrace.end("chat_smart_starter_cache_refresh", interval, category: .dataLoad) }
+
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let todayEntries = allFoodEntries.filter { $0.loggedAt >= startOfDay }
+        smartStarterTodayFoodCount = todayEntries.count
+        smartStarterTodayCalories = todayEntries.reduce(0) { $0 + $1.calories }
+        smartStarterTodayProtein = todayEntries.reduce(0) { $0 + Int($1.proteinGrams) }
+        smartStarterLastWorkoutDate = liveWorkouts.first?.startedAt ?? recentWorkouts.first?.loggedAt
+        recordChatLatencyProbe(
+            "refreshSmartStarterCache",
+            startedAt: startedAt,
+            counts: [
+                "allFood": allFoodEntries.count,
+                "todayFood": smartStarterTodayFoodCount,
+                "recentWorkouts": recentWorkouts.count,
+                "liveWorkouts": liveWorkouts.count
+            ]
+        )
     }
 
     private func handleSelectedPhotoItem(_ newValue: PhotosPickerItem?) {
@@ -395,7 +945,7 @@ private struct ChatRootView: View {
     let currentSessionIdString: String
     let isTemporarySession: Bool
     let temporaryMessagesCount: Int
-    let allMessagesCount: Int
+    let allMessagesFingerprint: String
     let chatSessions: [(id: UUID, firstMessage: String, date: Date)]
     let onToggleTemporaryMode: () -> Void
     let onSelectSession: (UUID) -> Void
@@ -458,7 +1008,7 @@ private struct ChatRootView: View {
         .onChange(of: temporaryMessagesCount) { _, _ in
             onTemporaryMessagesChange()
         }
-        .onChange(of: allMessagesCount) { _, _ in
+        .onChange(of: allMessagesFingerprint) { _, _ in
             onAllMessagesChange()
         }
         .chatCameraSheet(showingCamera: $showingCamera) { image in

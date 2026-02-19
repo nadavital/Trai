@@ -29,3 +29,4 @@
 
 ## Performance Notes
 - Live workout UI is sensitive to main-thread work. Avoid JSON encode/decode in hot getters (e.g., `LiveWorkoutEntry.sets`) and avoid synchronous `modelContext.save()` on `Add Set`; prefer caching and debounced saves.
+- Live workout latency checks: run `./scripts/run_live_workout_stability.sh --mode sim`; deeper context/results live in `/Users/nadav/Desktop/Trai/.agent/done/live-workout-latency-report.md`.

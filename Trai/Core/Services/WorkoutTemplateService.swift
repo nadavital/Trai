@@ -8,10 +8,7 @@
 import Foundation
 import SwiftData
 
-@MainActor @Observable
-final class WorkoutTemplateService {
-    private let performanceService = ExercisePerformanceService()
-
+struct WorkoutTemplateService {
     // MARK: - Progression Suggestion
 
     struct ProgressionSuggestion {
@@ -135,7 +132,7 @@ final class WorkoutTemplateService {
         exerciseName: String,
         modelContext: ModelContext
     ) -> ExerciseHistory? {
-        performanceService.history(
+        ExercisePerformanceService.history(
             for: exerciseName,
             limit: 1,
             modelContext: modelContext
@@ -148,7 +145,7 @@ final class WorkoutTemplateService {
         limit: Int = 5,
         modelContext: ModelContext
     ) -> [ExerciseHistory] {
-        performanceService.history(
+        ExercisePerformanceService.history(
             for: exerciseName,
             limit: limit,
             modelContext: modelContext
@@ -160,7 +157,7 @@ final class WorkoutTemplateService {
         exerciseName: String,
         modelContext: ModelContext
     ) -> ExerciseHistory? {
-        performanceService.snapshot(
+        ExercisePerformanceService.snapshot(
             for: exerciseName,
             modelContext: modelContext
         )?.weightPR

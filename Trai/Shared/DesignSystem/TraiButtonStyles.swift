@@ -71,6 +71,56 @@ struct TraiTertiaryButtonStyle: ButtonStyle {
     }
 }
 
+// MARK: - Pill Button Styles
+
+/// Prominent capsule action style for primary confirmations.
+struct TraiPillProminentButtonStyle: ButtonStyle {
+    var color: Color = .accentColor
+    var foregroundColor: Color = .white
+    var horizontalPadding: CGFloat = 16
+    var verticalPadding: CGFloat = 10
+    var pressedScale: CGFloat = 0.97
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(foregroundColor)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
+            .background(color)
+            .clipShape(.capsule)
+            .scaleEffect(configuration.isPressed ? pressedScale : 1)
+            .opacity(isEnabled ? 1 : 0.55)
+            .animation(TraiAnimation.quick, value: configuration.isPressed)
+            .animation(TraiAnimation.quick, value: isEnabled)
+    }
+}
+
+/// Subtle capsule action style for secondary actions.
+struct TraiPillSubtleButtonStyle: ButtonStyle {
+    var color: Color = .accentColor
+    var fillOpacity: Double = 0.12
+    var horizontalPadding: CGFloat = 16
+    var verticalPadding: CGFloat = 10
+    var pressedScale: CGFloat = 0.97
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let backgroundOpacity = configuration.isPressed ? min(fillOpacity + 0.06, 0.30) : fillOpacity
+
+        return configuration.label
+            .foregroundStyle(color)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
+            .background(color.opacity(backgroundOpacity))
+            .clipShape(.capsule)
+            .scaleEffect(configuration.isPressed ? pressedScale : 1)
+            .opacity(isEnabled ? 1 : 0.55)
+            .animation(TraiAnimation.quick, value: configuration.isPressed)
+            .animation(TraiAnimation.quick, value: isEnabled)
+    }
+}
+
 // MARK: - Convenience Extensions
 
 extension ButtonStyle where Self == TraiPrimaryButtonStyle {
@@ -90,5 +140,21 @@ extension ButtonStyle where Self == TraiTertiaryButtonStyle {
 
     static func traiTertiary(color: Color) -> TraiTertiaryButtonStyle {
         TraiTertiaryButtonStyle(color: color)
+    }
+}
+
+extension ButtonStyle where Self == TraiPillProminentButtonStyle {
+    static var traiPillProminent: TraiPillProminentButtonStyle { TraiPillProminentButtonStyle() }
+
+    static func traiPillProminent(color: Color) -> TraiPillProminentButtonStyle {
+        TraiPillProminentButtonStyle(color: color)
+    }
+}
+
+extension ButtonStyle where Self == TraiPillSubtleButtonStyle {
+    static var traiPillSubtle: TraiPillSubtleButtonStyle { TraiPillSubtleButtonStyle() }
+
+    static func traiPillSubtle(color: Color) -> TraiPillSubtleButtonStyle {
+        TraiPillSubtleButtonStyle(color: color)
     }
 }

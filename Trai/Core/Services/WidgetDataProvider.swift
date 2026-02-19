@@ -70,7 +70,7 @@ final class WidgetDataProvider {
         let fatConsumed = todayFoods.reduce(into: 0) { $0 += Int($1.fatGrams) }
 
         // Get muscle recovery info
-        let recoveryService = MuscleRecoveryService()
+        let recoveryService = MuscleRecoveryService.shared
         let recoveryInfo = recoveryService.getRecoveryStatus(modelContext: modelContext)
         let readyMuscleCount = recoveryInfo.filter { $0.status == .ready }.count
 
@@ -113,48 +113,49 @@ final class WidgetDataProvider {
 
     private func calculateWorkoutStreak(modelContext: ModelContext) -> Int {
         let calendar = Calendar.current
-        var currentDate = calendar.startOfDay(for: Date())
+        let today = calendar.startOfDay(for: Date())
+        let earliestDate = calendar.date(byAdding: .day, value: -365, to: today) ?? today
+        var descriptor = FetchDescriptor<LiveWorkout>(
+            predicate: #Predicate { workout in
+                workout.completedAt != nil && workout.completedAt! >= earliestDate
+            },
+            sortBy: [SortDescriptor(\.completedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 2000
+
+        let workouts = (try? modelContext.fetch(descriptor)) ?? []
+        let workoutDays = Set(workouts.compactMap { workout -> Date? in
+            guard let completedAt = workout.completedAt else { return nil }
+            return calendar.startOfDay(for: completedAt)
+        })
+
         var streak = 0
+        var consecutiveRestDays = 0
+        var currentDate = today
 
-        // Check backwards day by day
-        for _ in 0..<365 {
-            let nextDay = calendar.date(byAdding: .day, value: 1, to: currentDate)!
-
-            let descriptor = FetchDescriptor<LiveWorkout>(
-                predicate: #Predicate { workout in
-                    workout.completedAt != nil &&
-                    workout.completedAt! >= currentDate &&
-                    workout.completedAt! < nextDay
-                }
-            )
-
-            let workoutsOnDay = (try? modelContext.fetch(descriptor)) ?? []
-
-            if workoutsOnDay.isEmpty {
-                // Allow one rest day in streak
-                if streak > 0 {
-                    // Check if there was a workout the day before
-                    let previousDay = calendar.date(byAdding: .day, value: -1, to: currentDate)!
-                    let prevDescriptor = FetchDescriptor<LiveWorkout>(
-                        predicate: #Predicate { workout in
-                            workout.completedAt != nil &&
-                            workout.completedAt! >= previousDay &&
-                            workout.completedAt! < currentDate
-                        }
-                    )
-                    let prevWorkouts = (try? modelContext.fetch(prevDescriptor)) ?? []
-                    if prevWorkouts.isEmpty {
-                        break // Two consecutive rest days ends streak
-                    }
-                } else if currentDate != calendar.startOfDay(for: Date()) {
-                    // Not today and no workout = streak broken (unless it's today)
-                    break
-                }
-            } else {
-                streak += 1
+        for dayOffset in 0..<365 {
+            if dayOffset > 0 {
+                guard let previousDay = calendar.date(byAdding: .day, value: -1, to: currentDate) else { break }
+                currentDate = previousDay
             }
 
-            currentDate = calendar.date(byAdding: .day, value: -1, to: currentDate)!
+            if workoutDays.contains(currentDate) {
+                streak += 1
+                consecutiveRestDays = 0
+                continue
+            }
+
+            consecutiveRestDays += 1
+            if streak == 0 {
+                if currentDate != today {
+                    break
+                }
+                continue
+            }
+
+            if consecutiveRestDays >= 2 {
+                break
+            }
         }
 
         return streak

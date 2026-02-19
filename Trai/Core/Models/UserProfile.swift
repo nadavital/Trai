@@ -129,6 +129,24 @@ final class UserProfile {
     var createdAt: Date = Date()
     var hasCompletedOnboarding: Bool = false
 
+    @Transient
+    private var cachedEnabledMacrosJSONSnapshot: String?
+
+    @Transient
+    private var cachedEnabledMacrosValue: Set<MacroType> = MacroType.defaultEnabled
+
+    @Transient
+    private var cachedWorkoutPlanJSONSnapshot: String?
+
+    @Transient
+    private var cachedWorkoutPlanValue: WorkoutPlan?
+
+    @Transient
+    private var cachedPlanAssessmentJSONSnapshot: String?
+
+    @Transient
+    private var cachedPlanAssessmentValue: PlanAssessmentState = PlanAssessmentState()
+
     init() {}
 
     // MARK: - Computed Properties
@@ -354,13 +372,22 @@ extension UserProfile {
     /// The set of macros the user wants to track
     var enabledMacros: Set<MacroType> {
         get {
-            if enabledMacrosJSON.isEmpty {
-                return MacroType.defaultEnabled
+            if cachedEnabledMacrosJSONSnapshot == enabledMacrosJSON {
+                return cachedEnabledMacrosValue
             }
-            return Set(jsonString: enabledMacrosJSON)
+            if enabledMacrosJSON.isEmpty {
+                cachedEnabledMacrosValue = MacroType.defaultEnabled
+                cachedEnabledMacrosJSONSnapshot = enabledMacrosJSON
+                return cachedEnabledMacrosValue
+            }
+            cachedEnabledMacrosValue = Set(jsonString: enabledMacrosJSON)
+            cachedEnabledMacrosJSONSnapshot = enabledMacrosJSON
+            return cachedEnabledMacrosValue
         }
         set {
             enabledMacrosJSON = newValue.jsonString
+            cachedEnabledMacrosValue = newValue
+            cachedEnabledMacrosJSONSnapshot = enabledMacrosJSON
         }
     }
 
@@ -403,11 +430,23 @@ extension UserProfile {
     /// The user's current workout plan
     var workoutPlan: WorkoutPlan? {
         get {
-            guard let json = savedWorkoutPlanJSON else { return nil }
-            return WorkoutPlan.fromJSON(json)
+            if cachedWorkoutPlanJSONSnapshot == savedWorkoutPlanJSON {
+                return cachedWorkoutPlanValue
+            }
+            guard let json = savedWorkoutPlanJSON else {
+                cachedWorkoutPlanJSONSnapshot = nil
+                cachedWorkoutPlanValue = nil
+                return nil
+            }
+            cachedWorkoutPlanValue = WorkoutPlan.fromJSON(json)
+            cachedWorkoutPlanJSONSnapshot = json
+            return cachedWorkoutPlanValue
         }
         set {
-            savedWorkoutPlanJSON = newValue?.toJSON()
+            let encoded = newValue?.toJSON()
+            savedWorkoutPlanJSON = encoded
+            cachedWorkoutPlanValue = newValue
+            cachedWorkoutPlanJSONSnapshot = encoded
             if newValue != nil {
                 workoutPlanGeneratedAt = Date()
             }
@@ -474,17 +513,26 @@ extension UserProfile {
     /// The user's plan assessment state (for proactive plan review recommendations)
     var planAssessmentState: PlanAssessmentState {
         get {
+            if cachedPlanAssessmentJSONSnapshot == planAssessmentStateJSON {
+                return cachedPlanAssessmentValue
+            }
             guard let json = planAssessmentStateJSON,
                   let data = json.data(using: .utf8),
                   let state = try? JSONDecoder().decode(PlanAssessmentState.self, from: data) else {
-                return PlanAssessmentState()
+                cachedPlanAssessmentValue = PlanAssessmentState()
+                cachedPlanAssessmentJSONSnapshot = planAssessmentStateJSON
+                return cachedPlanAssessmentValue
             }
+            cachedPlanAssessmentValue = state
+            cachedPlanAssessmentJSONSnapshot = json
             return state
         }
         set {
             if let data = try? JSONEncoder().encode(newValue),
                let json = String(data: data, encoding: .utf8) {
                 planAssessmentStateJSON = json
+                cachedPlanAssessmentValue = newValue
+                cachedPlanAssessmentJSONSnapshot = json
             }
         }
     }

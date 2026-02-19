@@ -92,3 +92,129 @@ final class AppRouteTests: XCTestCase {
         XCTAssertNil(PendingAppRouteStore.consumePendingRoute(defaults: defaults))
     }
 }
+
+@MainActor
+final class AppStartupCoordinatorTests: XCTestCase {
+    func testSchedulesDeferredWorkOncePerProcess() {
+        var coordinator = AppStartupCoordinator()
+
+        XCTAssertTrue(coordinator.claimDeferredStartupWork())
+        XCTAssertFalse(coordinator.claimDeferredStartupWork())
+
+        XCTAssertTrue(coordinator.claimStartupMigration())
+        XCTAssertFalse(coordinator.claimStartupMigration())
+    }
+
+    func testForegroundReopenDoesNotReplayColdLaunchWork() {
+        var coordinator = AppStartupCoordinator()
+
+        XCTAssertFalse(
+            coordinator.shouldScheduleForegroundHealthKitSync(
+                hasActiveWorkoutInProgress: false
+            )
+        )
+
+        XCTAssertTrue(coordinator.claimDeferredStartupWork())
+        coordinator.markDeferredStartupWorkCompleted()
+
+        // Cold-launch deferral work remains one-shot even after foreground reopen.
+        XCTAssertFalse(coordinator.claimDeferredStartupWork())
+        XCTAssertTrue(
+            coordinator.shouldScheduleForegroundHealthKitSync(
+                hasActiveWorkoutInProgress: false
+            )
+        )
+        XCTAssertFalse(
+            coordinator.shouldScheduleForegroundHealthKitSync(
+                hasActiveWorkoutInProgress: true
+            )
+        )
+    }
+}
+
+final class TabActivationPolicyTests: XCTestCase {
+    func testDefersHeavyRefreshUntilMinimumDwell() {
+        var policy = TabActivationPolicy(minimumDwellMilliseconds: 500)
+        let start = Date(timeIntervalSinceReferenceDate: 1000)
+        let token = policy.activate(now: start)
+
+        XCTAssertEqual(policy.effectiveDelayMilliseconds(requested: 120, now: start), 500)
+        XCTAssertFalse(policy.shouldRunHeavyRefresh(for: token, now: start.addingTimeInterval(0.49)))
+        XCTAssertTrue(policy.shouldRunHeavyRefresh(for: token, now: start.addingTimeInterval(0.5)))
+    }
+
+    func testCancelsDeferredRefreshWhenTabLosesFocus() {
+        var policy = TabActivationPolicy(minimumDwellMilliseconds: 300)
+        let start = Date(timeIntervalSinceReferenceDate: 2000)
+        let staleToken = policy.activate(now: start)
+
+        policy.deactivate()
+        let reactivatedToken = policy.activate(now: start.addingTimeInterval(1))
+
+        XCTAssertFalse(policy.shouldRunHeavyRefresh(for: staleToken, now: start.addingTimeInterval(2)))
+        XCTAssertTrue(policy.shouldRunHeavyRefresh(for: reactivatedToken, now: start.addingTimeInterval(1.4)))
+    }
+}
+
+final class TabPrewarmPolicyTests: XCTestCase {
+    func testPrewarmOrderPrioritizesLikelyNextTabsFromDashboard() {
+        let policy = TabPrewarmPolicy(initialDelayMilliseconds: 900, interTabDelayMilliseconds: 700)
+        let order = policy.preloadOrder(for: .dashboard, loadedTabs: [.dashboard])
+
+        XCTAssertEqual(order, [.workouts, .trai, .profile])
+    }
+
+    func testPrewarmOrderSkipsAlreadyLoadedTabsAndClampsDelays() {
+        let policy = TabPrewarmPolicy(initialDelayMilliseconds: -100, interTabDelayMilliseconds: -20)
+        let order = policy.preloadOrder(for: .profile, loadedTabs: [.profile, .dashboard, .workouts])
+
+        XCTAssertEqual(policy.initialDelayMilliseconds, 0)
+        XCTAssertEqual(policy.interTabDelayMilliseconds, 0)
+        XCTAssertEqual(order, [.trai])
+    }
+}
+
+final class ChatActivationWorkTests: XCTestCase {
+    func testFullActivationRunsOnFirstAppearThenRespectsCooldown() {
+        var policy = ChatActivationWorkPolicy(
+            fullActivationCooldownSeconds: 45,
+            recommendationCooldownSeconds: 90
+        )
+        let start = Date(timeIntervalSinceReferenceDate: 10_000)
+
+        XCTAssertTrue(
+            policy.shouldRunFullActivation(
+                hasPendingStartupActions: false,
+                now: start
+            )
+        )
+        policy.markFullActivationRun(at: start)
+
+        XCTAssertFalse(
+            policy.shouldRunFullActivation(
+                hasPendingStartupActions: false,
+                now: start.addingTimeInterval(20)
+            )
+        )
+        XCTAssertTrue(
+            policy.shouldRunFullActivation(
+                hasPendingStartupActions: false,
+                now: start.addingTimeInterval(46)
+            )
+        )
+    }
+
+    func testRecommendationCheckDeduplicatesWithinCooldown() {
+        var policy = ChatActivationWorkPolicy(
+            fullActivationCooldownSeconds: 45,
+            recommendationCooldownSeconds: 90
+        )
+        let start = Date(timeIntervalSinceReferenceDate: 20_000)
+
+        XCTAssertTrue(policy.shouldRunRecommendationCheck(now: start))
+        policy.markRecommendationCheckRun(at: start)
+
+        XCTAssertFalse(policy.shouldRunRecommendationCheck(now: start.addingTimeInterval(30)))
+        XCTAssertTrue(policy.shouldRunRecommendationCheck(now: start.addingTimeInterval(95)))
+    }
+}

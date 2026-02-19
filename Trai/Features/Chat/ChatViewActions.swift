@@ -524,11 +524,39 @@ extension ChatView {
         // Don't check if we already have a recommendation showing
         guard pendingPlanRecommendation == nil else { return }
 
+        let interval = PerformanceTrace.begin("chat_plan_recommendation_check", category: .dataLoad)
+        defer { PerformanceTrace.end("chat_plan_recommendation_check", interval, category: .dataLoad) }
+
+        let now = Date()
+        let calendar = Calendar.current
+        let weightWindowStart = calendar.date(byAdding: .day, value: -45, to: now) ?? .distantPast
+        let foodWindowStart = calendar.date(byAdding: .day, value: -45, to: now) ?? .distantPast
+
+        let recentWeightEntries: [WeightEntry] = {
+            let descriptor = FetchDescriptor<WeightEntry>(
+                predicate: #Predicate<WeightEntry> { entry in
+                    entry.loggedAt >= weightWindowStart
+                },
+                sortBy: [SortDescriptor(\WeightEntry.loggedAt, order: .reverse)]
+            )
+            return (try? modelContext.fetch(descriptor)) ?? []
+        }()
+
+        let recentFoodEntries: [FoodEntry] = {
+            let descriptor = FetchDescriptor<FoodEntry>(
+                predicate: #Predicate<FoodEntry> { entry in
+                    entry.loggedAt >= foodWindowStart
+                },
+                sortBy: [SortDescriptor(\FoodEntry.loggedAt, order: .reverse)]
+            )
+            return (try? modelContext.fetch(descriptor)) ?? []
+        }()
+
         // Check for recommendation triggers
         if let recommendation = planAssessmentService.checkForRecommendation(
             profile: profile,
-            weightEntries: Array(weightEntries),
-            foodEntries: Array(allFoodEntries)
+            weightEntries: recentWeightEntries,
+            foodEntries: recentFoodEntries
         ) {
             pendingPlanRecommendation = recommendation
             planRecommendationMessage = planAssessmentService.getRecommendationMessage(

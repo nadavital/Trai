@@ -15,6 +15,7 @@ struct TraiApp: App {
     @MainActor static var sharedModelContainer: ModelContainer?
 
     let isUITesting: Bool
+    let isRunningTests: Bool
     let modelContainer: ModelContainer
     @State private var notificationService = NotificationService()
     @State private var healthKitService = HealthKitService()
@@ -22,13 +23,30 @@ struct TraiApp: App {
     @State private var showRemindersFromNotification = false
     @State private var deepLinkDestination: AppRoute?
     @State private var lastHealthKitWorkoutSyncDate: Date?
+    @AppStorage("healthkitRecentWorkoutSyncTimestamp")
+    private var persistedHealthKitWorkoutSyncTimestamp: Double = 0
+    @State private var startupCoordinator = AppStartupCoordinator()
+    @State private var deferredHealthKitSyncTask: Task<Void, Never>?
     @Environment(\.scenePhase) private var scenePhase
+    private let startupTaskDeferral: Duration = .seconds(2)
+    private let startupMigrationDeferral: Duration = .seconds(90)
+    private let foregroundHealthKitSyncDelay: Duration = .seconds(35)
+    private let minimumHealthKitSyncInterval: TimeInterval = 6 * 60 * 60
+    private let initialHealthKitSyncLookbackDays = 30
+    private let incrementalHealthKitSyncLookbackDays = 10
+    private static let swiftDataStoreFilename = "default.store"
 
     init() {
         let isUITesting = AppLaunchArguments.isUITesting
+        let isRunningTests = AppLaunchArguments.isRunningTests
+        let shouldUseInMemoryStore = AppLaunchArguments.shouldUseInMemoryStore
         self.isUITesting = isUITesting
+        self.isRunningTests = isRunningTests
 
         do {
+            Self.primeSharedStoreDirectoryIfNeeded(usesInMemoryStore: shouldUseInMemoryStore)
+            Self.migrateLegacyStoreToSharedContainerIfNeeded(usesInMemoryStore: shouldUseInMemoryStore)
+
             let schema = Schema([
                 UserProfile.self,
                 FoodEntry.self,
@@ -49,11 +67,21 @@ struct TraiApp: App {
                 BehaviorEvent.self
             ])
 
-            let modelConfiguration = ModelConfiguration(
-                schema: schema,
-                isStoredInMemoryOnly: isUITesting,
-                cloudKitDatabase: .automatic
-            )
+            let modelConfiguration: ModelConfiguration
+            if shouldUseInMemoryStore {
+                modelConfiguration = ModelConfiguration(
+                    schema: schema,
+                    isStoredInMemoryOnly: true,
+                    cloudKitDatabase: .none
+                )
+            } else {
+                modelConfiguration = ModelConfiguration(
+                    schema: schema,
+                    isStoredInMemoryOnly: false,
+                    groupContainer: .identifier(SharedStorageKeys.AppGroup.suiteName),
+                    cloudKitDatabase: .automatic
+                )
+            }
 
             modelContainer = try ModelContainer(
                 for: schema,
@@ -67,7 +95,9 @@ struct TraiApp: App {
                 if isUITesting {
                     seedUITestProfileIfNeeded(modelContainer: container)
                 }
-                migrateExistingWorkoutSets(modelContainer: container)
+                if AppLaunchArguments.shouldSeedLiveWorkoutPerfData {
+                    seedLiveWorkoutPerformanceDataIfNeeded(modelContainer: container)
+                }
             }
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
@@ -76,7 +106,7 @@ struct TraiApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if isUITesting {
+            if isRunningTests {
                 ContentView(deepLinkDestination: $deepLinkDestination)
                     .environment(notificationService)
                     .environment(\.showRemindersFromNotification, $showRemindersFromNotification)
@@ -89,20 +119,10 @@ struct TraiApp: App {
                     .environment(healthKitService)
                     .environment(\.showRemindersFromNotification, $showRemindersFromNotification)
                     .onAppear {
+                        PerformanceTrace.event("app_window_appear", category: .launch)
                         setupNotificationDelegate()
-                        // Clean up any stale Live Activities from previous sessions
-                        Task { @MainActor in
-                            LiveActivityManager.shared.cancelAllActivities()
-                        }
-                        // Process any pending widget food logs
-                        processPendingWidgetFoodLogs()
-                        // Update widget data on launch
-                        Task { @MainActor in
-                            WidgetDataProvider.shared.updateWidgetData(modelContext: modelContainer.mainContext)
-                        }
-                        Task { @MainActor in
-                            await syncRecentWorkoutsFromHealthKit()
-                        }
+                        scheduleDeferredStartupTasksIfNeeded()
+                        scheduleStartupMigrationIfNeeded()
                     }
                     .onOpenURL { url in
                         handleDeepLink(url)
@@ -111,17 +131,18 @@ struct TraiApp: App {
         }
         .modelContainer(modelContainer)
         .onChange(of: scenePhase) { _, newPhase in
-            guard !isUITesting else { return }
+            guard !isRunningTests else { return }
 
             if newPhase == .background {
+                deferredHealthKitSyncTask?.cancel()
+                NotificationCenter.default.post(name: .liveWorkoutForceFlush, object: nil)
                 // Update widget data when app goes to background
                 Task { @MainActor in
+                    guard !hasActiveLiveWorkoutInProgress() else { return }
                     WidgetDataProvider.shared.updateWidgetData(modelContext: modelContainer.mainContext)
                 }
             } else if newPhase == .active {
-                Task { @MainActor in
-                    await syncRecentWorkoutsFromHealthKit()
-                }
+                scheduleForegroundHealthKitSyncIfEligible()
             }
         }
     }
@@ -144,20 +165,110 @@ struct TraiApp: App {
     }
 
     @MainActor
-    private func syncRecentWorkoutsFromHealthKit() async {
-        let now = Date()
+    private func scheduleDeferredStartupTasksIfNeeded() {
+        guard startupCoordinator.claimDeferredStartupWork() else { return }
 
-        // Debounce repeated syncs while app is already open and active.
-        if let lastSync = lastHealthKitWorkoutSyncDate, now.timeIntervalSince(lastSync) < 60 {
+        Task(priority: .utility) {
+            try? await Task.sleep(for: startupTaskDeferral)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                let interval = PerformanceTrace.begin("startup_deferral", category: .launch)
+                // Keep non-critical cleanup and widget persistence off the first-frame path.
+                LiveActivityManager.shared.cancelAllActivities()
+                processPendingWidgetFoodLogs()
+                startupCoordinator.markDeferredStartupWorkCompleted()
+                PerformanceTrace.event("startup_deferral_completed", category: .launch)
+                PerformanceTrace.end("startup_deferral", interval, category: .launch)
+            }
+        }
+    }
+
+    @MainActor
+    private func scheduleStartupMigrationIfNeeded() {
+        guard startupCoordinator.claimStartupMigration() else { return }
+
+        Task(priority: .utility) {
+            // Keep migration work well off the critical startup + early interaction window.
+            try? await Task.sleep(for: startupMigrationDeferral)
+            guard !Task.isCancelled else { return }
+            await runStartupMigrationWhenIdle()
+        }
+    }
+
+    @MainActor
+    private func runStartupMigrationWhenIdle(maxAttempts: Int = 8) async {
+        for attempt in 0..<maxAttempts {
+            guard !Task.isCancelled else { return }
+            if !hasActiveLiveWorkoutInProgress() {
+                let interval = PerformanceTrace.begin("startup_migration", category: .dataLoad)
+                await migrateExistingWorkoutSets(modelContainer: modelContainer)
+                PerformanceTrace.end("startup_migration", interval, category: .dataLoad)
+                return
+            }
+
+            let retryDelay: Duration = attempt < 3 ? .seconds(45) : .seconds(90)
+            try? await Task.sleep(for: retryDelay)
+        }
+    }
+
+    @MainActor
+    private func scheduleForegroundHealthKitSyncIfEligible() {
+        deferredHealthKitSyncTask?.cancel()
+        deferredHealthKitSyncTask = Task(priority: .utility) { @MainActor in
+            try? await Task.sleep(for: foregroundHealthKitSyncDelay)
+            guard !Task.isCancelled else { return }
+            guard scenePhase == .active else { return }
+            let hasActiveWorkout = hasActiveLiveWorkoutInProgress()
+            guard startupCoordinator.shouldScheduleForegroundHealthKitSync(
+                hasActiveWorkoutInProgress: hasActiveWorkout
+            ) else { return }
+            await syncRecentWorkoutsFromHealthKit()
+        }
+    }
+
+    @MainActor
+    private func hasActiveLiveWorkoutInProgress() -> Bool {
+        var descriptor = FetchDescriptor<LiveWorkout>(predicate: #Predicate { $0.completedAt == nil })
+        descriptor.fetchLimit = 1
+        let active = (try? modelContainer.mainContext.fetch(descriptor)) ?? []
+        return !active.isEmpty
+    }
+
+    @MainActor
+    private func syncRecentWorkoutsFromHealthKit() async {
+        let interval = PerformanceTrace.begin("healthkit_recent_sync", category: .dataLoad)
+        defer { PerformanceTrace.end("healthkit_recent_sync", interval, category: .dataLoad) }
+
+        let now = Date()
+        let persistedLastSync: Date? = {
+            guard persistedHealthKitWorkoutSyncTimestamp > 0 else { return nil }
+            return Date(timeIntervalSince1970: persistedHealthKitWorkoutSyncTimestamp)
+        }()
+        let effectiveLastSync = lastHealthKitWorkoutSyncDate ?? persistedLastSync
+
+        // Persisted debounce keeps launch-time sync from re-running every app open.
+        if let lastSync = effectiveLastSync, now.timeIntervalSince(lastSync) < minimumHealthKitSyncInterval {
             return
         }
 
         do {
             let context = modelContainer.mainContext
-            let oneMonthAgo = Calendar.current.date(byAdding: .month, value: -1, to: now) ?? now
-            let healthKitWorkouts = try await healthKitService.fetchWorkoutsAuthorized(from: oneMonthAgo, to: now)
+            let lookbackDays = effectiveLastSync == nil
+                ? initialHealthKitSyncLookbackDays
+                : incrementalHealthKitSyncLookbackDays
+            let syncStart = Calendar.current.date(byAdding: .day, value: -lookbackDays, to: now) ?? now
+            let healthKitWorkouts = try await healthKitService.fetchWorkoutsAuthorized(from: syncStart, to: now)
+            guard !hasActiveLiveWorkoutInProgress() else { return }
+            guard !healthKitWorkouts.isEmpty else {
+                // Avoid long import backoff when the sample window is empty.
+                return
+            }
 
-            let workoutDescriptor = FetchDescriptor<WorkoutSession>()
+            let workoutDescriptor = FetchDescriptor<WorkoutSession>(
+                predicate: #Predicate<WorkoutSession> { workout in
+                    workout.loggedAt >= syncStart && workout.healthKitWorkoutID != nil
+                }
+            )
             let existingWorkouts = (try? context.fetch(workoutDescriptor)) ?? []
             let existingIDs = Set(existingWorkouts.compactMap { $0.healthKitWorkoutID })
             let newWorkouts = healthKitWorkouts.filter { !existingIDs.contains($0.healthKitWorkoutID ?? "") }
@@ -169,11 +280,22 @@ struct TraiApp: App {
                 try? context.save()
             }
 
-            let liveDescriptor = FetchDescriptor<LiveWorkout>(predicate: #Predicate { $0.completedAt != nil })
+            let mergeSearchStart = Calendar.current.date(
+                byAdding: .day,
+                value: -(lookbackDays + 14),
+                to: now
+            ) ?? syncStart
+            let liveDescriptor = FetchDescriptor<LiveWorkout>(
+                predicate: #Predicate<LiveWorkout> { workout in
+                    workout.completedAt != nil &&
+                    workout.mergedHealthKitWorkoutID == nil &&
+                    workout.startedAt >= mergeSearchStart
+                }
+            )
             let completedLiveWorkouts = (try? context.fetch(liveDescriptor)) ?? []
 
             var didMerge = false
-            for workout in completedLiveWorkouts where workout.mergedHealthKitWorkoutID == nil {
+            for workout in completedLiveWorkouts {
                 if let match = healthKitService.bestOverlappingWorkout(for: workout, from: healthKitWorkouts, searchBufferMinutes: 15) {
                     workout.mergedHealthKitWorkoutID = match.healthKitWorkoutID
                     if let calories = match.caloriesBurned {
@@ -191,8 +313,71 @@ struct TraiApp: App {
             }
 
             lastHealthKitWorkoutSyncDate = now
+            persistedHealthKitWorkoutSyncTimestamp = now.timeIntervalSince1970
+            PerformanceTrace.event("healthkit_recent_sync_completed", category: .dataLoad)
         } catch {
             // Handle silently to avoid blocking app startup.
+        }
+    }
+
+    private static func primeSharedStoreDirectoryIfNeeded(usesInMemoryStore: Bool) {
+        guard !usesInMemoryStore else { return }
+        guard let groupURL = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: SharedStorageKeys.AppGroup.suiteName
+        ) else {
+            return
+        }
+
+        let appSupportURL = groupURL.appendingPathComponent("Library/Application Support", isDirectory: true)
+        try? FileManager.default.createDirectory(at: appSupportURL, withIntermediateDirectories: true)
+    }
+
+    private static func migrateLegacyStoreToSharedContainerIfNeeded(usesInMemoryStore: Bool) {
+        guard !usesInMemoryStore else { return }
+
+        let fileManager = FileManager.default
+        guard let sharedContainerURL = fileManager.containerURL(
+            forSecurityApplicationGroupIdentifier: SharedStorageKeys.AppGroup.suiteName
+        ) else {
+            return
+        }
+        guard let appSupportURL = fileManager.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first else {
+            return
+        }
+
+        let sharedAppSupportURL = sharedContainerURL.appendingPathComponent(
+            "Library/Application Support",
+            isDirectory: true
+        )
+        try? fileManager.createDirectory(
+            at: sharedAppSupportURL,
+            withIntermediateDirectories: true
+        )
+
+        guard let legacyFiles = try? fileManager.contentsOfDirectory(
+            at: appSupportURL,
+            includingPropertiesForKeys: nil
+        ) else {
+            return
+        }
+
+        let legacyStoreFiles = legacyFiles.filter {
+            $0.lastPathComponent.hasPrefix(swiftDataStoreFilename)
+        }
+        guard !legacyStoreFiles.isEmpty else { return }
+
+        let sharedStoreURL = sharedAppSupportURL.appendingPathComponent(swiftDataStoreFilename)
+        guard !fileManager.fileExists(atPath: sharedStoreURL.path) else {
+            return
+        }
+
+        for sourceURL in legacyStoreFiles {
+            let destinationURL = sharedAppSupportURL.appendingPathComponent(sourceURL.lastPathComponent)
+            guard !fileManager.fileExists(atPath: destinationURL.path) else { continue }
+            try? fileManager.copyItem(at: sourceURL, to: destinationURL)
         }
     }
 }
@@ -260,9 +445,29 @@ private func seedUITestProfileIfNeeded(modelContainer: ModelContainer) {
     try? context.save()
 }
 
+@MainActor
+private func seedLiveWorkoutPerformanceDataIfNeeded(modelContainer: ModelContainer) {
+    let seeder = LiveWorkoutPerformanceDataSeeder()
+    let context = modelContainer.mainContext
+    do {
+        let summary = try seeder.seed(
+            modelContext: context,
+            configuration: .defaultHeavyDeviceProfile
+        )
+        print(
+            "Perf seed complete (\(summary.runIdentifier)): " +
+            "\(summary.totalWorkoutsInserted) workouts, " +
+            "\(summary.totalEntriesInserted) entries, " +
+            "\(summary.totalSetsInserted) sets"
+        )
+    } catch {
+        print("Perf seed failed: \(error.localizedDescription)")
+    }
+}
+
 /// Fix existing completed workouts that have sets with data but not marked as completed
 @MainActor
-private func migrateExistingWorkoutSets(modelContainer: ModelContainer) {
+private func migrateExistingWorkoutSets(modelContainer: ModelContainer) async {
     let context = modelContainer.mainContext
     let migrationKey = "workout_sets_completion_migration_v1"
 
@@ -279,9 +484,19 @@ private func migrateExistingWorkoutSets(modelContainer: ModelContainer) {
     guard let workouts = try? context.fetch(descriptor) else { return }
 
     var fixedCount = 0
+    var insertedHistoryCount = 0
+    let historyDescriptor = FetchDescriptor<ExerciseHistory>()
+    let existingHistories = (try? context.fetch(historyDescriptor)) ?? []
+    var historyDatesByExercise: [String: [Date]] = Dictionary(
+        grouping: existingHistories,
+        by: \.exerciseName
+    ).mapValues { histories in
+        histories.map(\.performedAt).sorted()
+    }
 
-    for workout in workouts {
+    for (index, workout) in workouts.enumerated() {
         guard let entries = workout.entries else { continue }
+        let completedAt = workout.completedAt
 
         for entry in entries {
             var needsUpdate = false
@@ -302,51 +517,70 @@ private func migrateExistingWorkoutSets(modelContainer: ModelContainer) {
                 entry.sets = updatedSets
                 fixedCount += 1
             }
+            guard let completedAt else { continue }
+
+            // Ensure ExerciseHistory exists for this entry around workout completion.
+            let completedSets = entry.sets.filter { $0.completed && !$0.isWarmup && $0.reps > 0 }
+            guard !completedSets.isEmpty else { continue }
+
+            let existingDates = historyDatesByExercise[entry.exerciseName] ?? []
+            guard !hasDateInWindow(existingDates, around: completedAt) else { continue }
+
+            let history = ExerciseHistory(from: entry, performedAt: completedAt)
+            context.insert(history)
+            insertedHistoryCount += 1
+            historyDatesByExercise[entry.exerciseName] = insertingSortedDate(completedAt, into: existingDates)
         }
 
-        // Also ensure ExerciseHistory exists for this workout
-        createMissingExerciseHistory(for: workout, context: context)
+        if index.isMultiple(of: 20) {
+            await Task.yield()
+        }
+    }
+
+    if fixedCount > 0 || insertedHistoryCount > 0 {
+        try? context.save()
     }
 
     if fixedCount > 0 {
-        try? context.save()
         print("Migration: Fixed \(fixedCount) exercise entries with unmarked sets")
+    }
+    if insertedHistoryCount > 0 {
+        print("Migration: Inserted \(insertedHistoryCount) missing exercise history entries")
     }
 
     // Mark migration as complete
     UserDefaults.standard.set(true, forKey: migrationKey)
 }
 
-/// Create ExerciseHistory entries for completed workouts that are missing them
-@MainActor
-private func createMissingExerciseHistory(for workout: LiveWorkout, context: ModelContext) {
-    guard let entries = workout.entries,
-          let completedAt = workout.completedAt else { return }
+private func hasDateInWindow(_ dates: [Date], around target: Date, tolerance: TimeInterval = 60) -> Bool {
+    guard !dates.isEmpty else { return false }
 
-    // Fetch all existing history and filter in memory
-    // (SwiftData predicates don't support captured variables)
-    let historyDescriptor = FetchDescriptor<ExerciseHistory>()
-    let allHistories = (try? context.fetch(historyDescriptor)) ?? []
+    let lowerBound = target.addingTimeInterval(-tolerance)
+    let upperBound = target.addingTimeInterval(tolerance)
+    let startIndex = lowerBoundIndex(for: lowerBound, in: dates)
+    guard startIndex < dates.count else { return false }
+    return dates[startIndex] <= upperBound
+}
 
-    // Find histories around this workout's completion time
-    let startTime = completedAt.addingTimeInterval(-60)
-    let endTime = completedAt.addingTimeInterval(60)
-    let existingExerciseNames = Set(
-        allHistories
-            .filter { $0.performedAt >= startTime && $0.performedAt <= endTime }
-            .map { $0.exerciseName }
-    )
+private func lowerBoundIndex(for value: Date, in dates: [Date]) -> Int {
+    var lower = 0
+    var upper = dates.count
 
-    for entry in entries {
-        // Check if entry has completed sets
-        let completedSets = entry.sets.filter { $0.completed && !$0.isWarmup && $0.reps > 0 }
-        guard !completedSets.isEmpty else { continue }
-
-        // Skip if history already exists for this exercise
-        guard !existingExerciseNames.contains(entry.exerciseName) else { continue }
-
-        // Create new history entry
-        let history = ExerciseHistory(from: entry, performedAt: completedAt)
-        context.insert(history)
+    while lower < upper {
+        let mid = (lower + upper) / 2
+        if dates[mid] < value {
+            lower = mid + 1
+        } else {
+            upper = mid
+        }
     }
+
+    return lower
+}
+
+private func insertingSortedDate(_ value: Date, into dates: [Date]) -> [Date] {
+    var updated = dates
+    let insertIndex = lowerBoundIndex(for: value, in: updated)
+    updated.insert(value, at: insertIndex)
+    return updated
 }

@@ -140,6 +140,7 @@ struct AddFoodView: View {
                             saveEntry()
                         }
                         .frame(maxWidth: .infinity)
+                        .buttonStyle(.traiPillProminent)
                     }
                 }
 
@@ -167,6 +168,8 @@ struct AddFoodView: View {
                         Button("Save Manual Entry") {
                             saveManualEntry()
                         }
+                        .frame(maxWidth: .infinity)
+                        .buttonStyle(.traiPillProminent)
                         .disabled(manualName.isEmpty || manualCalories.isEmpty)
                     }
                 }

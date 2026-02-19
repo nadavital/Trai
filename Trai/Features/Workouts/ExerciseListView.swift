@@ -8,12 +8,14 @@
 import SwiftUI
 import SwiftData
 
+private enum ExerciseSelectionPerformanceConfig {
+    static let usageHistorySampleLimit = 400
+}
+
 struct ExerciseListView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
-    @Query(sort: \ExerciseHistory.performedAt, order: .reverse)
-    private var exerciseHistory: [ExerciseHistory]
 
     // Selection callback
     private let onSelect: ((Exercise) -> Void)?
@@ -36,6 +38,8 @@ struct ExerciseListView: View {
     @State private var isAnalyzingPhoto = false
     @State private var photoAnalysisError: String?
     @State private var lastCapturedImageData: Data?
+    @State private var usageSummaryCache: UsageSummary = .empty
+    @State private var usageSummaryFingerprint: UsageSummaryFingerprint?
 
     // MARK: - Initializers
 
@@ -56,48 +60,32 @@ struct ExerciseListView: View {
         self._selectedExercise = selectedExercise
     }
 
-    // MARK: - Computed Properties
+    // MARK: - View Data
 
-    private var recentExerciseNames: [String] {
-        // Get unique exercise names from recent history
-        var seen = Set<String>()
-        return exerciseHistory
-            .compactMap { history -> String? in
-                guard !seen.contains(history.exerciseName) else { return nil }
-                seen.insert(history.exerciseName)
-                return history.exerciseName
-            }
-            .prefix(5)
-            .map { $0 }
+    private struct UsageSummary {
+        let usageFrequencyByExerciseName: [String: Int]
+        let mostRecentUsageByExerciseName: [String: Date]
+        let recentExerciseNames: [String]
+
+        static let empty = UsageSummary(
+            usageFrequencyByExerciseName: [:],
+            mostRecentUsageByExerciseName: [:],
+            recentExerciseNames: []
+        )
     }
 
-    private var recentExercises: [Exercise] {
-        let allRecent = recentExerciseNames.compactMap { name in
-            exercises.first { $0.name == name }
-        }
-        // Filter to target muscle groups if specified
-        if !targetMuscleGroups.isEmpty {
-            let targetRawValues = Set(targetMuscleGroups.map(\.rawValue))
-            return allRecent.filter { exercise in
-                guard let muscleGroup = exercise.muscleGroup else { return false }
-                return targetRawValues.contains(muscleGroup)
-            }
-        }
-        return allRecent
+    private struct ListData {
+        let filteredExercises: [Exercise]
+        let recentExercises: [Exercise]
+        let exercisesByMuscleGroup: [Exercise.MuscleGroup: [Exercise]]
+        let sortedMuscleGroups: [Exercise.MuscleGroup]
+        let noMuscleGroupExercises: [Exercise]
+        let showCustomOption: Bool
     }
 
-    private var usageFrequencyByExerciseName: [String: Int] {
-        Dictionary(grouping: exerciseHistory) { $0.exerciseName }
-            .mapValues { $0.count }
-    }
-
-    private var mostRecentUsageByExerciseName: [String: Date] {
-        exerciseHistory.reduce(into: [String: Date]()) { result, history in
-            if let current = result[history.exerciseName], current >= history.performedAt {
-                return
-            }
-            result[history.exerciseName] = history.performedAt
-        }
+    private struct UsageSummaryFingerprint: Equatable {
+        let historyCount: Int
+        let newestPerformedAt: Date?
     }
 
     private var targetMusclePriority: [Exercise.MuscleGroup: Int] {
@@ -112,7 +100,50 @@ struct ExerciseListView: View {
         Dictionary(uniqueKeysWithValues: Exercise.MuscleGroup.allCases.enumerated().map { ($1, $0) })
     }
 
-    private var filteredExercises: [Exercise] {
+    private func buildUsageSummary(from history: [ExerciseHistory]) -> UsageSummary {
+        guard !history.isEmpty else { return .empty }
+        var usageFrequencyByExerciseName: [String: Int] = [:]
+        var mostRecentUsageByExerciseName: [String: Date] = [:]
+        var recentExerciseNames: [String] = []
+        var seenRecentNames = Set<String>()
+
+        for entry in history.prefix(ExerciseSelectionPerformanceConfig.usageHistorySampleLimit) {
+            usageFrequencyByExerciseName[entry.exerciseName, default: 0] += 1
+            if mostRecentUsageByExerciseName[entry.exerciseName] == nil {
+                mostRecentUsageByExerciseName[entry.exerciseName] = entry.performedAt
+            }
+            if seenRecentNames.insert(entry.exerciseName).inserted, recentExerciseNames.count < 5 {
+                recentExerciseNames.append(entry.exerciseName)
+            }
+        }
+
+        return UsageSummary(
+            usageFrequencyByExerciseName: usageFrequencyByExerciseName,
+            mostRecentUsageByExerciseName: mostRecentUsageByExerciseName,
+            recentExerciseNames: recentExerciseNames
+        )
+    }
+
+    private func refreshUsageSummaryIfNeeded(force: Bool = false) {
+        var descriptor = FetchDescriptor<ExerciseHistory>(
+            sortBy: [SortDescriptor(\.performedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = ExerciseSelectionPerformanceConfig.usageHistorySampleLimit
+        let sampledHistory = (try? modelContext.fetch(descriptor)) ?? []
+        let fingerprint = UsageSummaryFingerprint(
+            historyCount: sampledHistory.count,
+            newestPerformedAt: sampledHistory.first?.performedAt
+        )
+        guard force || fingerprint != usageSummaryFingerprint else { return }
+        usageSummaryCache = buildUsageSummary(from: sampledHistory)
+        usageSummaryFingerprint = fingerprint
+    }
+
+    private func makeListData() -> ListData {
+        let usageSummary = usageSummaryCache
+        let targetPriority = targetMusclePriority
+        let muscleOrder = muscleGroupDefaultOrder
+
         var result = exercises
 
         // Apply search filter - include equipment name
@@ -134,66 +165,94 @@ struct ExerciseListView: View {
         }
 
         result.sort { a, b in
-            let aTargetPriority = a.targetMuscleGroup.flatMap { targetMusclePriority[$0] } ?? Int.max
-            let bTargetPriority = b.targetMuscleGroup.flatMap { targetMusclePriority[$0] } ?? Int.max
+            let aTargetPriority = a.targetMuscleGroup.flatMap { targetPriority[$0] } ?? Int.max
+            let bTargetPriority = b.targetMuscleGroup.flatMap { targetPriority[$0] } ?? Int.max
             if aTargetPriority != bTargetPriority { return aTargetPriority < bTargetPriority }
 
             // Keep section ordering stable by using muscle default order.
-            let aMuscleOrder = a.targetMuscleGroup.flatMap { muscleGroupDefaultOrder[$0] } ?? Int.max
-            let bMuscleOrder = b.targetMuscleGroup.flatMap { muscleGroupDefaultOrder[$0] } ?? Int.max
+            let aMuscleOrder = a.targetMuscleGroup.flatMap { muscleOrder[$0] } ?? Int.max
+            let bMuscleOrder = b.targetMuscleGroup.flatMap { muscleOrder[$0] } ?? Int.max
             if aMuscleOrder != bMuscleOrder { return aMuscleOrder < bMuscleOrder }
 
             // Then prioritize most recently performed exercises.
-            let aRecent = mostRecentUsageByExerciseName[a.name] ?? .distantPast
-            let bRecent = mostRecentUsageByExerciseName[b.name] ?? .distantPast
+            let aRecent = usageSummary.mostRecentUsageByExerciseName[a.name] ?? .distantPast
+            let bRecent = usageSummary.mostRecentUsageByExerciseName[b.name] ?? .distantPast
             if aRecent != bRecent { return aRecent > bRecent }
 
             // Then by usage frequency.
-            let aFreq = usageFrequencyByExerciseName[a.name] ?? 0
-            let bFreq = usageFrequencyByExerciseName[b.name] ?? 0
+            let aFreq = usageSummary.usageFrequencyByExerciseName[a.name] ?? 0
+            let bFreq = usageSummary.usageFrequencyByExerciseName[b.name] ?? 0
             if aFreq != bFreq { return aFreq > bFreq }
 
             // Finally alphabetically.
             return a.name < b.name
         }
 
-        return result
-    }
-
-    private var exercisesByCategory: [Exercise.Category: [Exercise]] {
-        Dictionary(grouping: filteredExercises) { $0.exerciseCategory }
-    }
-
-    private var exercisesByMuscleGroup: [Exercise.MuscleGroup: [Exercise]] {
-        var grouped: [Exercise.MuscleGroup: [Exercise]] = [:]
-        for exercise in filteredExercises {
-            if let muscleGroup = exercise.targetMuscleGroup {
-                grouped[muscleGroup, default: []].append(exercise)
+        var exercisesByMuscleGroup: [Exercise.MuscleGroup: [Exercise]] = [:]
+        var noMuscleGroupExercises: [Exercise] = []
+        let targetRawValues = Set(targetMuscleGroups.map(\.rawValue))
+        let exerciseByName = exercises.reduce(into: [String: Exercise]()) { result, exercise in
+            if result[exercise.name] == nil {
+                result[exercise.name] = exercise
             }
         }
-        return grouped
-    }
 
-    private var sortedMuscleGroups: [Exercise.MuscleGroup] {
-        let allGroups = Array(exercisesByMuscleGroup.keys)
+        let recentExercises = usageSummary.recentExerciseNames.compactMap { name -> Exercise? in
+            guard let exercise = exerciseByName[name] else { return nil }
+            guard !targetRawValues.isEmpty else { return exercise }
+            guard let muscleGroup = exercise.muscleGroup else { return nil }
+            return targetRawValues.contains(muscleGroup) ? exercise : nil
+        }
 
-        // Sort with targeted muscles first (in workout-provided order), then canonical order.
-        return allGroups.sorted { a, b in
-            let aPriority = targetMusclePriority[a] ?? Int.max
-            let bPriority = targetMusclePriority[b] ?? Int.max
+        for exercise in result {
+            if let muscleGroup = exercise.targetMuscleGroup {
+                exercisesByMuscleGroup[muscleGroup, default: []].append(exercise)
+            } else {
+                noMuscleGroupExercises.append(exercise)
+            }
+        }
+
+        let sortedMuscleGroups = Array(exercisesByMuscleGroup.keys).sorted { a, b in
+            let aPriority = targetPriority[a] ?? Int.max
+            let bPriority = targetPriority[b] ?? Int.max
             if aPriority != bPriority { return aPriority < bPriority }
 
-            let aOrder = muscleGroupDefaultOrder[a] ?? Int.max
-            let bOrder = muscleGroupDefaultOrder[b] ?? Int.max
+            let aOrder = muscleOrder[a] ?? Int.max
+            let bOrder = muscleOrder[b] ?? Int.max
             if aOrder != bOrder { return aOrder < bOrder }
 
             return a.displayName < b.displayName
         }
+
+        return ListData(
+            filteredExercises: result,
+            recentExercises: recentExercises,
+            exercisesByMuscleGroup: exercisesByMuscleGroup,
+            sortedMuscleGroups: sortedMuscleGroups,
+            noMuscleGroupExercises: noMuscleGroupExercises,
+            showCustomOption: !searchText.isEmpty && result.isEmpty
+        )
     }
 
-    /// Whether to search for custom exercises (when search yields no results)
-    private var showCustomOption: Bool {
-        !searchText.isEmpty && filteredExercises.isEmpty
+    private var muscleGroupsForFilterChips: [Exercise.MuscleGroup] {
+        let grouped = exercises.reduce(into: Set<Exercise.MuscleGroup>()) { partialResult, exercise in
+            if let group = exercise.targetMuscleGroup {
+                partialResult.insert(group)
+            }
+        }
+
+        let targetPriority = targetMusclePriority
+        let muscleOrder = muscleGroupDefaultOrder
+        return grouped.sorted { a, b in
+            let aPriority = targetPriority[a] ?? Int.max
+            let bPriority = targetPriority[b] ?? Int.max
+            if aPriority != bPriority { return aPriority < bPriority }
+
+            let aOrder = muscleOrder[a] ?? Int.max
+            let bOrder = muscleOrder[b] ?? Int.max
+            if aOrder != bOrder { return aOrder < bOrder }
+            return a.displayName < b.displayName
+        }
     }
 
     private var quickAddCategory: Exercise.Category {
@@ -208,10 +267,12 @@ struct ExerciseListView: View {
     // MARK: - Body
 
     var body: some View {
+        let listData = makeListData()
+
         NavigationStack {
             VStack(spacing: 0) {
                 // Filter chips
-                filterSection
+                filterSection(muscleGroups: muscleGroupsForFilterChips)
 
                 List {
                     // Load defaults if empty
@@ -257,7 +318,7 @@ struct ExerciseListView: View {
                         }
 
                         // Option to add searched exercise directly
-                        if showCustomOption {
+                        if listData.showCustomOption {
                             Section {
                                 Button {
                                     addCustomExercise(
@@ -280,9 +341,9 @@ struct ExerciseListView: View {
                         }
 
                         // Recent exercises section
-                        if searchText.isEmpty && selectedCategory == nil && selectedMuscleGroup == nil && !recentExercises.isEmpty {
+                        if searchText.isEmpty && selectedCategory == nil && selectedMuscleGroup == nil && !listData.recentExercises.isEmpty {
                             Section {
-                                ForEach(recentExercises) { exercise in
+                                ForEach(listData.recentExercises) { exercise in
                                     exerciseRow(exercise)
                                 }
                             } header: {
@@ -291,8 +352,8 @@ struct ExerciseListView: View {
                         }
 
                         // Exercises by muscle group (primary grouping)
-                        ForEach(sortedMuscleGroups) { muscleGroup in
-                            if let muscleExercises = exercisesByMuscleGroup[muscleGroup], !muscleExercises.isEmpty {
+                        ForEach(listData.sortedMuscleGroups) { muscleGroup in
+                            if let muscleExercises = listData.exercisesByMuscleGroup[muscleGroup], !muscleExercises.isEmpty {
                                 Section {
                                     ForEach(muscleExercises) { exercise in
                                         exerciseRow(exercise)
@@ -304,10 +365,9 @@ struct ExerciseListView: View {
                         }
 
                         // Show exercises without muscle group (cardio, etc.)
-                        let noMuscleGroupExercises = filteredExercises.filter { $0.targetMuscleGroup == nil }
-                        if !noMuscleGroupExercises.isEmpty {
+                        if !listData.noMuscleGroupExercises.isEmpty {
                             Section {
-                                ForEach(noMuscleGroupExercises) { exercise in
+                                ForEach(listData.noMuscleGroupExercises) { exercise in
                                     exerciseRow(exercise)
                                 }
                             } header: {
@@ -400,6 +460,10 @@ struct ExerciseListView: View {
                     }
                 }
             }
+            .onAppear {
+                refreshUsageSummaryIfNeeded(force: true)
+            }
+            .accessibilityIdentifier("exerciseListView")
         }
     }
 
@@ -430,7 +494,7 @@ struct ExerciseListView: View {
 
     // MARK: - Filter Section
 
-    private var filterSection: some View {
+    private func filterSection(muscleGroups: [Exercise.MuscleGroup]) -> some View {
         VStack(spacing: 0) {
             // Row 1: Category filters
             ScrollView(.horizontal, showsIndicators: false) {
@@ -466,7 +530,7 @@ struct ExerciseListView: View {
             if selectedCategory == .strength || selectedCategory == nil {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(sortedMuscleGroups) { muscleGroup in
+                        ForEach(muscleGroups) { muscleGroup in
                             FilterChip(
                                 label: muscleGroup.displayName,
                                 icon: muscleGroup.iconName,

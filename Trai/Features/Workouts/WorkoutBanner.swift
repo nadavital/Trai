@@ -13,26 +13,32 @@ struct WorkoutBanner: View {
     let onTap: () -> Void
     let onEnd: () -> Void
 
-    @State private var elapsedTime: TimeInterval = 0
-    @State private var timer: Timer?
+    private struct BannerStats {
+        let exerciseCount: Int
+        let completedSets: Int
+    }
 
-    private var formattedTime: String {
+    private var stats: BannerStats {
+        let entries = workout.entries ?? []
+        let completedSets = entries.reduce(0) { total, entry in
+            total + (entry.completedSets?.count ?? 0)
+        }
+        return BannerStats(
+            exerciseCount: entries.count,
+            completedSets: completedSets
+        )
+    }
+
+    private func formattedTime(at date: Date) -> String {
+        let elapsedTime = date.timeIntervalSince(workout.startedAt)
         let minutes = Int(elapsedTime) / 60
         let seconds = Int(elapsedTime) % 60
         return String(format: "%d:%02d", minutes, seconds)
     }
 
-    private var exerciseCount: Int {
-        workout.entries?.count ?? 0
-    }
-
-    private var completedSets: Int {
-        workout.entries?.reduce(0) { total, entry in
-            total + (entry.completedSets?.count ?? 0)
-        } ?? 0
-    }
-
     var body: some View {
+        let stats = stats
+
         HStack(spacing: 12) {
             // Pulsing indicator
             Circle()
@@ -52,13 +58,15 @@ struct WorkoutBanner: View {
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
-                    if exerciseCount > 0 {
-                        Text("\(exerciseCount) exercises")
+                    if stats.exerciseCount > 0 {
+                        Text("\(stats.exerciseCount) exercises")
                     }
                     Text("•")
                         .foregroundStyle(.tertiary)
-                    Text(formattedTime)
-                        .monospacedDigit()
+                    TimelineView(.periodic(from: workout.startedAt, by: 1.0)) { context in
+                        Text(formattedTime(at: context.date))
+                            .monospacedDigit()
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -67,11 +75,11 @@ struct WorkoutBanner: View {
             Spacer(minLength: 8)
 
             // Sets completed badge
-            if completedSets > 0 {
+            if stats.completedSets > 0 {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.caption)
-                    Text("\(completedSets) sets")
+                    Text("\(stats.completedSets) sets")
                         .font(.caption)
                 }
                 .foregroundStyle(.green)
@@ -88,27 +96,9 @@ struct WorkoutBanner: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 16)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("activeWorkoutBanner")
         .onTapGesture(perform: onTap)
-        .onAppear {
-            startTimer()
-        }
-        .onDisappear {
-            stopTimer()
-        }
-    }
-
-    private func startTimer() {
-        // Calculate initial elapsed time
-        elapsedTime = Date().timeIntervalSince(workout.startedAt)
-
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            elapsedTime = Date().timeIntervalSince(workout.startedAt)
-        }
-    }
-
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
     }
 }
 

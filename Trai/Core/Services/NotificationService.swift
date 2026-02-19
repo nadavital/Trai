@@ -15,7 +15,9 @@ final class NotificationService {
     private(set) var isAuthorized = false
     private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
 
-    private let center = UNUserNotificationCenter.current()
+    @ObservationIgnored
+    private var center: UNUserNotificationCenter { UNUserNotificationCenter.current() }
+    private var didRegisterCategories = false
 
     // MARK: - Notification Identifiers
 
@@ -45,11 +47,14 @@ final class NotificationService {
     // MARK: - Initialization
 
     init() {
-        registerNotificationCategories()
+        // Keep init lightweight; register categories lazily on first notification work.
     }
 
     /// Register notification categories with actions for long-press menu
-    private func registerNotificationCategories() {
+    private func registerNotificationCategoriesIfNeeded() {
+        guard !didRegisterCategories else { return }
+        didRegisterCategories = true
+
         let completeAction = UNNotificationAction(
             identifier: NotificationAction.complete.rawValue,
             title: "Mark Complete",
@@ -79,6 +84,7 @@ final class NotificationService {
 
     /// Request notification authorization
     func requestAuthorization() async -> Bool {
+        registerNotificationCategoriesIfNeeded()
         do {
             let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
             isAuthorized = granted
@@ -101,6 +107,7 @@ final class NotificationService {
 
     /// Schedule meal reminders based on user preferences
     func scheduleMealReminders(times: [MealReminderTime]) async {
+        registerNotificationCategoriesIfNeeded()
         // Clear existing meal reminders
         await cancelNotifications(category: .mealReminder)
 
@@ -146,6 +153,7 @@ final class NotificationService {
 
     /// Schedule workout reminders for specific days
     func scheduleWorkoutReminders(days: [Int], hour: Int, minute: Int) async {
+        registerNotificationCategoriesIfNeeded()
         // Clear existing workout reminders
         await cancelNotifications(category: .workoutReminder)
 
@@ -187,6 +195,7 @@ final class NotificationService {
 
     /// Schedule weekly weight check reminder
     func scheduleWeightReminder(weekday: Int, hour: Int, minute: Int) async {
+        registerNotificationCategoriesIfNeeded()
         await cancelNotifications(category: .weightReminder)
 
         guard isAuthorized else { return }
@@ -221,6 +230,7 @@ final class NotificationService {
 
     /// Schedule a single custom reminder
     func scheduleCustomReminder(_ reminder: CustomReminder) async {
+        registerNotificationCategoriesIfNeeded()
         // Cancel existing notification for this reminder first
         await cancelCustomReminder(id: reminder.id)
 
@@ -328,6 +338,7 @@ final class NotificationService {
 
     /// Schedule a snoozed notification for 10 minutes from now
     func scheduleSnooze(title: String, body: String, category: NotificationCategory, userInfo: [AnyHashable: Any]) async {
+        registerNotificationCategoriesIfNeeded()
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body

@@ -75,6 +75,11 @@ public struct TraiLensView: View {
         palette.colors
     }
 
+    private var animationCadence: TimeInterval {
+        // Decorative animation can run below display-link speed to cut main-thread churn.
+        size < 80 ? (1.0 / 24.0) : (1.0 / 30.0)
+    }
+
     public init(size: CGFloat = 120, state: TraiLensState = .idle, palette: TraiLensPalette = .energy) {
         self.size = size
         self.state = state
@@ -100,7 +105,7 @@ public struct TraiLensView: View {
     }
 
     public var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.animation(minimumInterval: animationCadence)) { timeline in
             ZStack {
                 // The liquid core - particles with blur for metaball effect
                 Canvas { context, canvasSize in
