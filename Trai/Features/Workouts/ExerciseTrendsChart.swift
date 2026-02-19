@@ -50,21 +50,27 @@ struct ExerciseTrendsChart: View {
     }
 
     private var dataPoints: [DataPoint] {
-        filteredHistory.map { entry in
-            let value: Double
+        filteredHistory.compactMap { entry in
             switch selectedMetric {
             case .weight:
                 // Use displayWeight which handles legacy records with bestSetWeightLbs = 0
-                value = entry.displayWeight(usesMetric: !useLbs)
+                let value = entry.displayWeight(usesMetric: !useLbs)
+                return DataPoint(date: entry.performedAt, value: value)
             case .volume:
                 // Volume is stored in kg, convert if needed
-                value = useLbs ? entry.totalVolume * WeightUtility.kgToLbs : entry.totalVolume
+                let value = useLbs ? entry.totalVolume * WeightUtility.kgToLbs : entry.totalVolume
+                return DataPoint(date: entry.performedAt, value: value)
             case .oneRepMax:
-                // 1RM is stored in kg, convert if needed
-                let oneRM = entry.estimatedOneRepMax ?? 0
-                value = useLbs ? WeightUtility.round(oneRM * WeightUtility.kgToLbs, unit: .lbs) : oneRM
+                // Use stored 1RM when available, and backfill from weight/reps for legacy rows.
+                let oneRM = entry.estimatedOneRepMax ??
+                    LiveWorkoutEntry.estimatedOneRepMax(
+                        weightKg: entry.bestSetWeightKg,
+                        reps: entry.bestSetReps
+                    )
+                guard let oneRM, oneRM > 0 else { return nil }
+                let value = useLbs ? WeightUtility.round(oneRM * WeightUtility.kgToLbs, unit: .lbs) : oneRM
+                return DataPoint(date: entry.performedAt, value: value)
             }
-            return DataPoint(date: entry.performedAt, value: value)
         }
     }
 

@@ -268,7 +268,16 @@ enum ExercisePerformanceService {
             weightPR: bestWeightRecord(in: history),
             repsPR: bestRepsRecord(in: history),
             volumePR: bestVolumeRecord(in: history),
-            estimatedOneRepMax: history.compactMap(\.estimatedOneRepMax).max(),
+            estimatedOneRepMax: history
+                .compactMap { entry in
+                    entry.estimatedOneRepMax ??
+                        LiveWorkoutEntry.estimatedOneRepMax(
+                            weightKg: entry.bestSetWeightKg,
+                            reps: entry.bestSetReps
+                        )
+                }
+                .filter { $0 > 0 }
+                .max(),
             totalSessions: history.count
         )
     }

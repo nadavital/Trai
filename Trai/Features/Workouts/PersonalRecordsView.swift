@@ -825,8 +825,7 @@ private struct EditHistorySheet: View {
                     HStack {
                         Text("Est. 1RM")
                         Spacer()
-                        if reps > 0 && reps <= 12 {
-                            let oneRM = weightKg * (36.0 / (37.0 - Double(reps)))
+                        if let oneRM = LiveWorkoutEntry.estimatedOneRepMax(weightKg: weightKg, reps: reps) {
                             let displayOneRM = useLbs ? oneRM * WeightUtility.kgToLbs : oneRM
                             Text(displayOneRM, format: .number.precision(.fractionLength(1)))
                             Text(weightUnit)
@@ -849,7 +848,7 @@ private struct EditHistorySheet: View {
                 } header: {
                     Text("Calculated Values")
                 } footer: {
-                    Text("Estimated 1RM uses the Brzycki formula and is only calculated for 1-12 reps.")
+                    Text("Estimated 1RM uses the Brzycki formula and is only calculated for 1-25 reps.")
                 }
             }
             .navigationTitle("Edit Record")
@@ -896,11 +895,10 @@ private struct EditHistorySheet: View {
         ).joined(separator: ",")
 
         // Recalculate estimated 1RM
-        if reps > 0 && reps <= 12 {
-            history.estimatedOneRepMax = history.bestSetWeightKg * (36.0 / (37.0 - Double(reps)))
-        } else {
-            history.estimatedOneRepMax = nil
-        }
+        history.estimatedOneRepMax = LiveWorkoutEntry.estimatedOneRepMax(
+            weightKg: history.bestSetWeightKg,
+            reps: reps
+        )
 
         try? modelContext.save()
         HapticManager.success()
