@@ -39,4 +39,9 @@ enum StableUUID {
     static func forWorkoutReminder() -> UUID {
         from("WORKOUT-REMINDER")
     }
+
+    /// Generate a stable UUID for the weekly weight reminder
+    static func forWeightReminder() -> UUID {
+        from("WEIGHT-REMINDER")
+    }
 }

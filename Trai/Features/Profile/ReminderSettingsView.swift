@@ -23,7 +23,10 @@ struct ReminderSettingsView: View {
                 Section {
                     Button {
                         Task {
-                            _ = await service.requestAuthorization()
+                            let granted = await service.requestAuthorization()
+                            if granted {
+                                await syncBuiltInReminderSchedules()
+                            }
                         }
                     } label: {
                         Label("Enable Notifications", systemImage: "bell.badge")
@@ -156,12 +159,40 @@ struct ReminderSettingsView: View {
             }
             Task {
                 await notificationService?.updateAuthorizationStatus()
+                await syncBuiltInReminderSchedules()
             }
             // Fetch custom reminders
             fetchCustomReminders()
         }
         .onChange(of: showAddReminderSheet) { _, isShowing in
             if !isShowing { fetchCustomReminders() }
+        }
+        .onChange(of: profile.mealRemindersEnabled) { _, _ in
+            Task { await syncBuiltInReminderSchedules() }
+        }
+        .onChange(of: profile.enabledMealReminders) { _, _ in
+            Task { await syncBuiltInReminderSchedules() }
+        }
+        .onChange(of: profile.workoutRemindersEnabled) { _, _ in
+            Task { await syncBuiltInReminderSchedules() }
+        }
+        .onChange(of: profile.workoutReminderDays) { _, _ in
+            Task { await syncBuiltInReminderSchedules() }
+        }
+        .onChange(of: profile.workoutReminderHour) { _, _ in
+            Task { await syncBuiltInReminderSchedules() }
+        }
+        .onChange(of: profile.workoutReminderMinute) { _, _ in
+            Task { await syncBuiltInReminderSchedules() }
+        }
+        .onChange(of: profile.weightReminderEnabled) { _, _ in
+            Task { await syncBuiltInReminderSchedules() }
+        }
+        .onChange(of: profile.weightReminderWeekday) { _, _ in
+            Task { await syncBuiltInReminderSchedules() }
+        }
+        .onChange(of: profile.weightReminderHour) { _, _ in
+            Task { await syncBuiltInReminderSchedules() }
         }
     }
 
@@ -254,6 +285,65 @@ struct ReminderSettingsView: View {
         modelContext.delete(reminder)
         fetchCustomReminders()
         HapticManager.lightTap()
+    }
+
+    @MainActor
+    private func syncBuiltInReminderSchedules() async {
+        guard let service = notificationService else { return }
+        let completedTodayReminderIDs = fetchCompletedReminderIDsForToday()
+
+        await service.updateAuthorizationStatus()
+        guard service.isAuthorized else {
+            await service.cancelNotifications(category: .mealReminder)
+            await service.cancelNotifications(category: .workoutReminder)
+            await service.cancelNotifications(category: .weightReminder)
+            return
+        }
+
+        if profile.mealRemindersEnabled {
+            let enabledMeals = Set(profile.enabledMealReminders.split(separator: ",").map(String.init))
+            let mealTimes = MealReminderTime.allMeals.filter { enabledMeals.contains($0.id) }
+            await service.scheduleMealReminders(
+                times: mealTimes,
+                skippingTodayReminderIDs: completedTodayReminderIDs
+            )
+        } else {
+            await service.cancelNotifications(category: .mealReminder)
+        }
+
+        if profile.workoutRemindersEnabled {
+            let workoutDays = Set(profile.workoutReminderDays.split(separator: ",").compactMap { Int($0) })
+            await service.scheduleWorkoutReminders(
+                days: workoutDays.sorted(),
+                hour: profile.workoutReminderHour,
+                minute: profile.workoutReminderMinute,
+                skippingTodayReminderIDs: completedTodayReminderIDs
+            )
+        } else {
+            await service.cancelNotifications(category: .workoutReminder)
+        }
+
+        if profile.weightReminderEnabled {
+            await service.scheduleWeightReminder(
+                weekday: profile.weightReminderWeekday,
+                hour: profile.weightReminderHour,
+                minute: 0,
+                skippingTodayReminderIDs: completedTodayReminderIDs
+            )
+        } else {
+            await service.cancelNotifications(category: .weightReminder)
+        }
+    }
+
+    private func fetchCompletedReminderIDsForToday() -> Set<UUID> {
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let descriptor = FetchDescriptor<ReminderCompletion>(
+            predicate: #Predicate { completion in
+                completion.completedAt >= startOfDay
+            }
+        )
+        let completions = (try? modelContext.fetch(descriptor)) ?? []
+        return Set(completions.map(\.reminderId))
     }
 }
 

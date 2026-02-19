@@ -44,6 +44,7 @@ struct DashboardView: View {
     @Query private var behaviorEvents: [BehaviorEvent]
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(NotificationService.self) private var notificationService: NotificationService?
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
     @State private var recoveryService = MuscleRecoveryService.shared
@@ -1549,9 +1550,29 @@ struct DashboardView: View {
     }
 
     private func completeReminder(_ reminder: TodaysRemindersCard.ReminderItem) {
+        if todaysCompletedReminderIds.contains(reminder.id) {
+            notificationService?.cancelPendingRequest(identifier: reminder.pendingNotificationIdentifier)
+            return
+        }
+
         // Calculate if completed on time (within 30 min of scheduled time)
         let calendar = Calendar.current
         let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        let reminderID = reminder.id
+        let existingDescriptor = FetchDescriptor<ReminderCompletion>(
+            predicate: #Predicate { completion in
+                completion.reminderId == reminderID && completion.completedAt >= startOfDay
+            }
+        )
+        if let existing = try? modelContext.fetch(existingDescriptor), !existing.isEmpty {
+            _ = withAnimation(.easeInOut(duration: 0.3)) {
+                todaysCompletedReminderIds.insert(reminder.id)
+            }
+            notificationService?.cancelPendingRequest(identifier: reminder.pendingNotificationIdentifier)
+            return
+        }
+
         let currentHour = calendar.component(.hour, from: now)
         let currentMinute = calendar.component(.minute, from: now)
         let currentMinutes = currentHour * 60 + currentMinute
@@ -1565,6 +1586,11 @@ struct DashboardView: View {
             wasOnTime: wasOnTime
         )
         modelContext.insert(completion)
+        do {
+            try modelContext.save()
+        } catch {
+            print("Failed to save reminder completion: \(error)")
+        }
         reminderCompletionHistory.insert(completion, at: 0)
         trimReminderCompletionHistory(to: now)
 
@@ -1572,6 +1598,7 @@ struct DashboardView: View {
         _ = withAnimation(.easeInOut(duration: 0.3)) {
             todaysCompletedReminderIds.insert(reminder.id)
         }
+        notificationService?.cancelPendingRequest(identifier: reminder.pendingNotificationIdentifier)
 
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.completeReminder,

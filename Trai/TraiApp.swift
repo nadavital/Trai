@@ -17,16 +17,19 @@ struct TraiApp: App {
     let isUITesting: Bool
     let isRunningTests: Bool
     let modelContainer: ModelContainer
-    @State private var notificationService = NotificationService()
-    @State private var healthKitService = HealthKitService()
+    @State private var notificationService: NotificationService
+    @State private var healthKitService: HealthKitService
     @State private var notificationDelegate: NotificationDelegate?
     @State private var showRemindersFromNotification = false
     @State private var deepLinkDestination: AppRoute?
     @State private var lastHealthKitWorkoutSyncDate: Date?
     @AppStorage("healthkitRecentWorkoutSyncTimestamp")
     private var persistedHealthKitWorkoutSyncTimestamp: Double = 0
+    @AppStorage("reminderScheduleRefreshToken")
+    private var reminderScheduleRefreshToken: String = ""
     @State private var startupCoordinator = AppStartupCoordinator()
     @State private var deferredHealthKitSyncTask: Task<Void, Never>?
+    @State private var reminderScheduleRefreshTask: Task<Void, Never>?
     @Environment(\.scenePhase) private var scenePhase
     private let startupTaskDeferral: Duration = .seconds(2)
     private let startupMigrationDeferral: Duration = .seconds(90)
@@ -37,6 +40,11 @@ struct TraiApp: App {
     private static let swiftDataStoreFilename = "default.store"
 
     init() {
+        let notificationService = NotificationService()
+        let healthKitService = HealthKitService()
+        _notificationService = State(initialValue: notificationService)
+        _healthKitService = State(initialValue: healthKitService)
+
         let isUITesting = AppLaunchArguments.isUITesting
         let isRunningTests = AppLaunchArguments.isRunningTests
         let shouldUseInMemoryStore = AppLaunchArguments.shouldUseInMemoryStore
@@ -88,6 +96,13 @@ struct TraiApp: App {
                 configurations: [modelConfiguration]
             )
 
+            notificationService.ensureNotificationSetup()
+            let delegate = NotificationDelegate(
+                modelContainer: modelContainer,
+                notificationService: notificationService
+            )
+            _notificationDelegate = State(initialValue: delegate)
+
             // Set shared container for App Intents access
             let container = modelContainer
             Task { @MainActor in
@@ -125,6 +140,7 @@ struct TraiApp: App {
                         setupNotificationDelegate()
                         scheduleDeferredStartupTasksIfNeeded()
                         scheduleStartupMigrationIfNeeded()
+                        scheduleReminderScheduleRefreshIfNeeded()
                     }
                     .onOpenURL { url in
                         handleDeepLink(url)
@@ -137,6 +153,7 @@ struct TraiApp: App {
 
             if newPhase == .background {
                 deferredHealthKitSyncTask?.cancel()
+                reminderScheduleRefreshTask?.cancel()
                 NotificationCenter.default.post(name: .liveWorkoutForceFlush, object: nil)
                 // Update widget data when app goes to background
                 Task { @MainActor in
@@ -145,6 +162,7 @@ struct TraiApp: App {
                 }
             } else if newPhase == .active {
                 scheduleForegroundHealthKitSyncIfEligible()
+                scheduleReminderScheduleRefreshIfNeeded()
             }
         }
     }
@@ -155,15 +173,95 @@ struct TraiApp: App {
     }
 
     private func setupNotificationDelegate() {
-        guard notificationDelegate == nil else { return }
-        let delegate = NotificationDelegate(
-            modelContainer: modelContainer,
-            notificationService: notificationService
-        )
-        delegate.onShowReminders = {
+        notificationService.ensureNotificationSetup()
+
+        if notificationDelegate == nil {
+            notificationDelegate = NotificationDelegate(
+                modelContainer: modelContainer,
+                notificationService: notificationService
+            )
+        }
+
+        notificationDelegate?.onShowReminders = {
             showRemindersFromNotification = true
         }
-        notificationDelegate = delegate
+    }
+
+    @MainActor
+    private func scheduleReminderScheduleRefreshIfNeeded(force: Bool = false) {
+        reminderScheduleRefreshTask?.cancel()
+        reminderScheduleRefreshTask = Task(priority: .utility) { @MainActor in
+            await refreshReminderSchedulesIfNeeded(force: force)
+        }
+    }
+
+    @MainActor
+    private func refreshReminderSchedulesIfNeeded(force: Bool) async {
+        let todayToken = NotificationService.occurrenceDateToken(for: Date())
+        if !force, reminderScheduleRefreshToken == todayToken {
+            return
+        }
+
+        await notificationService.updateAuthorizationStatus()
+        guard notificationService.isAuthorized else { return }
+
+        var profileDescriptor = FetchDescriptor<UserProfile>()
+        profileDescriptor.fetchLimit = 1
+        guard let profile = try? modelContainer.mainContext.fetch(profileDescriptor).first else { return }
+
+        let customReminderDescriptor = FetchDescriptor<CustomReminder>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        let customReminders = (try? modelContainer.mainContext.fetch(customReminderDescriptor)) ?? []
+
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let completionDescriptor = FetchDescriptor<ReminderCompletion>(
+            predicate: #Predicate { completion in
+                completion.completedAt >= startOfDay
+            }
+        )
+        let completions = (try? modelContainer.mainContext.fetch(completionDescriptor)) ?? []
+        let completedTodayReminderIDs = Set(completions.map(\.reminderId))
+
+        if profile.mealRemindersEnabled {
+            let enabledMeals = Set(profile.enabledMealReminders.split(separator: ",").map(String.init))
+            let mealTimes = MealReminderTime.allMeals.filter { enabledMeals.contains($0.id) }
+            await notificationService.scheduleMealReminders(
+                times: mealTimes,
+                skippingTodayReminderIDs: completedTodayReminderIDs
+            )
+        } else {
+            await notificationService.cancelNotifications(category: .mealReminder)
+        }
+
+        if profile.workoutRemindersEnabled {
+            let workoutDays = Set(profile.workoutReminderDays.split(separator: ",").compactMap { Int($0) })
+            await notificationService.scheduleWorkoutReminders(
+                days: workoutDays.sorted(),
+                hour: profile.workoutReminderHour,
+                minute: profile.workoutReminderMinute,
+                skippingTodayReminderIDs: completedTodayReminderIDs
+            )
+        } else {
+            await notificationService.cancelNotifications(category: .workoutReminder)
+        }
+
+        if profile.weightReminderEnabled {
+            await notificationService.scheduleWeightReminder(
+                weekday: profile.weightReminderWeekday,
+                hour: profile.weightReminderHour,
+                minute: 0,
+                skippingTodayReminderIDs: completedTodayReminderIDs
+            )
+        } else {
+            await notificationService.cancelNotifications(category: .weightReminder)
+        }
+
+        await notificationService.scheduleAllCustomReminders(
+            customReminders,
+            skippingTodayReminderIDs: completedTodayReminderIDs
+        )
+        reminderScheduleRefreshToken = todayToken
     }
 
     @MainActor
