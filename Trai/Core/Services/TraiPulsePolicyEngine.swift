@@ -530,7 +530,18 @@ enum TraiPulsePolicyEngine {
             return false
         }
         guard recent.questionID.contains("protein") else { return false }
-        return TraiPulseResponseInterpreter.containsNoFoodCue(recent.answer)
+        guard TraiPulseResponseInterpreter.containsNoFoodCue(recent.answer) else { return false }
+        return shouldApplyNoFoodTonightGuardrail(answeredAt: recent.createdAt, now: now)
+    }
+
+    private static func shouldApplyNoFoodTonightGuardrail(
+        answeredAt: Date,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> Bool {
+        let currentHour = calendar.component(.hour, from: now)
+        guard (17..<24).contains(currentHour) else { return false }
+        return calendar.isDate(answeredAt, inSameDayAs: now)
     }
 
     private static func weekdayName(for weekday: Int) -> String {
