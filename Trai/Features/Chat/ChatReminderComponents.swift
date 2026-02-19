@@ -108,7 +108,7 @@ struct ReminderSuggestionCard: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.traiTertiary())
 
                 Button {
                     onConfirm()
@@ -122,7 +122,7 @@ struct ReminderSuggestionCard: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.traiPrimary())
             }
         }
         .padding()

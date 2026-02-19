@@ -140,6 +140,7 @@ struct LogWeightSheet: View {
                     Button("Save", systemImage: "checkmark") {
                         saveWeight()
                     }
+                    .labelStyle(.iconOnly)
                     .disabled(!isValidWeight)
                 }
             }

@@ -56,21 +56,21 @@ struct DailyTargetsCard: View {
                 MacroEditField(
                     value: $adjustedProtein,
                     label: "Protein",
-                    color: .blue,
+                    color: MacroType.protein.color,
                     icon: "p.circle.fill"
                 )
 
                 MacroEditField(
                     value: $adjustedCarbs,
                     label: "Carbs",
-                    color: .green,
+                    color: MacroType.carbs.color,
                     icon: "c.circle.fill"
                 )
 
                 MacroEditField(
                     value: $adjustedFat,
                     label: "Fat",
-                    color: .yellow,
+                    color: MacroType.fat.color,
                     icon: "f.circle.fill"
                 )
             }
@@ -250,15 +250,15 @@ struct MacroVisualizationCard: View {
             GeometryReader { geo in
                 HStack(spacing: 2) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.blue)
+                        .fill(MacroType.protein.color)
                         .frame(width: geo.size.width * CGFloat(split.proteinPercent) / 100)
 
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.green)
+                        .fill(MacroType.carbs.color)
                         .frame(width: geo.size.width * CGFloat(split.carbsPercent) / 100)
 
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.yellow)
+                        .fill(MacroType.fat.color)
                         .frame(width: geo.size.width * CGFloat(split.fatPercent) / 100)
                 }
             }
@@ -267,9 +267,9 @@ struct MacroVisualizationCard: View {
 
             // Legend
             HStack(spacing: 20) {
-                MacroLegend(label: "Protein", percent: split.proteinPercent, color: .blue)
-                MacroLegend(label: "Carbs", percent: split.carbsPercent, color: .green)
-                MacroLegend(label: "Fat", percent: split.fatPercent, color: .yellow)
+                MacroLegend(label: "Protein", percent: split.proteinPercent, color: MacroType.protein.color)
+                MacroLegend(label: "Carbs", percent: split.carbsPercent, color: MacroType.carbs.color)
+                MacroLegend(label: "Fat", percent: split.fatPercent, color: MacroType.fat.color)
             }
         }
         .padding()

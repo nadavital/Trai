@@ -76,17 +76,10 @@ struct ProfileEditSheet: View {
                         saveChanges()
                         dismiss()
                     }
+                    .labelStyle(.iconOnly)
                     .disabled(!isValid)
                 }
 
-                ToolbarItem(placement: .keyboard) {
-                    HStack {
-                        Spacer()
-                        Button("Done") {
-                            focusedField = nil
-                        }
-                    }
-                }
             }
         }
     }

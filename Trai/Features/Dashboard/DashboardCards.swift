@@ -112,7 +112,7 @@ struct CalorieProgressCard: View {
                     }
                 }
             }
-            .traiCard(glow: .nutrition)
+            .traiCard()
         }
         .buttonStyle(TraiPressStyle())
     }
@@ -196,7 +196,7 @@ struct MacroBreakdownCard: View {
                     }
                 }
             }
-            .traiCard(glow: .macros)
+            .traiCard()
         }
         .buttonStyle(TraiPressStyle())
     }
@@ -284,7 +284,7 @@ struct TodaysActivityCard: View {
                 }
             }
         }
-        .traiCard(glow: .activity)
+        .traiCard()
     }
 
     private func formatSteps(_ steps: Int) -> String {
@@ -408,7 +408,7 @@ struct WeightTrendCard: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .traiCard(glow: .body)
+        .traiCard()
     }
 }
 
@@ -447,7 +447,7 @@ struct QuickActionsCard: View {
                 )
             }
         }
-        .traiCard(glow: .quickActions)
+        .traiCard()
     }
 }
 
@@ -549,7 +549,7 @@ struct WorkoutTrendCard: View {
                     )
                 }
             }
-            .traiCard(glow: .trends)
+            .traiCard()
         }
         .buttonStyle(TraiPressStyle())
     }

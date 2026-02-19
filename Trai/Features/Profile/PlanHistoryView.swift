@@ -104,6 +104,7 @@ private struct PlanVersionDetailView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done", systemImage: "checkmark") { dismiss() }
+                    .labelStyle(.iconOnly)
             }
         }
     }

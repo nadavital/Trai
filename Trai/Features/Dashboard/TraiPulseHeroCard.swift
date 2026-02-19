@@ -204,16 +204,6 @@ struct TraiPulseHeroCard: View {
                 questionFeedback = nil
             }
         }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button {
-                    isQuestionInputFocused = false
-                } label: {
-                    Image(systemName: "keyboard.chevron.compact.down")
-                }
-            }
-        }
         .onTapGesture {
             isQuestionInputFocused = false
         }
@@ -287,7 +277,7 @@ struct TraiPulseHeroCard: View {
                     await refreshPulseContent(force: true)
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.traiTertiary())
             .tint(.accentColor)
         }
         .padding(.vertical, 4)
@@ -503,7 +493,7 @@ struct TraiPulseHeroCard: View {
                         .map(\.title)
                     submitQuestion(question, answer: selectedTitles.joined(separator: ", "))
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.traiPrimary())
                 .tint(.accentColor)
                 .disabled(selectedQuestionOptions.isEmpty)
 
@@ -563,7 +553,7 @@ struct TraiPulseHeroCard: View {
                     Button("Save") {
                         submitQuestion(question, answer: questionNote)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.traiPrimary())
                     .tint(.accentColor)
                     .disabled(questionNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }

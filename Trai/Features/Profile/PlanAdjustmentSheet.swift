@@ -68,6 +68,7 @@ struct PlanAdjustmentSheet: View {
                         saveChanges()
                         dismiss()
                     }
+                    .labelStyle(.iconOnly)
                 }
             }
             .sheet(isPresented: $showAICoach) {
@@ -80,6 +81,7 @@ struct PlanAdjustmentSheet: View {
                                 Button("Done", systemImage: "checkmark") {
                                     showAICoach = false
                                 }
+                                .labelStyle(.iconOnly)
                             }
                         }
                 }
@@ -194,7 +196,7 @@ struct PlanAdjustmentSheet: View {
                     label: "Protein",
                     value: $protein,
                     unit: "g",
-                    color: .blue,
+                    color: MacroType.protein.color,
                     range: 50...400,
                     step: 5
                 )
@@ -205,7 +207,7 @@ struct PlanAdjustmentSheet: View {
                     label: "Carbs",
                     value: $carbs,
                     unit: "g",
-                    color: .green,
+                    color: MacroType.carbs.color,
                     range: 50...600,
                     step: 5
                 )
@@ -216,7 +218,7 @@ struct PlanAdjustmentSheet: View {
                     label: "Fat",
                     value: $fat,
                     unit: "g",
-                    color: .yellow,
+                    color: MacroType.fat.color,
                     range: 20...200,
                     step: 5
                 )

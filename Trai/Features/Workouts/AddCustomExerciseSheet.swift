@@ -64,6 +64,7 @@ struct AddCustomExerciseSheet: View {
                         HapticManager.success()
                         dismiss()
                     }
+                    .labelStyle(.iconOnly)
                     .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }

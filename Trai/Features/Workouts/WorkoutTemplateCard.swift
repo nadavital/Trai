@@ -126,9 +126,9 @@ struct WorkoutTemplateCard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
             }
-            .buttonStyle(.traiPrimary)
+            .buttonStyle(.traiPrimary())
         }
-        .traiCard(glow: .workout)
+        .traiCard()
     }
 }
 

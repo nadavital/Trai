@@ -75,7 +75,7 @@ struct SuggestedEditCard: View {
                     Text("Cancel")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.traiTertiary())
 
                 Button {
                     onAccept()
@@ -86,7 +86,7 @@ struct SuggestedEditCard: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.traiPrimary())
                 .tint(.orange)
             }
         }
@@ -254,7 +254,7 @@ struct SuggestedMealCard: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.traiTertiary())
                 .disabled(isLogging)
 
                 Button {
@@ -270,7 +270,7 @@ struct SuggestedMealCard: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.traiPrimary())
                 .tint(.green)
                 .disabled(isLogging)
             }
@@ -403,6 +403,7 @@ struct EditMealSuggestionSheet: View {
                         )
                         onSave(updated)
                     }
+                    .labelStyle(.iconOnly)
                     .fontWeight(.semibold)
                     .disabled(!isValid)
                 }

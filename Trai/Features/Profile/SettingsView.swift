@@ -236,6 +236,7 @@ struct SettingsView: View {
                 Button("Done", systemImage: "checkmark") {
                     dismiss()
                 }
+                .labelStyle(.iconOnly)
             }
         }
         .sheet(isPresented: $showPlanAdjustment) {

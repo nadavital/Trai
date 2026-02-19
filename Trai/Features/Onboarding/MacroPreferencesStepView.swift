@@ -55,14 +55,14 @@ struct MacroPreferencesStepView: View {
         VStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .stroke(Color.purple.opacity(0.15), lineWidth: 2)
+                    .stroke(Color.accentColor.opacity(0.15), lineWidth: 2)
                     .frame(width: 95, height: 95)
                     .scaleEffect(headerVisible ? 1 : 0.5)
 
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Color.purple.opacity(0.15), Color.blue.opacity(0.1)],
+                            colors: [Color.accentColor.opacity(0.16), TraiColors.coral.opacity(0.12)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -71,7 +71,7 @@ struct MacroPreferencesStepView: View {
 
                 Image(systemName: "chart.pie.fill")
                     .font(.system(size: 36))
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(Color.accentColor)
                     .symbolRenderingMode(.hierarchical)
             }
             .scaleEffect(headerVisible ? 1 : 0.8)

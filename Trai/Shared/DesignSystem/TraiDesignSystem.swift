@@ -154,21 +154,24 @@ struct TraiPressStyle: ButtonStyle {
 struct TraiCardBackground: ViewModifier {
     var tintColor: Color?
     var glow: TraiCardGlow?
+    var cornerRadius: CGFloat = TraiRadius.medium
+    var contentPadding: CGFloat = TraiSpacing.md
     @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
         content
-            .padding()
+            .padding(contentPadding)
             .background(
                 ZStack {
-                    RoundedRectangle(cornerRadius: TraiRadius.medium)
-                        .fill(cardFill)
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(.ultraThinMaterial)
 
                     if let glow {
                         TraiCardGlowBackground(glow: glow)
-                            .clipShape(.rect(cornerRadius: TraiRadius.medium))
+                            .opacity(0.35)
+                            .clipShape(.rect(cornerRadius: cornerRadius))
                     } else if let tintColor {
-                        RoundedRectangle(cornerRadius: TraiRadius.medium)
+                        RoundedRectangle(cornerRadius: cornerRadius)
                             .fill(TraiGradient.cardSurface(tintColor))
                     }
                 }
@@ -180,20 +183,14 @@ struct TraiCardBackground: ViewModifier {
             )
     }
 
-    private var cardFill: Color {
-        colorScheme == .dark
-            ? Color(.secondarySystemBackground)
-            : .white
-    }
-
     private var shadowColor: Color {
         colorScheme == .dark
-            ? Color.white.opacity(0.03)
-            : Color.black.opacity(0.06)
+            ? Color.black.opacity(0.28)
+            : Color.black.opacity(0.08)
     }
 
     private var shadowRadius: CGFloat {
-        colorScheme == .dark ? 4 : 8
+        colorScheme == .dark ? 6 : 8
     }
 
     private var shadowY: CGFloat {
@@ -202,13 +199,33 @@ struct TraiCardBackground: ViewModifier {
 }
 
 extension View {
-    func traiCard(tint: Color? = nil) -> some View {
-        modifier(TraiCardBackground(tintColor: tint))
+    func traiCard(
+        tint: Color? = nil,
+        cornerRadius: CGFloat = TraiRadius.medium,
+        contentPadding: CGFloat = TraiSpacing.md
+    ) -> some View {
+        modifier(
+            TraiCardBackground(
+                tintColor: tint,
+                cornerRadius: cornerRadius,
+                contentPadding: contentPadding
+            )
+        )
     }
 
     /// Card with organic radial gradient glow background.
-    func traiCard(glow: TraiCardGlow) -> some View {
-        modifier(TraiCardBackground(glow: glow))
+    func traiCard(
+        glow: TraiCardGlow,
+        cornerRadius: CGFloat = TraiRadius.medium,
+        contentPadding: CGFloat = TraiSpacing.md
+    ) -> some View {
+        modifier(
+            TraiCardBackground(
+                glow: glow,
+                cornerRadius: cornerRadius,
+                contentPadding: contentPadding
+            )
+        )
     }
 }
 
@@ -314,7 +331,7 @@ private struct TraiCardGlowBackground: View {
     @Environment(\.colorScheme) private var colorScheme
 
     private var intensityScale: Double {
-        colorScheme == .dark ? 1.4 : 1.0
+        colorScheme == .dark ? 0.55 : 0.42
     }
 
     var body: some View {
@@ -334,7 +351,7 @@ private struct TraiCardGlowBackground: View {
                     )
                 }
             }
-            .blur(radius: 20)
+            .blur(radius: 24)
         }
     }
 }

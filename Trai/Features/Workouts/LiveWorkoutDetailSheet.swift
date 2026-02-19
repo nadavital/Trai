@@ -98,6 +98,7 @@ struct LiveWorkoutDetailSheet: View {
                                 isEditing = false
                             }
                         }
+                        .labelStyle(.iconOnly)
                         .tint(.accentColor)
                     }
                 } else {
@@ -113,6 +114,7 @@ struct LiveWorkoutDetailSheet: View {
                         Button("Done", systemImage: "checkmark") {
                             dismiss()
                         }
+                        .labelStyle(.iconOnly)
                     }
                 }
             }
@@ -246,7 +248,7 @@ struct LiveWorkoutDetailSheet: View {
             Label("Add Exercise", systemImage: "plus.circle.fill")
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.traiPillProminent)
+        .buttonStyle(.traiPrimary())
     }
 
     // MARK: - Notes Section

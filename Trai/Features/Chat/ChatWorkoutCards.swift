@@ -60,7 +60,7 @@ struct SuggestedWorkoutCard: View {
                 Button("Dismiss", systemImage: "xmark") {
                     onDismiss()
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.traiTertiary())
                 .controlSize(.small)
 
                 Spacer()
@@ -68,7 +68,7 @@ struct SuggestedWorkoutCard: View {
                 Button("Start Workout", systemImage: "play.fill") {
                     onAccept()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.traiPrimary())
                 .controlSize(.small)
             }
         }
@@ -200,7 +200,7 @@ struct SuggestedWorkoutLogCard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.traiPrimary())
             .tint(.green)
         }
         .padding(14)

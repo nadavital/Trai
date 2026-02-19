@@ -100,6 +100,7 @@ struct CalorieDetailSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark") { dismiss() }
+                        .labelStyle(.iconOnly)
                 }
 
                 if let addAction = onAddFood {
@@ -284,7 +285,7 @@ private struct EmptyStateView: View {
 
             if let addAction = onAddFood {
                 Button("Log Your First Meal", action: addAction)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.traiPrimary())
             }
         }
         .frame(maxWidth: .infinity)

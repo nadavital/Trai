@@ -131,6 +131,7 @@ struct CustomWorkoutSetupSheet: View {
                         onStart(finalName, selectedType, Array(selectedMuscles))
                         dismiss()
                     }
+                    .labelStyle(.iconOnly)
                 }
             }
         }

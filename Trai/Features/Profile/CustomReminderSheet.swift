@@ -80,6 +80,7 @@ struct CustomReminderSheet: View {
                     Button("Save", systemImage: "checkmark") {
                         save()
                     }
+                    .labelStyle(.iconOnly)
                     .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }

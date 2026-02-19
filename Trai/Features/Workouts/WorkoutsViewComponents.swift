@@ -35,9 +35,7 @@ struct QuickStartCard: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
-            .padding()
-            .background(Color(.tertiarySystemFill))
-            .clipShape(.rect(cornerRadius: 12))
+            .traiCard(cornerRadius: 12)
         }
         .buttonStyle(.plain)
     }
@@ -81,13 +79,7 @@ struct ActiveWorkoutBanner: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            .padding()
-            .background(Color.green.opacity(0.15))
-            .clipShape(.rect(cornerRadius: 16))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(.green.opacity(0.3), lineWidth: 1)
-            }
+            .traiCard(tint: .green, cornerRadius: 16)
         }
         .buttonStyle(.plain)
     }
@@ -160,9 +152,7 @@ struct TodaysWorkoutSummary: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(cornerRadius: 16)
     }
 }
 

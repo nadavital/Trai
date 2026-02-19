@@ -34,148 +34,39 @@ struct AddFoodView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                // Photo section
-                Section {
-                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                        if let imageData = selectedImageData,
-                           let uiImage = UIImage(data: imageData) {
-                            Image(uiImage: uiImage)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(height: 200)
-                                .clipShape(.rect(cornerRadius: 12))
-                        } else {
-                            ContentUnavailableView {
-                                Label("Add Photo", systemImage: "camera.fill")
-                            } description: {
-                                Text("Take or select a photo of your food")
-                            }
-                            .frame(height: 150)
-                        }
+            ScrollView {
+                VStack(spacing: 14) {
+                    photoSection
+                        .traiCard(cornerRadius: 16)
+
+                    descriptionSection
+                        .traiCard(cornerRadius: 16)
+
+                    mealTypeSection
+                        .traiCard(cornerRadius: 16)
+
+                    analyzeSection
+                        .traiCard(cornerRadius: 16)
+
+                    if let result = analysisResult {
+                        analysisSection(result)
+                            .traiCard(cornerRadius: 16)
                     }
-                    .onChange(of: selectedPhotoItem) { _, newValue in
-                        Task {
-                            if let data = try? await newValue?.loadTransferable(type: Data.self) {
-                                selectedImageData = data
-                            }
-                        }
+
+                    if let error = errorMessage {
+                        errorSection(error)
+                            .traiCard(cornerRadius: 16)
                     }
-                } header: {
-                    Text("Photo")
+
+                    manualEntrySection
+                        .traiCard(cornerRadius: 16)
                 }
-
-                // Description section
-                Section {
-                    TextField("Describe what you're eating...", text: $foodDescription, axis: .vertical)
-                        .lineLimit(3...6)
-                } header: {
-                    Text("Description")
-                } footer: {
-                    Text("Describe your food for more accurate AI analysis")
-                }
-
-                // Meal type
-                Section {
-                    Picker("Meal", selection: $selectedMealType) {
-                        ForEach(FoodEntry.MealType.allCases) { mealType in
-                            Label(mealType.displayName, systemImage: mealType.iconName)
-                                .tag(mealType)
-                        }
-                    }
-                }
-
-                // AI Analysis button
-                Section {
-                    Button {
-                        Task {
-                            await analyzeFood()
-                        }
-                    } label: {
-                        if isAnalyzing {
-                            HStack {
-                                ProgressView()
-                                Text("Analyzing...")
-                            }
-                            .frame(maxWidth: .infinity)
-                        } else {
-                            Label("Analyze with AI", systemImage: "sparkles")
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .disabled(selectedImageData == nil && foodDescription.isEmpty)
-                    .disabled(isAnalyzing)
-                }
-
-                // Analysis result
-                if let result = analysisResult {
-                    Section {
-                        LabeledContent("Food", value: result.name)
-                        LabeledContent("Calories", value: "\(result.calories) kcal")
-                        LabeledContent("Protein", value: "\(Int(result.proteinGrams))g")
-                        LabeledContent("Carbs", value: "\(Int(result.carbsGrams))g")
-                        LabeledContent("Fat", value: "\(Int(result.fatGrams))g")
-
-                        if let serving = result.servingSize {
-                            LabeledContent("Serving", value: serving)
-                        }
-
-                        if let notes = result.notes {
-                            Text(notes)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } header: {
-                        HStack {
-                            Text("Analysis Result")
-                            Spacer()
-                            Text(result.confidence)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Section {
-                        Button("Save Entry", systemImage: "checkmark.circle.fill") {
-                            saveEntry()
-                        }
-                        .frame(maxWidth: .infinity)
-                        .buttonStyle(.traiPillProminent)
-                    }
-                }
-
-                // Error message
-                if let error = errorMessage {
-                    Section {
-                        Text(error)
-                            .foregroundStyle(.red)
-                    }
-                }
-
-                // Manual entry toggle
-                Section {
-                    DisclosureGroup("Manual Entry", isExpanded: $showManualEntry) {
-                        TextField("Food name", text: $manualName)
-                        TextField("Calories", text: $manualCalories)
-                            .keyboardType(.numberPad)
-                        TextField("Protein (g)", text: $manualProtein)
-                            .keyboardType(.decimalPad)
-                        TextField("Carbs (g)", text: $manualCarbs)
-                            .keyboardType(.decimalPad)
-                        TextField("Fat (g)", text: $manualFat)
-                            .keyboardType(.decimalPad)
-
-                        Button("Save Manual Entry") {
-                            saveManualEntry()
-                        }
-                        .frame(maxWidth: .infinity)
-                        .buttonStyle(.traiPillProminent)
-                        .disabled(manualName.isEmpty || manualCalories.isEmpty)
-                    }
-                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
             }
             .navigationTitle("Add Food")
             .navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {
@@ -183,7 +74,237 @@ struct AddFoodView: View {
                     }
                 }
             }
+            .onChange(of: selectedPhotoItem) { _, newValue in
+                Task {
+                    if let data = try? await newValue?.loadTransferable(type: Data.self) {
+                        selectedImageData = data
+                    }
+                }
+            }
         }
+    }
+
+    private var photoSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Photo", icon: "camera.fill")
+
+            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                Group {
+                    if let imageData = selectedImageData,
+                       let uiImage = UIImage(data: imageData) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(height: 200)
+                            .clipShape(.rect(cornerRadius: 12))
+                    } else {
+                        VStack(spacing: 8) {
+                            Image(systemName: "photo.badge.plus")
+                                .font(.title2)
+                                .foregroundStyle(Color.accentColor)
+                            Text("Select food photo")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Text("Take or choose a clear image for better analysis")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 150)
+                        .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var descriptionSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Description", icon: "text.alignleft")
+
+            TextField("Describe what you're eating...", text: $foodDescription, axis: .vertical)
+                .lineLimit(3...6)
+                .padding(12)
+                .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+
+            Text("Describe your food for more accurate AI analysis")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var mealTypeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Meal", icon: "clock")
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(FoodEntry.MealType.allCases) { mealType in
+                    if selectedMealType == mealType {
+                        Button {
+                            selectedMealType = mealType
+                            HapticManager.lightTap()
+                        } label: {
+                            Label(mealType.displayName, systemImage: mealType.iconName)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true))
+                    } else {
+                        Button {
+                            selectedMealType = mealType
+                            HapticManager.lightTap()
+                        } label: {
+                            Label(mealType.displayName, systemImage: mealType.iconName)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.traiTertiary(color: .secondary, fullWidth: true))
+                    }
+                }
+            }
+        }
+    }
+
+    private var analyzeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("AI Analysis", icon: "sparkles")
+
+            Button {
+                Task {
+                    await analyzeFood()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    if isAnalyzing {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "sparkles")
+                    }
+                    Text(isAnalyzing ? "Analyzing..." : "Analyze with AI")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.traiPrimary(fullWidth: true))
+            .disabled((selectedImageData == nil && foodDescription.isEmpty) || isAnalyzing)
+        }
+    }
+
+    private func analysisSection(_ result: FoodAnalysis) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                sectionTitle("Analysis Result", icon: "checkmark.seal.fill")
+                Spacer()
+                Text(result.confidence)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 8) {
+                infoRow(label: "Food", value: result.name)
+                infoRow(label: "Calories", value: "\(result.calories) kcal")
+                infoRow(label: "Protein", value: "\(Int(result.proteinGrams))g")
+                infoRow(label: "Carbs", value: "\(Int(result.carbsGrams))g")
+                infoRow(label: "Fat", value: "\(Int(result.fatGrams))g")
+
+                if let serving = result.servingSize {
+                    infoRow(label: "Serving", value: serving)
+                }
+            }
+
+            if let notes = result.notes {
+                Text(notes)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            }
+
+            Button("Save Entry", systemImage: "checkmark.circle.fill") {
+                saveEntry()
+            }
+            .buttonStyle(.traiPrimary(fullWidth: true))
+        }
+    }
+
+    private func errorSection(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Error", icon: "exclamationmark.triangle.fill")
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.red)
+        }
+    }
+
+    private var manualEntrySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.snappy) {
+                    showManualEntry.toggle()
+                }
+            } label: {
+                HStack {
+                    Label("Manual Entry", systemImage: "square.and.pencil")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(showManualEntry ? 90 : 0))
+                }
+            }
+            .buttonStyle(.plain)
+
+            if showManualEntry {
+                VStack(spacing: 8) {
+                    TextField("Food name", text: $manualName)
+                        .padding(12)
+                        .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+
+                    TextField("Calories", text: $manualCalories)
+                        .keyboardType(.numberPad)
+                        .padding(12)
+                        .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+
+                    HStack(spacing: 8) {
+                        nutrientField("Protein (g)", text: $manualProtein)
+                        nutrientField("Carbs (g)", text: $manualCarbs)
+                    }
+
+                    nutrientField("Fat (g)", text: $manualFat)
+
+                    Button("Save Manual Entry", systemImage: "checkmark") {
+                        saveManualEntry()
+                    }
+                    .buttonStyle(.traiPrimary(fullWidth: true))
+                    .disabled(manualName.isEmpty || manualCalories.isEmpty)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    private func nutrientField(_ placeholder: String, text: Binding<String>) -> some View {
+        TextField(placeholder, text: text)
+            .keyboardType(.decimalPad)
+            .padding(12)
+            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func infoRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .fontWeight(.medium)
+                .multilineTextAlignment(.trailing)
+        }
+        .font(.subheadline)
+    }
+
+    private func sectionTitle(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.headline)
+            .foregroundStyle(.primary)
     }
 
     private func analyzeFood() async {

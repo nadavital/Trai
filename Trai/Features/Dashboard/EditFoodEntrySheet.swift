@@ -48,76 +48,78 @@ struct EditFoodEntrySheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                // Image preview
-                if let imageData = entry.imageData,
-                   let uiImage = UIImage(data: imageData) {
-                    Section {
-                        HStack {
-                            Spacer()
+            ScrollView {
+                VStack(spacing: 14) {
+                    if let imageData = entry.imageData,
+                       let uiImage = UIImage(data: imageData) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            sectionTitle("Photo", icon: "camera.fill")
                             Image(uiImage: uiImage)
                                 .resizable()
                                 .scaledToFill()
-                                .frame(width: 150, height: 150)
+                                .frame(height: 180)
+                                .frame(maxWidth: .infinity)
                                 .clipShape(.rect(cornerRadius: 12))
-                            Spacer()
+                        }
+                        .traiCard(cornerRadius: 16)
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        sectionTitle("Food Details", icon: "fork.knife")
+                        TextField("Name", text: $name)
+                            .padding(12)
+                            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+
+                        TextField("Serving Size", text: $servingSize)
+                            .textContentType(.none)
+                            .padding(12)
+                            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .traiCard(cornerRadius: 16)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        sectionTitle("Nutrition", icon: "chart.pie.fill")
+
+                        MacroInputRow(
+                            label: "Calories",
+                            value: $caloriesText,
+                            unit: "kcal",
+                            color: .orange
+                        )
+
+                        ForEach(orderedEnabledMacros) { macro in
+                            MacroInputRow(
+                                label: macro.displayName,
+                                value: bindingFor(macro),
+                                unit: "g",
+                                color: macro.color
+                            )
                         }
                     }
-                    .listRowBackground(Color.clear)
-                }
+                    .traiCard(cornerRadius: 16)
 
-                // Basic Info
-                Section("Food Details") {
-                    TextField("Name", text: $name)
-
-                    TextField("Serving Size", text: $servingSize)
-                        .textContentType(.none)
-                }
-
-                // Nutrition
-                Section("Nutrition") {
-                    MacroInputRow(
-                        label: "Calories",
-                        value: $caloriesText,
-                        unit: "kcal",
-                        color: .orange
-                    )
-
-                    ForEach(orderedEnabledMacros) { macro in
-                        MacroInputRow(
-                            label: macro.displayName,
-                            value: bindingFor(macro),
-                            unit: "g",
-                            color: macro.color
-                        )
+                    VStack(alignment: .leading, spacing: 10) {
+                        sectionTitle("Notes", icon: "note.text")
+                        TextField("Add notes about this food...", text: $notes, axis: .vertical)
+                            .lineLimit(3...6)
+                            .padding(12)
+                            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
                     }
-                }
+                    .traiCard(cornerRadius: 16)
 
-                // Notes
-                Section("Notes") {
-                    TextField("Add notes about this food...", text: $notes, axis: .vertical)
-                        .lineLimit(3...6)
-                }
-
-                // Entry info
-                Section {
-                    HStack {
-                        Text("Logged")
-                        Spacer()
-                        Text(entry.loggedAt, format: .dateTime.month().day().hour().minute())
-                            .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 10) {
+                        sectionTitle("Entry Info", icon: "info.circle")
+                        infoRow("Logged", value: entry.loggedAt.formatted(.dateTime.month().day().hour().minute()))
+                        infoRow("Input Method", value: entry.input.displayName)
                     }
-
-                    HStack {
-                        Text("Input Method")
-                        Spacer()
-                        Text(entry.input.displayName)
-                            .foregroundStyle(.secondary)
-                    }
+                    .traiCard(cornerRadius: 16)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
             }
             .navigationTitle("Edit Food")
             .navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {
@@ -129,10 +131,29 @@ struct EditFoodEntrySheet: View {
                     Button("Save", systemImage: "checkmark") {
                         saveChanges()
                     }
+                    .labelStyle(.iconOnly)
                     .disabled(name.isEmpty)
                 }
             }
         }
+    }
+
+    private func sectionTitle(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.headline)
+            .foregroundStyle(.primary)
+    }
+
+    private func infoRow(_ label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .fontWeight(.medium)
+                .multilineTextAlignment(.trailing)
+        }
+        .font(.subheadline)
     }
 
     private func bindingFor(_ macro: MacroType) -> Binding<String> {
@@ -172,22 +193,32 @@ private struct MacroInputRow: View {
     var body: some View {
         HStack {
             Circle()
-                .fill(color)
-                .frame(width: 8, height: 8)
+                .fill(color.opacity(0.2))
+                .frame(width: 24, height: 24)
+                .overlay {
+                    Text(label.prefix(1))
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(color)
+                }
 
             Text(label)
 
             Spacer()
 
             TextField("0", text: $value)
-                .keyboardType(.decimalPad)
+                .keyboardType(unit == "kcal" ? .numberPad : .decimalPad)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 80)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
 
             Text(unit)
                 .foregroundStyle(.secondary)
                 .frame(width: 35, alignment: .leading)
         }
+        .font(.subheadline)
     }
 }
 

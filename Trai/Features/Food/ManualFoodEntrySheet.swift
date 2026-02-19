@@ -41,46 +41,51 @@ struct ManualFoodEntrySheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField("Food name", text: $name)
-                } header: {
-                    Text("Name")
-                }
-
-                Section {
-                    HStack {
-                        Text("Calories")
-                        Spacer()
-                        TextField("0", text: $caloriesText)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                        Text("kcal")
-                            .foregroundStyle(.secondary)
+            ScrollView {
+                VStack(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        sectionTitle("Name", icon: "fork.knife")
+                        TextField("Food name", text: $name)
+                            .padding(12)
+                            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
                     }
-                } header: {
-                    Text("Calories")
-                }
+                    .traiCard(cornerRadius: 16)
 
-                if !orderedEnabledMacros.isEmpty {
-                    Section {
-                        ForEach(orderedEnabledMacros) { macro in
-                            MacroInputRow(label: macro.displayName, text: bindingFor(macro))
+                    VStack(alignment: .leading, spacing: 10) {
+                        sectionTitle("Calories", icon: "flame.fill")
+                        MacroInputRow(label: "Calories", text: $caloriesText, unit: "kcal", color: .orange)
+                    }
+                    .traiCard(cornerRadius: 16)
+
+                    if !orderedEnabledMacros.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            sectionTitle("Macros", icon: "chart.pie.fill")
+                            ForEach(orderedEnabledMacros) { macro in
+                                MacroInputRow(
+                                    label: macro.displayName,
+                                    text: bindingFor(macro),
+                                    unit: "g",
+                                    color: macro.color
+                                )
+                            }
                         }
-                    } header: {
-                        Text("Macros")
+                        .traiCard(cornerRadius: 16)
                     }
-                }
 
-                Section {
-                    TextField("e.g., 1 cup, 100g", text: $servingSize)
-                } header: {
-                    Text("Serving Size (optional)")
+                    VStack(alignment: .leading, spacing: 10) {
+                        sectionTitle("Serving Size", icon: "scalemass")
+                        TextField("e.g., 1 cup, 100g", text: $servingSize)
+                            .padding(12)
+                            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .traiCard(cornerRadius: 16)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
             }
             .navigationTitle("Manual Entry")
             .navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {
@@ -92,10 +97,17 @@ struct ManualFoodEntrySheet: View {
                     Button("Save", systemImage: "checkmark") {
                         saveEntry()
                     }
+                    .labelStyle(.iconOnly)
                     .disabled(!isValid)
                 }
             }
         }
+    }
+
+    private func sectionTitle(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.headline)
+            .foregroundStyle(.primary)
     }
 
     private func bindingFor(_ macro: MacroType) -> Binding<String> {
@@ -140,17 +152,35 @@ struct ManualFoodEntrySheet: View {
 private struct MacroInputRow: View {
     let label: String
     @Binding var text: String
+    let unit: String
+    let color: Color
 
     var body: some View {
         HStack {
+            Circle()
+                .fill(color.opacity(0.2))
+                .frame(width: 24, height: 24)
+                .overlay {
+                    Text(label.prefix(1))
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(color)
+                }
+
             Text(label)
             Spacer()
             TextField("0", text: $text)
-                .keyboardType(.decimalPad)
+                .keyboardType(unit == "kcal" ? .numberPad : .decimalPad)
                 .multilineTextAlignment(.trailing)
-                .frame(width: 60)
-            Text("g")
+                .frame(width: 80)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+
+            Text(unit)
                 .foregroundStyle(.secondary)
+                .frame(width: 34, alignment: .leading)
         }
+        .font(.subheadline)
     }
 }

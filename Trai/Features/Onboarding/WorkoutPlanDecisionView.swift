@@ -51,7 +51,7 @@ struct WorkoutPlanDecisionView: View {
                             .font(.subheadline)
                             .fontWeight(.medium)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.traiTertiary())
                     .offset(y: contentVisible ? 0 : 20)
                     .opacity(contentVisible ? 1 : 0)
                 } else {

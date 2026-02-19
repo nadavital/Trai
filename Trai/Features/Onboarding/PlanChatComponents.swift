@@ -108,21 +108,21 @@ struct ProposedPlanCard: View {
                 MacroDisplay(
                     value: plan.dailyTargets.protein,
                     label: "Protein",
-                    color: .blue,
+                    color: MacroType.protein.color,
                     icon: "p.circle.fill"
                 )
 
                 MacroDisplay(
                     value: plan.dailyTargets.carbs,
                     label: "Carbs",
-                    color: .green,
+                    color: MacroType.carbs.color,
                     icon: "c.circle.fill"
                 )
 
                 MacroDisplay(
                     value: plan.dailyTargets.fat,
                     label: "Fat",
-                    color: .yellow,
+                    color: MacroType.fat.color,
                     icon: "f.circle.fill"
                 )
             }
@@ -130,15 +130,15 @@ struct ProposedPlanCard: View {
             GeometryReader { geo in
                 HStack(spacing: 2) {
                     RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.blue)
+                        .fill(MacroType.protein.color)
                         .frame(width: geo.size.width * CGFloat(plan.macroSplit.proteinPercent) / 100)
 
                     RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.green)
+                        .fill(MacroType.carbs.color)
                         .frame(width: geo.size.width * CGFloat(plan.macroSplit.carbsPercent) / 100)
 
                     RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.yellow)
+                        .fill(MacroType.fat.color)
                         .frame(width: geo.size.width * CGFloat(plan.macroSplit.fatPercent) / 100)
                 }
             }
@@ -159,7 +159,7 @@ struct ProposedPlanCard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.traiPrimary())
             .tint(.green)
         }
         .padding(16)

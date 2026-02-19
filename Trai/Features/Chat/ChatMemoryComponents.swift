@@ -96,6 +96,7 @@ struct SavedMemoriesSheet: View {
                     Button("Done", systemImage: "checkmark") {
                         dismiss()
                     }
+                    .labelStyle(.iconOnly)
                 }
             }
             .onAppear {

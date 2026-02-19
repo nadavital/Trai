@@ -69,9 +69,17 @@ struct DailyFoodTimeline: View {
                 Spacer()
 
                 if let addAction = onAddFood {
-                    Button("Add", systemImage: "plus.circle.fill", action: addAction)
-                        .font(.subheadline)
+                    Button("Add", systemImage: "plus", action: addAction)
                         .labelStyle(.iconOnly)
+                        .buttonStyle(
+                            .traiSecondary(
+                                color: .accentColor,
+                                size: .compact,
+                                width: 32,
+                                height: 32,
+                                fillOpacity: 0.18
+                            )
+                        )
                 }
             }
 
@@ -102,9 +110,7 @@ struct DailyFoodTimeline: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(cornerRadius: 16)
     }
 }
 

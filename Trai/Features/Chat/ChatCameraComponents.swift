@@ -243,6 +243,7 @@ struct ImagePreviewView: View {
                     Button("Done", systemImage: "checkmark") {
                         onDismiss()
                     }
+                    .labelStyle(.iconOnly)
                     .foregroundStyle(.white)
                 }
             }
