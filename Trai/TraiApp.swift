@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import WidgetKit
+import BackgroundTasks
 
 @main
 struct TraiApp: App {
@@ -34,10 +35,12 @@ struct TraiApp: App {
     private let startupTaskDeferral: Duration = .seconds(2)
     private let startupMigrationDeferral: Duration = .seconds(90)
     private let foregroundHealthKitSyncDelay: Duration = .seconds(35)
+    private let reminderBackgroundRefreshInterval: TimeInterval = 12 * 60 * 60
     private let minimumHealthKitSyncInterval: TimeInterval = 6 * 60 * 60
     private let initialHealthKitSyncLookbackDays = 30
     private let incrementalHealthKitSyncLookbackDays = 10
     private static let swiftDataStoreFilename = "default.store"
+    private static let reminderBackgroundRefreshTaskIdentifier = "Nadav.Trai.reminder-refresh"
 
     init() {
         let notificationService = NotificationService()
@@ -141,6 +144,7 @@ struct TraiApp: App {
                         scheduleDeferredStartupTasksIfNeeded()
                         scheduleStartupMigrationIfNeeded()
                         scheduleReminderScheduleRefreshIfNeeded()
+                        scheduleReminderBackgroundRefresh()
                     }
                     .onOpenURL { url in
                         handleDeepLink(url)
@@ -163,7 +167,11 @@ struct TraiApp: App {
             } else if newPhase == .active {
                 scheduleForegroundHealthKitSyncIfEligible()
                 scheduleReminderScheduleRefreshIfNeeded()
+                scheduleReminderBackgroundRefresh()
             }
+        }
+        .backgroundTask(.appRefresh(Self.reminderBackgroundRefreshTaskIdentifier)) {
+            await handleReminderBackgroundRefresh()
         }
     }
 
@@ -193,6 +201,26 @@ struct TraiApp: App {
         reminderScheduleRefreshTask = Task(priority: .utility) { @MainActor in
             await refreshReminderSchedulesIfNeeded(force: force)
         }
+    }
+
+    private func scheduleReminderBackgroundRefresh() {
+        guard !isRunningTests else { return }
+
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.reminderBackgroundRefreshTaskIdentifier)
+        let request = BGAppRefreshTaskRequest(identifier: Self.reminderBackgroundRefreshTaskIdentifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: reminderBackgroundRefreshInterval)
+
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            print("Failed to schedule reminder background refresh: \(error)")
+        }
+    }
+
+    @MainActor
+    private func handleReminderBackgroundRefresh() async {
+        await refreshReminderSchedulesIfNeeded(force: true)
+        scheduleReminderBackgroundRefresh()
     }
 
     @MainActor
@@ -262,6 +290,7 @@ struct TraiApp: App {
             skippingTodayReminderIDs: completedTodayReminderIDs
         )
         reminderScheduleRefreshToken = todayToken
+        scheduleReminderBackgroundRefresh()
     }
 
     @MainActor

@@ -408,13 +408,35 @@ final class NotificationService {
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .authorized else { return }
 
+        let enabledReminders = reminders.filter { $0.isEnabled }
+        guard !enabledReminders.isEmpty else { return }
+
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfToday = calendar.startOfDay(for: now)
         var pendingCount = await center.pendingNotificationRequests().count
-        for reminder in reminders where reminder.isEnabled {
-            await scheduleCustomReminderOccurrences(
-                reminder,
-                skippingTodayReminderIDs: skippingTodayReminderIDs,
-                pendingCount: &pendingCount
-            )
+
+        // Interleave across reminders by day so later reminders are not starved by the pending cap.
+        for dayOffset in 0..<customSchedulingWindowDays {
+            guard let dayDate = calendar.date(byAdding: .day, value: dayOffset, to: startOfToday) else { continue }
+            let weekday = calendar.component(.weekday, from: dayDate)
+
+            for reminder in enabledReminders {
+                let scheduledForWeekday = reminder.isDaily || reminder.repeatDaysSet.contains(weekday)
+                guard scheduledForWeekday else { continue }
+
+                if dayOffset == 0, skippingTodayReminderIDs.contains(reminder.id) {
+                    continue
+                }
+
+                await scheduleCustomReminderOccurrence(
+                    reminder,
+                    on: dayDate,
+                    now: now,
+                    calendar: calendar,
+                    pendingCount: &pendingCount
+                )
+            }
         }
     }
 
@@ -436,36 +458,51 @@ final class NotificationService {
             if dayOffset == 0, skippingTodayReminderIDs.contains(reminder.id) {
                 continue
             }
-
-            var dateComponents = calendar.dateComponents([.year, .month, .day], from: dayDate)
-            dateComponents.hour = reminder.hour
-            dateComponents.minute = reminder.minute
-
-            guard let fireDate = calendar.date(from: dateComponents), fireDate > now else { continue }
-
-            let content = UNMutableNotificationContent()
-            content.title = reminder.title
-            if !reminder.body.isEmpty {
-                content.body = reminder.body
-            }
-            content.sound = .default
-            content.interruptionLevel = .timeSensitive
-            content.categoryIdentifier = NotificationCategory.customReminder.rawValue
-            content.userInfo = [
-                "reminderId": reminder.id.uuidString,
-                "reminderHour": reminder.hour,
-                "reminderMinute": reminder.minute,
-                "scheduledDate": Self.occurrenceDateToken(for: dayDate, calendar: calendar)
-            ]
-
-            let request = UNNotificationRequest(
-                identifier: Self.customRequestIdentifier(reminderId: reminder.id, date: dayDate, calendar: calendar),
-                content: content,
-                trigger: UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
+            await scheduleCustomReminderOccurrence(
+                reminder,
+                on: dayDate,
+                now: now,
+                calendar: calendar,
+                pendingCount: &pendingCount
             )
-
-            await addRequestIfCapacity(request, pendingCount: &pendingCount)
         }
+    }
+
+    private func scheduleCustomReminderOccurrence(
+        _ reminder: CustomReminder,
+        on dayDate: Date,
+        now: Date,
+        calendar: Calendar,
+        pendingCount: inout Int
+    ) async {
+        var dateComponents = calendar.dateComponents([.year, .month, .day], from: dayDate)
+        dateComponents.hour = reminder.hour
+        dateComponents.minute = reminder.minute
+
+        guard let fireDate = calendar.date(from: dateComponents), fireDate > now else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = reminder.title
+        if !reminder.body.isEmpty {
+            content.body = reminder.body
+        }
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive
+        content.categoryIdentifier = NotificationCategory.customReminder.rawValue
+        content.userInfo = [
+            "reminderId": reminder.id.uuidString,
+            "reminderHour": reminder.hour,
+            "reminderMinute": reminder.minute,
+            "scheduledDate": Self.occurrenceDateToken(for: dayDate, calendar: calendar)
+        ]
+
+        let request = UNNotificationRequest(
+            identifier: Self.customRequestIdentifier(reminderId: reminder.id, date: dayDate, calendar: calendar),
+            content: content,
+            trigger: UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
+        )
+
+        await addRequestIfCapacity(request, pendingCount: &pendingCount)
     }
 
     /// Cancel a specific custom reminder by ID
