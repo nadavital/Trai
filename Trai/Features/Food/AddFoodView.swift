@@ -374,6 +374,8 @@ struct AddFoodView: View {
         entry.imageData = selectedImageData
         entry.userDescription = foodDescription
         entry.aiAnalysis = result.notes
+        entry.emoji = FoodEmojiResolver.resolve(preferred: result.emoji, foodName: result.name)
+        entry.ensureDisplayMetadata()
 
         modelContext.insert(entry)
         saveMacrosToHealthKit(entry)
@@ -395,6 +397,8 @@ struct AddFoodView: View {
 
         entry.servingSize = manualServingSize.isEmpty ? nil : manualServingSize
         entry.imageData = selectedImageData
+        entry.emoji = FoodEmojiResolver.resolve(preferred: nil, foodName: manualName)
+        entry.ensureDisplayMetadata()
 
         modelContext.insert(entry)
         saveMacrosToHealthKit(entry)

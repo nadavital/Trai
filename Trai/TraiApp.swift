@@ -331,6 +331,7 @@ struct TraiApp: App {
             if !hasActiveLiveWorkoutInProgress() {
                 let interval = PerformanceTrace.begin("startup_migration", category: .dataLoad)
                 await migrateExistingWorkoutSets(modelContainer: modelContainer)
+                await migrateLegacyCloudImagesAndBackfillFoodEmoji(modelContainer: modelContainer)
                 PerformanceTrace.end("startup_migration", interval, category: .dataLoad)
                 return
             }
@@ -533,6 +534,8 @@ extension TraiApp {
             entry.proteinGrams = Double(log.protein)
             entry.loggedAt = log.loggedAt
             entry.mealType = log.mealType
+            entry.emoji = FoodEmojiResolver.resolve(preferred: nil, foodName: log.name)
+            entry.ensureDisplayMetadata()
             context.insert(entry)
             BehaviorTracker(modelContext: context).record(
                 actionKey: BehaviorActionKey.logFood,
@@ -722,6 +725,68 @@ private func migrateExistingWorkoutSets(modelContainer: ModelContainer) async {
     }
 
     // Mark migration as complete
+    UserDefaults.standard.set(true, forKey: migrationKey)
+}
+
+/// Move legacy CloudKit-backed image blobs to local-only file storage and backfill food emojis.
+@MainActor
+private func migrateLegacyCloudImagesAndBackfillFoodEmoji(modelContainer: ModelContainer) async {
+    let context = modelContainer.mainContext
+    let migrationKey = "local_image_storage_migration_v1"
+
+    if UserDefaults.standard.bool(forKey: migrationKey) {
+        return
+    }
+
+    var migratedFoodImages = 0
+    var backfilledFoodEmoji = 0
+    var migratedChatImages = 0
+
+    let foodDescriptor = FetchDescriptor<FoodEntry>()
+    if let foodEntries = try? context.fetch(foodDescriptor) {
+        for (index, entry) in foodEntries.enumerated() {
+            if entry.migrateLegacyImageToLocalStoreIfNeeded() {
+                migratedFoodImages += 1
+            }
+
+            let previousEmoji = entry.emoji
+            entry.ensureDisplayMetadata()
+            if previousEmoji != entry.emoji {
+                backfilledFoodEmoji += 1
+            }
+
+            if index.isMultiple(of: 40) {
+                await Task.yield()
+            }
+        }
+    }
+
+    let chatDescriptor = FetchDescriptor<ChatMessage>()
+    if let chatMessages = try? context.fetch(chatDescriptor) {
+        for (index, message) in chatMessages.enumerated() {
+            if message.migrateLegacyImageToLocalStoreIfNeeded() {
+                migratedChatImages += 1
+            }
+            if index.isMultiple(of: 80) {
+                await Task.yield()
+            }
+        }
+    }
+
+    if migratedFoodImages > 0 || backfilledFoodEmoji > 0 || migratedChatImages > 0 {
+        try? context.save()
+    }
+
+    if migratedFoodImages > 0 {
+        print("Migration: Moved \(migratedFoodImages) food images to local-only storage")
+    }
+    if backfilledFoodEmoji > 0 {
+        print("Migration: Backfilled emoji for \(backfilledFoodEmoji) food entries")
+    }
+    if migratedChatImages > 0 {
+        print("Migration: Moved \(migratedChatImages) chat images to local-only storage")
+    }
+
     UserDefaults.standard.set(true, forKey: migrationKey)
 }
 

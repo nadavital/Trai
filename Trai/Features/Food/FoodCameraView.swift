@@ -171,11 +171,12 @@ struct FoodCameraView: View {
         entry.fiberGrams = result.fiberGrams
         entry.sugarGrams = result.sugarGrams
         entry.servingSize = result.servingSize
-        entry.emoji = result.emoji
+        entry.emoji = FoodEmojiResolver.resolve(preferred: result.emoji, foodName: result.name)
         entry.imageData = capturedImage?.jpegData(compressionQuality: 0.8)
         entry.userDescription = foodDescription
         entry.aiAnalysis = result.notes
         entry.inputMethod = capturedImage != nil ? "camera" : "description"
+        entry.ensureDisplayMetadata()
 
         assignSession(to: entry)
         modelContext.insert(entry)
@@ -198,11 +199,12 @@ struct FoodCameraView: View {
         entry.fiberGrams = suggestion.fiberGrams
         entry.sugarGrams = suggestion.sugarGrams
         entry.servingSize = suggestion.servingSize
-        entry.emoji = suggestion.emoji
+        entry.emoji = FoodEmojiResolver.resolve(preferred: suggestion.emoji, foodName: suggestion.name)
         entry.imageData = capturedImage?.jpegData(compressionQuality: 0.8)
         entry.userDescription = foodDescription
         entry.aiAnalysis = "Refined from initial analysis"
         entry.inputMethod = capturedImage != nil ? "camera" : "description"
+        entry.ensureDisplayMetadata()
 
         assignSession(to: entry)
         modelContext.insert(entry)

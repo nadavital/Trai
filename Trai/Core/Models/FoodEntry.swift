@@ -30,8 +30,40 @@ final class FoodEntry {
     var servingSize: String?
     var servingQuantity: Double = 1.0
 
-    /// Image data from photo taken of the food
-    @Attribute(.externalStorage) var imageData: Data?
+    /// Local storage key for image data (blob is stored on-device, not in CloudKit).
+    var imageStorageKey: String?
+
+    /// Legacy CloudKit-backed image blob. Kept for one-way migration to local store.
+    @Attribute(.externalStorage, originalName: "imageData") private var legacyImageData: Data?
+
+    /// Image data from photo taken of the food (local-only).
+    @Transient
+    var imageData: Data? {
+        get {
+            if let key = imageStorageKey,
+               let data = LocalImageStore.shared.loadData(for: key) {
+                return data
+            }
+
+            guard migrateLegacyImageToLocalStoreIfNeeded() else { return nil }
+            return imageStorageKey.flatMap { LocalImageStore.shared.loadData(for: $0) }
+        }
+        set {
+            guard let data = newValue, !data.isEmpty else {
+                if let key = imageStorageKey {
+                    LocalImageStore.shared.removeData(for: key)
+                }
+                imageStorageKey = nil
+                legacyImageData = nil
+                return
+            }
+
+            let key = imageStorageKey ?? localImageKey
+            LocalImageStore.shared.storeData(data, for: key)
+            imageStorageKey = key
+            legacyImageData = nil
+        }
+    }
 
     /// User's text description of the food
     var userDescription: String?
@@ -60,6 +92,7 @@ final class FoodEntry {
         self.proteinGrams = proteinGrams
         self.carbsGrams = carbsGrams
         self.fatGrams = fatGrams
+        self.emoji = FoodEmojiResolver.resolve(preferred: nil, foodName: name)
     }
 }
 
@@ -138,9 +171,28 @@ extension FoodEntry {
 // MARK: - Computed Properties
 
 extension FoodEntry {
+    private var localImageKey: String {
+        "food-\(id.uuidString.lowercased())"
+    }
+
+    /// Make sure all entries have a persisted emoji for image-less rendering on other devices.
+    func ensureDisplayMetadata() {
+        emoji = FoodEmojiResolver.resolve(preferred: emoji, foodName: name)
+    }
+
+    @discardableResult
+    func migrateLegacyImageToLocalStoreIfNeeded() -> Bool {
+        guard let legacyImageData, !legacyImageData.isEmpty else { return false }
+        let key = imageStorageKey ?? localImageKey
+        LocalImageStore.shared.storeData(legacyImageData, for: key)
+        imageStorageKey = key
+        self.legacyImageData = nil
+        return true
+    }
+
     /// Display emoji with fallback to fork and knife
     var displayEmoji: String {
-        emoji ?? "🍽️"
+        FoodEmojiResolver.resolve(preferred: emoji, foodName: name)
     }
 
     /// Total macros in grams

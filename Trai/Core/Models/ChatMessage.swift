@@ -29,8 +29,40 @@ final class ChatMessage {
     /// Whether the user manually stopped this message (don't show retry)
     var wasManuallyStopped: Bool = false
 
-    /// Image data attached to this message (for food logging via chat)
-    @Attribute(.externalStorage) var imageData: Data?
+    /// Local storage key for image data (blob is stored on-device, not in CloudKit).
+    var imageStorageKey: String?
+
+    /// Legacy CloudKit-backed image blob. Kept for one-way migration to local store.
+    @Attribute(.externalStorage, originalName: "imageData") private var legacyImageData: Data?
+
+    /// Image data attached to this message (for food logging via chat, local-only).
+    @Transient
+    var imageData: Data? {
+        get {
+            if let key = imageStorageKey,
+               let data = LocalImageStore.shared.loadData(for: key) {
+                return data
+            }
+
+            guard migrateLegacyImageToLocalStoreIfNeeded() else { return nil }
+            return imageStorageKey.flatMap { LocalImageStore.shared.loadData(for: $0) }
+        }
+        set {
+            guard let data = newValue, !data.isEmpty else {
+                if let key = imageStorageKey {
+                    LocalImageStore.shared.removeData(for: key)
+                }
+                imageStorageKey = nil
+                legacyImageData = nil
+                return
+            }
+
+            let key = imageStorageKey ?? localImageKey
+            LocalImageStore.shared.storeData(data, for: key)
+            imageStorageKey = key
+            legacyImageData = nil
+        }
+    }
 
     /// Food entry logged from this message (AI response with logMeal action)
     var loggedFoodEntryId: UUID?
@@ -369,6 +401,20 @@ final class ChatMessage {
         let message = ChatMessage(content: "", isFromUser: false)
         message.errorMessage = error
         return message
+    }
+
+    private var localImageKey: String {
+        "chat-\(id.uuidString.lowercased())"
+    }
+
+    @discardableResult
+    func migrateLegacyImageToLocalStoreIfNeeded() -> Bool {
+        guard let legacyImageData, !legacyImageData.isEmpty else { return false }
+        let key = imageStorageKey ?? localImageKey
+        LocalImageStore.shared.storeData(legacyImageData, for: key)
+        imageStorageKey = key
+        self.legacyImageData = nil
+        return true
     }
 }
 

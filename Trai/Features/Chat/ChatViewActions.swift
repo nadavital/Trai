@@ -58,9 +58,10 @@ extension ChatView {
         entry.fatGrams = meal.fatGrams
         entry.fiberGrams = meal.fiberGrams
         entry.servingSize = meal.servingSize
-        entry.emoji = meal.emoji
+        entry.emoji = FoodEmojiResolver.resolve(preferred: meal.emoji, foodName: meal.name)
         entry.imageData = imageData
         entry.inputMethod = "chat"
+        entry.ensureDisplayMetadata()
 
         let logDate: Date
         if let loggedAt = meal.loggedAtDate {

@@ -91,6 +91,7 @@ struct FoodTrackingView: View {
     }
 
     private func deleteEntry(_ entry: FoodEntry) {
+        entry.imageData = nil
         modelContext.delete(entry)
     }
 }
@@ -177,8 +178,8 @@ struct FoodEntryRow: View {
                     .fill(Color(.tertiarySystemBackground))
                     .frame(width: 50, height: 50)
                     .overlay {
-                        Image(systemName: "fork.knife")
-                            .foregroundStyle(.secondary)
+                        Text(entry.displayEmoji)
+                            .font(.system(size: 24))
                     }
             }
 

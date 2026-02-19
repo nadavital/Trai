@@ -63,6 +63,8 @@ struct LogFoodTextIntent: AppIntent {
             entry.sugarGrams = analysis.sugar
             entry.servingSize = "\(analysis.servingSize) \(analysis.servingUnit)"
             entry.inputMethod = "description"
+            entry.emoji = FoodEmojiResolver.resolve(preferred: analysis.emoji, foodName: analysis.name)
+            entry.ensureDisplayMetadata()
 
             context.insert(entry)
             BehaviorTracker(modelContext: context).record(
@@ -111,6 +113,7 @@ extension GeminiService {
         - sugar: number (grams, optional)
         - servingSize: number
         - servingUnit: string
+        - emoji: string (single relevant food emoji)
 
         Be reasonable with estimates based on typical serving sizes.
         """
@@ -126,9 +129,10 @@ extension GeminiService {
                 "fiber": ["type": "number"],
                 "sugar": ["type": "number"],
                 "servingSize": ["type": "number"],
-                "servingUnit": ["type": "string"]
+                "servingUnit": ["type": "string"],
+                "emoji": ["type": "string"]
             ],
-            "required": ["name", "calories", "protein", "carbs", "fat", "servingSize", "servingUnit"]
+            "required": ["name", "calories", "protein", "carbs", "fat", "servingSize", "servingUnit", "emoji"]
         ]
 
         let body: [String: Any] = [
@@ -157,7 +161,8 @@ extension GeminiService {
             fiber: json["fiber"] as? Double,
             sugar: json["sugar"] as? Double,
             servingSize: json["servingSize"] as? Double ?? 1,
-            servingUnit: json["servingUnit"] as? String ?? "serving"
+            servingUnit: json["servingUnit"] as? String ?? "serving",
+            emoji: json["emoji"] as? String
         )
     }
 
@@ -171,5 +176,6 @@ extension GeminiService {
         let sugar: Double?
         let servingSize: Double
         let servingUnit: String
+        let emoji: String?
     }
 }

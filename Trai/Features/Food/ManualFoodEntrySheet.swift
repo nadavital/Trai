@@ -131,6 +131,8 @@ struct ManualFoodEntrySheet: View {
         entry.sugarGrams = Double(sugarText).flatMap { $0 > 0 ? $0 : nil }
         entry.servingSize = servingSize.isEmpty ? nil : servingSize
         entry.inputMethod = "manual"
+        entry.emoji = FoodEmojiResolver.resolve(preferred: nil, foodName: name)
+        entry.ensureDisplayMetadata()
 
         // Assign session if adding to existing session
         if let sessionId {
