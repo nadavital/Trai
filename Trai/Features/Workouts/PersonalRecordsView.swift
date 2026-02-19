@@ -444,6 +444,17 @@ private struct ExercisePRCard: View {
         return "\(Int(displayVolume.rounded()))"
     }
 
+    private var isBodyweightWeightPR: Bool {
+        pr.maxWeightKg <= 0 && pr.maxWeightReps > 0
+    }
+
+    private var weightPRSummary: String {
+        if isBodyweightWeightPR {
+            return "BW × \(pr.maxWeightReps)"
+        }
+        return "\(displayWeight(pr.maxWeightKg)) \(weightUnit) × \(pr.maxWeightReps)"
+    }
+
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 10) {
@@ -463,7 +474,7 @@ private struct ExercisePRCard: View {
                         .foregroundStyle(.tertiary)
                 }
 
-                Text("\(displayWeight(pr.maxWeightKg)) \(weightUnit) × \(pr.maxWeightReps)")
+                Text(weightPRSummary)
                     .font(.title3)
                     .bold()
                     .lineLimit(1)
@@ -649,6 +660,14 @@ struct PRStatsGrid: View {
         return "\(Int(displayVolume.rounded()))"
     }
 
+    private var isBodyweightWeightPR: Bool {
+        pr.maxWeightKg <= 0 && pr.maxWeightReps > 0
+    }
+
+    private var isBodyweightRepsPR: Bool {
+        pr.maxReps > 0 && pr.maxRepsWeight <= 0
+    }
+
     var body: some View {
         Grid(horizontalSpacing: 16, verticalSpacing: 12) {
             GridRow {
@@ -656,7 +675,7 @@ struct PRStatsGrid: View {
                     icon: PRMetricKind.weight.iconName,
                     iconColor: PRMetricKind.weight.color,
                     label: PRMetricKind.weight.label,
-                    value: "\(displayWeight(pr.maxWeightKg)) \(weightUnit)",
+                    value: isBodyweightWeightPR ? "BW" : "\(displayWeight(pr.maxWeightKg)) \(weightUnit)",
                     detail: "× \(pr.maxWeightReps)"
                 )
                 PRStatCell(
@@ -664,7 +683,7 @@ struct PRStatsGrid: View {
                     iconColor: PRMetricKind.reps.color,
                     label: PRMetricKind.reps.label,
                     value: "\(pr.maxReps)",
-                    detail: "@ \(displayWeight(pr.maxRepsWeight)) \(weightUnit)"
+                    detail: isBodyweightRepsPR ? "@ BW" : "@ \(displayWeight(pr.maxRepsWeight)) \(weightUnit)"
                 )
             }
             GridRow {
@@ -742,6 +761,10 @@ struct HistoryRow: View {
         return WeightUtility.displayInt(kg, displayUnit: unit)
     }
 
+    private var isBodyweightEntry: Bool {
+        entry.bestSetWeightKg <= 0 && entry.bestSetReps > 0
+    }
+
     var body: some View {
         HStack {
             Text(entry.performedAt, format: .dateTime.month(.abbreviated).day())
@@ -749,7 +772,9 @@ struct HistoryRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 50, alignment: .leading)
 
-            Text("\(displayWeight(entry.bestSetWeightKg)) \(weightUnit) × \(entry.bestSetReps)")
+            Text(isBodyweightEntry
+                 ? "BW × \(entry.bestSetReps)"
+                 : "\(displayWeight(entry.bestSetWeightKg)) \(weightUnit) × \(entry.bestSetReps)")
                 .font(.subheadline)
                 .bold()
 
