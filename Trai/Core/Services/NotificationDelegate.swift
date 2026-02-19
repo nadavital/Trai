@@ -41,7 +41,13 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         Task { @MainActor in
             switch actionIdentifier {
             case NotificationService.NotificationAction.complete.rawValue:
-                await handleCompleteAction(userInfo: userInfo)
+                await handleCompleteAction(
+                    userInfo: userInfo,
+                    categoryIdentifier: categoryIdentifier
+                )
+                UNUserNotificationCenter.current().removeDeliveredNotifications(
+                    withIdentifiers: [response.notification.request.identifier]
+                )
 
             case NotificationService.NotificationAction.snooze.rawValue:
                 await handleSnoozeAction(
@@ -98,8 +104,11 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         } else if categoryIdentifier == NotificationService.NotificationCategory.workoutReminder.rawValue {
             // Workout reminder - use stable UUID
             reminderId = StableUUID.forWorkoutReminder()
+        } else if categoryIdentifier == NotificationService.NotificationCategory.weightReminder.rawValue {
+            // Weekly weight reminder
+            reminderId = StableUUID.forWeightReminder()
         } else {
-            // Weight reminder or unknown - no completion tracking
+            // Unknown reminder type
             reminderId = nil
         }
 
@@ -118,21 +127,33 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - Action Handlers
 
-    private func handleCompleteAction(userInfo: [AnyHashable: Any]) async {
+    private func handleCompleteAction(
+        userInfo: [AnyHashable: Any],
+        categoryIdentifier: String
+    ) async {
         let context = modelContainer.mainContext
 
         // Try to get reminder ID from userInfo
         if let reminderIdString = userInfo["reminderId"] as? String,
            let reminderId = UUID(uuidString: reminderIdString) {
-            // Custom reminder
-            let hour = userInfo["reminderHour"] as? Int ?? 0
-            let minute = userInfo["reminderMinute"] as? Int ?? 0
+            let hour = intValue(for: "reminderHour", in: userInfo) ?? 0
+            let minute = intValue(for: "reminderMinute", in: userInfo) ?? 0
             await completeReminder(id: reminderId, hour: hour, minute: minute, context: context)
         } else if let mealId = userInfo["mealId"] as? String {
             // Meal reminder - use stable UUID matching TodaysRemindersCard
             let reminderId = StableUUID.forMeal(mealId)
-            let hour = userInfo["reminderHour"] as? Int ?? 0
-            let minute = userInfo["reminderMinute"] as? Int ?? 0
+            let hour = intValue(for: "reminderHour", in: userInfo) ?? 0
+            let minute = intValue(for: "reminderMinute", in: userInfo) ?? 0
+            await completeReminder(id: reminderId, hour: hour, minute: minute, context: context)
+        } else if categoryIdentifier == NotificationService.NotificationCategory.workoutReminder.rawValue {
+            let reminderId = StableUUID.forWorkoutReminder()
+            let hour = intValue(for: "reminderHour", in: userInfo) ?? 0
+            let minute = intValue(for: "reminderMinute", in: userInfo) ?? 0
+            await completeReminder(id: reminderId, hour: hour, minute: minute, context: context)
+        } else if categoryIdentifier == NotificationService.NotificationCategory.weightReminder.rawValue {
+            let reminderId = StableUUID.forWeightReminder()
+            let hour = intValue(for: "reminderHour", in: userInfo) ?? 0
+            let minute = intValue(for: "reminderMinute", in: userInfo) ?? 0
             await completeReminder(id: reminderId, hour: hour, minute: minute, context: context)
         }
     }
@@ -140,6 +161,16 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     private func completeReminder(id: UUID, hour: Int, minute: Int, context: ModelContext) async {
         let calendar = Calendar.current
         let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        let existingDescriptor = FetchDescriptor<ReminderCompletion>(
+            predicate: #Predicate { completion in
+                completion.reminderId == id && completion.completedAt >= startOfDay
+            }
+        )
+        if let existing = try? context.fetch(existingDescriptor), !existing.isEmpty {
+            return
+        }
+
         let currentHour = calendar.component(.hour, from: now)
         let currentMinute = calendar.component(.minute, from: now)
         let currentMinutes = currentHour * 60 + currentMinute
@@ -153,6 +184,19 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         )
         context.insert(completion)
         try? context.save()
+    }
+
+    private func intValue(for key: String, in userInfo: [AnyHashable: Any]) -> Int? {
+        if let intValue = userInfo[key] as? Int {
+            return intValue
+        }
+        if let number = userInfo[key] as? NSNumber {
+            return number.intValue
+        }
+        if let string = userInfo[key] as? String {
+            return Int(string)
+        }
+        return nil
     }
 
     private func handleSnoozeAction(

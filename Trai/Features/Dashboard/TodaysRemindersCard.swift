@@ -21,6 +21,7 @@ struct TodaysRemindersCard: View {
         let hour: Int
         let minute: Int
         let isCustom: Bool
+        let pendingNotificationIdentifier: String?
     }
 
     /// Track which reminders are in the completing animation state
@@ -190,7 +191,12 @@ extension TodaysRemindersCard {
                     time: reminder.formattedTime,
                     hour: reminder.hour,
                     minute: reminder.minute,
-                    isCustom: true
+                    isCustom: true,
+                    pendingNotificationIdentifier: NotificationService.customRequestIdentifier(
+                        reminderId: reminder.id,
+                        date: now,
+                        calendar: calendar
+                    )
                 ))
             }
         }
@@ -204,7 +210,12 @@ extension TodaysRemindersCard {
                     time: formatTime(hour: meal.hour, minute: meal.minute),
                     hour: meal.hour,
                     minute: meal.minute,
-                    isCustom: false
+                    isCustom: false,
+                    pendingNotificationIdentifier: NotificationService.mealRequestIdentifier(
+                        mealId: meal.id,
+                        date: now,
+                        calendar: calendar
+                    )
                 ))
             }
         }
@@ -217,7 +228,12 @@ extension TodaysRemindersCard {
                 time: formatTime(hour: workoutHour, minute: workoutMinute),
                 hour: workoutHour,
                 minute: workoutMinute,
-                isCustom: false
+                isCustom: false,
+                pendingNotificationIdentifier: NotificationService.workoutRequestIdentifier(
+                    weekday: currentWeekday,
+                    date: now,
+                    calendar: calendar
+                )
             ))
         }
 
@@ -235,9 +251,9 @@ extension TodaysRemindersCard {
 #Preview {
     TodaysRemindersCard(
         reminders: [
-            .init(id: UUID(), title: "Drink water", time: "10:00 AM", hour: 10, minute: 0, isCustom: true),
-            .init(id: UUID(), title: "Lunch", time: "12:00 PM", hour: 12, minute: 0, isCustom: false),
-            .init(id: UUID(), title: "Workout", time: "5:00 PM", hour: 17, minute: 0, isCustom: false)
+            .init(id: UUID(), title: "Drink water", time: "10:00 AM", hour: 10, minute: 0, isCustom: true, pendingNotificationIdentifier: nil),
+            .init(id: UUID(), title: "Lunch", time: "12:00 PM", hour: 12, minute: 0, isCustom: false, pendingNotificationIdentifier: nil),
+            .init(id: UUID(), title: "Workout", time: "5:00 PM", hour: 17, minute: 0, isCustom: false, pendingNotificationIdentifier: nil)
         ],
         onReminderTap: { _ in },
         onComplete: { _ in },

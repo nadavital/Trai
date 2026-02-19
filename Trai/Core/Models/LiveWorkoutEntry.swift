@@ -219,6 +219,14 @@ extension LiveWorkoutEntry {
 // MARK: - Computed Properties
 
 extension LiveWorkoutEntry {
+    static let estimatedOneRepMaxRepRange = 1...25
+
+    static func estimatedOneRepMax(weightKg: Double, reps: Int) -> Double? {
+        guard weightKg > 0, estimatedOneRepMaxRepRange.contains(reps) else { return nil }
+        // Brzycki formula: 1RM = weight × (36 / (37 - reps))
+        return weightKg * (36.0 / (37.0 - Double(reps)))
+    }
+
     /// Only completed (non-warmup) sets
     var completedSets: [SetData]? {
         sets.filter { $0.completed && !$0.isWarmup }
@@ -252,9 +260,8 @@ extension LiveWorkoutEntry {
 
     /// Estimated one rep max using Brzycki formula
     var estimatedOneRepMax: Double? {
-        guard let best = bestSet, best.reps > 0, best.reps <= 12 else { return nil }
-        // Brzycki formula: 1RM = weight × (36 / (37 - reps))
-        return best.weightKg * (36.0 / (37.0 - Double(best.reps)))
+        guard let best = bestSet else { return nil }
+        return Self.estimatedOneRepMax(weightKg: best.weightKg, reps: best.reps)
     }
 }
 

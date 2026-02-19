@@ -44,6 +44,7 @@ struct DashboardView: View {
     @Query private var behaviorEvents: [BehaviorEvent]
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(NotificationService.self) private var notificationService: NotificationService?
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
     @State private var recoveryService = MuscleRecoveryService.shared
@@ -450,6 +451,7 @@ struct DashboardView: View {
         )
         let lastActiveWorkoutHour = lastRecentWorkoutHour
         let lastActiveWorkoutAt = lastRecentWorkoutAt
+        let lastCompletedWorkoutName = lastRecentCompletedWorkoutName
         let planReviewRecommendation = pendingPlanReviewRecommendation
         let reminderCandidateScores = todaysReminderCandidateScores
 
@@ -486,6 +488,7 @@ struct DashboardView: View {
                 todayOpenedActionKeys: todayActionState.openedActionKeys,
                 todayCompletedActionKeys: todayActionState.completedActionKeys,
                 lastActiveWorkoutAt: lastActiveWorkoutAt,
+                lastCompletedWorkoutName: lastCompletedWorkoutName,
                 pendingReminderCandidates: todaysReminderCandidates,
                 pendingReminderCandidateScores: reminderCandidateScores
             )
@@ -1440,6 +1443,40 @@ struct DashboardView: View {
         return latest
     }
 
+    private var lastRecentCompletedWorkoutName: String? {
+        let referenceDate = Date()
+
+        let latestLoggedWorkout = allWorkouts
+            .filter { $0.loggedAt <= referenceDate }
+            .max { $0.loggedAt < $1.loggedAt }
+            .map { workout -> (date: Date, name: String) in
+                let name = workout.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                return (workout.loggedAt, name.isEmpty ? "Workout" : name)
+            }
+
+        let latestCompletedLiveWorkout = liveWorkouts
+            .compactMap { workout -> (date: Date, name: String)? in
+                guard let completedAt = workout.completedAt, completedAt <= referenceDate else {
+                    return nil
+                }
+                let rawName = workout.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                let resolvedName = rawName.isEmpty ? "\(workout.type.displayName) Workout" : rawName
+                return (completedAt, resolvedName)
+            }
+            .max { $0.date < $1.date }
+
+        switch (latestLoggedWorkout, latestCompletedLiveWorkout) {
+        case let (logged?, live?):
+            return logged.date >= live.date ? logged.name : live.name
+        case let (logged?, nil):
+            return logged.name
+        case let (nil, live?):
+            return live.name
+        case (nil, nil):
+            return nil
+        }
+    }
+
     private var lastRecentWorkoutHour: Int? {
         guard let latest = lastRecentWorkoutAt else { return nil }
         return Calendar.current.component(.hour, from: latest)
@@ -1513,9 +1550,29 @@ struct DashboardView: View {
     }
 
     private func completeReminder(_ reminder: TodaysRemindersCard.ReminderItem) {
+        if todaysCompletedReminderIds.contains(reminder.id) {
+            notificationService?.cancelPendingRequest(identifier: reminder.pendingNotificationIdentifier)
+            return
+        }
+
         // Calculate if completed on time (within 30 min of scheduled time)
         let calendar = Calendar.current
         let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        let reminderID = reminder.id
+        let existingDescriptor = FetchDescriptor<ReminderCompletion>(
+            predicate: #Predicate { completion in
+                completion.reminderId == reminderID && completion.completedAt >= startOfDay
+            }
+        )
+        if let existing = try? modelContext.fetch(existingDescriptor), !existing.isEmpty {
+            _ = withAnimation(.easeInOut(duration: 0.3)) {
+                todaysCompletedReminderIds.insert(reminder.id)
+            }
+            notificationService?.cancelPendingRequest(identifier: reminder.pendingNotificationIdentifier)
+            return
+        }
+
         let currentHour = calendar.component(.hour, from: now)
         let currentMinute = calendar.component(.minute, from: now)
         let currentMinutes = currentHour * 60 + currentMinute
@@ -1529,6 +1586,11 @@ struct DashboardView: View {
             wasOnTime: wasOnTime
         )
         modelContext.insert(completion)
+        do {
+            try modelContext.save()
+        } catch {
+            print("Failed to save reminder completion: \(error)")
+        }
         reminderCompletionHistory.insert(completion, at: 0)
         trimReminderCompletionHistory(to: now)
 
@@ -1536,6 +1598,7 @@ struct DashboardView: View {
         _ = withAnimation(.easeInOut(duration: 0.3)) {
             todaysCompletedReminderIds.insert(reminder.id)
         }
+        notificationService?.cancelPendingRequest(identifier: reminder.pendingNotificationIdentifier)
 
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.completeReminder,

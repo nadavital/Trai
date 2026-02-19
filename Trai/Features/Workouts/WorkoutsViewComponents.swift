@@ -16,28 +16,27 @@ struct QuickStartCard: View {
         Button(action: onStartBlankWorkout) {
             HStack(spacing: 12) {
                 Image(systemName: "plus.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(.accent)
+                    .font(.traiBold(20))
+                    .foregroundStyle(Color.accentColor)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Start Custom Workout")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
+                        .font(.traiHeadline(15))
 
                     Text("Add exercises as you go")
-                        .font(.caption)
+                        .font(.traiLabel(12))
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.caption)
+                    .font(.traiLabel(12))
                     .foregroundStyle(.tertiary)
             }
             .traiCard(cornerRadius: 12)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TraiPressStyle())
     }
 }
 

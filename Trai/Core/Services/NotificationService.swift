@@ -18,6 +18,10 @@ final class NotificationService {
     @ObservationIgnored
     private var center: UNUserNotificationCenter { UNUserNotificationCenter.current() }
     private var didRegisterCategories = false
+    // Keep horizons beyond one week while respecting iOS's 64 pending request limit.
+    private let builtInSchedulingWindowDays = 10
+    private let customSchedulingWindowDays = 8
+    private let maxPendingRequests = 64
 
     // MARK: - Notification Identifiers
 
@@ -44,10 +48,37 @@ final class NotificationService {
         case snooze = "SNOOZE_ACTION"
     }
 
+    // MARK: - Request Identifiers
+
+    nonisolated static func occurrenceDateToken(for date: Date, calendar: Calendar = .current) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        let year = components.year ?? 1970
+        let month = components.month ?? 1
+        let day = components.day ?? 1
+        return String(format: "%04d%02d%02d", year, month, day)
+    }
+
+    nonisolated static func mealRequestIdentifier(mealId: String, date: Date, calendar: Calendar = .current) -> String {
+        "\(NotificationCategory.mealReminder.rawValue)_\(mealId)_\(occurrenceDateToken(for: date, calendar: calendar))"
+    }
+
+    nonisolated static func workoutRequestIdentifier(weekday: Int, date: Date, calendar: Calendar = .current) -> String {
+        "\(NotificationCategory.workoutReminder.rawValue)_\(weekday)_\(occurrenceDateToken(for: date, calendar: calendar))"
+    }
+
+    nonisolated static func weightRequestIdentifier(date: Date, calendar: Calendar = .current) -> String {
+        "\(NotificationCategory.weightReminder.rawValue)_\(occurrenceDateToken(for: date, calendar: calendar))"
+    }
+
+    nonisolated static func customRequestIdentifier(reminderId: UUID, date: Date, calendar: Calendar = .current) -> String {
+        "\(NotificationCategory.customReminder.rawValue)_\(reminderId.uuidString)_\(occurrenceDateToken(for: date, calendar: calendar))"
+    }
+
     // MARK: - Initialization
 
     init() {
-        // Keep init lightweight; register categories lazily on first notification work.
+        // Register categories early so long-press actions work on cold launch.
+        registerNotificationCategoriesIfNeeded()
     }
 
     /// Register notification categories with actions for long-press menu
@@ -80,6 +111,11 @@ final class NotificationService {
         center.setNotificationCategories(Set(categories))
     }
 
+    /// Ensure categories are registered before notifications are delivered/handled.
+    func ensureNotificationSetup() {
+        registerNotificationCategoriesIfNeeded()
+    }
+
     // MARK: - Authorization
 
     /// Request notification authorization
@@ -105,20 +141,55 @@ final class NotificationService {
 
     // MARK: - Scheduling Meal Reminders
 
-    /// Schedule meal reminders based on user preferences
-    func scheduleMealReminders(times: [MealReminderTime]) async {
+    /// Schedule meal reminders based on user preferences.
+    /// Uses one-shot rolling notifications so a single day can be skipped when already completed.
+    func scheduleMealReminders(
+        times: [MealReminderTime],
+        skippingTodayReminderIDs: Set<UUID> = []
+    ) async {
         registerNotificationCategoriesIfNeeded()
         // Clear existing meal reminders
         await cancelNotifications(category: .mealReminder)
 
-        guard isAuthorized else { return }
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else { return }
 
-        for meal in times {
-            await scheduleMealReminder(meal)
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfToday = calendar.startOfDay(for: now)
+        var pendingCount = await center.pendingNotificationRequests().count
+
+        for dayOffset in 0..<builtInSchedulingWindowDays {
+            guard let dayDate = calendar.date(byAdding: .day, value: dayOffset, to: startOfToday) else { continue }
+            for meal in times {
+                let mealReminderID = StableUUID.forMeal(meal.id)
+                if dayOffset == 0, skippingTodayReminderIDs.contains(mealReminderID) {
+                    continue
+                }
+                await scheduleMealReminder(
+                    meal,
+                    on: dayDate,
+                    now: now,
+                    calendar: calendar,
+                    pendingCount: &pendingCount
+                )
+            }
         }
     }
 
-    private func scheduleMealReminder(_ meal: MealReminderTime) async {
+    private func scheduleMealReminder(
+        _ meal: MealReminderTime,
+        on dayDate: Date,
+        now: Date,
+        calendar: Calendar,
+        pendingCount: inout Int
+    ) async {
+        var dateComponents = calendar.dateComponents([.year, .month, .day], from: dayDate)
+        dateComponents.hour = meal.hour
+        dateComponents.minute = meal.minute
+
+        guard let fireDate = calendar.date(from: dateComponents), fireDate > now else { return }
+
         let content = UNMutableNotificationContent()
         content.title = "Time for \(meal.displayName)"
         content.body = meal.message
@@ -128,77 +199,157 @@ final class NotificationService {
         content.userInfo = [
             "mealId": meal.id,
             "reminderHour": meal.hour,
-            "reminderMinute": meal.minute
+            "reminderMinute": meal.minute,
+            "scheduledDate": Self.occurrenceDateToken(for: dayDate, calendar: calendar)
         ]
 
-        var dateComponents = DateComponents()
-        dateComponents.hour = meal.hour
-        dateComponents.minute = meal.minute
-
-        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
         let request = UNNotificationRequest(
-            identifier: "\(NotificationCategory.mealReminder.rawValue)_\(meal.id)",
+            identifier: Self.mealRequestIdentifier(mealId: meal.id, date: dayDate, calendar: calendar),
             content: content,
             trigger: trigger
         )
 
-        do {
-            try await center.add(request)
-        } catch {
-            print("Failed to schedule meal reminder: \(error)")
-        }
+        await addRequestIfCapacity(request, pendingCount: &pendingCount)
     }
 
     // MARK: - Scheduling Workout Reminders
 
-    /// Schedule workout reminders for specific days
-    func scheduleWorkoutReminders(days: [Int], hour: Int, minute: Int) async {
+    /// Schedule workout reminders for specific days.
+    /// Uses one-shot rolling notifications so today's reminder can be skipped when already completed.
+    func scheduleWorkoutReminders(
+        days: [Int],
+        hour: Int,
+        minute: Int,
+        skippingTodayReminderIDs: Set<UUID> = []
+    ) async {
         registerNotificationCategoriesIfNeeded()
         // Clear existing workout reminders
         await cancelNotifications(category: .workoutReminder)
 
-        guard isAuthorized else { return }
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else { return }
 
-        for day in days {
-            await scheduleWorkoutReminder(weekday: day, hour: hour, minute: minute)
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfToday = calendar.startOfDay(for: now)
+        let scheduledDays = Set(days)
+        var pendingCount = await center.pendingNotificationRequests().count
+
+        for dayOffset in 0..<builtInSchedulingWindowDays {
+            guard let dayDate = calendar.date(byAdding: .day, value: dayOffset, to: startOfToday) else { continue }
+            let weekday = calendar.component(.weekday, from: dayDate)
+            guard scheduledDays.contains(weekday) else { continue }
+
+            if dayOffset == 0, skippingTodayReminderIDs.contains(StableUUID.forWorkoutReminder()) {
+                continue
+            }
+
+            await scheduleWorkoutReminder(
+                weekday: weekday,
+                hour: hour,
+                minute: minute,
+                on: dayDate,
+                now: now,
+                calendar: calendar,
+                pendingCount: &pendingCount
+            )
         }
     }
 
-    private func scheduleWorkoutReminder(weekday: Int, hour: Int, minute: Int) async {
+    private func scheduleWorkoutReminder(
+        weekday: Int,
+        hour: Int,
+        minute: Int,
+        on dayDate: Date,
+        now: Date,
+        calendar: Calendar,
+        pendingCount: inout Int
+    ) async {
+        var dateComponents = calendar.dateComponents([.year, .month, .day], from: dayDate)
+        dateComponents.hour = hour
+        dateComponents.minute = minute
+
+        guard let fireDate = calendar.date(from: dateComponents), fireDate > now else { return }
+
         let content = UNMutableNotificationContent()
         content.title = "Workout Time"
         content.body = "Ready to crush your workout? Let's go!"
         content.sound = .default
         content.interruptionLevel = .timeSensitive
         content.categoryIdentifier = NotificationCategory.workoutReminder.rawValue
+        content.userInfo = [
+            "reminderId": StableUUID.forWorkoutReminder().uuidString,
+            "reminderHour": hour,
+            "reminderMinute": minute,
+            "scheduledDate": Self.occurrenceDateToken(for: dayDate, calendar: calendar)
+        ]
 
-        var dateComponents = DateComponents()
-        dateComponents.weekday = weekday // 1 = Sunday, 2 = Monday, etc.
-        dateComponents.hour = hour
-        dateComponents.minute = minute
-
-        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
         let request = UNNotificationRequest(
-            identifier: "\(NotificationCategory.workoutReminder.rawValue)_\(weekday)",
+            identifier: Self.workoutRequestIdentifier(weekday: weekday, date: dayDate, calendar: calendar),
             content: content,
             trigger: trigger
         )
 
-        do {
-            try await center.add(request)
-        } catch {
-            print("Failed to schedule workout reminder: \(error)")
-        }
+        await addRequestIfCapacity(request, pendingCount: &pendingCount)
     }
 
     // MARK: - Weight Reminders
 
-    /// Schedule weekly weight check reminder
-    func scheduleWeightReminder(weekday: Int, hour: Int, minute: Int) async {
+    /// Schedule weekly weight check reminders.
+    /// Uses one-shot rolling notifications so today's reminder can be skipped when already completed.
+    func scheduleWeightReminder(
+        weekday: Int,
+        hour: Int,
+        minute: Int,
+        skippingTodayReminderIDs: Set<UUID> = []
+    ) async {
         registerNotificationCategoriesIfNeeded()
         await cancelNotifications(category: .weightReminder)
 
-        guard isAuthorized else { return }
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else { return }
+
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfToday = calendar.startOfDay(for: now)
+        var pendingCount = await center.pendingNotificationRequests().count
+        let weightReminderID = StableUUID.forWeightReminder()
+
+        for dayOffset in 0..<builtInSchedulingWindowDays {
+            guard let dayDate = calendar.date(byAdding: .day, value: dayOffset, to: startOfToday) else { continue }
+            let dayWeekday = calendar.component(.weekday, from: dayDate)
+            guard dayWeekday == weekday else { continue }
+
+            if dayOffset == 0, skippingTodayReminderIDs.contains(weightReminderID) {
+                continue
+            }
+
+            await scheduleWeightReminder(
+                hour: hour,
+                minute: minute,
+                on: dayDate,
+                now: now,
+                calendar: calendar,
+                pendingCount: &pendingCount
+            )
+        }
+    }
+
+    private func scheduleWeightReminder(
+        hour: Int,
+        minute: Int,
+        on dayDate: Date,
+        now: Date,
+        calendar: Calendar,
+        pendingCount: inout Int
+    ) async {
+        var dateComponents = calendar.dateComponents([.year, .month, .day], from: dayDate)
+        dateComponents.hour = hour
+        dateComponents.minute = minute
+
+        guard let fireDate = calendar.date(from: dateComponents), fireDate > now else { return }
 
         let content = UNMutableNotificationContent()
         content.title = "Weekly Weigh-In"
@@ -206,30 +357,30 @@ final class NotificationService {
         content.sound = .default
         content.interruptionLevel = .timeSensitive
         content.categoryIdentifier = NotificationCategory.weightReminder.rawValue
+        content.userInfo = [
+            "reminderId": StableUUID.forWeightReminder().uuidString,
+            "reminderHour": hour,
+            "reminderMinute": minute,
+            "scheduledDate": Self.occurrenceDateToken(for: dayDate, calendar: calendar)
+        ]
 
-        var dateComponents = DateComponents()
-        dateComponents.weekday = weekday
-        dateComponents.hour = hour
-        dateComponents.minute = minute
-
-        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
         let request = UNNotificationRequest(
-            identifier: NotificationCategory.weightReminder.rawValue,
+            identifier: Self.weightRequestIdentifier(date: dayDate, calendar: calendar),
             content: content,
             trigger: trigger
         )
 
-        do {
-            try await center.add(request)
-        } catch {
-            print("Failed to schedule weight reminder: \(error)")
-        }
+        await addRequestIfCapacity(request, pendingCount: &pendingCount)
     }
 
     // MARK: - Custom Reminders
 
-    /// Schedule a single custom reminder
-    func scheduleCustomReminder(_ reminder: CustomReminder) async {
+    /// Schedule a single custom reminder using one-shot rolling notifications.
+    func scheduleCustomReminder(
+        _ reminder: CustomReminder,
+        skippingTodayReminderIDs: Set<UUID> = []
+    ) async {
         registerNotificationCategoriesIfNeeded()
         // Cancel existing notification for this reminder first
         await cancelCustomReminder(id: reminder.id)
@@ -237,6 +388,98 @@ final class NotificationService {
         // Check authorization status directly (not cached) to handle edit scenarios
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .authorized, reminder.isEnabled else { return }
+
+        var pendingCount = await center.pendingNotificationRequests().count
+        await scheduleCustomReminderOccurrences(
+            reminder,
+            skippingTodayReminderIDs: skippingTodayReminderIDs,
+            pendingCount: &pendingCount
+        )
+    }
+
+    /// Schedule all custom reminders
+    func scheduleAllCustomReminders(
+        _ reminders: [CustomReminder],
+        skippingTodayReminderIDs: Set<UUID> = []
+    ) async {
+        // Clear all custom reminders first
+        await cancelNotifications(category: .customReminder)
+
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else { return }
+
+        let enabledReminders = reminders.filter { $0.isEnabled }
+        guard !enabledReminders.isEmpty else { return }
+
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfToday = calendar.startOfDay(for: now)
+        var pendingCount = await center.pendingNotificationRequests().count
+
+        // Interleave across reminders by day so later reminders are not starved by the pending cap.
+        for dayOffset in 0..<customSchedulingWindowDays {
+            guard let dayDate = calendar.date(byAdding: .day, value: dayOffset, to: startOfToday) else { continue }
+            let weekday = calendar.component(.weekday, from: dayDate)
+
+            for reminder in enabledReminders {
+                let scheduledForWeekday = reminder.isDaily || reminder.repeatDaysSet.contains(weekday)
+                guard scheduledForWeekday else { continue }
+
+                if dayOffset == 0, skippingTodayReminderIDs.contains(reminder.id) {
+                    continue
+                }
+
+                await scheduleCustomReminderOccurrence(
+                    reminder,
+                    on: dayDate,
+                    now: now,
+                    calendar: calendar,
+                    pendingCount: &pendingCount
+                )
+            }
+        }
+    }
+
+    private func scheduleCustomReminderOccurrences(
+        _ reminder: CustomReminder,
+        skippingTodayReminderIDs: Set<UUID>,
+        pendingCount: inout Int
+    ) async {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfToday = calendar.startOfDay(for: now)
+
+        for dayOffset in 0..<customSchedulingWindowDays {
+            guard let dayDate = calendar.date(byAdding: .day, value: dayOffset, to: startOfToday) else { continue }
+            let weekday = calendar.component(.weekday, from: dayDate)
+            let scheduledForWeekday = reminder.isDaily || reminder.repeatDaysSet.contains(weekday)
+            guard scheduledForWeekday else { continue }
+
+            if dayOffset == 0, skippingTodayReminderIDs.contains(reminder.id) {
+                continue
+            }
+            await scheduleCustomReminderOccurrence(
+                reminder,
+                on: dayDate,
+                now: now,
+                calendar: calendar,
+                pendingCount: &pendingCount
+            )
+        }
+    }
+
+    private func scheduleCustomReminderOccurrence(
+        _ reminder: CustomReminder,
+        on dayDate: Date,
+        now: Date,
+        calendar: Calendar,
+        pendingCount: inout Int
+    ) async {
+        var dateComponents = calendar.dateComponents([.year, .month, .day], from: dayDate)
+        dateComponents.hour = reminder.hour
+        dateComponents.minute = reminder.minute
+
+        guard let fireDate = calendar.date(from: dateComponents), fireDate > now else { return }
 
         let content = UNMutableNotificationContent()
         content.title = reminder.title
@@ -249,61 +492,17 @@ final class NotificationService {
         content.userInfo = [
             "reminderId": reminder.id.uuidString,
             "reminderHour": reminder.hour,
-            "reminderMinute": reminder.minute
+            "reminderMinute": reminder.minute,
+            "scheduledDate": Self.occurrenceDateToken(for: dayDate, calendar: calendar)
         ]
 
-        if reminder.isDaily {
-            // Schedule daily at the specified time
-            var dateComponents = DateComponents()
-            dateComponents.hour = reminder.hour
-            dateComponents.minute = reminder.minute
+        let request = UNNotificationRequest(
+            identifier: Self.customRequestIdentifier(reminderId: reminder.id, date: dayDate, calendar: calendar),
+            content: content,
+            trigger: UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
+        )
 
-            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-            let request = UNNotificationRequest(
-                identifier: "\(NotificationCategory.customReminder.rawValue)_\(reminder.id.uuidString)",
-                content: content,
-                trigger: trigger
-            )
-
-            do {
-                try await center.add(request)
-            } catch {
-                print("Failed to schedule custom reminder: \(error)")
-            }
-        } else {
-            // Schedule for each selected day
-            for weekday in reminder.repeatDaysSet {
-                var dateComponents = DateComponents()
-                dateComponents.weekday = weekday
-                dateComponents.hour = reminder.hour
-                dateComponents.minute = reminder.minute
-
-                let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-                let request = UNNotificationRequest(
-                    identifier: "\(NotificationCategory.customReminder.rawValue)_\(reminder.id.uuidString)_\(weekday)",
-                    content: content,
-                    trigger: trigger
-                )
-
-                do {
-                    try await center.add(request)
-                } catch {
-                    print("Failed to schedule custom reminder for day \(weekday): \(error)")
-                }
-            }
-        }
-    }
-
-    /// Schedule all custom reminders
-    func scheduleAllCustomReminders(_ reminders: [CustomReminder]) async {
-        // Clear all custom reminders first
-        await cancelNotifications(category: .customReminder)
-
-        guard isAuthorized else { return }
-
-        for reminder in reminders where reminder.isEnabled {
-            await scheduleCustomReminder(reminder)
-        }
+        await addRequestIfCapacity(request, pendingCount: &pendingCount)
     }
 
     /// Cancel a specific custom reminder by ID
@@ -315,6 +514,12 @@ final class NotificationService {
             .map { $0.identifier }
 
         center.removePendingNotificationRequests(withIdentifiers: toRemove)
+    }
+
+    /// Cancel a specific pending notification request.
+    func cancelPendingRequest(identifier: String?) {
+        guard let identifier, !identifier.isEmpty else { return }
+        center.removePendingNotificationRequests(withIdentifiers: [identifier])
     }
 
     // MARK: - Cancellation
@@ -332,6 +537,20 @@ final class NotificationService {
     /// Cancel all reminders
     func cancelAllReminders() {
         center.removeAllPendingNotificationRequests()
+    }
+
+    private func addRequestIfCapacity(_ request: UNNotificationRequest, pendingCount: inout Int) async {
+        guard pendingCount < maxPendingRequests else {
+            print("Skipping notification schedule due to pending request cap: \(request.identifier)")
+            return
+        }
+
+        do {
+            try await center.add(request)
+            pendingCount += 1
+        } catch {
+            print("Failed to schedule reminder request \(request.identifier): \(error)")
+        }
     }
 
     // MARK: - Snooze

@@ -63,7 +63,7 @@ struct TraiWidgetsLiveActivity: Widget {
             }
             .widgetURL(AppRoute.workout(templateName: nil).url)
         }
-        .supplementalActivityFamilies([.small, .medium])
+        .supplementalActivityFamilies([.small])
     }
 }
 
@@ -87,15 +87,11 @@ private struct LockScreenWorkoutView: View {
         return false
     }
 
-    private var isSupplementalFamily: Bool {
-        isSmallFamily || isMediumFamily
-    }
+    private var isSupplementalFamily: Bool { isSmallFamily }
 
     var body: some View {
         if isSmallFamily {
             smallFamilyBody
-        } else if isMediumFamily {
-            mediumFamilyBody
         } else {
             regularBody
         }

@@ -21,6 +21,7 @@ struct TraiPulseHeroCard: View {
     @AppStorage("pulse_last_question_id") private var lastQuestionID: String = ""
     @AppStorage("pulse_cached_brief_v1") private var cachedPulseRaw: String = ""
     @AppStorage("pulse_last_model_refresh_at") private var lastModelRefreshAt: Double = 0
+    @AppStorage("pulse_last_refresh_key_v1") private var lastRefreshKey: String = ""
 
     @State private var geminiService = GeminiService()
     @State private var pulseContent: TraiPulseContentSnapshot?
@@ -34,6 +35,7 @@ struct TraiPulseHeroCard: View {
     @State private var questionFeedback: String?
     @State private var showingCustomAnswerField = false
     @State private var lastTrackedPromptSignature: String?
+    @State private var isHydratedFromCache = false
     @FocusState private var isQuestionInputFocused: Bool
 
     private let questionCooldownSeconds: TimeInterval = 6 * 60 * 60
@@ -95,6 +97,10 @@ struct TraiPulseHeroCard: View {
         let signalSignature = context.activeSignals.prefix(4).map { signal in
             "\(signal.id.uuidString)-\(Int(signal.createdAt.timeIntervalSince1970))"
         }.joined(separator: "|")
+        let reminderSignature = context.pendingReminderCandidates
+            .prefix(4)
+            .map { "\($0.id)-\($0.hour)-\($0.minute)-\($0.title)" }
+            .joined(separator: "|")
 
         let trendSignature: String
         if let trend = context.trend {
@@ -119,6 +125,10 @@ struct TraiPulseHeroCard: View {
             String(context.proteinConsumed),
             String(context.proteinGoal),
             String(context.readyMuscleCount),
+            context.lastCompletedWorkoutName ?? "",
+            String(Int(context.lastActiveWorkoutAt?.timeIntervalSince1970 ?? 0)),
+            String(context.pendingReminderCandidates.count),
+            reminderSignature,
             trendSignature,
             patternSignature,
             signalSignature,
@@ -666,6 +676,7 @@ struct TraiPulseHeroCard: View {
         }
         let snapshot = cached.snapshot()
         pulseContent = snapshot
+        isHydratedFromCache = true
         trackPromptPresentationIfNeeded(snapshot)
     }
 
@@ -686,7 +697,12 @@ struct TraiPulseHeroCard: View {
             hydrateFromCacheIfNeeded()
             if lastModelRefreshAt > 0 {
                 let age = Date().timeIntervalSince1970 - lastModelRefreshAt
-                if age < pulseRefreshTTLSeconds {
+                let hasCurrentSnapshot = pulseContent != nil
+                let isSameContextKey = lastRefreshKey == refreshKey
+                if age < pulseRefreshTTLSeconds &&
+                    hasCurrentSnapshot &&
+                    isSameContextKey &&
+                    !isHydratedFromCache {
                     return
                 }
             }
@@ -709,6 +725,8 @@ struct TraiPulseHeroCard: View {
             trackPromptPresentationIfNeeded(generated)
             persistPulseCache(generated)
             lastModelRefreshAt = Date().timeIntervalSince1970
+            lastRefreshKey = refreshKey
+            isHydratedFromCache = false
         } catch {
             pulseError = error.localizedDescription
             hydrateFromCacheIfNeeded()

@@ -17,10 +17,6 @@ struct CustomWorkoutSetupSheet: View {
     @State private var selectedType: LiveWorkout.WorkoutType = .strength
     @State private var selectedMuscles: Set<LiveWorkout.MuscleGroup> = []
 
-    private var canStart: Bool {
-        !workoutName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedMuscles.isEmpty
-    }
-
     private var defaultName: String {
         if selectedMuscles.isEmpty {
             return "Custom Workout"
@@ -35,86 +31,23 @@ struct CustomWorkoutSetupSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
-                    // Workout name
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Workout Name")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                VStack(spacing: 14) {
+                    setupHeaderCard
 
-                        TextField("e.g., Arm Day, Push Day", text: $workoutName)
-                            .textFieldStyle(.roundedBorder)
-                    }
+                    nameCard
 
-                    // Workout type
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Workout Type")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                    workoutTypeCard
 
-                        HStack(spacing: 12) {
-                            WorkoutTypeButton(
-                                type: .strength,
-                                isSelected: selectedType == .strength
-                            ) { selectedType = .strength }
-
-                            WorkoutTypeButton(
-                                type: .cardio,
-                                isSelected: selectedType == .cardio
-                            ) { selectedType = .cardio }
-
-                            WorkoutTypeButton(
-                                type: .mixed,
-                                isSelected: selectedType == .mixed
-                            ) { selectedType = .mixed }
-                        }
-                    }
-
-                    // Muscle groups (for strength/mixed)
                     if selectedType != .cardio {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Target Muscle Groups")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-
-                            Text("Select what you want to train today")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-
-                            // Quick presets
-                            HStack(spacing: 8) {
-                                PresetButton(title: "Push", isSelected: isPushSelected) {
-                                    togglePreset(LiveWorkout.MuscleGroup.pushMuscles)
-                                }
-                                PresetButton(title: "Pull", isSelected: isPullSelected) {
-                                    togglePreset(LiveWorkout.MuscleGroup.pullMuscles)
-                                }
-                                PresetButton(title: "Legs", isSelected: isLegsSelected) {
-                                    togglePreset(LiveWorkout.MuscleGroup.legMuscles)
-                                }
-                                PresetButton(title: "Full Body", isSelected: isFullBodySelected) {
-                                    togglePreset([.fullBody])
-                                }
-                            }
-
-                            // Individual muscle groups
-                            FlowLayout(spacing: 8) {
-                                ForEach(LiveWorkout.MuscleGroup.allCases.filter { $0 != .fullBody }) { muscle in
-                                    WorkoutMuscleChip(
-                                        muscle: muscle,
-                                        isSelected: selectedMuscles.contains(muscle)
-                                    ) {
-                                        toggleMuscle(muscle)
-                                    }
-                                }
-                            }
-                        }
+                        targetMusclesCard
                     }
 
-                    Spacer(minLength: 40)
+                    Spacer(minLength: 24)
                 }
-                .padding()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Custom Workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -135,6 +68,110 @@ struct CustomWorkoutSetupSheet: View {
                 }
             }
         }
+    }
+
+    private var setupHeaderCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "figure.run.circle.fill")
+                .font(.traiBold(24))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 40, height: 40)
+                .background(Color.accentColor.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Build Your Session")
+                    .font(.traiHeadline())
+
+                Text("Pick a type, set targets, and start quickly.")
+                    .font(.traiLabel(12))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .traiCard(cornerRadius: 16)
+    }
+
+    private var nameCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Workout Name", systemImage: "textformat")
+                .font(.traiHeadline())
+
+            TextField("e.g. Push Day, Legs, Arm Focus", text: $workoutName)
+                .padding(12)
+                .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+
+            if workoutName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("Suggested: \(defaultName)")
+                    .font(.traiLabel(12))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .traiCard(cornerRadius: 16)
+    }
+
+    private var workoutTypeCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Workout Type", systemImage: "square.grid.2x2.fill")
+                .font(.traiHeadline())
+
+            HStack(spacing: 8) {
+                ForEach(LiveWorkout.WorkoutType.allCases) { type in
+                    WorkoutTypeButton(
+                        type: type,
+                        isSelected: selectedType == type
+                    ) {
+                        selectedType = type
+                        HapticManager.selectionChanged()
+                    }
+                }
+            }
+        }
+        .traiCard(cornerRadius: 16)
+    }
+
+    private var targetMusclesCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Target Muscles", systemImage: "figure.strengthtraining.traditional")
+                .font(.traiHeadline())
+
+            Text("Select what you want to train today")
+                .font(.traiLabel(12))
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 6) {
+                PresetButton(title: "Push", isSelected: isPushSelected) {
+                    togglePreset(LiveWorkout.MuscleGroup.pushMuscles)
+                }
+                PresetButton(title: "Pull", isSelected: isPullSelected) {
+                    togglePreset(LiveWorkout.MuscleGroup.pullMuscles)
+                }
+                PresetButton(title: "Legs", isSelected: isLegsSelected) {
+                    togglePreset(LiveWorkout.MuscleGroup.legMuscles)
+                }
+                PresetButton(title: "Full Body", isSelected: isFullBodySelected) {
+                    togglePreset([.fullBody])
+                }
+            }
+
+            FlowLayout(spacing: 8) {
+                ForEach(LiveWorkout.MuscleGroup.allCases.filter { $0 != .fullBody }) { muscle in
+                    WorkoutMuscleChip(
+                        muscle: muscle,
+                        isSelected: selectedMuscles.contains(muscle)
+                    ) {
+                        toggleMuscle(muscle)
+                    }
+                }
+            }
+
+            if !selectedMuscles.isEmpty {
+                Text("\(selectedMuscles.count) selected")
+                    .font(.traiLabel(12))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .traiCard(cornerRadius: 16)
     }
 
     // MARK: - Presets
@@ -158,10 +195,8 @@ struct CustomWorkoutSetupSheet: View {
     private func togglePreset(_ muscles: [LiveWorkout.MuscleGroup]) {
         let muscleSet = Set(muscles)
         if muscleSet.isSubset(of: selectedMuscles) {
-            // Remove preset
             selectedMuscles.subtract(muscleSet)
         } else {
-            // Add preset (and remove fullBody if adding specific muscles)
             selectedMuscles.formUnion(muscleSet)
             if muscles != [.fullBody] {
                 selectedMuscles.remove(.fullBody)
@@ -175,7 +210,6 @@ struct CustomWorkoutSetupSheet: View {
             selectedMuscles.remove(muscle)
         } else {
             selectedMuscles.insert(muscle)
-            // Remove fullBody if adding specific muscles
             if muscle != .fullBody {
                 selectedMuscles.remove(.fullBody)
             }
@@ -192,20 +226,27 @@ private struct WorkoutTypeButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: type.iconName)
-                    .font(.title2)
-                Text(type.displayName)
-                    .font(.caption)
+        if isSelected {
+            Button(action: action) {
+                label
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(isSelected ? Color.accentColor : Color(.tertiarySystemFill))
-            .foregroundStyle(isSelected ? .white : .primary)
-            .clipShape(.rect(cornerRadius: 12))
+            .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.18))
+        } else {
+            Button(action: action) {
+                label
+            }
+            .buttonStyle(.traiTertiary(color: .secondary, fullWidth: true))
         }
-        .buttonStyle(.plain)
+    }
+
+    private var label: some View {
+        VStack(spacing: 6) {
+            Image(systemName: type.iconName)
+                .font(.traiHeadline(18))
+            Text(type.displayName)
+                .font(.traiLabel(12))
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -217,17 +258,19 @@ private struct PresetButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.caption)
-                .fontWeight(.medium)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(isSelected ? Color.accentColor : Color(.tertiarySystemFill))
-                .foregroundStyle(isSelected ? .white : .primary)
-                .clipShape(.capsule)
+        if isSelected {
+            Button(action: action) {
+                Text(title)
+                    .font(.traiLabel(12))
+            }
+            .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fillOpacity: 0.18))
+        } else {
+            Button(action: action) {
+                Text(title)
+                    .font(.traiLabel(12))
+            }
+            .buttonStyle(.traiTertiary(color: .secondary, size: .compact))
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -239,20 +282,26 @@ private struct WorkoutMuscleChip: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: muscle.iconName)
-                    .font(.caption)
-                Text(muscle.displayName)
-                    .font(.caption)
+        if isSelected {
+            Button(action: action) {
+                label
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(isSelected ? Color.accentColor : Color(.tertiarySystemFill))
-            .foregroundStyle(isSelected ? .white : .primary)
-            .clipShape(.capsule)
+            .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fillOpacity: 0.18))
+        } else {
+            Button(action: action) {
+                label
+            }
+            .buttonStyle(.traiTertiary(color: .secondary, size: .compact))
         }
-        .buttonStyle(.plain)
+    }
+
+    private var label: some View {
+        HStack(spacing: 4) {
+            Image(systemName: muscle.iconName)
+                .font(.traiLabel(12))
+            Text(muscle.displayName)
+                .font(.traiLabel(12))
+        }
     }
 }
 

@@ -174,6 +174,7 @@ extension GeminiService {
                 .joined(separator: ", ")
         let deterministicTopAction = rankedActions.first.map { modelActionKind(for: $0.action.kind) } ?? "none"
         let deterministicTopScore = rankedActions.first.map { String(format: "%.2f", $0.score) } ?? "0.00"
+        let lastCompletedWorkoutName = request.context.lastCompletedWorkoutName ?? "unknown"
 
         let prompt = """
         You are generating content for a fitness app dashboard surface called Trai Pulse.
@@ -254,6 +255,7 @@ extension GeminiService {
         - tomorrow_focus: \(request.preferences.tomorrowFocus.rawValue)
         - preferred_workout_window: \(request.preferences.workoutWindow.rawValue)
         - recommended_workout: \(workoutName)
+        - last_completed_workout_name: \(lastCompletedWorkoutName)
         - has_workout_today: \(request.context.hasWorkoutToday)
         - has_active_workout: \(request.context.hasActiveWorkout)
         - calories_today: \(request.context.caloriesConsumed)
@@ -300,6 +302,7 @@ extension GeminiService {
         - Avoid repeating the same plan change recommendation every day.
         - If should_prioritize_weight_log_now is true, strongly prefer `log_weight` or `open_weight` over workout-start actions.
         - If has_workout_today is true, has_active_workout is false, allow_question is true, and no workout check-in has been captured today, prefer a short workout follow-up question before suggesting another workout start.
+        - If generating a post-workout follow-up question, use last_completed_workout_name for wording (not recommended_workout).
         - If deterministic_top_action_score >= 0.78, prefer that action unless there is a stronger safety/context reason not to.
         """
 

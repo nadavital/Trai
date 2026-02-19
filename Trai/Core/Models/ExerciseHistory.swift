@@ -268,15 +268,30 @@ enum ExercisePerformanceService {
             weightPR: bestWeightRecord(in: history),
             repsPR: bestRepsRecord(in: history),
             volumePR: bestVolumeRecord(in: history),
-            estimatedOneRepMax: history.compactMap(\.estimatedOneRepMax).max(),
+            estimatedOneRepMax: history
+                .compactMap { entry in
+                    entry.estimatedOneRepMax ??
+                        LiveWorkoutEntry.estimatedOneRepMax(
+                            weightKg: entry.bestSetWeightKg,
+                            reps: entry.bestSetReps
+                        )
+                }
+                .filter { $0 > 0 }
+                .max(),
             totalSessions: history.count
         )
     }
 
     static func bestWeightRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
-        history
-            .filter { $0.bestSetWeightKg > 0 }
-            .max(by: isWeightRecordWorse(_:_:))
+        let weightedHistory = history.filter { $0.bestSetWeightKg > 0 }
+        if !weightedHistory.isEmpty {
+            return weightedHistory.max(by: isWeightRecordWorse(_:_:))
+        }
+
+        // Bodyweight exercises have zero external load. Fall back to best reps at bodyweight.
+        return history
+            .filter { $0.bestSetWeightKg == 0 && $0.bestSetReps > 0 }
+            .max(by: isRepsRecordWorse(_:_:))
     }
 
     static func bestRepsRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
