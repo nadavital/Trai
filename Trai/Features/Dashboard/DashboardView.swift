@@ -1738,6 +1738,7 @@ struct DashboardView: View {
     }
 
     private func deleteFoodEntry(_ entry: FoodEntry) {
+        entry.imageData = nil
         modelContext.delete(entry)
         HapticManager.success()
     }
