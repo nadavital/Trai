@@ -64,16 +64,37 @@ struct EditFoodEntrySheet: View {
                         .traiCard(cornerRadius: 16)
                     }
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        sectionTitle("Food Details", icon: "fork.knife")
-                        TextField("Name", text: $name)
-                            .padding(12)
-                            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label("Food Details", systemImage: "fork.knife")
+                                .font(.traiHeadline())
+                                .foregroundStyle(.primary)
 
-                        TextField("Serving Size", text: $servingSize)
-                            .textContentType(.none)
-                            .padding(12)
-                            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                            Text("Name and quantity")
+                                .font(.traiLabel(12))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Name")
+                                .font(.traiLabel(12))
+                                .foregroundStyle(.secondary)
+
+                            TextField("e.g. Grilled chicken salad", text: $name)
+                                .padding(12)
+                                .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Quantity")
+                                .font(.traiLabel(12))
+                                .foregroundStyle(.secondary)
+
+                            TextField("e.g. 1 bowl, 150 g, 2 slices", text: $servingSize)
+                                .textContentType(.none)
+                                .padding(12)
+                                .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                        }
                     }
                     .traiCard(cornerRadius: 16)
 
@@ -84,7 +105,7 @@ struct EditFoodEntrySheet: View {
                             label: "Calories",
                             value: $caloriesText,
                             unit: "kcal",
-                            color: .orange
+                            color: .accentColor
                         )
 
                         ForEach(orderedEnabledMacros) { macro in

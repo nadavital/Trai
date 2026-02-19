@@ -30,25 +30,25 @@ struct AddCustomExerciseSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
-                    // Exercise name input
+                VStack(spacing: 14) {
                     nameInputCard
+                        .traiCard(cornerRadius: 16)
 
-                    // AI Analysis card
                     aiAnalysisCard
+                        .traiCard(cornerRadius: 16)
 
-                    // Category selector
                     categorySelector
+                        .traiCard(cornerRadius: 16)
 
-                    // Muscle group selector (strength only)
                     if selectedCategory == .strength {
                         muscleGroupSelector
+                            .traiCard(cornerRadius: 16)
                     }
                 }
-                .padding()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(Color(.systemGroupedBackground))
             .navigationTitle("New Exercise")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -82,19 +82,14 @@ struct AddCustomExerciseSheet: View {
     // MARK: - Name Input Card
 
     private var nameInputCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Exercise Name")
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("Exercise Name", icon: "figure.strengthtraining.traditional")
 
-            TextField("e.g., Incline DB Press", text: $exerciseName)
+            TextField("e.g. Incline DB Press", text: $exerciseName)
                 .textInputAutocapitalization(.words)
-                .font(.title3)
-                .fontWeight(.medium)
-                .padding()
-                .background(Color(.secondarySystemGroupedBackground))
-                .clipShape(.rect(cornerRadius: 12))
+                .font(.traiHeadline(18))
+                .padding(12)
+                .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
                 .focused($isNameFocused)
                 .onChange(of: exerciseName) { _, _ in
                     if hasAnalyzed {
@@ -109,74 +104,50 @@ struct AddCustomExerciseSheet: View {
 
     private var aiAnalysisCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(.accent)
-                Text("Trai Analysis")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                Spacer()
-            }
+            sectionHeader("Trai Analysis", icon: "sparkles")
 
             if isAnalyzing {
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     ProgressView()
-                        .scaleEffect(0.9)
                     Text("Analyzing exercise...")
-                        .font(.subheadline)
+                        .font(.traiHeadline(15))
                         .foregroundStyle(.secondary)
                     Spacer()
                 }
-                .padding()
-                .background(Color.accentColor.opacity(0.1))
-                .clipShape(.rect(cornerRadius: 12))
+                .padding(12)
+                .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
             } else if let analysis = analysisResult {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(analysis.description)
-                        .font(.subheadline)
-                        .multilineTextAlignment(.leading)
+                        .font(.traiHeadline(15))
 
                     if let tips = analysis.tips {
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: "lightbulb.fill")
-                                .font(.caption)
+                                .font(.traiLabel(12))
                                 .foregroundStyle(.yellow)
                             Text(tips)
-                                .font(.caption)
+                                .font(.traiLabel(12))
                                 .foregroundStyle(.secondary)
                         }
                     }
 
                     if let secondary = analysis.secondaryMuscles, !secondary.isEmpty {
-                        HStack(spacing: 4) {
-                            Text("Also works:")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                            Text(secondary.joined(separator: ", "))
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundStyle(.secondary)
-                        }
+                        Text("Also works: \(secondary.joined(separator: ", "))")
+                            .font(.traiLabel(12))
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .padding()
-                .background(Color.accentColor.opacity(0.1))
-                .clipShape(.rect(cornerRadius: 12))
+                .padding(12)
+                .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
             } else {
                 Button {
                     Task { await analyzeExercise() }
                 } label: {
-                    HStack {
-                        Text("Analyze with AI")
-                        Spacer()
-                        Image(systemName: "arrow.right.circle.fill")
-                            .font(.title3)
-                    }
-                    .padding()
-                    .background(Color.accentColor.opacity(0.1))
-                    .clipShape(.rect(cornerRadius: 12))
+                    Label("Analyze with AI", systemImage: "sparkles")
+                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true))
                 .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -186,12 +157,9 @@ struct AddCustomExerciseSheet: View {
 
     private var categorySelector: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Category")
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
+            sectionHeader("Category", icon: "square.grid.2x2")
 
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 ForEach(Exercise.Category.allCases) { category in
                     CategoryButton(
                         category: category,
@@ -211,10 +179,7 @@ struct AddCustomExerciseSheet: View {
 
     private var muscleGroupSelector: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Target Muscle")
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
+            sectionHeader("Target Muscle", icon: "figure.strengthtraining.traditional")
 
             LazyVGrid(columns: [
                 GridItem(.flexible()),
@@ -240,6 +205,12 @@ struct AddCustomExerciseSheet: View {
         }
     }
 
+    private func sectionHeader(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.traiHeadline())
+            .foregroundStyle(.primary)
+    }
+
     // MARK: - Analysis
 
     private func analyzeExercise() async {
@@ -254,7 +225,6 @@ struct AddCustomExerciseSheet: View {
             analysisResult = analysis
             hasAnalyzed = true
 
-            // Apply AI suggestions with animation
             withAnimation(.snappy(duration: 0.2)) {
                 if let category = Exercise.Category(rawValue: analysis.category) {
                     selectedCategory = category
@@ -279,25 +249,27 @@ private struct CategoryButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                Image(systemName: category.iconName)
-                    .font(.title2)
-                Text(category.displayName)
-                    .font(.caption)
-                    .fontWeight(.medium)
+        if isSelected {
+            Button(action: action) {
+                label
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(isSelected ? Color.accentColor.opacity(0.15) : Color(.secondarySystemGroupedBackground))
-            .foregroundStyle(isSelected ? .accent : .primary)
-            .clipShape(.rect(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2)
-            )
+            .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.18))
+        } else {
+            Button(action: action) {
+                label
+            }
+            .buttonStyle(.traiTertiary(color: .secondary, fullWidth: true))
         }
-        .buttonStyle(.plain)
+    }
+
+    private var label: some View {
+        VStack(spacing: 6) {
+            Image(systemName: category.iconName)
+                .font(.traiHeadline(18))
+            Text(category.displayName)
+                .font(.traiLabel(12))
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -309,26 +281,27 @@ private struct MuscleButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: muscle.iconName)
-                    .font(.title3)
-                Text(muscle.displayName)
-                    .font(.caption2)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
+        if isSelected {
+            Button(action: action) {
+                label
             }
-            // Keep chip height consistent across varying SF Symbol bounding boxes.
-            .frame(maxWidth: .infinity, minHeight: 56)
-            .padding(.vertical, 10)
-            .background(isSelected ? Color.accentColor.opacity(0.15) : Color(.secondarySystemGroupedBackground))
-            .foregroundStyle(isSelected ? .accent : .primary)
-            .clipShape(.rect(cornerRadius: 10))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2)
-            )
+            .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fullWidth: true, fillOpacity: 0.18))
+        } else {
+            Button(action: action) {
+                label
+            }
+            .buttonStyle(.traiTertiary(color: .secondary, size: .compact, fullWidth: true))
         }
-        .buttonStyle(.plain)
+    }
+
+    private var label: some View {
+        VStack(spacing: 6) {
+            Image(systemName: muscle.iconName)
+                .font(.traiLabel(13))
+            Text(muscle.displayName)
+                .font(.traiLabel(11))
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, minHeight: 54)
     }
 }

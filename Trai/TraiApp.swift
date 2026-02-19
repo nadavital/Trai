@@ -97,6 +97,8 @@ struct TraiApp: App {
                 }
                 if AppLaunchArguments.shouldSeedLiveWorkoutPerfData {
                     seedLiveWorkoutPerformanceDataIfNeeded(modelContainer: container)
+                } else {
+                    purgeLiveWorkoutPerformanceSeedDataIfPresent(modelContainer: container)
                 }
             }
         } catch {
@@ -462,6 +464,50 @@ private func seedLiveWorkoutPerformanceDataIfNeeded(modelContainer: ModelContain
         )
     } catch {
         print("Perf seed failed: \(error.localizedDescription)")
+    }
+}
+
+@MainActor
+private func purgeLiveWorkoutPerformanceSeedDataIfPresent(modelContainer: ModelContainer) {
+    let seedMarkerPrefix = "[PerfSeed:"
+    let context = modelContainer.mainContext
+
+    do {
+        let workoutDescriptor = FetchDescriptor<LiveWorkout>()
+        let allWorkouts = try context.fetch(workoutDescriptor)
+        let seededWorkouts = allWorkouts.filter { $0.notes.contains(seedMarkerPrefix) }
+        guard !seededWorkouts.isEmpty else { return }
+
+        var seededEntryIDs: Set<UUID> = []
+        seededEntryIDs.reserveCapacity(seededWorkouts.count * 6)
+
+        for workout in seededWorkouts {
+            for entry in workout.entries ?? [] {
+                seededEntryIDs.insert(entry.id)
+            }
+            context.delete(workout)
+        }
+
+        var deletedHistoryCount = 0
+        if !seededEntryIDs.isEmpty {
+            let historyDescriptor = FetchDescriptor<ExerciseHistory>()
+            let allHistory = try context.fetch(historyDescriptor)
+            for history in allHistory {
+                guard let sourceWorkoutEntryId = history.sourceWorkoutEntryId else { continue }
+                if seededEntryIDs.contains(sourceWorkoutEntryId) {
+                    context.delete(history)
+                    deletedHistoryCount += 1
+                }
+            }
+        }
+
+        try context.save()
+        print(
+            "Purged perf seed data: \(seededWorkouts.count) workouts, " +
+            "\(deletedHistoryCount) history entries"
+        )
+    } catch {
+        print("Perf seed cleanup failed: \(error.localizedDescription)")
     }
 }
 
