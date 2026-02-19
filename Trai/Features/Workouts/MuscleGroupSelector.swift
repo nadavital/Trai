@@ -97,7 +97,7 @@ struct MuscleGroupSelector: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.traiPrimary())
                 }
                 .padding(.top, 4)
             }

@@ -280,6 +280,7 @@ struct MemoryDetailSheet: View {
                     Button("Done", systemImage: "checkmark") {
                         dismiss()
                     }
+                    .labelStyle(.iconOnly)
                     .tint(.accentColor)
                 }
 
@@ -379,9 +380,10 @@ struct MemoryEditSheet: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("Save", systemImage: "checkmark") {
                         saveChanges()
                     }
+                    .labelStyle(.iconOnly)
                     .tint(.accentColor)
                     .disabled(draftContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }

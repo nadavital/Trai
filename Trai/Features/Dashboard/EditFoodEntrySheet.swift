@@ -129,6 +129,7 @@ struct EditFoodEntrySheet: View {
                     Button("Save", systemImage: "checkmark") {
                         saveChanges()
                     }
+                    .labelStyle(.iconOnly)
                     .disabled(name.isEmpty)
                 }
             }

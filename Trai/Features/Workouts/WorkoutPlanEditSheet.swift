@@ -70,7 +70,8 @@ struct WorkoutPlanEditSheet: View {
                         hasPendingChanges = false
                         dismiss()
                     }
-                    .tint(.red)
+                    .labelStyle(.iconOnly)
+                    .tint(.accentColor)
                 }
             }
         }
@@ -608,7 +609,8 @@ private struct WorkoutDayEditorSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(confirmTitle, systemImage: "checkmark", action: onConfirm)
-                        .tint(.red)
+                        .labelStyle(.iconOnly)
+                        .tint(.accentColor)
                 }
             }
         }

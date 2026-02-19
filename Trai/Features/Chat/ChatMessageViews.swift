@@ -932,7 +932,7 @@ struct ErrorBubble: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.traiPrimary())
                 .controlSize(.small)
             }
         }

@@ -70,7 +70,7 @@ struct TodaysRemindersCard: View {
             }
             .animation(.easeInOut(duration: 0.3), value: reminders.map(\.id))
         }
-        .traiCard(glow: .reminders)
+        .traiCard()
     }
 
     private func completeWithAnimation(_ reminder: ReminderItem) {

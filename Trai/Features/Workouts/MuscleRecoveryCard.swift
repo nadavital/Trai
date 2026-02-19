@@ -195,6 +195,7 @@ struct MuscleRecoveryDetailSheet: View {
                     Button("Done", systemImage: "checkmark") {
                         dismiss()
                     }
+                    .labelStyle(.iconOnly)
                 }
             }
         }

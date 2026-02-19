@@ -269,8 +269,7 @@ struct OnboardingView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
         }
-        .buttonStyle(.glassProminent)
-        .tint(canProceed ? .accentColor : .gray)
+        .buttonStyle(.traiPrimary(color: canProceed ? .accentColor : .gray, size: .large, fullWidth: true))
         .disabled(!canProceed)
         .animation(.easeInOut(duration: 0.2), value: canProceed)
         .padding(.horizontal, 24)

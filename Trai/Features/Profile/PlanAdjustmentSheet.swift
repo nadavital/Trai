@@ -68,6 +68,7 @@ struct PlanAdjustmentSheet: View {
                         saveChanges()
                         dismiss()
                     }
+                    .labelStyle(.iconOnly)
                 }
             }
             .sheet(isPresented: $showAICoach) {
@@ -80,6 +81,7 @@ struct PlanAdjustmentSheet: View {
                                 Button("Done", systemImage: "checkmark") {
                                     showAICoach = false
                                 }
+                                .labelStyle(.iconOnly)
                             }
                         }
                 }

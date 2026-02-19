@@ -38,7 +38,7 @@ extension ProfileView {
                         .font(.subheadline)
                         .fontWeight(.medium)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.traiTertiary(size: .compact, width: 76, height: 32))
                 .controlSize(.small)
             }
 
@@ -94,8 +94,7 @@ extension ProfileView {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .tint(.accentColor)
+                .buttonStyle(.traiSecondary(color: .accentColor, height: 40))
 
                 // Plan History link
                 NavigationLink {
@@ -106,7 +105,7 @@ extension ProfileView {
                         Text("History")
                     }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.traiTertiary(width: 108, height: 40))
             }
 
             if let currentWeight = latestWeightForPlanPrompt,
@@ -115,7 +114,7 @@ extension ProfileView {
                 HStack(spacing: 12) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.title3)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Color.accentColor)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(String(format: "Weight changed by %.1f kg", diff))
@@ -133,15 +132,15 @@ extension ProfileView {
                         showPlanSheet = true
                     }
                     .font(.subheadline)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.traiPrimary(color: .accentColor, size: .compact, width: 76, height: 32))
                     .controlSize(.small)
                 }
                 .padding()
-                .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
             }
         }
         .padding(20)
-        .background(RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
+        .traiCard(cornerRadius: 20, contentPadding: 0)
     }
 
     // MARK: - Workout Plan Card
@@ -176,7 +175,7 @@ extension ProfileView {
                             .font(.subheadline)
                             .fontWeight(.medium)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.traiTertiary(size: .compact, width: 76, height: 32))
                     .controlSize(.small)
                 }
 
@@ -194,7 +193,7 @@ extension ProfileView {
                     VStack(spacing: 2) {
                         Text("\(plan.templates.count)")
                             .font(.system(size: 36, weight: .bold, design: .rounded))
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(Color.accentColor)
                         Text("workouts")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -234,8 +233,7 @@ extension ProfileView {
                         }
                         .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.accentColor)
+                    .buttonStyle(.traiSecondary(color: .accentColor, height: 40))
 
                     NavigationLink {
                         WorkoutPlanHistoryView()
@@ -245,11 +243,11 @@ extension ProfileView {
                             Text("History")
                         }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.traiTertiary(width: 108, height: 40))
                 }
             }
             .padding(20)
-            .background(RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
+            .traiCard(cornerRadius: 20, contentPadding: 0)
         } else {
             // No plan - show create CTA
             VStack(spacing: 16) {
@@ -274,7 +272,7 @@ extension ProfileView {
                     HStack(spacing: 12) {
                         Image(systemName: "sparkles")
                             .font(.title2)
-                            .foregroundStyle(.purple)
+                            .foregroundStyle(Color.accentColor)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Create Personalized Plan")
@@ -294,16 +292,12 @@ extension ProfileView {
                             .foregroundStyle(.tertiary)
                     }
                     .padding()
-                    .background(Color.purple.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.purple.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [6, 3]))
-                    }
+                    .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
                 }
                 .buttonStyle(.plain)
             }
             .padding(20)
-            .background(RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
+            .traiCard(cornerRadius: 20, contentPadding: 0)
         }
     }
 
@@ -333,11 +327,11 @@ extension ProfileView {
         case "chest", "shoulders", "triceps":
             return .orange
         case "back", "biceps":
-            return .blue
+            return .accentColor
         case "quads", "hamstrings", "glutes", "calves", "legs":
             return .green
         case "core":
-            return .purple
+            return TraiColors.coral
         default:
             return .gray
         }
@@ -374,7 +368,7 @@ extension ProfileView {
                     .foregroundStyle(.tertiary)
             }
             .padding()
-            .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
+            .traiCard(cornerRadius: 16, contentPadding: 0)
         }
         .buttonStyle(.plain)
     }
@@ -389,9 +383,9 @@ extension ProfileView {
             HStack {
                 Image(systemName: "bubble.left.and.bubble.right.fill")
                     .font(.title2)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.accentColor)
                     .frame(width: 40, height: 40)
-                    .background(Color.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Chat History")
@@ -410,7 +404,7 @@ extension ProfileView {
                     .foregroundStyle(.tertiary)
             }
             .padding()
-            .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
+            .traiCard(cornerRadius: 16, contentPadding: 0)
         }
         .buttonStyle(.plain)
     }
@@ -459,7 +453,7 @@ extension ProfileView {
                     .foregroundStyle(.tertiary)
             }
             .padding()
-            .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
+            .traiCard(cornerRadius: 16, contentPadding: 0)
         }
         .buttonStyle(.plain)
     }
@@ -474,9 +468,9 @@ extension ProfileView {
             HStack {
                 Image(systemName: "bell.fill")
                     .font(.title2)
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(Color.accentColor)
                     .frame(width: 40, height: 40)
-                    .background(Color.purple.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Reminders")
@@ -495,7 +489,7 @@ extension ProfileView {
                     .foregroundStyle(.tertiary)
             }
             .padding()
-            .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
+            .traiCard(cornerRadius: 16, contentPadding: 0)
         }
         .buttonStyle(.plain)
     }

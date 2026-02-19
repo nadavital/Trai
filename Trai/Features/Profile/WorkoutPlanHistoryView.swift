@@ -154,6 +154,7 @@ private struct WorkoutPlanVersionDetailView: View {
                 Button("Done", systemImage: "checkmark") {
                     dismiss()
                 }
+                .labelStyle(.iconOnly)
             }
         }
     }

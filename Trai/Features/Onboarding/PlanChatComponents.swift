@@ -159,7 +159,7 @@ struct ProposedPlanCard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.traiPrimary())
             .tint(.green)
         }
         .padding(16)

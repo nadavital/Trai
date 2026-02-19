@@ -326,7 +326,7 @@ struct WorkoutPlanChatFlow: View {
                 .font(.subheadline)
                 .fontWeight(.medium)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.traiTertiary())
 
             // Done button
             Button {
@@ -340,8 +340,7 @@ struct WorkoutPlanChatFlow: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
             }
-            .buttonStyle(.glassProminent)
-            .tint(.accentColor)
+            .buttonStyle(.traiPrimary(fullWidth: true))
 
             // Skip button (onboarding only)
             if isOnboarding {

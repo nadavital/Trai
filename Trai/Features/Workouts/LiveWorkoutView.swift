@@ -66,6 +66,7 @@ struct LiveWorkoutView: View {
                         Button("Done", systemImage: "checkmark") {
                             handleSummaryDone()
                         }
+                        .labelStyle(.iconOnly)
                     }
                 } else {
                     if AppLaunchArguments.isUITesting && AppLaunchArguments.shouldUseLiveWorkoutUITestPreset {
@@ -91,6 +92,7 @@ struct LiveWorkoutView: View {
                         Button("End", systemImage: "checkmark") {
                             showingEndConfirmation = true
                         }
+                        .labelStyle(.iconOnly)
                         .accessibilityIdentifier("liveWorkoutEndButton")
                         .tint(.accentColor)
                     }
@@ -138,6 +140,7 @@ struct LiveWorkoutView: View {
                                 Button("Done", systemImage: "checkmark") {
                                     showingChat = false
                                 }
+                                .labelStyle(.iconOnly)
                             }
                         }
                 }
@@ -239,7 +242,7 @@ struct LiveWorkoutView: View {
                                     }
                                 }
                                 .font(.caption)
-                                .buttonStyle(.traiPillSubtle)
+                                .buttonStyle(.traiSecondary())
                                 .disabled(viewModel.isRetryingWatchSync)
                             }
                         }

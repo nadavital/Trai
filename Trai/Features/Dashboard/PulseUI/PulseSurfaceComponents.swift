@@ -179,11 +179,11 @@ struct PulsePlanProposalView: View {
 
             HStack(spacing: 8) {
                 Button(proposal.applyLabel, action: onApply)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.traiPrimary())
                     .tint(.accentColor)
 
                 Button(proposal.reviewLabel, action: onReview)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.traiTertiary())
                     .tint(.accentColor)
 
                 Button(proposal.deferLabel, action: onLater)
@@ -214,12 +214,12 @@ struct PulseTextComposer: View {
 
             if bordered {
                 Button(submitTitle, action: onSubmit)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.traiTertiary())
                     .tint(.accentColor)
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             } else {
                 Button(submitTitle, action: onSubmit)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.traiPrimary())
                     .tint(.accentColor)
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -239,14 +239,14 @@ struct PulseActionButtonsRow: View {
                 Text(primaryTitle)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.traiPrimary())
             .tint(.accentColor)
 
             Button(action: onSecondary) {
                 Text(secondaryTitle)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.traiTertiary())
             .tint(.accentColor)
         }
     }

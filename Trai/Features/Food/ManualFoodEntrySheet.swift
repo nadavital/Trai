@@ -92,6 +92,7 @@ struct ManualFoodEntrySheet: View {
                     Button("Save", systemImage: "checkmark") {
                         saveEntry()
                     }
+                    .labelStyle(.iconOnly)
                     .disabled(!isValid)
                 }
             }

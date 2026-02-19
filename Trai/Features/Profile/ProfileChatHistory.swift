@@ -20,9 +20,9 @@ struct ChatSessionRow: View {
         HStack(spacing: 12) {
             Image(systemName: "bubble.left.fill")
                 .font(.body)
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 32, height: 32)
-                .background(Color.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+                .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(sessionTitle)
@@ -192,9 +192,9 @@ struct ChatSessionListRow: View {
         HStack(spacing: 12) {
             Image(systemName: "bubble.left.fill")
                 .font(.caption)
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 24, height: 24)
-                .background(Color.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
+                .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(sessionTitle)

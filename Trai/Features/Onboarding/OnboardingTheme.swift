@@ -44,7 +44,7 @@ struct AnimatedGradientBackground: View {
         LinearGradient(
             colors: [
                 Color.accentColor.opacity(0.1),
-                Color.purple.opacity(0.05),
+                TraiColors.coral.opacity(0.06),
                 Color.accentColor.opacity(0.08)
             ],
             startPoint: animateGradient ? .topLeading : .bottomLeading,

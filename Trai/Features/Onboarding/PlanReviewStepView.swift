@@ -152,7 +152,7 @@ struct PlanReviewStepView: View {
                     .trim(from: 0, to: 0.65)
                     .stroke(
                         AngularGradient(
-                            colors: [.accentColor, .purple, .accentColor.opacity(0.3)],
+                            colors: [.accentColor, TraiColors.coral, .accentColor.opacity(0.3)],
                             center: .center
                         ),
                         style: StrokeStyle(lineWidth: 5, lineCap: .round)
@@ -172,15 +172,7 @@ struct PlanReviewStepView: View {
                     )
                     .frame(width: 90, height: 90)
 
-                Image(systemName: "dumbbell.fill")
-                    .font(.system(size: 34, weight: .medium))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.accentColor, .purple],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                TraiLensView(size: 54, state: .thinking, palette: .energy)
                     .modifier(SparkleModifier())
             }
 
@@ -240,13 +232,9 @@ struct PlanReviewStepView: View {
 
             Button(action: onRetry) {
                 Label("Try Again", systemImage: "arrow.clockwise")
-                    .font(.headline)
-                    .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.accentColor)
-                    .clipShape(.rect(cornerRadius: 14))
             }
+            .buttonStyle(.traiPrimary(fullWidth: true))
             .padding(.horizontal, 40)
 
             Spacer()
@@ -304,8 +292,7 @@ struct PlanReviewStepView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
             }
-            .buttonStyle(.glassProminent)
-            .tint(.purple)
+            .buttonStyle(.traiPrimary(color: .accentColor, fullWidth: true))
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 70)

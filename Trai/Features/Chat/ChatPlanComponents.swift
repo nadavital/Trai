@@ -50,7 +50,7 @@ struct PlanUpdateSuggestionCard: View {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles")
                         .font(.subheadline)
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(Color.accentColor)
 
                     Text("Suggested Plan Update")
                         .font(.subheadline)
@@ -130,7 +130,7 @@ struct PlanUpdateSuggestionCard: View {
                     if let goalName = suggestion.goalDisplayName {
                         HStack(spacing: 8) {
                             Circle()
-                                .fill(Color.purple)
+                                .fill(Color.accentColor)
                                 .frame(width: 10, height: 10)
 
                             Text("Goal")
@@ -141,7 +141,7 @@ struct PlanUpdateSuggestionCard: View {
                             Text(goalName)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
-                                .foregroundStyle(.purple)
+                                .foregroundStyle(Color.accentColor)
                         }
                         .padding(.vertical, 10)
                     }
@@ -162,7 +162,7 @@ struct PlanUpdateSuggestionCard: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.traiTertiary())
                 .tint(.secondary)
 
                 Button {
@@ -178,8 +178,8 @@ struct PlanUpdateSuggestionCard: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.purple)
+                .buttonStyle(.traiPrimary())
+                .tint(.accentColor)
             }
         }
         .padding(16)
@@ -187,10 +187,6 @@ struct PlanUpdateSuggestionCard: View {
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color(.secondarySystemBackground))
                 .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.purple.opacity(0.2), lineWidth: 1)
         )
     }
 }
@@ -268,7 +264,7 @@ struct PlanUpdateAppliedBadge: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(Color.accentColor)
                 Text("Plan updated")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -280,7 +276,7 @@ struct PlanUpdateAppliedBadge: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color.purple.opacity(0.1))
+            .background(Color.accentColor.opacity(0.1))
             .clipShape(.capsule)
         }
         .buttonStyle(.plain)
@@ -323,12 +319,12 @@ struct PlanUpdateDetailSheet: View {
                     if let goalName = plan.goalDisplayName {
                         HStack(spacing: 8) {
                             Circle()
-                                .fill(Color.purple)
+                                .fill(Color.accentColor)
                                 .frame(width: 10, height: 10)
                             Text("Goal")
                             Spacer()
                             Text(goalName)
-                                .foregroundStyle(.purple)
+                                .foregroundStyle(Color.accentColor)
                                 .fontWeight(.medium)
                         }
                     }
@@ -343,6 +339,7 @@ struct PlanUpdateDetailSheet: View {
                     Button("Done", systemImage: "checkmark") {
                         dismiss()
                     }
+                    .labelStyle(.iconOnly)
                 }
             }
         }
@@ -480,6 +477,7 @@ struct EditPlanSuggestionSheet: View {
                         )
                         onSave(updated)
                     }
+                    .labelStyle(.iconOnly)
                     .fontWeight(.semibold)
                     .disabled(!isValid)
                 }

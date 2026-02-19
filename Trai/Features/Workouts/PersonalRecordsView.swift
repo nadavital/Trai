@@ -866,6 +866,7 @@ private struct EditHistorySheet: View {
                         saveChanges()
                         dismiss()
                     }
+                    .labelStyle(.iconOnly)
                     .disabled(weightDisplay <= 0 || reps <= 0)
                 }
             }

@@ -122,6 +122,7 @@ struct WorkoutSummarySheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark", action: onDismiss)
+                    .labelStyle(.iconOnly)
                 }
             }
             .task {

@@ -539,7 +539,7 @@ struct ProfileView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
-        .background(RoundedRectangle(cornerRadius: 24).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
+        .traiCard(cornerRadius: 24, contentPadding: 0)
     }
 
 }

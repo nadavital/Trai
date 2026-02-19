@@ -105,6 +105,7 @@ struct WorkoutTrendDetailSheet: View {
                     Button("Done", systemImage: "checkmark") {
                         dismiss()
                     }
+                    .labelStyle(.iconOnly)
                 }
 
                 if let onStartWorkout {

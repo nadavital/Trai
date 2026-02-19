@@ -42,7 +42,7 @@ struct EmptyMealsView: View {
             if let addAction = onAddFood {
                 Button("Log Your First Meal", action: addAction)
                     .font(.subheadline)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.traiTertiary())
             }
         }
         .frame(maxWidth: .infinity)

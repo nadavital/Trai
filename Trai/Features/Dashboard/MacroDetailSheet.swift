@@ -101,6 +101,7 @@ struct MacroDetailSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark") { dismiss() }
+                        .labelStyle(.iconOnly)
                 }
 
                 if let addAction = onAddFood {

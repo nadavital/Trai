@@ -27,11 +27,11 @@ struct PlanReviewRecommendationCard: View {
     private var accentColor: Color {
         switch recommendation.trigger {
         case .weightChange:
-            .blue
+            .accentColor
         case .weightPlateau:
             .orange
         case .planAge:
-            .purple
+            .accentColor
         }
     }
 
@@ -94,7 +94,7 @@ struct PlanReviewRecommendationCard: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.traiTertiary())
                 .tint(.secondary)
 
                 Button {
@@ -111,7 +111,7 @@ struct PlanReviewRecommendationCard: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.traiPrimary())
                 .tint(accentColor)
             }
         }
@@ -120,10 +120,6 @@ struct PlanReviewRecommendationCard: View {
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color(.secondarySystemBackground))
                 .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(accentColor.opacity(0.2), lineWidth: 1)
         )
     }
 }

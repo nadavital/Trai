@@ -72,6 +72,7 @@ struct MacroTrackingSettingsSheet: View {
                         HapticManager.success()
                         dismiss()
                     }
+                    .labelStyle(.iconOnly)
                 }
             }
         }

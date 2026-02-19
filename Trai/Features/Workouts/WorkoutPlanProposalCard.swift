@@ -127,7 +127,7 @@ struct WorkoutPlanProposalCard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.traiPrimary())
             .tint(.accent)
 
             // Customize button (optional)
@@ -143,7 +143,7 @@ struct WorkoutPlanProposalCard: View {
                     .padding(.vertical, 12)
                     .padding(.horizontal, 16)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.traiTertiary())
             }
         }
     }

@@ -156,7 +156,7 @@ struct AddExerciseButton: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.traiPillSubtle)
+        .buttonStyle(.traiSecondary())
     }
 }
 
@@ -175,7 +175,7 @@ struct WorkoutBottomBar: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.traiPillSubtle)
+            .buttonStyle(.traiSecondary())
 
             Button(action: onAddExercise) {
                 HStack {
@@ -186,7 +186,7 @@ struct WorkoutBottomBar: View {
                 .accessibilityIdentifier("liveWorkoutAddExerciseButton")
             }
             .accessibilityIdentifier("liveWorkoutAddExerciseButton")
-            .buttonStyle(.traiPillSubtle)
+            .buttonStyle(.traiTertiary())
         }
         .accessibilityIdentifier("liveWorkoutBottomBar")
         .padding()
