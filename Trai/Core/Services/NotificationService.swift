@@ -18,9 +18,10 @@ final class NotificationService {
     @ObservationIgnored
     private var center: UNUserNotificationCenter { UNUserNotificationCenter.current() }
     private var didRegisterCategories = false
-    private let builtInSchedulingWindowDays = 7
-    private let customSchedulingWindowDays = 5
-    private let maxPendingRequests = 60
+    // Keep horizons beyond one week while respecting iOS's 64 pending request limit.
+    private let builtInSchedulingWindowDays = 10
+    private let customSchedulingWindowDays = 8
+    private let maxPendingRequests = 64
 
     // MARK: - Notification Identifiers
 
@@ -226,7 +227,8 @@ final class NotificationService {
         // Clear existing workout reminders
         await cancelNotifications(category: .workoutReminder)
 
-        guard isAuthorized else { return }
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else { return }
 
         let calendar = Calendar.current
         let now = Date()
@@ -306,7 +308,8 @@ final class NotificationService {
         registerNotificationCategoriesIfNeeded()
         await cancelNotifications(category: .weightReminder)
 
-        guard isAuthorized else { return }
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else { return }
 
         let calendar = Calendar.current
         let now = Date()
