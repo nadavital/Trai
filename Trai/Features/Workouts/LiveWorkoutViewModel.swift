@@ -66,10 +66,10 @@ final class LiveWorkoutViewModel {
     // PRs achieved during this workout (exercise name -> PR details)
     var achievedPRs: [String: PRValue] = [:]
 
-    enum PRType: String {
-        case weight = "Weight PR"
-        case volume = "Volume PR"
-        case reps = "Rep PR"
+    enum PRType {
+        case weight
+        case volume
+        case reps
     }
 
     struct PRValue: Equatable {
@@ -78,13 +78,18 @@ final class LiveWorkoutViewModel {
         let newValue: Double
         let previousValue: Double
         let isFirstTime: Bool
+        let volumePRMode: UserProfile.VolumePRMode
 
         var improvement: Double { newValue - previousValue }
+
+        private var volumeUnitSuffix: String {
+            volumePRMode.unitSuffix
+        }
 
         var formattedNewValue: String {
             switch type {
             case .weight: return String(format: "%.1f kg", newValue)
-            case .volume: return String(format: "%.0f kg", newValue)
+            case .volume: return String(format: "%.0f kg%@", newValue, volumeUnitSuffix)
             case .reps: return "\(Int(newValue)) reps"
             }
         }
@@ -93,7 +98,7 @@ final class LiveWorkoutViewModel {
             guard !isFirstTime && improvement > 0 else { return "" }
             switch type {
             case .weight: return String(format: "+%.1f kg", improvement)
-            case .volume: return String(format: "+%.0f kg", improvement)
+            case .volume: return String(format: "+%.0f kg%@", improvement, volumeUnitSuffix)
             case .reps: return "+\(Int(improvement)) reps"
             }
         }
@@ -147,6 +152,7 @@ final class LiveWorkoutViewModel {
     private var modelContext: ModelContext?
     private(set) var healthKitService: HealthKitService?
     private var usesMetricWeightPreference = true
+    private var volumePRModePreference: UserProfile.VolumePRMode = .perSet
     private let maxSuggestionPoolSize = 12
     private let exerciseUsageHistoryLookbackDays = 365
     private let exerciseUsageHistoryFetchLimit = 900
@@ -210,6 +216,10 @@ final class LiveWorkoutViewModel {
         !entries.isEmpty && entries.allSatisfy { entry in
             entry.sets.allSatisfy(\.completed)
         }
+    }
+
+    var volumePRMode: UserProfile.VolumePRMode {
+        volumePRModePreference
     }
 
     /// Target muscle groups for this workout
@@ -364,6 +374,7 @@ final class LiveWorkoutViewModel {
         self.modelContext = modelContext
         self.healthKitService = healthKitService
         usesMetricWeightPreference = getUserUsesMetricWeight()
+        volumePRModePreference = getUserVolumePRMode()
         configurePersistenceCoordinatorIfNeeded()
         registerBackgroundFlushObserverIfNeeded()
 
@@ -774,7 +785,11 @@ final class LiveWorkoutViewModel {
             return cached
         }
         guard let modelContext else { return nil }
-        guard let snapshot = ExercisePerformanceService.snapshot(for: exerciseName, modelContext: modelContext) else {
+        guard let snapshot = ExercisePerformanceService.snapshot(
+            for: exerciseName,
+            modelContext: modelContext,
+            volumePRMode: volumePRModePreference
+        ) else {
             clearPerformanceCache(for: exerciseName)
             return nil
         }
@@ -790,10 +805,14 @@ final class LiveWorkoutViewModel {
 
         let currentBestWeight = completedSets.map(\.weightKg).max() ?? 0
         let currentTotalVolume = completedSets.reduce(0) { $0 + $1.volume }
+        let currentVolumeMetric = volumeValue(
+            totalVolume: currentTotalVolume,
+            setCount: completedSets.count
+        )
         let currentBestReps = completedSets.map(\.reps).max() ?? 0
         let snapshot = getPerformanceSnapshot(for: entry.exerciseName)
         let previousWeightPR = snapshot?.weightPR?.bestSetWeightKg ?? 0
-        let previousVolumePR = snapshot?.volumePR?.totalVolume ?? 0
+        let previousVolumePR = snapshot?.volumePR?.volumeValue(for: volumePRModePreference) ?? 0
         let previousRepsPR = snapshot?.repsPR?.bestSetReps ?? 0
 
         // First time doing this exercise - consider it a PR if there's weight.
@@ -806,7 +825,7 @@ final class LiveWorkoutViewModel {
             return .weight
         }
         // Check for volume PR
-        if currentTotalVolume > previousVolumePR {
+        if currentVolumeMetric > previousVolumePR {
             return .volume
         }
         // Check for rep PR (at same or higher weight)
@@ -1253,6 +1272,26 @@ final class LiveWorkoutViewModel {
         return true // Fallback default (metric)
     }
 
+    /// Get user's volume PR mode preference from their profile
+    private func getUserVolumePRMode() -> UserProfile.VolumePRMode {
+        guard let modelContext else { return .perSet }
+        var descriptor = FetchDescriptor<UserProfile>()
+        descriptor.fetchLimit = 1
+        if let profile = try? modelContext.fetch(descriptor).first {
+            return profile.volumePRModeValue
+        }
+        return .perSet
+    }
+
+    private func volumeValue(totalVolume: Double, setCount: Int) -> Double {
+        switch volumePRModePreference {
+        case .perSet:
+            return totalVolume / Double(max(setCount, 1))
+        case .totalVolume:
+            return totalVolume
+        }
+    }
+
     func cancelWorkout() {
         stopTimer()
         // End Live Activity immediately (no summary)
@@ -1311,9 +1350,10 @@ final class LiveWorkoutViewModel {
             // Check for PRs against canonical per-metric records.
             let previousSnapshot = getPerformanceSnapshot(for: entry.exerciseName)
             let previousWeight = previousSnapshot?.weightPR?.bestSetWeightKg ?? 0
-            let previousVolume = previousSnapshot?.volumePR?.totalVolume ?? 0
+            let previousVolume = previousSnapshot?.volumePR?.volumeValue(for: volumePRModePreference) ?? 0
             let previousReps = Double(previousSnapshot?.repsPR?.bestSetReps ?? 0)
             let hasHistory = (previousSnapshot?.totalSessions ?? 0) > 0
+            let currentVolume = history.volumeValue(for: volumePRModePreference)
 
             if history.bestSetWeightKg > previousWeight {
                 achievedPRs[entry.exerciseName] = PRValue(
@@ -1321,18 +1361,20 @@ final class LiveWorkoutViewModel {
                     exerciseName: entry.exerciseName,
                     newValue: history.bestSetWeightKg,
                     previousValue: previousWeight,
-                    isFirstTime: !hasHistory || previousWeight <= 0
+                    isFirstTime: !hasHistory || previousWeight <= 0,
+                    volumePRMode: volumePRModePreference
                 )
             }
             // Volume PR (only if no weight PR already detected)
-            else if history.totalVolume > previousVolume,
+            else if currentVolume > previousVolume,
                     achievedPRs[entry.exerciseName] == nil {
                 achievedPRs[entry.exerciseName] = PRValue(
                     type: .volume,
                     exerciseName: entry.exerciseName,
-                    newValue: history.totalVolume,
+                    newValue: currentVolume,
                     previousValue: previousVolume,
-                    isFirstTime: false
+                    isFirstTime: false,
+                    volumePRMode: volumePRModePreference
                 )
             }
             // Rep PR (only if nothing else detected)
@@ -1343,7 +1385,8 @@ final class LiveWorkoutViewModel {
                     exerciseName: entry.exerciseName,
                     newValue: Double(history.bestSetReps),
                     previousValue: previousReps,
-                    isFirstTime: false
+                    isFirstTime: false,
+                    volumePRMode: volumePRModePreference
                 )
             }
         }

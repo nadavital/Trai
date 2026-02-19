@@ -12,16 +12,28 @@ import Charts
 struct ExerciseTrendsChart: View {
     let history: [ExerciseHistory]
     let useLbs: Bool
+    let volumePRMode: UserProfile.VolumePRMode
 
     @State private var selectedMetric: Metric = .weight
     @State private var selectedRange: TimeRange = .threeMonths
 
     // MARK: - Types
 
-    enum Metric: String, CaseIterable {
-        case weight = "Weight"
-        case volume = "Volume"
-        case oneRepMax = "1RM"
+    enum Metric: CaseIterable {
+        case weight
+        case volume
+        case oneRepMax
+
+        func title(volumePRMode: UserProfile.VolumePRMode) -> String {
+            switch self {
+            case .weight:
+                return "Weight"
+            case .volume:
+                return volumePRMode.chartLabel
+            case .oneRepMax:
+                return "1RM"
+            }
+        }
     }
 
     enum TimeRange: String, CaseIterable {
@@ -57,8 +69,8 @@ struct ExerciseTrendsChart: View {
                 let value = entry.displayWeight(usesMetric: !useLbs)
                 return DataPoint(date: entry.performedAt, value: value)
             case .volume:
-                // Volume is stored in kg, convert if needed
-                let value = useLbs ? entry.totalVolume * WeightUtility.kgToLbs : entry.totalVolume
+                let volumeValue = entry.volumeValue(for: volumePRMode)
+                let value = useLbs ? volumeValue * WeightUtility.kgToLbs : volumeValue
                 return DataPoint(date: entry.performedAt, value: value)
             case .oneRepMax:
                 // Use stored 1RM when available, and backfill from weight/reps for legacy rows.
@@ -113,7 +125,7 @@ struct ExerciseTrendsChart: View {
             HStack {
                 Picker("Metric", selection: $selectedMetric) {
                     ForEach(Metric.allCases, id: \.self) { metric in
-                        Text(metric.rawValue).tag(metric)
+                        Text(metric.title(volumePRMode: volumePRMode)).tag(metric)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -155,14 +167,14 @@ struct ExerciseTrendsChart: View {
         Chart(dataPoints) { point in
             LineMark(
                 x: .value("Date", point.date),
-                y: .value(selectedMetric.rawValue, point.value)
+                y: .value(selectedMetric.title(volumePRMode: volumePRMode), point.value)
             )
             .foregroundStyle(Color.accentColor)
             .interpolationMethod(.catmullRom)
 
             PointMark(
                 x: .value("Date", point.date),
-                y: .value(selectedMetric.rawValue, point.value)
+                y: .value(selectedMetric.title(volumePRMode: volumePRMode), point.value)
             )
             .foregroundStyle(Color.accentColor)
             .symbolSize(30)
@@ -269,6 +281,6 @@ private struct ExerciseTrendBadge: View {
 // MARK: - Preview
 
 #Preview {
-    ExerciseTrendsChart(history: [], useLbs: false)
+    ExerciseTrendsChart(history: [], useLbs: false, volumePRMode: .perSet)
         .padding()
 }

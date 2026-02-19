@@ -8,13 +8,17 @@ enum PRMetricKind {
     case estimatedOneRepMax
 
     var label: String {
+        label(for: .perSet)
+    }
+
+    func label(for volumePRMode: UserProfile.VolumePRMode) -> String {
         switch self {
         case .weight:
             return "Weight PR"
         case .reps:
             return "Rep PR"
         case .volume:
-            return "Volume PR"
+            return volumePRMode.prLabel
         case .estimatedOneRepMax:
             return "Est. 1RM"
         }

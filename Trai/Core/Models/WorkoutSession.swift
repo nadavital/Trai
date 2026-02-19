@@ -80,6 +80,22 @@ extension WorkoutSession {
         return Double(sets * reps) * weightKg
     }
 
+    /// Normalized session volume to compare across different set counts.
+    var volumePerSet: Double? {
+        guard let totalVolume, sets > 0 else { return nil }
+        return totalVolume / Double(sets)
+    }
+
+    /// Returns the volume metric value using the selected PR mode.
+    func volumeValue(for mode: UserProfile.VolumePRMode) -> Double? {
+        switch mode {
+        case .perSet:
+            return volumePerSet
+        case .totalVolume:
+            return totalVolume
+        }
+    }
+
     /// Formatted duration string
     var formattedDuration: String? {
         guard let durationMinutes else { return nil }

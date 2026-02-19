@@ -29,6 +29,10 @@ struct PersonalRecordsView: View {
         !(profiles.first?.usesMetricExerciseWeight ?? true)
     }
 
+    private var volumePRMode: UserProfile.VolumePRMode {
+        profiles.first?.volumePRModeValue ?? .perSet
+    }
+
     private var historyByExerciseName: [String: [ExerciseHistory]] {
         Dictionary(grouping: allHistory, by: \.exerciseName)
     }
@@ -47,11 +51,15 @@ struct PersonalRecordsView: View {
 
     /// Group history by exercise and compute PRs
     private var exercisePRs: [ExercisePR] {
-        let snapshotsByExercise = ExercisePerformanceService.snapshots(from: allHistory)
+        let snapshotsByExercise = ExercisePerformanceService.snapshots(
+            from: allHistory,
+            volumePRMode: volumePRMode
+        )
         return snapshotsByExercise.values.map { snapshot in
             ExercisePR.from(
                 snapshot: snapshot,
-                muscleGroup: muscleGroupByExerciseName[snapshot.exerciseName]
+                muscleGroup: muscleGroupByExerciseName[snapshot.exerciseName],
+                volumePRMode: volumePRMode
             )
         }
     }
@@ -105,9 +113,9 @@ struct PersonalRecordsView: View {
                                 selectedSort = option
                             } label: {
                                 if selectedSort == option {
-                                    Label(option.label, systemImage: "checkmark")
+                                    Label(option.label(volumePRMode: volumePRMode), systemImage: "checkmark")
                                 } else {
-                                    Text(option.label)
+                                    Text(option.label(volumePRMode: volumePRMode))
                                 }
                             }
                         }
@@ -121,6 +129,7 @@ struct PersonalRecordsView: View {
                     pr: pr,
                     history: historyByExerciseName[pr.exerciseName] ?? [],
                     useLbs: useLbs,
+                    volumePRMode: volumePRMode,
                     onDeleteAll: {
                         exerciseToDelete = pr
                         showingDeleteConfirmation = true
@@ -202,7 +211,7 @@ struct PersonalRecordsView: View {
                     ForEach(visibleMuscleGroups) { muscleGroup in
                         if let prs = prsByMuscleGroup[muscleGroup], !prs.isEmpty {
                             Section {
-                                PRCardRow(prs: prs, useLbs: useLbs) { pr in
+                                PRCardRow(prs: prs, useLbs: useLbs, volumePRMode: volumePRMode) { pr in
                                     selectedExercise = pr
                                 }
                                 .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 4, trailing: 0))
@@ -218,7 +227,7 @@ struct PersonalRecordsView: View {
                     let noMuscleGroup = visiblePRs.filter { $0.muscleGroup == nil }
                     if !noMuscleGroup.isEmpty {
                         Section {
-                            PRCardRow(prs: noMuscleGroup, useLbs: useLbs) { pr in
+                            PRCardRow(prs: noMuscleGroup, useLbs: useLbs, volumePRMode: volumePRMode) { pr in
                                 selectedExercise = pr
                             }
                             .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 4, trailing: 0))
@@ -288,14 +297,14 @@ private enum PRSortOption: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var label: String {
+    func label(volumePRMode: UserProfile.VolumePRMode) -> String {
         switch self {
         case .recentActivity:
             return "Recent Activity"
         case .weightPR:
             return "Heaviest Weight"
         case .volumePR:
-            return "Highest Volume"
+            return volumePRMode.sortLabel
         case .alphabetical:
             return "A-Z"
         }
@@ -320,7 +329,7 @@ struct ExercisePR: Identifiable {
     let maxRepsDate: Date?
     let maxRepsWeight: Double
 
-    // Volume PR
+    // Volume PR based on user-selected mode (per-set or total volume)
     let maxVolume: Double
     let maxVolumeDate: Date?
 
@@ -331,14 +340,27 @@ struct ExercisePR: Identifiable {
     let lastPerformed: Date
 
     /// Create an ExercisePR from exercise history entries
-    static func from(exerciseName: String, history: [ExerciseHistory], muscleGroup: Exercise.MuscleGroup? = nil) -> ExercisePR? {
-        guard let snapshot = ExercisePerformanceService.snapshot(exerciseName: exerciseName, history: history) else {
+    static func from(
+        exerciseName: String,
+        history: [ExerciseHistory],
+        muscleGroup: Exercise.MuscleGroup? = nil,
+        volumePRMode: UserProfile.VolumePRMode = .perSet
+    ) -> ExercisePR? {
+        guard let snapshot = ExercisePerformanceService.snapshot(
+            exerciseName: exerciseName,
+            history: history,
+            volumePRMode: volumePRMode
+        ) else {
             return nil
         }
-        return from(snapshot: snapshot, muscleGroup: muscleGroup)
+        return from(snapshot: snapshot, muscleGroup: muscleGroup, volumePRMode: volumePRMode)
     }
 
-    static func from(snapshot: ExercisePerformanceSnapshot, muscleGroup: Exercise.MuscleGroup? = nil) -> ExercisePR {
+    static func from(
+        snapshot: ExercisePerformanceSnapshot,
+        muscleGroup: Exercise.MuscleGroup? = nil,
+        volumePRMode: UserProfile.VolumePRMode = .perSet
+    ) -> ExercisePR {
         ExercisePR(
             exerciseName: snapshot.exerciseName,
             muscleGroup: muscleGroup,
@@ -348,7 +370,7 @@ struct ExercisePR: Identifiable {
             maxReps: snapshot.repsPR?.bestSetReps ?? 0,
             maxRepsDate: snapshot.repsPR?.performedAt,
             maxRepsWeight: snapshot.repsPR?.bestSetWeightKg ?? 0,
-            maxVolume: snapshot.volumePR?.totalVolume ?? 0,
+            maxVolume: snapshot.volumePR?.volumeValue(for: volumePRMode) ?? 0,
             maxVolumeDate: snapshot.volumePR?.performedAt,
             estimated1RM: snapshot.estimatedOneRepMax,
             totalSessions: snapshot.totalSessions,
@@ -406,13 +428,14 @@ private struct PRSectionHeader: View {
 private struct PRCardRow: View {
     let prs: [ExercisePR]
     let useLbs: Bool
+    let volumePRMode: UserProfile.VolumePRMode
     let onSelect: (ExercisePR) -> Void
 
     var body: some View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 12) {
                 ForEach(prs) { pr in
-                    ExercisePRCard(pr: pr, useLbs: useLbs) {
+                    ExercisePRCard(pr: pr, useLbs: useLbs, volumePRMode: volumePRMode) {
                         onSelect(pr)
                     }
                 }
@@ -427,6 +450,7 @@ private struct PRCardRow: View {
 private struct ExercisePRCard: View {
     let pr: ExercisePR
     let useLbs: Bool
+    let volumePRMode: UserProfile.VolumePRMode
     let onTap: () -> Void
 
     private var weightUnit: String { useLbs ? "lbs" : "kg" }
@@ -453,6 +477,14 @@ private struct ExercisePRCard: View {
             return "BW × \(pr.maxWeightReps)"
         }
         return "\(displayWeight(pr.maxWeightKg)) \(weightUnit) × \(pr.maxWeightReps)"
+    }
+
+    private var formattedVolumeWithUnit: String {
+        let suffix = volumePRMode.unitSuffix
+        if suffix.isEmpty {
+            return "\(formatVolume(pr.maxVolume)) \(weightUnit)"
+        }
+        return "\(formatVolume(pr.maxVolume)) \(weightUnit)\(suffix)"
     }
 
     var body: some View {
@@ -494,7 +526,7 @@ private struct ExercisePRCard: View {
                     HStack(spacing: 4) {
                         Image(systemName: PRMetricKind.volume.iconName)
                             .foregroundStyle(PRMetricKind.volume.color)
-                        Text("\(formatVolume(pr.maxVolume)) \(weightUnit)")
+                        Text(formattedVolumeWithUnit)
                     }
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -521,6 +553,7 @@ struct PRDetailSheet: View {
     let pr: ExercisePR
     let history: [ExerciseHistory]
     let useLbs: Bool
+    let volumePRMode: UserProfile.VolumePRMode
     let onDeleteAll: () -> Void
 
     @State private var historyToEdit: ExerciseHistory?
@@ -541,7 +574,11 @@ struct PRDetailSheet: View {
                 // Progress chart (only show if enough data)
                 if history.count >= 2 {
                     Section {
-                        ExerciseTrendsChart(history: history, useLbs: useLbs)
+                        ExerciseTrendsChart(
+                            history: history,
+                            useLbs: useLbs,
+                            volumePRMode: volumePRMode
+                        )
                     } header: {
                         Text("Progress")
                     }
@@ -549,7 +586,7 @@ struct PRDetailSheet: View {
 
                 // PR Stats - Compact 2x2 Grid
                 Section {
-                    PRStatsGrid(pr: pr, useLbs: useLbs)
+                    PRStatsGrid(pr: pr, useLbs: useLbs, volumePRMode: volumePRMode)
                 } header: {
                     Text("Personal Records")
                 }
@@ -644,6 +681,7 @@ struct PRDetailSheet: View {
 struct PRStatsGrid: View {
     let pr: ExercisePR
     let useLbs: Bool
+    let volumePRMode: UserProfile.VolumePRMode
 
     private var weightUnit: String { useLbs ? "lbs" : "kg" }
 
@@ -668,6 +706,14 @@ struct PRStatsGrid: View {
         pr.maxReps > 0 && pr.maxRepsWeight <= 0
     }
 
+    private var volumeDetail: String {
+        let suffix = volumePRMode.unitSuffix
+        if suffix.isEmpty {
+            return weightUnit
+        }
+        return "\(weightUnit)\(suffix)"
+    }
+
     var body: some View {
         Grid(horizontalSpacing: 16, verticalSpacing: 12) {
             GridRow {
@@ -690,9 +736,9 @@ struct PRStatsGrid: View {
                 PRStatCell(
                     icon: PRMetricKind.volume.iconName,
                     iconColor: PRMetricKind.volume.color,
-                    label: PRMetricKind.volume.label,
+                    label: PRMetricKind.volume.label(for: volumePRMode),
                     value: formatVolume(pr.maxVolume),
-                    detail: weightUnit
+                    detail: volumeDetail
                 )
                 if let oneRM = pr.estimated1RM {
                     PRStatCell(

@@ -23,6 +23,7 @@ struct LiveWorkoutDetailSheet: View {
     @Query(sort: \ExerciseHistory.performedAt, order: .reverse)
     private var allExerciseHistory: [ExerciseHistory]
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
+    @Query private var profiles: [UserProfile]
     @State private var isEditing = false
     @State private var selectedExercise: IdentifiableExercise?
     @State private var showingExercisePicker = false
@@ -46,6 +47,10 @@ struct LiveWorkoutDetailSheet: View {
 
     private var durationMinutes: Int {
         Int(workout.duration / 60)
+    }
+
+    private var volumePRMode: UserProfile.VolumePRMode {
+        profiles.first?.volumePRModeValue ?? .perSet
     }
 
     var body: some View {
@@ -138,12 +143,14 @@ struct LiveWorkoutDetailSheet: View {
         if let pr = ExercisePR.from(
             exerciseName: exerciseName,
             history: history,
-            muscleGroup: exercise?.targetMuscleGroup
+            muscleGroup: exercise?.targetMuscleGroup,
+            volumePRMode: volumePRMode
         ) {
             PRDetailSheet(
                 pr: pr,
                 history: history,
                 useLbs: useLbs,
+                volumePRMode: volumePRMode,
                 onDeleteAll: {}
             )
         } else {
