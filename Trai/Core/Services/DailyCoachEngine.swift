@@ -115,6 +115,7 @@ struct DailyCoachContext {
     let todayOpenedActionKeys: Set<String>
     let todayCompletedActionKeys: Set<String>
     let lastActiveWorkoutAt: Date?
+    let lastCompletedWorkoutName: String?
     let pendingReminderCandidates: [TraiPulseReminderCandidate]
     let pendingReminderCandidateScores: [String: Double]
 
@@ -151,6 +152,7 @@ struct DailyCoachContext {
         todayOpenedActionKeys: Set<String> = [],
         todayCompletedActionKeys: Set<String> = [],
         lastActiveWorkoutAt: Date? = nil,
+        lastCompletedWorkoutName: String? = nil,
         pendingReminderCandidates: [TraiPulseReminderCandidate] = [],
         pendingReminderCandidateScores: [String: Double] = [:]
     ) {
@@ -186,6 +188,7 @@ struct DailyCoachContext {
         self.todayOpenedActionKeys = todayOpenedActionKeys
         self.todayCompletedActionKeys = todayCompletedActionKeys
         self.lastActiveWorkoutAt = lastActiveWorkoutAt
+        self.lastCompletedWorkoutName = lastCompletedWorkoutName
         self.pendingReminderCandidates = pendingReminderCandidates
         self.pendingReminderCandidateScores = pendingReminderCandidateScores
     }

@@ -80,23 +80,24 @@ enum TraiPulsePolicyEngine {
             )
         }
 
+        adjusted = enforceQuestionPolicy(on: adjusted, request: request, now: now)
+        adjusted = enforceActionPolicy(on: adjusted, request: request, now: now)
+
         if shouldInjectPostWorkoutQuestion(request: request, now: now) {
-            if case .none = adjusted.prompt {
+            let followupQuestion = postWorkoutFollowupQuestion(
+                workoutName: request.context.lastCompletedWorkoutName
+            )
+            switch adjusted.prompt {
+            case .none, .some(.action), .some(.question):
                 adjusted = TraiPulseContentSnapshot(
                     source: adjusted.source,
                     surfaceType: .quickCheckin,
                     title: adjusted.title,
                     message: adjusted.message,
-                    prompt: .question(postWorkoutFollowupQuestion())
+                    prompt: .question(followupQuestion)
                 )
-            } else if case .some(.action) = adjusted.prompt {
-                adjusted = TraiPulseContentSnapshot(
-                    source: adjusted.source,
-                    surfaceType: .quickCheckin,
-                    title: adjusted.title,
-                    message: adjusted.message,
-                    prompt: .question(postWorkoutFollowupQuestion())
-                )
+            case .some(.planProposal):
+                break
             }
         }
 
@@ -131,6 +132,100 @@ enum TraiPulsePolicyEngine {
         adjusted = stampActionTelemetry(on: adjusted, ranked: ranked)
 
         return adjusted
+    }
+
+    private static func enforceQuestionPolicy(
+        on snapshot: TraiPulseContentSnapshot,
+        request: GeminiService.PulseContentRequest,
+        now: Date
+    ) -> TraiPulseContentSnapshot {
+        guard case .some(.question(let question)) = snapshot.prompt else { return snapshot }
+
+        guard request.allowQuestion else {
+            return TraiPulseContentSnapshot(
+                source: snapshot.source,
+                surfaceType: .coachNote,
+                title: snapshot.title,
+                message: snapshot.message,
+                prompt: nil
+            )
+        }
+
+        if let blocked = request.blockedQuestionID,
+           blocked.caseInsensitiveCompare(question.id) == .orderedSame {
+            return TraiPulseContentSnapshot(
+                source: snapshot.source,
+                surfaceType: .coachNote,
+                title: snapshot.title,
+                message: snapshot.message,
+                prompt: nil
+            )
+        }
+
+        if question.id == postWorkoutQuestionID {
+            guard shouldInjectPostWorkoutQuestion(request: request, now: now) else {
+                return TraiPulseContentSnapshot(
+                    source: snapshot.source,
+                    surfaceType: .coachNote,
+                    title: snapshot.title,
+                    message: snapshot.message,
+                    prompt: nil
+                )
+            }
+        }
+
+        return snapshot
+    }
+
+    private static func enforceActionPolicy(
+        on snapshot: TraiPulseContentSnapshot,
+        request: GeminiService.PulseContentRequest,
+        now: Date
+    ) -> TraiPulseContentSnapshot {
+        guard case .some(.action(let action)) = snapshot.prompt else { return snapshot }
+
+        let hasActiveWorkout = request.context.hasActiveWorkout
+        let avoidFoodLoggingTonight = shouldAvoidFoodLoggingTonight(request.context, now: now)
+        var adjustedAction = action
+
+        if hasActiveWorkout, (action.kind == .startWorkout || action.kind == .startWorkoutTemplate) {
+            var metadata = action.metadata ?? [:]
+            metadata["pulse_guardrail_locked"] = "1"
+            metadata["pulse_guardrail_reason"] = "active_workout"
+            adjustedAction = DailyCoachAction(
+                kind: .openWorkouts,
+                title: "Resume Active Workout",
+                subtitle: "Continue your in-progress session",
+                metadata: metadata
+            )
+        }
+
+        if avoidFoodLoggingTonight, (adjustedAction.kind == .logFood || adjustedAction.kind == .logFoodCamera) {
+            var metadata = adjustedAction.metadata ?? [:]
+            metadata["pulse_guardrail_locked"] = "1"
+            metadata["pulse_guardrail_reason"] = "no_food_tonight"
+            adjustedAction = DailyCoachAction(
+                kind: .openProfile,
+                title: "Set Morning Protein Plan",
+                subtitle: "Food logging paused for tonight",
+                metadata: metadata
+            )
+        }
+
+        guard adjustedAction.kind != action.kind ||
+                adjustedAction.title != action.title ||
+                adjustedAction.subtitle != action.subtitle ||
+                adjustedAction.metadata != action.metadata else {
+            return snapshot
+        }
+
+        return TraiPulseContentSnapshot(
+            source: snapshot.source,
+            surfaceType: preferredSurface(for: adjustedAction.kind),
+            title: snapshot.title,
+            message: snapshot.message,
+            prompt: .action(adjustedAction)
+        )
     }
 
     private static func applyDeterministicActionRanking(
@@ -307,10 +402,23 @@ enum TraiPulsePolicyEngine {
         return !alreadyAnsweredPulseQuestion
     }
 
-    private static func postWorkoutFollowupQuestion() -> TraiPulseQuestion {
-        TraiPulseQuestion(
+    private static func postWorkoutFollowupQuestion(workoutName: String?) -> TraiPulseQuestion {
+        let trimmedName = workoutName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prompt: String
+        if let trimmedName, !trimmedName.isEmpty {
+            let normalized = trimmedName.lowercased()
+            if normalized.hasSuffix("workout") || normalized.hasSuffix("session") {
+                prompt = "How did your \(trimmedName) feel?"
+            } else {
+                prompt = "How did your \(trimmedName) workout feel?"
+            }
+        } else {
+            prompt = "How did this workout feel?"
+        }
+
+        return TraiPulseQuestion(
             id: postWorkoutQuestionID,
-            prompt: "How did this workout feel?",
+            prompt: prompt,
             mode: .singleChoice,
             options: [
                 TraiPulseQuestionOption(title: "Felt strong"),
@@ -370,6 +478,10 @@ enum TraiPulsePolicyEngine {
     }
 
     private static func canReplaceAction(_ current: DailyCoachAction, with replacement: DailyCoachAction) -> Bool {
+        if current.metadata?["pulse_guardrail_locked"] == "1" {
+            return false
+        }
+
         if current.kind == .completeReminder, replacement.kind != .completeReminder {
             return false
         }
@@ -407,6 +519,18 @@ enum TraiPulsePolicyEngine {
             subtitle: action.subtitle,
             metadata: metadata.isEmpty ? nil : metadata
         )
+    }
+
+    private static func shouldAvoidFoodLoggingTonight(
+        _ context: DailyCoachContext,
+        now: Date
+    ) -> Bool {
+        let snapshots = context.activeSignals.activeSnapshots(now: now)
+        guard let recent = TraiPulseResponseInterpreter.recentPulseAnswer(from: snapshots, now: now) else {
+            return false
+        }
+        guard recent.questionID.contains("protein") else { return false }
+        return TraiPulseResponseInterpreter.containsNoFoodCue(recent.answer)
     }
 
     private static func weekdayName(for weekday: Int) -> String {

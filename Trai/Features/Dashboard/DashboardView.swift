@@ -450,6 +450,7 @@ struct DashboardView: View {
         )
         let lastActiveWorkoutHour = lastRecentWorkoutHour
         let lastActiveWorkoutAt = lastRecentWorkoutAt
+        let lastCompletedWorkoutName = lastRecentCompletedWorkoutName
         let planReviewRecommendation = pendingPlanReviewRecommendation
         let reminderCandidateScores = todaysReminderCandidateScores
 
@@ -486,6 +487,7 @@ struct DashboardView: View {
                 todayOpenedActionKeys: todayActionState.openedActionKeys,
                 todayCompletedActionKeys: todayActionState.completedActionKeys,
                 lastActiveWorkoutAt: lastActiveWorkoutAt,
+                lastCompletedWorkoutName: lastCompletedWorkoutName,
                 pendingReminderCandidates: todaysReminderCandidates,
                 pendingReminderCandidateScores: reminderCandidateScores
             )
@@ -1438,6 +1440,40 @@ struct DashboardView: View {
             .filter { $0 <= referenceDate }
         guard let latest = recentWorkoutDate.max() else { return nil }
         return latest
+    }
+
+    private var lastRecentCompletedWorkoutName: String? {
+        let referenceDate = Date()
+
+        let latestLoggedWorkout = allWorkouts
+            .filter { $0.loggedAt <= referenceDate }
+            .max { $0.loggedAt < $1.loggedAt }
+            .map { workout -> (date: Date, name: String) in
+                let name = workout.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                return (workout.loggedAt, name.isEmpty ? "Workout" : name)
+            }
+
+        let latestCompletedLiveWorkout = liveWorkouts
+            .compactMap { workout -> (date: Date, name: String)? in
+                guard let completedAt = workout.completedAt, completedAt <= referenceDate else {
+                    return nil
+                }
+                let rawName = workout.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                let resolvedName = rawName.isEmpty ? "\(workout.type.displayName) Workout" : rawName
+                return (completedAt, resolvedName)
+            }
+            .max { $0.date < $1.date }
+
+        switch (latestLoggedWorkout, latestCompletedLiveWorkout) {
+        case let (logged?, live?):
+            return logged.date >= live.date ? logged.name : live.name
+        case let (logged?, nil):
+            return logged.name
+        case let (nil, live?):
+            return live.name
+        case (nil, nil):
+            return nil
+        }
     }
 
     private var lastRecentWorkoutHour: Int? {

@@ -337,7 +337,14 @@ enum TraiPulseResponseInterpreter {
 
     private static func parseAnswer(from detail: String) -> String? {
         guard let answerRange = detail.range(of: "Answer:", options: .caseInsensitive) else { return nil }
-        let answer = detail[answerRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        let trailing = String(detail[answerRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let adaptationMarker = " [PulseAdaptation:"
+        let answer: String
+        if let markerRange = trailing.range(of: adaptationMarker, options: .caseInsensitive) {
+            answer = String(trailing[..<markerRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            answer = trailing
+        }
         return answer.isEmpty ? nil : answer
     }
 
