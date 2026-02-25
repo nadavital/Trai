@@ -178,7 +178,7 @@ extension Array where Element == CoachSignal {
         active(now: now).map(\.snapshot)
     }
 
-    func pulseSummary(maxCount: Int = 3, now: Date = .now) -> String {
+    func contextSummary(maxCount: Int = 3, now: Date = .now) -> String {
         let activeSignals = active(now: now).prefix(maxCount)
         guard !activeSignals.isEmpty else { return "" }
 

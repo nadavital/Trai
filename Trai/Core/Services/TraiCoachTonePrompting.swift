@@ -2,7 +2,7 @@
 //  TraiCoachTonePrompting.swift
 //  Trai
 //
-//  Shared tone utilities so Pulse and chat surfaces use one coach voice.
+//  Shared tone utilities so dashboard and chat surfaces use one coach voice.
 //
 
 import Foundation
@@ -31,7 +31,7 @@ extension TraiCoachTone {
         }
     }
 
-    nonisolated var pulseStylePrompt: String {
+    nonisolated var coachStylePrompt: String {
         switch self {
         case .encouraging:
             return "Tone should feel uplifting and confident, focusing on momentum."

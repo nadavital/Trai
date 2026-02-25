@@ -61,8 +61,7 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            // Full-screen animated gradient background
-            AnimatedGradientBackground()
+            Color.clear
 
             if showingWorkoutSetup {
                 // Embedded workout plan chat flow
@@ -114,6 +113,7 @@ struct OnboardingView: View {
             }
         }
         .animation(.smooth(duration: 0.4), value: showingWorkoutSetup)
+        .traiBackground()
     }
 
     // MARK: - Top Navigation Bar
@@ -132,8 +132,7 @@ struct OnboardingView: View {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 16, weight: .semibold))
                         Text("Back")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+                            .font(.traiLabel(14))
                     }
                     .foregroundStyle(.secondary)
                 }

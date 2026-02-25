@@ -32,7 +32,6 @@ extension ChatView {
         lastActivityTimestamp = Date().timeIntervalSince1970
         isTemporarySession = false
         temporaryMessages = []
-        pulseHandoffContext = ""
         if !silent {
             HapticManager.lightTap()
         }
@@ -46,14 +45,12 @@ extension ChatView {
             temporaryMessages = []
             isTemporarySession = true
         }
-        pulseHandoffContext = ""
     }
 
     func switchToSession(_ sessionId: UUID) {
         currentSessionIdString = sessionId.uuidString
         isTemporarySession = false
         temporaryMessages = []
-        pulseHandoffContext = ""
         HapticManager.lightTap()
     }
 
@@ -76,34 +73,6 @@ extension ChatView {
 // MARK: - Messaging
 
 extension ChatView {
-    func startPulseConversation(from handoffPrompt: String) {
-        let trimmedPrompt = handoffPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedPrompt.isEmpty else { return }
-
-        updateLastActivity()
-        pulseHandoffContext = trimmedPrompt
-
-        let previousMessages = Array(currentSessionMessages.suffix(10))
-        let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
-        let baseContext = buildFitnessContext()
-        aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.todaysCalories)/\(baseContext.dailyCalorieGoal)"
-
-        if isTemporarySession {
-            temporaryMessages.append(aiMessage)
-        } else {
-            modelContext.insert(aiMessage)
-        }
-
-        currentMessageTask = Task {
-            await performSendMessage(
-                text: "Open with a concise Pulse check-in and clear next step based on the dashboard handoff context.",
-                capturedImage: nil,
-                previousMessages: previousMessages,
-                aiMessage: aiMessage
-            )
-        }
-    }
-
     func friendlyFunctionName(_ name: String) -> String {
         switch name {
         case "suggest_food_log":
@@ -211,11 +180,6 @@ extension ChatView {
         var lastStreamRenderAt = Date.distantPast
 
         do {
-            let handoffContext = pulseHandoffContext.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !handoffContext.isEmpty {
-                pulseHandoffContext = ""
-            }
-
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
             let currentDateTime = dateFormatter.string(from: Date())
@@ -227,10 +191,7 @@ extension ChatView {
             // Filter memories by relevance to current message (reduces prompt size, improves relevance)
             let relevantMemories = activeMemories.filterForRelevance(message: text, maxCount: 10)
             let memoriesContext = relevantMemories.formatForPrompt()
-            var pulseContext = buildCompactPulseContext(now: Date())
-            if !handoffContext.isEmpty {
-                pulseContext += "\n[Dashboard handoff context]: \(handoffContext)"
-            }
+            let coachContext = buildCompactCoachContext(now: Date())
 
             // Fetch activity data from HealthKit
             let activityData = await fetchActivityData()
@@ -242,7 +203,7 @@ extension ChatView {
                 conversationHistory: historyString,
                 coachTone: coachTone,
                 memoriesContext: memoriesContext,
-                pulseContext: pulseContext,
+                coachContext: coachContext,
                 pendingSuggestion: pendingMealSuggestion?.meal,
                 isIncognitoMode: isTemporarySession,
                 activeWorkout: workoutContext,
@@ -391,8 +352,8 @@ extension ChatView {
         }
     }
 
-    private func buildCompactPulseContext(now: Date) -> String {
-        let patternProfile = TraiPulsePatternService.buildProfile(
+    private func buildCompactCoachContext(now: Date) -> String {
+        let patternProfile = TraiCoachPatternService.buildProfile(
             now: now,
             foodEntries: allFoodEntries,
             workouts: recentWorkouts,
@@ -401,7 +362,7 @@ extension ChatView {
             behaviorEvents: behaviorEvents,
             profile: profile
         )
-        let trend = TraiPulsePatternService.buildTrendSnapshot(
+        let trend = TraiCoachPatternService.buildTrendSnapshot(
             now: now,
             foodEntries: allFoodEntries,
             workouts: recentWorkouts,
@@ -443,6 +404,17 @@ extension ChatView {
             .reduce(0) { total, session in
                 total + Int(session.durationMinutes ?? 0)
             }
+        let recommendedWorkoutName: String? = {
+            guard let plan = profile?.workoutPlan else { return nil }
+            if let recommendedTemplateId = recoveryService.getRecommendedTemplateId(
+                plan: plan,
+                modelContext: modelContext
+            ) {
+                return plan.templates.first(where: { $0.id == recommendedTemplateId })?.name
+                    ?? plan.templates.first?.name
+            }
+            return plan.templates.first?.name
+        }()
         let lastActiveWorkoutHour: Int? = {
             let candidates = recentWorkouts
                 .filter { $0.loggedAt >= today && $0.loggedAt < endOfDay }
@@ -453,7 +425,7 @@ extension ChatView {
         }()
 
         let preferredWindow = patternProfile.strongestWorkoutWindow(minScore: 0.38)?.hourRange ?? (9, 21)
-        let context = TraiPulseInputContext(
+        let context = TraiCoachInputContext(
             now: now,
             hasWorkoutToday: hasWorkoutToday,
             hasActiveWorkout: hasActiveWorkout,
@@ -462,7 +434,7 @@ extension ChatView {
             proteinConsumed: Int(todaysFoodEntries.reduce(0.0) { $0 + $1.proteinGrams }.rounded()),
             proteinGoal: proteinGoal,
             readyMuscleCount: readyMuscleCount,
-            recommendedWorkoutName: nil,
+            recommendedWorkoutName: recommendedWorkoutName,
             workoutWindowStartHour: preferredWindow.0,
             workoutWindowEndHour: preferredWindow.1,
             activeSignals: activeSnapshots,
@@ -479,7 +451,7 @@ extension ChatView {
             contextPacket: nil
         )
 
-        let packet = TraiPulseContextAssembler.assemble(
+        let packet = TraiCoachContextAssembler.assemble(
             patternProfile: patternProfile,
             activeSignals: activeSnapshots,
             context: context,

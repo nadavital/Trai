@@ -23,7 +23,7 @@ struct WorkoutPlanDecisionView: View {
                     TraiLensView(size: 60, state: .idle, palette: .energy)
 
                     Text(hasWorkoutPlan ? "Your Workout Plan is Ready!" : "One More Thing...")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(.traiBold(28))
                         .multilineTextAlignment(.center)
 
                     Text(hasWorkoutPlan
@@ -61,8 +61,7 @@ struct WorkoutPlanDecisionView: View {
                         onCreatePlan()
                     } label: {
                         HStack(spacing: 12) {
-                            Image(systemName: "dumbbell.fill")
-                                .font(.title2)
+                            TraiLensIcon(size: 22, palette: .energy)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Create Workout Plan")
                                     .font(.headline)
@@ -76,8 +75,7 @@ struct WorkoutPlanDecisionView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(.rect(cornerRadius: 16))
+                        .traiCard(cornerRadius: 16, contentPadding: 0)
                     }
                     .buttonStyle(.plain)
                     .offset(y: contentVisible ? 0 : 20)
@@ -122,9 +120,7 @@ struct WorkoutPlanDecisionView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(.rect(cornerRadius: 12))
+            .traiCard(cornerRadius: 12)
 
             // Workout list
             ForEach(plan.templates.prefix(4)) { template in
@@ -151,8 +147,7 @@ struct WorkoutPlanDecisionView: View {
                 }
                 .padding(.vertical, 8)
                 .padding(.horizontal, 12)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(.rect(cornerRadius: 12))
+                .traiCard(cornerRadius: 12, contentPadding: 0)
             }
 
             if plan.templates.count > 4 {

@@ -67,6 +67,10 @@ struct WorkoutsView: View {
     private static let workoutHistoryWindowDays = 120
     private static let workoutHistoryFetchLimit = 48
     private static let maxHistoryDayGroups = 56
+    private static let sectionSnapshotUserDefaultsKey = "workouts_tab_cached_sections_v1"
+    private static let sectionSnapshotTTLSeconds: TimeInterval = 7 * 24 * 60 * 60
+    private static let recoveryReadyThresholdHours: Double = 48
+    private static let recoveryRecoveringThresholdHours: Double = 24
     private static var initialHistoryRefreshDelayMilliseconds: Int {
         AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 2300 : 420
     }
@@ -113,6 +117,12 @@ struct WorkoutsView: View {
         )
         liveWorkoutDescriptor.fetchLimit = Self.workoutHistoryFetchLimit
         _allLiveWorkouts = Query(liveWorkoutDescriptor)
+
+        if let cachedSnapshot = Self.loadCachedSectionSnapshot(now: now) {
+            _recoveryInfo = State(initialValue: Self.recoveryInfo(from: cachedSnapshot, now: now))
+            _templateScores = State(initialValue: Self.templateScores(from: cachedSnapshot))
+            _recommendedTemplateId = State(initialValue: Self.recommendedTemplateId(from: cachedSnapshot))
+        }
     }
 
     // MARK: - Computed Properties
@@ -239,6 +249,7 @@ struct WorkoutsView: View {
                 tabActivationPolicy.activate()
                 isWorkoutsTabVisible = true
                 trackOpenWorkoutsIfNeeded()
+                seedHistoryCachesFromCurrentQueriesIfNeeded()
                 schedulePendingRefreshesIfNeeded()
                 scheduleCloudKitHistoryReconciliationIfNeeded()
             }
@@ -246,10 +257,12 @@ struct WorkoutsView: View {
                 markRecoveryRefreshNeeded(delayMilliseconds: 140)
             }
             .onChange(of: workoutsRefreshFingerprint) {
+                seedHistoryCachesFromCurrentQueriesIfNeeded()
                 markHistoryRefreshNeeded()
                 markRecoveryRefreshNeeded()
             }
             .onChange(of: liveWorkoutsRefreshFingerprint) {
+                seedHistoryCachesFromCurrentQueriesIfNeeded()
                 markHistoryRefreshNeeded()
                 markRecoveryRefreshNeeded(forceRefresh: true)
             }
@@ -391,6 +404,7 @@ struct WorkoutsView: View {
             recommendedTemplateId = nil
             hasPendingRecoveryRefresh = false
             pendingRecoveryRefreshShouldForce = false
+            persistCachedSectionSnapshot()
             recordWorkoutsLatencyProbe(
                 "loadRecoveryAndScoresNoPlan",
                 startedAt: startedAt,
@@ -419,6 +433,7 @@ struct WorkoutsView: View {
         recommendedTemplateId = bestTemplateId ?? plan.templates.first?.id
         hasPendingRecoveryRefresh = false
         pendingRecoveryRefreshShouldForce = false
+        persistCachedSectionSnapshot()
         recordWorkoutsLatencyProbe(
             "loadRecoveryAndScores",
             startedAt: startedAt,
@@ -468,6 +483,134 @@ struct WorkoutsView: View {
                 "groupedLiveDays": cachedLiveWorkoutsByDate.count
             ]
         )
+    }
+
+    private func seedHistoryCachesFromCurrentQueriesIfNeeded() {
+        guard cachedWorkoutsByDate.isEmpty, cachedLiveWorkoutsByDate.isEmpty else { return }
+
+        let completedInAppWorkouts = completedLiveWorkouts
+        guard !allWorkouts.isEmpty || !completedInAppWorkouts.isEmpty else { return }
+
+        let mergedHealthKitIDs = Set(completedInAppWorkouts.compactMap(\.mergedHealthKitWorkoutID))
+        let filteredWorkouts = allWorkouts.filter { workout in
+            guard let healthKitWorkoutID = workout.healthKitWorkoutID else { return true }
+            return !mergedHealthKitIDs.contains(healthKitWorkoutID)
+        }
+
+        cachedWorkoutsByDate = groupWorkoutsByDay(
+            filteredWorkouts,
+            maxGroups: Self.maxHistoryDayGroups
+        )
+        cachedLiveWorkoutsByDate = groupLiveWorkoutsByDay(
+            completedInAppWorkouts,
+            maxGroups: Self.maxHistoryDayGroups
+        )
+    }
+
+    private func persistCachedSectionSnapshot() {
+        let snapshot = CachedSectionSnapshot(
+            generatedAt: Date(),
+            recovery: recoveryInfo.map { info in
+                CachedSectionSnapshot.RecoveryInfoItem(
+                    muscleGroupRawValue: info.muscleGroup.rawValue,
+                    lastTrainedAt: info.lastTrainedAt
+                )
+            },
+            templateScores: templateScores.map { entry in
+                CachedSectionSnapshot.TemplateScoreItem(
+                    templateId: entry.key.uuidString,
+                    score: entry.value.score,
+                    reason: entry.value.reason
+                )
+            },
+            recommendedTemplateId: recommendedTemplateId?.uuidString
+        )
+
+        guard let data = try? JSONEncoder().encode(snapshot),
+              let json = String(data: data, encoding: .utf8) else {
+            return
+        }
+        UserDefaults.standard.set(json, forKey: Self.sectionSnapshotUserDefaultsKey)
+    }
+
+    private static func loadCachedSectionSnapshot(now: Date) -> CachedSectionSnapshot? {
+        guard let json = UserDefaults.standard.string(forKey: sectionSnapshotUserDefaultsKey),
+              let data = json.data(using: .utf8),
+              let snapshot = try? JSONDecoder().decode(CachedSectionSnapshot.self, from: data) else {
+            return nil
+        }
+
+        let age = now.timeIntervalSince(snapshot.generatedAt)
+        guard age >= 0, age <= sectionSnapshotTTLSeconds else { return nil }
+        return snapshot
+    }
+
+    private static func recoveryInfo(
+        from snapshot: CachedSectionSnapshot,
+        now: Date
+    ) -> [MuscleRecoveryService.MuscleRecoveryInfo] {
+        snapshot.recovery.compactMap { item in
+            guard let muscleGroup = LiveWorkout.MuscleGroup(rawValue: item.muscleGroupRawValue) else {
+                return nil
+            }
+
+            let hoursSinceTraining = item.lastTrainedAt.map {
+                max(0, now.timeIntervalSince($0) / 3600)
+            }
+            return MuscleRecoveryService.MuscleRecoveryInfo(
+                muscleGroup: muscleGroup,
+                status: recoveryStatus(hoursSinceTraining: hoursSinceTraining),
+                lastTrainedAt: item.lastTrainedAt,
+                hoursSinceTraining: hoursSinceTraining
+            )
+        }
+    }
+
+    private static func recoveryStatus(hoursSinceTraining: Double?) -> MuscleRecoveryService.RecoveryStatus {
+        guard let hoursSinceTraining else {
+            return .ready
+        }
+        if hoursSinceTraining >= recoveryReadyThresholdHours {
+            return .ready
+        }
+        if hoursSinceTraining >= recoveryRecoveringThresholdHours {
+            return .recovering
+        }
+        return .tired
+    }
+
+    private static func templateScores(
+        from snapshot: CachedSectionSnapshot
+    ) -> [UUID: (score: Double, reason: String)] {
+        var scores: [UUID: (score: Double, reason: String)] = [:]
+        for item in snapshot.templateScores {
+            guard let id = UUID(uuidString: item.templateId) else { continue }
+            scores[id] = (item.score, item.reason)
+        }
+        return scores
+    }
+
+    private static func recommendedTemplateId(from snapshot: CachedSectionSnapshot) -> UUID? {
+        guard let rawValue = snapshot.recommendedTemplateId else { return nil }
+        return UUID(uuidString: rawValue)
+    }
+
+    private struct CachedSectionSnapshot: Codable {
+        struct RecoveryInfoItem: Codable {
+            let muscleGroupRawValue: String
+            let lastTrainedAt: Date?
+        }
+
+        struct TemplateScoreItem: Codable {
+            let templateId: String
+            let score: Double
+            let reason: String
+        }
+
+        let generatedAt: Date
+        let recovery: [RecoveryInfoItem]
+        let templateScores: [TemplateScoreItem]
+        let recommendedTemplateId: String?
     }
 
     private func historyWindowStartDate(now: Date = Date()) -> Date {

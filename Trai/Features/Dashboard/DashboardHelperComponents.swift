@@ -68,8 +68,6 @@ struct QuickActionButton: View {
     let color: Color
     let action: () -> Void
 
-    @State private var isPressed = false
-
     var body: some View {
         Button {
             HapticManager.lightTap()
@@ -97,12 +95,15 @@ struct QuickActionButton: View {
                     Text(title)
                         .font(.traiLabel())
                         .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
 
-                    if let subtitle {
+                    if let subtitle, !subtitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(subtitle)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
                 }
             }
@@ -112,6 +113,50 @@ struct QuickActionButton: View {
             .clipShape(.rect(cornerRadius: TraiRadius.medium))
         }
         .buttonStyle(TraiPressStyle(scale: 0.93))
+    }
+}
+
+struct ChatWithTraiCard: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            HapticManager.lightTap()
+            action()
+        } label: {
+            HStack(spacing: TraiSpacing.sm) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            TraiGradient.actionVibrant(
+                                .accentColor,
+                                .accentColor.opacity(0.7)
+                            )
+                        )
+                        .frame(width: 30, height: 30)
+
+                    Image(systemName: "circle.hexagongrid.circle")
+                        .font(.caption)
+                        .bold()
+                        .foregroundStyle(.white)
+                }
+
+                Text("Chat with Trai")
+                    .font(.traiHeadline(14))
+
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(Color.accentColor)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                Capsule()
+                    .fill(Color.accentColor.opacity(0.12))
+            )
+            .shadow(color: Color.accentColor.opacity(0.20), radius: 6, y: 2)
+        }
+        .buttonStyle(TraiPressStyle(scale: 0.96))
     }
 }
 

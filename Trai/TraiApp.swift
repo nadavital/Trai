@@ -39,6 +39,7 @@ struct TraiApp: App {
     private let minimumHealthKitSyncInterval: TimeInterval = 6 * 60 * 60
     private let initialHealthKitSyncLookbackDays = 30
     private let incrementalHealthKitSyncLookbackDays = 10
+    private let brandAccent = Color("AccentColor")
     private static let swiftDataStoreFilename = "default.store"
     private static let reminderBackgroundRefreshTaskIdentifier = "Nadav.Trai.reminder-refresh"
 
@@ -128,6 +129,8 @@ struct TraiApp: App {
         WindowGroup {
             if isRunningTests {
                 ContentView(deepLinkDestination: $deepLinkDestination)
+                    .tint(brandAccent)
+                    .accentColor(brandAccent)
                     .environment(notificationService)
                     .environment(\.showRemindersFromNotification, $showRemindersFromNotification)
                     .onOpenURL { url in
@@ -135,6 +138,8 @@ struct TraiApp: App {
                     }
             } else {
                 ContentView(deepLinkDestination: $deepLinkDestination)
+                    .tint(brandAccent)
+                    .accentColor(brandAccent)
                     .environment(notificationService)
                     .environment(healthKitService)
                     .environment(\.showRemindersFromNotification, $showRemindersFromNotification)
@@ -566,9 +571,23 @@ extension TraiApp {
 @MainActor
 private func seedUITestProfileIfNeeded(modelContainer: ModelContainer) {
     let context = modelContainer.mainContext
-    let profileDescriptor = FetchDescriptor<UserProfile>()
-    let existingCount = (try? context.fetchCount(profileDescriptor)) ?? 0
-    guard existingCount == 0 else { return }
+    var completedProfileDescriptor = FetchDescriptor<UserProfile>(
+        predicate: #Predicate<UserProfile> { $0.hasCompletedOnboarding == true }
+    )
+    completedProfileDescriptor.fetchLimit = 1
+    let hasCompletedProfile = ((try? context.fetch(completedProfileDescriptor)) ?? []).isEmpty == false
+    guard !hasCompletedProfile else { return }
+
+    var anyProfileDescriptor = FetchDescriptor<UserProfile>()
+    anyProfileDescriptor.fetchLimit = 1
+    if let existingProfile = ((try? context.fetch(anyProfileDescriptor)) ?? []).first {
+        existingProfile.hasCompletedOnboarding = true
+        if existingProfile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            existingProfile.name = "UI Test User"
+        }
+        try? context.save()
+        return
+    }
 
     let profile = UserProfile()
     profile.name = "UI Test User"

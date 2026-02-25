@@ -85,9 +85,7 @@ struct ChatView: View {
     @AppStorage("lastChatActivityDate") var lastActivityTimestamp: Double = 0
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest: Bool = false
     @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest: Bool = false
-    @AppStorage("pendingPulseSeedPrompt") var pendingPulseSeedPrompt: String = ""
     @AppStorage(TraiCoachTone.storageKey) var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
-    @State var pulseHandoffContext: String = ""
     @State var isTemporarySession = false
     @State var temporaryMessages: [ChatMessage] = []
     @State var processingMealSuggestionKeys: Set<MealSuggestionKey> = []
@@ -272,7 +270,7 @@ struct ChatView: View {
 
     var pendingMealSuggestion: (message: ChatMessage, meal: SuggestedFoodEntry)? {
         for message in currentSessionMessages.reversed() {
-            if message.hasPendingMealSuggestion, let meal = message.suggestedMeal {
+            if let meal = message.pendingMealSuggestions.first?.meal {
                 return (message, meal)
             }
         }
@@ -305,7 +303,6 @@ struct ChatView: View {
     private var hasPendingStartupActions: Bool {
         pendingPlanReviewRequest
             || pendingWorkoutPlanReviewRequest
-            || !pendingPulseSeedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var isChatTabActive: Bool {
@@ -848,7 +845,6 @@ struct ChatView: View {
                 suppressAutomaticMessageCacheRebuild = true
                 checkSessionTimeout()
                 checkForPendingPlanReview()
-                checkForPendingPulsePrompt()
                 if !hadPendingStartupActions {
                     scheduleDeferredPlanRecommendationIfNeeded()
                 }

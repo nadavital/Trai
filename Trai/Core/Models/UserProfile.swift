@@ -131,24 +131,8 @@ final class UserProfile {
 
     var createdAt: Date = Date()
     var hasCompletedOnboarding: Bool = false
-
-    @Transient
-    private var cachedEnabledMacrosJSONSnapshot: String?
-
-    @Transient
-    private var cachedEnabledMacrosValue: Set<MacroType> = MacroType.defaultEnabled
-
-    @Transient
-    private var cachedWorkoutPlanJSONSnapshot: String?
-
-    @Transient
-    private var cachedWorkoutPlanValue: WorkoutPlan?
-
-    @Transient
-    private var cachedPlanAssessmentJSONSnapshot: String?
-
-    @Transient
-    private var cachedPlanAssessmentValue: PlanAssessmentState = PlanAssessmentState()
+    @Transient private var cachedWorkoutPlanJSONSnapshot: String?
+    @Transient private var cachedWorkoutPlanValue: WorkoutPlan?
 
     init() {}
 
@@ -375,22 +359,13 @@ extension UserProfile {
     /// The set of macros the user wants to track
     var enabledMacros: Set<MacroType> {
         get {
-            if cachedEnabledMacrosJSONSnapshot == enabledMacrosJSON {
-                return cachedEnabledMacrosValue
-            }
             if enabledMacrosJSON.isEmpty {
-                cachedEnabledMacrosValue = MacroType.defaultEnabled
-                cachedEnabledMacrosJSONSnapshot = enabledMacrosJSON
-                return cachedEnabledMacrosValue
+                return MacroType.defaultEnabled
             }
-            cachedEnabledMacrosValue = Set(jsonString: enabledMacrosJSON)
-            cachedEnabledMacrosJSONSnapshot = enabledMacrosJSON
-            return cachedEnabledMacrosValue
+            return Set(jsonString: enabledMacrosJSON)
         }
         set {
             enabledMacrosJSON = newValue.jsonString
-            cachedEnabledMacrosValue = newValue
-            cachedEnabledMacrosJSONSnapshot = enabledMacrosJSON
         }
     }
 
@@ -446,13 +421,17 @@ extension UserProfile {
             return cachedWorkoutPlanValue
         }
         set {
-            let encoded = newValue?.toJSON()
-            savedWorkoutPlanJSON = encoded
-            cachedWorkoutPlanValue = newValue
-            cachedWorkoutPlanJSONSnapshot = encoded
-            if newValue != nil {
-                workoutPlanGeneratedAt = Date()
+            guard let newValue else {
+                savedWorkoutPlanJSON = nil
+                cachedWorkoutPlanJSONSnapshot = nil
+                cachedWorkoutPlanValue = nil
+                return
             }
+            let encoded = newValue.toJSON()
+            savedWorkoutPlanJSON = encoded
+            cachedWorkoutPlanJSONSnapshot = encoded
+            cachedWorkoutPlanValue = newValue
+            workoutPlanGeneratedAt = Date()
         }
     }
 
@@ -516,26 +495,17 @@ extension UserProfile {
     /// The user's plan assessment state (for proactive plan review recommendations)
     var planAssessmentState: PlanAssessmentState {
         get {
-            if cachedPlanAssessmentJSONSnapshot == planAssessmentStateJSON {
-                return cachedPlanAssessmentValue
-            }
             guard let json = planAssessmentStateJSON,
                   let data = json.data(using: .utf8),
                   let state = try? JSONDecoder().decode(PlanAssessmentState.self, from: data) else {
-                cachedPlanAssessmentValue = PlanAssessmentState()
-                cachedPlanAssessmentJSONSnapshot = planAssessmentStateJSON
-                return cachedPlanAssessmentValue
+                return PlanAssessmentState()
             }
-            cachedPlanAssessmentValue = state
-            cachedPlanAssessmentJSONSnapshot = json
             return state
         }
         set {
             if let data = try? JSONEncoder().encode(newValue),
                let json = String(data: data, encoding: .utf8) {
                 planAssessmentStateJSON = json
-                cachedPlanAssessmentValue = newValue
-                cachedPlanAssessmentJSONSnapshot = json
             }
         }
     }

@@ -33,8 +33,9 @@ final class FoodEntry {
     /// Local storage key for image data (blob is stored on-device, not in CloudKit).
     var imageStorageKey: String?
 
-    /// Legacy CloudKit-backed image blob. Kept for one-way migration to local store.
-    @Attribute(.externalStorage, originalName: "imageData") private var legacyImageData: Data?
+    /// Legacy CloudKit-backed image blob. No `originalName` mapping because CloudKit stores
+    /// cannot perform in-place property renames during migration.
+    @Attribute(.externalStorage) private var legacyImageData: Data?
 
     /// Image data from photo taken of the food (local-only).
     @Transient

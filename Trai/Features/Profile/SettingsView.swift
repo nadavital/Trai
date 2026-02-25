@@ -79,7 +79,7 @@ struct SettingsView: View {
             } header: {
                 Text("Trai")
             } footer: {
-                Text("Pulse and Trai guidance will adapt to this tone while still learning from your behavior.")
+                Text("Trai guidance will adapt to this tone while still learning from your behavior.")
             }
 
             // MARK: - Nutrition Plan Section

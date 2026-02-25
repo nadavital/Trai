@@ -48,8 +48,8 @@ extension GeminiService {
             prompt += buildMemoriesSection(memoriesContext: context.memoriesContext)
         }
 
-        if !context.pulseContext.isEmpty {
-            prompt += buildPulseContextSection(pulseContext: context.pulseContext)
+        if !context.coachContext.isEmpty {
+            prompt += buildCoachContextSection(coachContext: context.coachContext)
         }
 
         if let pending = context.pendingSuggestion {
@@ -119,11 +119,11 @@ extension GeminiService {
         """
     }
 
-    private func buildPulseContextSection(pulseContext: String) -> String {
+    private func buildCoachContextSection(coachContext: String) -> String {
         """
 
-        RECENT SHORT-TERM CONTEXT (PULSE):
-        \(pulseContext)
+        RECENT SHORT-TERM CONTEXT:
+        \(coachContext)
 
         Treat this as temporary context with higher near-term priority than general advice.
         """

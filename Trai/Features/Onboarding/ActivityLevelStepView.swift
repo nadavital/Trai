@@ -78,14 +78,14 @@ struct ActivityLevelStepView: View {
             ZStack {
                 // Animated rings
                 Circle()
-                    .stroke(Color.orange.opacity(0.15), lineWidth: 2)
+                    .stroke(Color.accentColor.opacity(0.15), lineWidth: 2)
                     .frame(width: 95, height: 95)
                     .scaleEffect(headerVisible ? 1 : 0.5)
 
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Color.orange.opacity(0.15), Color.yellow.opacity(0.1)],
+                            colors: [Color.accentColor.opacity(0.16), TraiColors.coral.opacity(0.12)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -94,14 +94,14 @@ struct ActivityLevelStepView: View {
 
                 Image(systemName: "figure.run")
                     .font(.system(size: 36))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.accent)
                     .symbolRenderingMode(.hierarchical)
                     .offset(x: iconBounce ? 2 : 0)
             }
             .scaleEffect(headerVisible ? 1 : 0.8)
 
             Text("Activity Level")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.traiBold(28))
 
             Text("How active are you in a typical week?")
                 .font(.subheadline)
@@ -190,11 +190,7 @@ struct ActivityLevelStepView: View {
                     }
                 }
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Color(.secondarySystemBackground))
-        )
+        .traiCard(cornerRadius: 18)
         .overlay(
             RoundedRectangle(cornerRadius: 18)
                 .strokeBorder(
@@ -258,7 +254,7 @@ struct ActivityLevelRow: View {
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(.accent)
                 }
             }
             .padding(.horizontal, 14)
@@ -308,11 +304,11 @@ struct ActivityLevelRow: View {
 
     private var colorForLevel: Color {
         switch level {
-        case .sedentary: .gray
-        case .light: .blue
-        case .moderate: .green
-        case .active: .orange
-        case .veryActive: .red
+        case .sedentary: Color(.systemGray3)
+        case .light: TraiColors.coral
+        case .moderate: .accentColor
+        case .active: TraiColors.flame
+        case .veryActive: TraiColors.blaze
         }
     }
 }

@@ -3,7 +3,7 @@
 //  Trai
 //
 //  Interaction primitives: entrance animations, animated numbers,
-//  gradient text, celebration pulse, and shimmer loading.
+//  gradient text, celebration ripple, and shimmer loading.
 //
 
 import SwiftUI
@@ -98,10 +98,10 @@ extension View {
     }
 }
 
-// MARK: - Celebration Pulse
+// MARK: - Celebration Ripple
 
 /// Expanding ring + haptic, triggered on goal completions.
-struct TraiCelebrationPulse: View {
+struct TraiCelebrationRipple: View {
     let isActive: Bool
     var color: Color = TraiColors.flame
 

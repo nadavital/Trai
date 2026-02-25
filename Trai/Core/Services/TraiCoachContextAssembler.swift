@@ -1,24 +1,24 @@
 //
-//  TraiPulseContextAssembler.swift
+//  TraiCoachContextAssembler.swift
 //  Trai
 //
-//  Builds compact, ranked context packets for Pulse and chat prompts.
+//  Builds compact, ranked context packets for coach and chat prompts.
 //
 
 import Foundation
 
-enum TraiPulseContextAssembler {
+enum TraiCoachContextAssembler {
     private struct RankedSnippet {
         let text: String
         let utility: Double
     }
 
     static func assemble(
-        patternProfile: TraiPulsePatternProfile,
+        patternProfile: TraiCoachPatternProfile,
         activeSignals: [CoachSignalSnapshot],
-        context: TraiPulseInputContext,
+        context: TraiCoachInputContext,
         tokenBudget: Int = 700
-    ) -> TraiPulseContextPacket {
+    ) -> TraiCoachContextPacket {
         let proteinRemaining = max(context.proteinGoal - context.proteinConsumed, 0)
         let calorieRemaining = max(context.calorieGoal - context.caloriesConsumed, 0)
 
@@ -76,7 +76,7 @@ enum TraiPulseContextAssembler {
     }
 
     private static func primaryGoal(
-        context: TraiPulseInputContext,
+        context: TraiCoachInputContext,
         proteinRemaining: Int,
         calorieRemaining: Int
     ) -> String {
@@ -92,7 +92,7 @@ enum TraiPulseContextAssembler {
         return "Protect consistency and recovery for tomorrow"
     }
 
-    private static func rankedConstraints(from signals: [CoachSignalSnapshot], context: TraiPulseInputContext) -> [RankedSnippet] {
+    private static func rankedConstraints(from signals: [CoachSignalSnapshot], context: TraiCoachInputContext) -> [RankedSnippet] {
         var ranked = signals
             .sorted { lhs, rhs in
                 (lhs.severity * lhs.confidence) > (rhs.severity * rhs.confidence)
@@ -178,7 +178,7 @@ enum TraiPulseContextAssembler {
         return ranked.sorted { $0.utility > $1.utility }
     }
 
-    private static func rankedPatterns(from profile: TraiPulsePatternProfile) -> [RankedSnippet] {
+    private static func rankedPatterns(from profile: TraiCoachPatternProfile) -> [RankedSnippet] {
         var ranked: [RankedSnippet] = []
 
         if let window = profile.strongestWorkoutWindow(minScore: 0.32),
@@ -223,7 +223,7 @@ enum TraiPulseContextAssembler {
         return ranked.sorted { $0.utility > $1.utility }
     }
 
-    private static func rankedAnomalies(context: TraiPulseInputContext) -> [RankedSnippet] {
+    private static func rankedAnomalies(context: TraiCoachInputContext) -> [RankedSnippet] {
         guard let trend = context.trend else { return [] }
 
         var anomalies: [RankedSnippet] = []
@@ -301,8 +301,8 @@ enum TraiPulseContextAssembler {
     }
 
     private static func rankedActions(
-        context: TraiPulseInputContext,
-        patternProfile: TraiPulsePatternProfile,
+        context: TraiCoachInputContext,
+        patternProfile: TraiCoachPatternProfile,
         proteinRemaining: Int
     ) -> [RankedSnippet] {
         let workoutTitle = context.recommendedWorkoutName ?? "recommended workout"
@@ -457,7 +457,7 @@ enum TraiPulseContextAssembler {
 
         if let planReviewTrigger = context.planReviewTrigger, !planReviewTrigger.isEmpty {
             let reviewAction: String
-            let affinityKind: TraiPulseAction.Kind
+            let affinityKind: TraiCoachAction.Kind
             switch planReviewTrigger {
             case "weight_change", "weight_plateau":
                 reviewAction = "Review Nutrition Plan"
@@ -509,8 +509,8 @@ enum TraiPulseContextAssembler {
     }
 
     private static func rankedReminderCandidates(
-        context: TraiPulseInputContext
-    ) -> [(candidate: TraiPulseReminderCandidate, score: Double)] {
+        context: TraiCoachInputContext
+    ) -> [(candidate: TraiCoachReminderCandidate, score: Double)] {
         guard !context.pendingReminderCandidates.isEmpty else { return [] }
 
         return context.pendingReminderCandidates
@@ -550,7 +550,7 @@ enum TraiPulseContextAssembler {
         patterns: [String],
         anomalies: [String],
         actions: [String]
-    ) -> TraiPulseContextPacket {
+    ) -> TraiCoachContextPacket {
         var lines: [String] = []
         lines.append("goal=\(goal)")
 
@@ -569,7 +569,7 @@ enum TraiPulseContextAssembler {
 
         let summary = lines.joined(separator: "\n")
 
-        return TraiPulseContextPacket(
+        return TraiCoachContextPacket(
             goal: goal,
             constraints: constraints,
             patterns: patterns,

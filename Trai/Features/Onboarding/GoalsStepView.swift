@@ -69,32 +69,11 @@ struct GoalsStepView: View {
 
     private var headerSection: some View {
         VStack(spacing: 12) {
-            ZStack {
-                // Animated rings
-                Circle()
-                    .stroke(Color.green.opacity(0.15), lineWidth: 2)
-                    .frame(width: 95, height: 95)
-                    .scaleEffect(headerVisible ? 1 : 0.5)
-
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.green.opacity(0.15), Color.mint.opacity(0.1)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 80, height: 80)
-
-                Image(systemName: "target")
-                    .font(.system(size: 36))
-                    .foregroundStyle(.green)
-                    .symbolRenderingMode(.hierarchical)
-            }
+            TraiLensView(size: 54, state: .idle, palette: .energy)
             .scaleEffect(headerVisible ? 1 : 0.8)
 
             Text("Your Goals")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.traiBold(28))
 
             Text("What would you like to achieve?")
                 .font(.subheadline)
@@ -132,7 +111,7 @@ struct GoalsStepView: View {
                     Label("Anything else?", systemImage: "sparkles")
                         .font(.subheadline)
                         .fontWeight(.semibold)
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(.accent)
 
                     Spacer()
 
@@ -180,11 +159,7 @@ struct GoalsStepView: View {
                     }
                 }
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Color(.secondarySystemBackground))
-        )
+        .traiCard(cornerRadius: 18)
         .overlay(
             RoundedRectangle(cornerRadius: 18)
                 .strokeBorder(

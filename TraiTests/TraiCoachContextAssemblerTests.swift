@@ -1,7 +1,7 @@
 import XCTest
 @testable import Trai
 
-final class TraiPulseContextAssemblerTests: XCTestCase {
+final class TraiCoachContextAssemblerTests: XCTestCase {
     func testAssembleAddsNutritionPlanActionForWeightChangeTrigger() {
         let context = makeContext(
             planReviewTrigger: "weight_change",
@@ -9,7 +9,7 @@ final class TraiPulseContextAssemblerTests: XCTestCase {
             weightRecentRangeKg: 2.6
         )
 
-        let packet = TraiPulseContextAssembler.assemble(
+        let packet = TraiCoachContextAssembler.assemble(
             patternProfile: .empty,
             activeSignals: [],
             context: context
@@ -20,9 +20,9 @@ final class TraiPulseContextAssemblerTests: XCTestCase {
 
     func testAssembleRanksReminderCandidatesByScoreThenTime() {
         let candidates = [
-            TraiPulseReminderCandidate(id: "a", title: "Hydrate", time: "09:30 AM", hour: 9, minute: 30),
-            TraiPulseReminderCandidate(id: "b", title: "Stretch", time: "08:15 AM", hour: 8, minute: 15),
-            TraiPulseReminderCandidate(id: "c", title: "Walk", time: "10:00 AM", hour: 10, minute: 0)
+            TraiCoachReminderCandidate(id: "a", title: "Hydrate", time: "09:30 AM", hour: 9, minute: 30),
+            TraiCoachReminderCandidate(id: "b", title: "Stretch", time: "08:15 AM", hour: 8, minute: 15),
+            TraiCoachReminderCandidate(id: "c", title: "Walk", time: "10:00 AM", hour: 10, minute: 0)
         ]
 
         let context = makeContext(
@@ -34,7 +34,7 @@ final class TraiPulseContextAssemblerTests: XCTestCase {
             ]
         )
 
-        let packet = TraiPulseContextAssembler.assemble(
+        let packet = TraiCoachContextAssembler.assemble(
             patternProfile: .empty,
             activeSignals: [],
             context: context
@@ -46,7 +46,7 @@ final class TraiPulseContextAssemblerTests: XCTestCase {
     }
 
     func testAssemblePrioritizesWorkoutGoalWhenWorkoutNotStarted() {
-        let context = TraiPulseInputContext(
+        let context = TraiCoachInputContext(
             now: Date(timeIntervalSince1970: 1_736_208_000),
             hasWorkoutToday: false,
             hasActiveWorkout: false,
@@ -65,7 +65,7 @@ final class TraiPulseContextAssemblerTests: XCTestCase {
             contextPacket: nil
         )
 
-        let packet = TraiPulseContextAssembler.assemble(
+        let packet = TraiCoachContextAssembler.assemble(
             patternProfile: .empty,
             activeSignals: [],
             context: context
@@ -78,10 +78,10 @@ final class TraiPulseContextAssemblerTests: XCTestCase {
         planReviewTrigger: String? = nil,
         planReviewDaysSince: Int? = nil,
         weightRecentRangeKg: Double? = nil,
-        pendingReminderCandidates: [TraiPulseReminderCandidate] = [],
+        pendingReminderCandidates: [TraiCoachReminderCandidate] = [],
         pendingReminderCandidateScores: [String: Double] = [:]
-    ) -> TraiPulseInputContext {
-        TraiPulseInputContext(
+    ) -> TraiCoachInputContext {
+        TraiCoachInputContext(
             now: Date(timeIntervalSince1970: 1_736_208_000),
             hasWorkoutToday: true,
             hasActiveWorkout: false,

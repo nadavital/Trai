@@ -67,7 +67,6 @@ public struct TraiLensView: View {
     let palette: TraiLensPalette
 
     @State private var particles: [TraiParticle] = []
-    @State private var breathingPhase: CGFloat = 0
     @State private var currentBlur: CGFloat = 10
     @State private var currentSpeedMult: CGFloat = 0.5
 
@@ -76,14 +75,16 @@ public struct TraiLensView: View {
     }
 
     private var animationCadence: TimeInterval {
-        // Decorative animation can run below display-link speed to cut main-thread churn.
-        size < 80 ? (1.0 / 24.0) : (1.0 / 30.0)
+        // Keep cadence consistent to avoid shimmer/flicker at small icon sizes.
+        1.0 / 30.0
     }
 
     public init(size: CGFloat = 120, state: TraiLensState = .idle, palette: TraiLensPalette = .energy) {
         self.size = size
         self.state = state
         self.palette = palette
+        _currentBlur = State(initialValue: state.blurAmount(forSize: size))
+        _currentSpeedMult = State(initialValue: state.speedMultiplier)
     }
 
     func createParticles() {
@@ -129,10 +130,9 @@ public struct TraiLensView: View {
                     .glassEffect(.regular, in: .circle)
             }
             .frame(width: size, height: size)
-            .scaleEffect(1.0 + breathingOffset)
-            .onChange(of: timeline.date) { _, newDate in
+            .scaleEffect(1.0 + breathingOffset(at: timeline.date))
+            .onChange(of: timeline.date) { _, _ in
                 updateParticles()
-                breathingPhase = newDate.timeIntervalSinceReferenceDate
             }
             .onChange(of: palette) { _, _ in
                 createParticles()
@@ -153,8 +153,8 @@ public struct TraiLensView: View {
         // Smooth interpolation for blur and speed
         let targetBlur = state.blurAmount(forSize: size)
         let targetSpeed = state.speedMultiplier
-        currentBlur += (targetBlur - currentBlur) * 0.1
-        currentSpeedMult += (targetSpeed - currentSpeedMult) * 0.1
+        currentBlur += (targetBlur - currentBlur) * 0.08
+        currentSpeedMult += (targetSpeed - currentSpeedMult) * 0.08
 
         // Dynamic population adjustment
         let targetCount = state.particleCount(forSize: size)
@@ -173,20 +173,23 @@ public struct TraiLensView: View {
         }
 
         // Update particle positions
+        let sizeMotionScale: CGFloat = size < 70 ? 0.85 : 1.0
         for i in particles.indices {
-            particles[i].x += particles[i].baseSpeedX * currentSpeedMult
-            particles[i].y += particles[i].baseSpeedY * currentSpeedMult
+            particles[i].x += particles[i].baseSpeedX * currentSpeedMult * sizeMotionScale
+            particles[i].y += particles[i].baseSpeedY * currentSpeedMult * sizeMotionScale
 
             // Wrap around for smooth flow
-            if particles[i].x < -0.2 { particles[i].x = 1.2 }
-            if particles[i].x > 1.2 { particles[i].x = -0.2 }
-            if particles[i].y < -0.2 { particles[i].y = 1.2 }
-            if particles[i].y > 1.2 { particles[i].y = -0.2 }
+            if particles[i].x < -0.2 { particles[i].x += 1.4 }
+            if particles[i].x > 1.2 { particles[i].x -= 1.4 }
+            if particles[i].y < -0.2 { particles[i].y += 1.4 }
+            if particles[i].y > 1.2 { particles[i].y -= 1.4 }
         }
     }
 
-    private var breathingOffset: CGFloat {
-        sin(breathingPhase * .pi / state.breathingSpeed) * state.breathingAmplitude
+    private func breathingOffset(at date: Date) -> CGFloat {
+        let phase = date.timeIntervalSinceReferenceDate
+        let sizeScale: CGFloat = size < 70 ? 0.7 : 1.0
+        return sin(phase * .pi / state.breathingSpeed) * state.breathingAmplitude * sizeScale
     }
 }
 

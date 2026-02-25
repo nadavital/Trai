@@ -60,10 +60,7 @@ struct GoalCard: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .padding(.horizontal, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(Color(.secondarySystemBackground))
-            )
+            .traiCard(cornerRadius: 18, contentPadding: 0)
             .overlay(
                 RoundedRectangle(cornerRadius: 18)
                     .strokeBorder(
@@ -89,13 +86,13 @@ struct GoalCard: View {
 
     private var colorForGoal: Color {
         switch goal {
-        case .loseWeight: .red
-        case .loseFat: .orange
-        case .buildMuscle: .blue
-        case .recomposition: .purple
-        case .maintenance: .gray
-        case .performance: .green
-        case .health: .pink
+        case .loseWeight: TraiColors.ember
+        case .loseFat: TraiColors.flame
+        case .buildMuscle: .accentColor
+        case .recomposition: TraiColors.coral
+        case .maintenance: Color(.systemGray3)
+        case .performance: TraiColors.blaze
+        case .health: .accentColor
         }
     }
 }
@@ -162,10 +159,7 @@ struct GoalCardWithDescription: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .padding(.horizontal, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(Color(.secondarySystemBackground))
-            )
+            .traiCard(cornerRadius: 18, contentPadding: 0)
             .overlay(
                 RoundedRectangle(cornerRadius: 18)
                     .strokeBorder(
@@ -203,13 +197,13 @@ struct GoalCardWithDescription: View {
 
     private var colorForGoal: Color {
         switch goal {
-        case .loseWeight: .red
-        case .loseFat: .orange
-        case .buildMuscle: .blue
-        case .recomposition: .purple
-        case .maintenance: .gray
-        case .performance: .green
-        case .health: .pink
+        case .loseWeight: TraiColors.ember
+        case .loseFat: TraiColors.flame
+        case .buildMuscle: .accentColor
+        case .recomposition: TraiColors.coral
+        case .maintenance: Color(.systemGray3)
+        case .performance: TraiColors.blaze
+        case .health: .accentColor
         }
     }
 }

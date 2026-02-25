@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		090355E73CD8CE91D184469F /* TraiPulseContextAssemblerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60829DC4A73FC429F2BCAC0 /* TraiPulseContextAssemblerTests.swift */; };
+		090355E73CD8CE91D184469F /* TraiCoachContextAssemblerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60829DC4A73FC429F2BCAC0 /* TraiCoachContextAssemblerTests.swift */; };
 		11005DF0194ABAD4F254B859 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 798CA7F0428F6892AAAA2CE4 /* Foundation.framework */; };
 		50550A782F2067D000068DCD /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 50550A772F2067D000068DCD /* WidgetKit.framework */; };
 		50550A7A2F2067D000068DCD /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 50550A792F2067D000068DCD /* SwiftUI.framework */; };
@@ -22,11 +22,8 @@
 		D10000022A00000100D10001 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 21244ABFE007089D0AC73493 /* XCTest.framework */; };
 		F20000012A00000100F20001 /* AppRouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000022A00000100F20001 /* AppRouteTests.swift */; };
 		F20000032A00000100F20001 /* BehaviorProfileServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000042A00000100F20001 /* BehaviorProfileServiceTests.swift */; };
-		F20000052A00000100F20001 /* TraiPulsePolicyEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000062A00000100F20001 /* TraiPulsePolicyEngineTests.swift */; };
-		F20000072A00000100F20001 /* TraiPulseActionRankerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000082A00000100F20001 /* TraiPulseActionRankerTests.swift */; };
 		F20000092A00000100F20001 /* BehaviorTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000A2A00000100F20001 /* BehaviorTrackerTests.swift */; };
-		F200000B2A00000100F20001 /* TraiPulsePatternServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000C2A00000100F20001 /* TraiPulsePatternServiceTests.swift */; };
-		F200000D2A00000100F20001 /* DailyCoachEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000E2A00000100F20001 /* DailyCoachEngineTests.swift */; };
+		F200000B2A00000100F20001 /* TraiCoachPatternServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000C2A00000100F20001 /* TraiCoachPatternServiceTests.swift */; };
 		F200000F2A00000100F20001 /* WorkoutTemplateServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000102A00000100F20001 /* WorkoutTemplateServiceTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -81,16 +78,13 @@
 		A30000062B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveWorkoutUpdatePolicyTests.swift; sourceTree = "<group>"; };
 		A30000082B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveWorkoutPersistenceCoordinatorTests.swift; sourceTree = "<group>"; };
 		A300000A2B00000100A30001 /* LiveWorkoutPerformanceGuardrailsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveWorkoutPerformanceGuardrailsTests.swift; sourceTree = "<group>"; };
-		C60829DC4A73FC429F2BCAC0 /* TraiPulseContextAssemblerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiPulseContextAssemblerTests.swift; sourceTree = "<group>"; };
+		C60829DC4A73FC429F2BCAC0 /* TraiCoachContextAssemblerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiCoachContextAssemblerTests.swift; sourceTree = "<group>"; };
 		D10000042A00000100D10001 /* TraiUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TraiUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D10000052A00000100D10001 /* TraiUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiUITests.swift; sourceTree = "<group>"; };
 		F20000022A00000100F20001 /* AppRouteTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppRouteTests.swift; sourceTree = "<group>"; };
 		F20000042A00000100F20001 /* BehaviorProfileServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BehaviorProfileServiceTests.swift; sourceTree = "<group>"; };
-		F20000062A00000100F20001 /* TraiPulsePolicyEngineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiPulsePolicyEngineTests.swift; sourceTree = "<group>"; };
-		F20000082A00000100F20001 /* TraiPulseActionRankerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiPulseActionRankerTests.swift; sourceTree = "<group>"; };
 		F200000A2A00000100F20001 /* BehaviorTrackerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BehaviorTrackerTests.swift; sourceTree = "<group>"; };
-		F200000C2A00000100F20001 /* TraiPulsePatternServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiPulsePatternServiceTests.swift; sourceTree = "<group>"; };
-		F200000E2A00000100F20001 /* DailyCoachEngineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DailyCoachEngineTests.swift; sourceTree = "<group>"; };
+		F200000C2A00000100F20001 /* TraiCoachPatternServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiCoachPatternServiceTests.swift; sourceTree = "<group>"; };
 		F20000102A00000100F20001 /* WorkoutTemplateServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkoutTemplateServiceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -212,15 +206,12 @@
 				F20000022A00000100F20001 /* AppRouteTests.swift */,
 				F20000042A00000100F20001 /* BehaviorProfileServiceTests.swift */,
 				F200000A2A00000100F20001 /* BehaviorTrackerTests.swift */,
-				F200000E2A00000100F20001 /* DailyCoachEngineTests.swift */,
 				A300000A2B00000100A30001 /* LiveWorkoutPerformanceGuardrailsTests.swift */,
 				A30000022B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift */,
 				A30000082B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift */,
 				A30000062B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift */,
-				C60829DC4A73FC429F2BCAC0 /* TraiPulseContextAssemblerTests.swift */,
-				F20000082A00000100F20001 /* TraiPulseActionRankerTests.swift */,
-				F200000C2A00000100F20001 /* TraiPulsePatternServiceTests.swift */,
-				F20000062A00000100F20001 /* TraiPulsePolicyEngineTests.swift */,
+				C60829DC4A73FC429F2BCAC0 /* TraiCoachContextAssemblerTests.swift */,
+				F200000C2A00000100F20001 /* TraiCoachPatternServiceTests.swift */,
 				F20000102A00000100F20001 /* WorkoutTemplateServiceTests.swift */,
 			);
 			path = TraiTests;
@@ -415,15 +406,12 @@
 				F20000012A00000100F20001 /* AppRouteTests.swift in Sources */,
 				F20000032A00000100F20001 /* BehaviorProfileServiceTests.swift in Sources */,
 				F20000092A00000100F20001 /* BehaviorTrackerTests.swift in Sources */,
-				F200000D2A00000100F20001 /* DailyCoachEngineTests.swift in Sources */,
 				A30000092B00000100A30001 /* LiveWorkoutPerformanceGuardrailsTests.swift in Sources */,
 				A30000012B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift in Sources */,
 				A30000072B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift in Sources */,
 				A30000052B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift in Sources */,
-				090355E73CD8CE91D184469F /* TraiPulseContextAssemblerTests.swift in Sources */,
-				F20000072A00000100F20001 /* TraiPulseActionRankerTests.swift in Sources */,
-				F200000B2A00000100F20001 /* TraiPulsePatternServiceTests.swift in Sources */,
-				F20000052A00000100F20001 /* TraiPulsePolicyEngineTests.swift in Sources */,
+				090355E73CD8CE91D184469F /* TraiCoachContextAssemblerTests.swift in Sources */,
+				F200000B2A00000100F20001 /* TraiCoachPatternServiceTests.swift in Sources */,
 				F200000F2A00000100F20001 /* WorkoutTemplateServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -2,59 +2,10 @@
 //  PlanReviewAnimations.swift
 //  Trai
 //
-//  Animation modifiers and confetti effects for plan review
+//  Confetti and loading effects for plan review
 //
 
 import SwiftUI
-
-// MARK: - Rotating Modifier
-
-struct RotatingModifier: ViewModifier {
-    @State private var rotation: Double = 0
-
-    func body(content: Content) -> some View {
-        content
-            .rotationEffect(.degrees(rotation))
-            .onAppear {
-                withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
-                    rotation = 360
-                }
-            }
-    }
-}
-
-// MARK: - Pulsing Modifier
-
-struct PulsingModifier: ViewModifier {
-    @State private var scale: CGFloat = 1
-
-    func body(content: Content) -> some View {
-        content
-            .scaleEffect(scale)
-            .opacity(2 - scale)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: false)) {
-                    scale = 1.3
-                }
-            }
-    }
-}
-
-// MARK: - Sparkle Modifier
-
-struct SparkleModifier: ViewModifier {
-    @State private var scale: CGFloat = 1
-
-    func body(content: Content) -> some View {
-        content
-            .scaleEffect(scale)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                    scale = 1.1
-                }
-            }
-    }
-}
 
 // MARK: - Confetti View
 

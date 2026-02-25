@@ -43,9 +43,9 @@ struct WorkoutSummarySheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Success icon with celebration pulse
+                    // Success icon with celebration ripple
                     ZStack {
-                        TraiCelebrationPulse(isActive: showCelebration, color: .green)
+                        TraiCelebrationRipple(isActive: showCelebration, color: .green)
                             .frame(width: 80, height: 80)
 
                         Image(systemName: "checkmark.circle.fill")
@@ -211,9 +211,9 @@ struct WorkoutSummaryContent: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Success icon with celebration pulse
+                // Success icon with celebration ripple
                 ZStack {
-                    TraiCelebrationPulse(isActive: showCelebration, color: .green)
+                    TraiCelebrationRipple(isActive: showCelebration, color: .green)
                         .frame(width: 80, height: 80)
 
                     Image(systemName: "checkmark.circle.fill")
