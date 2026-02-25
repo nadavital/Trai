@@ -593,10 +593,16 @@ struct DashboardView: View {
             .onChange(of: allWorkouts.count) {
                 guard isDashboardTabActive else { return }
                 refreshWorkoutDateCache()
+                if isViewingToday {
+                    scheduleCoachContextRefresh(forceRefresh: true)
+                }
             }
             .onChange(of: liveWorkouts.count) {
                 guard isDashboardTabActive else { return }
                 refreshLiveWorkoutDateCache()
+                if isViewingToday {
+                    scheduleCoachContextRefresh(forceRefresh: true)
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .workoutCompleted)) { _ in
                 guard isDashboardTabActive else { return }

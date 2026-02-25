@@ -131,6 +131,8 @@ final class UserProfile {
 
     var createdAt: Date = Date()
     var hasCompletedOnboarding: Bool = false
+    @Transient private var cachedWorkoutPlanJSONSnapshot: String?
+    @Transient private var cachedWorkoutPlanValue: WorkoutPlan?
 
     init() {}
 
@@ -406,14 +408,30 @@ extension UserProfile {
     /// The user's current workout plan
     var workoutPlan: WorkoutPlan? {
         get {
-            guard let json = savedWorkoutPlanJSON else { return nil }
-            return WorkoutPlan.fromJSON(json)
+            if cachedWorkoutPlanJSONSnapshot == savedWorkoutPlanJSON {
+                return cachedWorkoutPlanValue
+            }
+            guard let json = savedWorkoutPlanJSON else {
+                cachedWorkoutPlanJSONSnapshot = nil
+                cachedWorkoutPlanValue = nil
+                return nil
+            }
+            cachedWorkoutPlanValue = WorkoutPlan.fromJSON(json)
+            cachedWorkoutPlanJSONSnapshot = json
+            return cachedWorkoutPlanValue
         }
         set {
-            savedWorkoutPlanJSON = newValue?.toJSON()
-            if newValue != nil {
-                workoutPlanGeneratedAt = Date()
+            guard let newValue else {
+                savedWorkoutPlanJSON = nil
+                cachedWorkoutPlanJSONSnapshot = nil
+                cachedWorkoutPlanValue = nil
+                return
             }
+            let encoded = newValue.toJSON()
+            savedWorkoutPlanJSON = encoded
+            cachedWorkoutPlanJSONSnapshot = encoded
+            cachedWorkoutPlanValue = newValue
+            workoutPlanGeneratedAt = Date()
         }
     }
 
