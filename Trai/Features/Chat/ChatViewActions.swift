@@ -44,6 +44,7 @@ extension ChatView {
             return
         }
         processingMealSuggestionKeys.insert(mealKey)
+        defer { processingMealSuggestionKeys.remove(mealKey) }
 
         let messageIndex = currentSessionMessages.firstIndex(where: { $0.id == message.id }) ?? 0
         let userMessage = messageIndex > 0 ? currentSessionMessages[messageIndex - 1] : nil
@@ -100,6 +101,8 @@ extension ChatView {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.markMealLogged(mealId: meal.id, entryId: entry.id)
         }
+        try? modelContext.save()
+        rebuildSessionMessages(preferLiveQueryData: true)
 
         HapticManager.success()
     }
@@ -108,6 +111,8 @@ extension ChatView {
         withAnimation(.easeOut(duration: 0.2)) {
             message.markMealDismissed(mealId: meal.id)
         }
+        try? modelContext.save()
+        rebuildSessionMessages(preferLiveQueryData: true)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.logFood,
             domain: .nutrition,
@@ -634,14 +639,6 @@ extension ChatView {
         sendMessage("Can you review my workout split and suggest any updates based on my recovery and recent workouts?")
     }
 
-    /// Check if Dashboard queued a Pulse context prompt for chat handoff
-    func checkForPendingPulsePrompt() {
-        let prompt = pendingPulseSeedPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty else { return }
-        pendingPulseSeedPrompt = ""
-        startNewSession(silent: true)
-        startPulseConversation(from: prompt)
-    }
 }
 
 // MARK: - Reminder Suggestion Actions

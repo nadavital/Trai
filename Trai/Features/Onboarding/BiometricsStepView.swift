@@ -94,14 +94,14 @@ struct BiometricsStepView: View {
         VStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .stroke(Color.blue.opacity(0.1), lineWidth: 2)
+                    .stroke(Color.accentColor.opacity(0.15), lineWidth: 2)
                     .frame(width: 95, height: 95)
                     .scaleEffect(headerVisible ? 1 : 0.5)
 
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Color.blue.opacity(0.15), Color.cyan.opacity(0.1)],
+                            colors: [Color.accentColor.opacity(0.16), TraiColors.coral.opacity(0.12)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -110,13 +110,13 @@ struct BiometricsStepView: View {
 
                 Image(systemName: "person.text.rectangle.fill")
                     .font(.system(size: 36))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.accent)
                     .symbolRenderingMode(.hierarchical)
             }
             .scaleEffect(headerVisible ? 1 : 0.8)
 
             Text("About You")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.traiBold(28))
 
             Text("This helps us calculate your\npersonalized nutrition plan")
                 .font(.subheadline)
@@ -134,7 +134,7 @@ struct BiometricsStepView: View {
             Label("Birthday", systemImage: "gift.fill")
                 .font(.subheadline)
                 .fontWeight(.semibold)
-                .foregroundStyle(.pink)
+                .foregroundStyle(.accent)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             DatePicker(
@@ -148,10 +148,8 @@ struct BiometricsStepView: View {
             .frame(height: 120)
             .clipped()
         }
-        .padding()
         .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(cornerRadius: 16)
     }
 
     // MARK: - Gender Card
@@ -163,7 +161,7 @@ struct BiometricsStepView: View {
                     Label("Biological Sex", systemImage: "figure.stand")
                         .font(.subheadline)
                         .fontWeight(.semibold)
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(.accent)
 
                     Text("Used for accurate metabolic calculations")
                         .font(.caption)
@@ -194,10 +192,8 @@ struct BiometricsStepView: View {
                 }
             }
         }
-        .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(cornerRadius: 16)
     }
 
     // MARK: - Height Card
@@ -208,7 +204,7 @@ struct BiometricsStepView: View {
                 Label("Height", systemImage: "ruler.fill")
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.accent)
 
                 Spacer()
 
@@ -245,10 +241,8 @@ struct BiometricsStepView: View {
                 }
             }
         }
-        .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(cornerRadius: 16)
     }
 
     // MARK: - Weight Card
@@ -259,7 +253,7 @@ struct BiometricsStepView: View {
                 Label("Weight", systemImage: "scalemass.fill")
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(.accent)
 
                 Spacer()
 
@@ -302,10 +296,8 @@ struct BiometricsStepView: View {
                 )
             }
         }
-        .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(cornerRadius: 16)
     }
 
     // MARK: - Helpers

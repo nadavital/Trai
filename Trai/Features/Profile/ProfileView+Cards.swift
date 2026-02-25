@@ -88,13 +88,9 @@ extension ProfileView {
                     onSelectTab?(.trai)
                     HapticManager.lightTap()
                 } label: {
-                    HStack {
-                        Image(systemName: "circle.hexagongrid.circle")
-                        Text("Review with Trai")
-                    }
-                    .frame(maxWidth: .infinity)
+                    traiReviewButtonLabel()
                 }
-                .buttonStyle(.traiSecondary(color: .accentColor, height: 40))
+                .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fullWidth: true, height: 40))
 
                 // Plan History link
                 NavigationLink {
@@ -103,9 +99,12 @@ extension ProfileView {
                     HStack {
                         Image(systemName: "clock.arrow.circlepath")
                         Text("History")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
                     }
+                    .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.traiTertiary(width: 108, height: 40))
+                .buttonStyle(.traiTertiary(size: .compact, width: 96, height: 40))
             }
 
             if let currentWeight = latestWeightForPlanPrompt,
@@ -227,13 +226,9 @@ extension ProfileView {
                         onSelectTab?(.trai)
                         HapticManager.lightTap()
                     } label: {
-                        HStack {
-                            Image(systemName: "circle.hexagongrid.circle")
-                            Text("Review with Trai")
-                        }
-                        .frame(maxWidth: .infinity)
+                        traiReviewButtonLabel()
                     }
-                    .buttonStyle(.traiSecondary(color: .accentColor, height: 40))
+                    .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fullWidth: true, height: 40))
 
                     NavigationLink {
                         WorkoutPlanHistoryView()
@@ -241,9 +236,12 @@ extension ProfileView {
                         HStack {
                             Image(systemName: "clock.arrow.circlepath")
                             Text("History")
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
                         }
+                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.traiTertiary(width: 108, height: 40))
+                    .buttonStyle(.traiTertiary(size: .compact, width: 96, height: 40))
                 }
             }
             .padding(20)
@@ -383,9 +381,9 @@ extension ProfileView {
             HStack {
                 Image(systemName: "bubble.left.and.bubble.right.fill")
                     .font(.title2)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.blue)
                     .frame(width: 40, height: 40)
-                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Chat History")
@@ -468,9 +466,9 @@ extension ProfileView {
             HStack {
                 Image(systemName: "bell.fill")
                     .font(.title2)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.pink)
                     .frame(width: 40, height: 40)
-                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color.pink.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Reminders")
@@ -496,12 +494,23 @@ extension ProfileView {
 
     // MARK: - Helpers
 
-    private var traiReviewButtonForeground: Color {
-        .red
-    }
+    @ViewBuilder
+    private func traiReviewButtonLabel() -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                Image(systemName: "circle.hexagongrid.circle")
+                Text("Review with Trai")
+            }
+            .frame(maxWidth: .infinity)
 
-    private var traiReviewButtonBackground: Color {
-        Color.red.opacity(0.15)
+            HStack(spacing: 6) {
+                Image(systemName: "circle.hexagongrid.circle")
+                Text("Review")
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.82)
     }
 
     func remindersSummary(_ profile: UserProfile, customCount: Int) -> String {

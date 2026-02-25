@@ -17,7 +17,6 @@ struct WelcomeStepView: View {
     @State private var feature2Visible = false
     @State private var feature3Visible = false
     @State private var inputSectionVisible = false
-    @State private var pulseRing = false
     @FocusState private var isNameFocused: Bool
 
     var body: some View {
@@ -85,43 +84,13 @@ struct WelcomeStepView: View {
             inputSectionVisible = true
         }
 
-        // Start subtle pulse animation
-        withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true).delay(1)) {
-            pulseRing = true
-        }
     }
 
     // MARK: - Hero Section
 
     private var heroSection: some View {
         VStack(spacing: 14) {
-            // App icon with subtle pulse
-            ZStack {
-                // Outer pulse ring
-                Circle()
-                    .stroke(Color.accentColor.opacity(0.15), lineWidth: 1.5)
-                    .frame(width: 120, height: 120)
-                    .scaleEffect(pulseRing ? 1.08 : 1)
-                    .opacity(pulseRing ? 0 : 0.6)
-
-                // Inner glow
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.accentColor.opacity(0.2), Color.clear],
-                            center: .center,
-                            startRadius: 20,
-                            endRadius: 55
-                        )
-                    )
-                    .frame(width: 110, height: 110)
-
-                // Icon
-                Image(systemName: "dumbbell.fill")
-                    .font(.system(size: 48))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.tint)
-            }
+            TraiLensView(size: 64, state: .idle, palette: .energy)
             .opacity(heroVisible ? 1 : 0)
             .scaleEffect(heroVisible ? 1 : 0.9)
 
@@ -132,7 +101,7 @@ struct WelcomeStepView: View {
                     .foregroundStyle(.secondary)
 
                 Text("Trai")
-                    .font(.system(size: 38, weight: .bold, design: .rounded))
+                    .font(.traiHero(38))
                     .foregroundStyle(.primary)
             }
             .opacity(titleVisible ? 1 : 0)
@@ -152,7 +121,7 @@ struct WelcomeStepView: View {
         VStack(spacing: 10) {
             FeatureRow(
                 icon: "sparkles",
-                color: .purple,
+                color: TraiColors.flame,
                 title: "AI-Powered Plans",
                 description: "Get personalized nutrition tailored to your body"
             )
@@ -160,7 +129,7 @@ struct WelcomeStepView: View {
 
             FeatureRow(
                 icon: "camera.fill",
-                color: .orange,
+                color: TraiColors.blaze,
                 title: "Snap & Track",
                 description: "Just photograph your meals to log them"
             )
@@ -168,7 +137,7 @@ struct WelcomeStepView: View {
 
             FeatureRow(
                 icon: "chart.line.uptrend.xyaxis",
-                color: .green,
+                color: .accentColor,
                 title: "Smart Insights",
                 description: "Track progress with intelligent analytics"
             )

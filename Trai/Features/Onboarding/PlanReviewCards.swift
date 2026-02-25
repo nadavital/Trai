@@ -20,7 +20,7 @@ struct DailyTargetsCard: View {
             HStack {
                 Label("Daily Targets", systemImage: "flame.fill")
                     .font(.headline)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.accent)
 
                 Spacer()
 
@@ -75,9 +75,7 @@ struct DailyTargetsCard: View {
                 )
             }
         }
-        .padding(20)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 20))
+        .traiCard(cornerRadius: 20, contentPadding: 20)
     }
 }
 
@@ -197,10 +195,8 @@ struct ProgressInsightsCard: View {
                 }
             }
         }
-        .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(cornerRadius: 16)
     }
 
     private func weeklyChangeColor(_ deficitOrSurplus: Int) -> Color {
@@ -272,9 +268,7 @@ struct MacroVisualizationCard: View {
                 MacroLegend(label: "Fat", percent: split.fatPercent, color: MacroType.fat.color)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(cornerRadius: 16)
     }
 }
 
@@ -304,10 +298,8 @@ struct GuidelinesCard: View {
                 }
             }
         }
-        .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(cornerRadius: 16)
     }
 }
 

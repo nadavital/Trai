@@ -1,13 +1,13 @@
 //
-//  TraiPulsePatternService.swift
+//  TraiCoachPatternService.swift
 //  Trai
 //
-//  Deterministic behavior pattern extraction for Trai Pulse personalization.
+//  Deterministic behavior pattern extraction for Trai coaching personalization.
 //
 
 import Foundation
 
-enum TraiPulsePatternService {
+enum TraiCoachPatternService {
     static func buildProfile(
         now: Date,
         foodEntries: [FoodEntry],
@@ -16,7 +16,7 @@ enum TraiPulsePatternService {
         suggestionUsage: [SuggestionUsage],
         behaviorEvents: [BehaviorEvent],
         profile: UserProfile?
-    ) -> TraiPulsePatternProfile {
+    ) -> TraiCoachPatternProfile {
         let calendar = Calendar.current
         let end = now
         guard let start = calendar.date(byAdding: .day, value: -27, to: calendar.startOfDay(for: end)) else {
@@ -28,14 +28,14 @@ enum TraiPulsePatternService {
         let workoutDatesInWindow = workoutDays.filter { $0 >= start && $0 <= end }
         let windowBehaviorEvents = behaviorEvents.filter { $0.occurredAt >= start && $0.occurredAt <= end }
 
-        var workoutBucketCounts: [TraiPulseTimeWindow: Int] = [:]
+        var workoutBucketCounts: [TraiCoachTimeWindow: Int] = [:]
         for workoutDate in workoutDatesInWindow {
             let hour = calendar.component(.hour, from: workoutDate)
             let bucket = workoutWindow(forHour: hour)
             workoutBucketCounts[bucket, default: 0] += 1
         }
 
-        var mealBucketCounts: [TraiPulseTimeWindow: Int] = [:]
+        var mealBucketCounts: [TraiCoachTimeWindow: Int] = [:]
         for entry in windowFoodEntries {
             let hour = calendar.component(.hour, from: entry.loggedAt)
             let bucket = mealWindow(forHour: hour)
@@ -70,7 +70,7 @@ enum TraiPulsePatternService {
             (0.15 * maxActionAffinity)
         )
 
-        return TraiPulsePatternProfile(
+        return TraiCoachPatternProfile(
             workoutWindowScores: workoutWindowScores,
             mealWindowScores: mealWindowScores,
             commonProteinAnchors: commonProteinAnchors,
@@ -87,7 +87,7 @@ enum TraiPulsePatternService {
         liveWorkouts: [LiveWorkout],
         profile: UserProfile?,
         daysWindow: Int = 7
-    ) -> TraiPulseTrendSnapshot? {
+    ) -> TraiCoachTrendSnapshot? {
         guard daysWindow > 0, let profile else { return nil }
 
         let calendar = Calendar.current
@@ -154,7 +154,7 @@ enum TraiPulsePatternService {
         let workoutDaysInWindow = workoutDays.filter { $0 >= startDay && $0 < endExclusive }.count
         let daysSinceWorkout = daysSinceLastWorkout(workoutDays: workoutDays, referenceDay: endDay, calendar: calendar)
 
-        return TraiPulseTrendSnapshot(
+        return TraiCoachTrendSnapshot(
             daysWindow: daysWindow,
             daysWithFoodLogs: daysWithFoodLogs,
             proteinTargetHitDays: proteinTargetHitDays,
@@ -254,7 +254,7 @@ enum TraiPulsePatternService {
     }
 
     private static func buildActionAffinity(from suggestionUsage: [SuggestionUsage]) -> [String: Double] {
-        let actionScores: [TraiPulseAction.Kind: Double] = suggestionUsage.reduce(into: [:]) { partialResult, usage in
+        let actionScores: [TraiCoachAction.Kind: Double] = suggestionUsage.reduce(into: [:]) { partialResult, usage in
             let mapped = actionKind(for: usage.suggestionType)
             partialResult[mapped, default: 0] += Double(max(usage.tapCount, 0))
         }
@@ -272,7 +272,7 @@ enum TraiPulsePatternService {
     private static func buildActionAffinity(from behaviorEvents: [BehaviorEvent]) -> [String: Double] {
         guard !behaviorEvents.isEmpty else { return [:] }
 
-        var actionScores: [TraiPulseAction.Kind: Double] = [:]
+        var actionScores: [TraiCoachAction.Kind: Double] = [:]
         for event in behaviorEvents {
             guard let kind = actionKind(forBehaviorActionKey: event.actionKey) else { continue }
             let weight = behaviorOutcomeWeight(event.outcome)
@@ -300,11 +300,11 @@ enum TraiPulsePatternService {
     private static func followThroughRates(
         from behaviorEvents: [BehaviorEvent],
         horizonMinutes: Int = 90
-    ) -> [TraiPulseAction.Kind: Double] {
+    ) -> [TraiCoachAction.Kind: Double] {
         guard horizonMinutes > 0 else { return [:] }
 
-        var opportunitiesByKind: [TraiPulseAction.Kind: [Date]] = [:]
-        var conversionsByKind: [TraiPulseAction.Kind: [Date]] = [:]
+        var opportunitiesByKind: [TraiCoachAction.Kind: [Date]] = [:]
+        var conversionsByKind: [TraiCoachAction.Kind: [Date]] = [:]
 
         for event in behaviorEvents {
             guard let kind = actionKind(forBehaviorActionKey: event.actionKey) else { continue }
@@ -317,7 +317,7 @@ enum TraiPulsePatternService {
         }
 
         let horizon = TimeInterval(horizonMinutes * 60)
-        var rates: [TraiPulseAction.Kind: Double] = [:]
+        var rates: [TraiCoachAction.Kind: Double] = [:]
 
         for (kind, opportunities) in opportunitiesByKind {
             guard opportunities.count >= 2 else { continue }
@@ -375,16 +375,16 @@ enum TraiPulsePatternService {
         return merged.mapValues { clamp($0 / total) }
     }
 
-    static func learnedWorkoutTimeWindows(from profile: TraiPulsePatternProfile?, maxWindows: Int = 2, minScore: Double = 0.18) -> [String] {
+    static func learnedWorkoutTimeWindows(from profile: TraiCoachPatternProfile?, maxWindows: Int = 2, minScore: Double = 0.18) -> [String] {
         guard
             let profile,
             maxWindows > 0
         else { return [] }
 
         let rankedWindows = profile.workoutWindowScores
-            .compactMap { rawWindow, score -> (TraiPulseTimeWindow, Double)? in
+            .compactMap { rawWindow, score -> (TraiCoachTimeWindow, Double)? in
                 guard
-                    let window = TraiPulseTimeWindow(rawValue: rawWindow),
+                    let window = TraiCoachTimeWindow(rawValue: rawWindow),
                     score >= minScore
                 else { return nil }
                 return (window, score)
@@ -400,13 +400,13 @@ enum TraiPulsePatternService {
     }
 
     private static func label(for windowLabel: String) -> String {
-        if let window = TraiPulseTimeWindow.allCases.first(where: { $0.label == windowLabel }) {
+        if let window = TraiCoachTimeWindow.allCases.first(where: { $0.label == windowLabel }) {
             return "\(window.label) (\(window.hourRange.start)-\(window.hourRange.end))"
         }
         return windowLabel
     }
 
-    private static func actionKind(for suggestionType: String) -> TraiPulseAction.Kind {
+    private static func actionKind(for suggestionType: String) -> TraiCoachAction.Kind {
         let suggestion = suggestionType.lowercased()
 
         if suggestion.contains("reminder") {
@@ -448,7 +448,7 @@ enum TraiPulsePatternService {
         return .openProfile
     }
 
-    private static func actionKind(forBehaviorActionKey actionKey: String) -> TraiPulseAction.Kind? {
+    private static func actionKind(forBehaviorActionKey actionKey: String) -> TraiCoachAction.Kind? {
         switch actionKey {
         case BehaviorActionKey.logFood:
             return .logFood
@@ -480,9 +480,9 @@ enum TraiPulsePatternService {
             break
         }
 
-        if actionKey.hasPrefix("engagement.pulse_action_tap.") {
-            let suffix = String(actionKey.dropFirst("engagement.pulse_action_tap.".count))
-            return TraiPulseAction.Kind(rawValue: suffix)
+        if let tapRange = actionKey.range(of: "_action_tap.") {
+            let suffix = String(actionKey[tapRange.upperBound...])
+            return TraiCoachAction.Kind(rawValue: suffix)
         }
 
         let normalized = actionKey.lowercased()
@@ -595,7 +595,7 @@ enum TraiPulsePatternService {
             .joined(separator: " ")
     }
 
-    private static func workoutWindow(forHour hour: Int) -> TraiPulseTimeWindow {
+    private static func workoutWindow(forHour hour: Int) -> TraiCoachTimeWindow {
         switch hour {
         case 5..<8: .earlyMorning
         case 8..<11: .morning
@@ -606,7 +606,7 @@ enum TraiPulsePatternService {
         }
     }
 
-    private static func mealWindow(forHour hour: Int) -> TraiPulseTimeWindow {
+    private static func mealWindow(forHour hour: Int) -> TraiCoachTimeWindow {
         switch hour {
         case 5..<9: .earlyMorning
         case 9..<12: .morning
@@ -617,11 +617,11 @@ enum TraiPulsePatternService {
         }
     }
 
-    private static func normalizedScores(from counts: [TraiPulseTimeWindow: Int], total: Int) -> [String: Double] {
+    private static func normalizedScores(from counts: [TraiCoachTimeWindow: Int], total: Int) -> [String: Double] {
         guard total > 0 else { return [:] }
 
         var result: [String: Double] = [:]
-        for window in TraiPulseTimeWindow.allCases {
+        for window in TraiCoachTimeWindow.allCases {
             let value = Double(counts[window] ?? 0) / Double(total)
             if value > 0 {
                 result[window.rawValue] = value

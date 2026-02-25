@@ -107,19 +107,22 @@ struct ProfileView: View {
     var conversationCount: Int { chatConversationCount }
 
     var body: some View {
+        let currentProfile = profile
+
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    if let profile {
-                        headerCard(profile)
-                        planCard(profile)
-                        workoutPlanCard(profile)
+                    if let currentProfile {
+                        headerCard(currentProfile)
+                        planCard(currentProfile)
+                        workoutPlanCard(currentProfile)
                         memoriesCard()
                         chatHistoryCard()
                         exercisesCard()
-                        remindersCard(profile, customRemindersCount: customRemindersCount)
+                        remindersCard(currentProfile, customRemindersCount: customRemindersCount)
                     }
                 }
+                .id(currentProfile?.id)
                 .padding()
             }
             .refreshable {
@@ -138,14 +141,14 @@ struct ProfileView: View {
                 }
             }
             .sheet(isPresented: $showPlanSheet) {
-                if let profile {
-                    PlanAdjustmentSheet(profile: profile)
+                if let currentProfile {
+                    PlanAdjustmentSheet(profile: currentProfile)
                 }
             }
             .sheet(isPresented: $showSettingsSheet) {
-                if let profile {
+                if let currentProfile {
                     NavigationStack {
-                        SettingsView(profile: profile)
+                        SettingsView(profile: currentProfile)
                     }
                 }
             }
@@ -153,7 +156,7 @@ struct ProfileView: View {
                 WorkoutPlanChatFlow()
             }
             .sheet(isPresented: $showPlanEditSheet) {
-                if let plan = profile?.workoutPlan {
+                if let plan = currentProfile?.workoutPlan {
                     WorkoutPlanEditSheet(currentPlan: plan)
                 }
             }

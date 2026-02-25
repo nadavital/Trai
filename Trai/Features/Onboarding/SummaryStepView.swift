@@ -56,20 +56,12 @@ struct SummaryStepView: View {
 
     private var headerSection: some View {
         VStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(Color.green.opacity(0.15))
-                    .frame(width: 80, height: 80)
-
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 40))
-                    .foregroundStyle(.green)
-            }
+            TraiLensView(size: 72, state: .idle, palette: .energy)
             .opacity(headerVisible ? 1 : 0)
             .scaleEffect(headerVisible ? 1 : 0.9)
 
             Text("Review Your Info")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.traiBold(28))
                 .opacity(headerVisible ? 1 : 0)
 
             Text("Make sure everything looks correct\nbefore we create your plan")
@@ -85,7 +77,7 @@ struct SummaryStepView: View {
     private var summaryCards: some View {
         VStack(spacing: 14) {
             // Profile card
-            SummaryCard(title: "Profile", icon: "person.fill", color: .blue) {
+            SummaryCard(title: "Profile", icon: "person.fill", color: TraiColors.flame) {
                 SummaryRow(label: "Name", value: userName)
                 SummaryRow(label: "Age", value: "\(calculateAge()) years old")
                 if let gender = gender {
@@ -94,7 +86,7 @@ struct SummaryStepView: View {
             }
 
             // Body card
-            SummaryCard(title: "Body", icon: "figure.stand", color: .orange) {
+            SummaryCard(title: "Body", icon: "figure.stand", color: .accentColor) {
                 SummaryRow(label: "Height", value: formatHeight())
                 SummaryRow(label: "Current Weight", value: formatWeight(weightValue))
                 if !targetWeightValue.isEmpty {
@@ -103,7 +95,7 @@ struct SummaryStepView: View {
             }
 
             // Activity card
-            SummaryCard(title: "Activity", icon: "flame.fill", color: .red) {
+            SummaryCard(title: "Activity", icon: "flame.fill", color: TraiColors.coral) {
                 if let activityLevel {
                     SummaryRow(label: "Level", value: activityLevel.displayName)
                 }
@@ -113,7 +105,7 @@ struct SummaryStepView: View {
             }
 
             // Goals card
-            SummaryCard(title: "Goals", icon: "target", color: .green) {
+            SummaryCard(title: "Goals", icon: "target", color: TraiColors.blaze) {
                 if let selectedGoal {
                     SummaryRow(label: "Primary Goal", value: selectedGoal.displayName)
                 }
@@ -130,7 +122,7 @@ struct SummaryStepView: View {
         HStack(spacing: 12) {
             Image(systemName: "sparkles")
                 .font(.title3)
-                .foregroundStyle(.purple)
+                .foregroundStyle(.accent)
 
             Text("Trai will use this information to create a personalized nutrition plan just for you.")
                 .font(.subheadline)
@@ -138,7 +130,7 @@ struct SummaryStepView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.purple.opacity(0.1))
+        .background(Color.accentColor.opacity(0.10))
         .clipShape(.rect(cornerRadius: 14))
     }
 
@@ -190,10 +182,8 @@ struct SummaryCard<Content: View>: View {
                 content
             }
         }
-        .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(cornerRadius: 16)
     }
 }
 

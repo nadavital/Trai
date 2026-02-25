@@ -138,47 +138,11 @@ struct PlanReviewStepView: View {
         VStack(spacing: 28) {
             Spacer(minLength: 50)
 
-            ZStack {
-                Circle()
-                    .stroke(Color.accentColor.opacity(0.15), lineWidth: 3)
-                    .frame(width: 120, height: 120)
-                    .modifier(PulsingModifier())
-
-                Circle()
-                    .stroke(Color.accentColor.opacity(0.2), lineWidth: 4)
-                    .frame(width: 100, height: 100)
-
-                Circle()
-                    .trim(from: 0, to: 0.65)
-                    .stroke(
-                        AngularGradient(
-                            colors: [.accentColor, TraiColors.coral, .accentColor.opacity(0.3)],
-                            center: .center
-                        ),
-                        style: StrokeStyle(lineWidth: 5, lineCap: .round)
-                    )
-                    .frame(width: 100, height: 100)
-                    .rotationEffect(.degrees(-90))
-                    .modifier(RotatingModifier())
-
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.accentColor.opacity(0.15), Color.clear],
-                            center: .center,
-                            startRadius: 10,
-                            endRadius: 45
-                        )
-                    )
-                    .frame(width: 90, height: 90)
-
-                TraiLensView(size: 54, state: .thinking, palette: .energy)
-                    .modifier(SparkleModifier())
-            }
+            TraiLensView(size: 72, state: .thinking, palette: .energy)
 
             VStack(spacing: 10) {
                 Text("Crafting Your Plan")
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .font(.traiBold(26))
 
                 Text("Trai is analyzing your profile and\ncreating a personalized nutrition strategy")
                     .font(.subheadline)
@@ -264,7 +228,7 @@ struct PlanReviewStepView: View {
 
             VStack(spacing: 8) {
                 Text("Your Plan is Ready!")
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .font(.traiBold(26))
 
                 Text("Review your personalized targets below")
                     .font(.subheadline)
@@ -283,8 +247,7 @@ struct PlanReviewStepView: View {
                 showChat = true
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "dumbbell.fill")
-                        .font(.subheadline)
+                    TraiLensIcon(size: 16, palette: .energy)
 
                     Text("Ask About Your Plan")
                         .fontWeight(.semibold)

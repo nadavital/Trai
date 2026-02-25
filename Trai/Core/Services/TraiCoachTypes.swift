@@ -1,13 +1,13 @@
 //
-//  TraiPulseTypes.swift
+//  TraiCoachTypes.swift
 //  Trai
 //
-//  Domain types for Trai Pulse analysis and UI.
+//  Domain types for Trai coach analysis and UI.
 //
 
 import Foundation
 
-enum TraiPulseTimeWindow: String, CaseIterable, Hashable, Sendable {
+enum TraiCoachTimeWindow: String, CaseIterable, Hashable, Sendable {
     case earlyMorning
     case morning
     case midday
@@ -38,7 +38,7 @@ enum TraiPulseTimeWindow: String, CaseIterable, Hashable, Sendable {
     }
 }
 
-struct TraiPulsePatternProfile: Hashable, Sendable {
+struct TraiCoachPatternProfile: Hashable, Sendable {
     let workoutWindowScores: [String: Double]
     let mealWindowScores: [String: Double]
     let commonProteinAnchors: [String]
@@ -46,7 +46,7 @@ struct TraiPulsePatternProfile: Hashable, Sendable {
     let actionAffinity: [String: Double]
     let confidence: Double
 
-    static let empty = TraiPulsePatternProfile(
+    static let empty = TraiCoachPatternProfile(
         workoutWindowScores: [:],
         mealWindowScores: [:],
         commonProteinAnchors: [],
@@ -55,32 +55,32 @@ struct TraiPulsePatternProfile: Hashable, Sendable {
         confidence: 0
     )
 
-    func strongestWorkoutWindow(minScore: Double = 0.30) -> TraiPulseTimeWindow? {
+    func strongestWorkoutWindow(minScore: Double = 0.30) -> TraiCoachTimeWindow? {
         let best = workoutWindowScores.max { $0.value < $1.value }
         guard let key = best?.key,
-              let window = TraiPulseTimeWindow(rawValue: key),
+              let window = TraiCoachTimeWindow(rawValue: key),
               (best?.value ?? 0) >= minScore else {
             return nil
         }
         return window
     }
 
-    func strongestMealWindow(minScore: Double = 0.25) -> TraiPulseTimeWindow? {
+    func strongestMealWindow(minScore: Double = 0.25) -> TraiCoachTimeWindow? {
         let best = mealWindowScores.max { $0.value < $1.value }
         guard let key = best?.key,
-              let window = TraiPulseTimeWindow(rawValue: key),
+              let window = TraiCoachTimeWindow(rawValue: key),
               (best?.value ?? 0) >= minScore else {
             return nil
         }
         return window
     }
 
-    func affinity(for action: TraiPulseAction.Kind) -> Double {
+    func affinity(for action: TraiCoachAction.Kind) -> Double {
         actionAffinity[action.rawValue] ?? 0
     }
 }
 
-struct TraiPulseReminderCandidate: Hashable, Sendable {
+struct TraiCoachReminderCandidate: Hashable, Sendable {
     let id: String
     let title: String
     let time: String
@@ -88,7 +88,7 @@ struct TraiPulseReminderCandidate: Hashable, Sendable {
     let minute: Int
 }
 
-struct TraiPulseContextPacket: Hashable, Sendable {
+struct TraiCoachContextPacket: Hashable, Sendable {
     let goal: String
     let constraints: [String]
     let patterns: [String]
@@ -98,7 +98,7 @@ struct TraiPulseContextPacket: Hashable, Sendable {
     let promptSummary: String
 }
 
-struct TraiPulseTrendSnapshot: Hashable, Sendable {
+struct TraiCoachTrendSnapshot: Hashable, Sendable {
     let daysWindow: Int
     let daysWithFoodLogs: Int
     let proteinTargetHitDays: Int
@@ -123,7 +123,7 @@ struct TraiPulseTrendSnapshot: Hashable, Sendable {
     }
 }
 
-struct TraiPulseAction: Identifiable, Hashable, Sendable {
+struct TraiCoachAction: Identifiable, Hashable, Sendable {
     enum Kind: String, Sendable {
         case startWorkout
         case logFood
@@ -157,13 +157,13 @@ struct TraiPulseAction: Identifiable, Hashable, Sendable {
     }
 }
 
-struct TraiPulseReason: Identifiable, Hashable, Sendable {
+struct TraiCoachReason: Identifiable, Hashable, Sendable {
     let id = UUID()
     let text: String
     let emphasis: Double
 }
 
-struct TraiPulseQuestionOption: Identifiable, Hashable, Sendable {
+struct TraiCoachQuestionOption: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let subtitle: String?
@@ -175,23 +175,23 @@ struct TraiPulseQuestionOption: Identifiable, Hashable, Sendable {
     }
 }
 
-enum TraiPulseQuestionInputMode: Hashable, Sendable {
+enum TraiCoachQuestionInputMode: Hashable, Sendable {
     case singleChoice
     case multipleChoice
     case slider(range: ClosedRange<Double>, step: Double, unit: String?)
     case note(maxLength: Int)
 }
 
-struct TraiPulseQuestion: Identifiable, Hashable, Sendable {
+struct TraiCoachQuestion: Identifiable, Hashable, Sendable {
     let id: String
     let prompt: String
-    let mode: TraiPulseQuestionInputMode
-    let options: [TraiPulseQuestionOption]
+    let mode: TraiCoachQuestionInputMode
+    let options: [TraiCoachQuestionOption]
     let placeholder: String
     let isRequired: Bool
 }
 
-struct TraiPulseBrief: Sendable {
+struct TraiCoachBrief: Sendable {
     enum Phase: Sendable {
         case morningPlan
         case onTrack
@@ -203,16 +203,16 @@ struct TraiPulseBrief: Sendable {
     let phase: Phase
     let title: String
     let message: String
-    let reasons: [TraiPulseReason]
+    let reasons: [TraiCoachReason]
     let confidence: Double
     let confidenceLabel: String
-    let primaryAction: TraiPulseAction
-    let secondaryAction: TraiPulseAction
-    let question: TraiPulseQuestion
+    let primaryAction: TraiCoachAction
+    let secondaryAction: TraiCoachAction
+    let question: TraiCoachQuestion
     let tomorrowPreview: String
 }
 
-struct TraiPulseInputContext: Sendable {
+struct TraiCoachInputContext: Sendable {
     let now: Date
     let hasWorkoutToday: Bool
     let hasActiveWorkout: Bool
@@ -226,9 +226,9 @@ struct TraiPulseInputContext: Sendable {
     let workoutWindowEndHour: Int
     let activeSignals: [CoachSignalSnapshot]
     let tomorrowWorkoutMinutes: Int
-    let trend: TraiPulseTrendSnapshot?
-    let patternProfile: TraiPulsePatternProfile?
-    let contextPacket: TraiPulseContextPacket?
+    let trend: TraiCoachTrendSnapshot?
+    let patternProfile: TraiCoachPatternProfile?
+    let contextPacket: TraiCoachContextPacket?
     let reminderCompletionRate: Double?
     let recentMissedReminderCount: Int?
     let daysSinceLastWeightLog: Int?
@@ -245,7 +245,7 @@ struct TraiPulseInputContext: Sendable {
     let planReviewMessage: String?
     let planReviewDaysSince: Int?
     let planReviewWeightDeltaKg: Double?
-    let pendingReminderCandidates: [TraiPulseReminderCandidate]
+    let pendingReminderCandidates: [TraiCoachReminderCandidate]
     let pendingReminderCandidateScores: [String: Double]
 
     init(
@@ -262,8 +262,8 @@ struct TraiPulseInputContext: Sendable {
         workoutWindowEndHour: Int,
         activeSignals: [CoachSignalSnapshot],
         tomorrowWorkoutMinutes: Int,
-        trend: TraiPulseTrendSnapshot?,
-        patternProfile: TraiPulsePatternProfile?,
+        trend: TraiCoachTrendSnapshot?,
+        patternProfile: TraiCoachPatternProfile?,
         reminderCompletionRate: Double? = nil,
         recentMissedReminderCount: Int? = nil,
         daysSinceLastWeightLog: Int? = nil,
@@ -280,9 +280,9 @@ struct TraiPulseInputContext: Sendable {
         planReviewMessage: String? = nil,
         planReviewDaysSince: Int? = nil,
         planReviewWeightDeltaKg: Double? = nil,
-        pendingReminderCandidates: [TraiPulseReminderCandidate] = [],
+        pendingReminderCandidates: [TraiCoachReminderCandidate] = [],
         pendingReminderCandidateScores: [String: Double] = [:],
-        contextPacket: TraiPulseContextPacket?
+        contextPacket: TraiCoachContextPacket?
     ) {
         self.now = now
         self.hasWorkoutToday = hasWorkoutToday

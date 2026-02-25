@@ -98,12 +98,12 @@ private struct ReminderRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Complete button with animated checkmark and celebration pulse
+            // Complete button with animated checkmark and celebration ripple
             Button {
                 onComplete()
             } label: {
                 ZStack {
-                    TraiCelebrationPulse(isActive: isCompleting, color: .green)
+                    TraiCelebrationRipple(isActive: isCompleting, color: .green)
                         .frame(width: 32, height: 32)
 
                     Image(systemName: "circle")

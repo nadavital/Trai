@@ -77,7 +77,7 @@ struct MacroPreferencesStepView: View {
             .scaleEffect(headerVisible ? 1 : 0.8)
 
             Text("Track What Matters")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.traiBold(28))
 
             Text("Choose which nutrients to monitor")
                 .font(.subheadline)
@@ -230,11 +230,7 @@ private struct MacroRingsPreview: View {
                 }
             }
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Color(.secondarySystemBackground))
-        )
+        .traiCard(cornerRadius: 18)
     }
 
     private var emptyState: some View {

@@ -1,7 +1,7 @@
 import XCTest
 @testable import Trai
 
-final class TraiPulsePatternServiceTests: XCTestCase {
+final class TraiCoachPatternServiceTests: XCTestCase {
     func testBuildProfileNormalizesProteinAnchorsAndWorkoutWindow() {
         let now = Date(timeIntervalSince1970: 1_736_208_000)
         let profile = UserProfile()
@@ -18,7 +18,7 @@ final class TraiPulsePatternServiceTests: XCTestCase {
             workout(at: date(daysFrom: now, offset: -3, hour: 19))
         ]
 
-        let built = TraiPulsePatternService.buildProfile(
+        let built = TraiCoachPatternService.buildProfile(
             now: now,
             foodEntries: foodEntries,
             workouts: workouts,
@@ -49,7 +49,7 @@ final class TraiPulsePatternServiceTests: XCTestCase {
         let legacyUsage = SuggestionUsage(suggestionType: "meal_log")
         legacyUsage.tapCount = 20
 
-        let built = TraiPulsePatternService.buildProfile(
+        let built = TraiCoachPatternService.buildProfile(
             now: now,
             foodEntries: [],
             workouts: [],
@@ -59,8 +59,8 @@ final class TraiPulsePatternServiceTests: XCTestCase {
             profile: nil
         )
 
-        let workoutAffinity = built.actionAffinity[TraiPulseAction.Kind.startWorkout.rawValue] ?? 0
-        let foodAffinity = built.actionAffinity[TraiPulseAction.Kind.logFood.rawValue] ?? 0
+        let workoutAffinity = built.actionAffinity[TraiCoachAction.Kind.startWorkout.rawValue] ?? 0
+        let foodAffinity = built.actionAffinity[TraiCoachAction.Kind.logFood.rawValue] ?? 0
 
         XCTAssertGreaterThan(workoutAffinity, foodAffinity)
         XCTAssertEqual(workoutAffinity, 0.85, accuracy: 0.0001)
@@ -87,7 +87,7 @@ final class TraiPulsePatternServiceTests: XCTestCase {
             liveWorkout(at: date(daysFrom: now, offset: -3, hour: 17))
         ]
 
-        let snapshot = TraiPulsePatternService.buildTrendSnapshot(
+        let snapshot = TraiCoachPatternService.buildTrendSnapshot(
             now: now,
             foodEntries: foodEntries,
             workouts: workouts,

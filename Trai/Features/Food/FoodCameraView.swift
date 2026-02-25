@@ -23,6 +23,7 @@ struct FoodCameraView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var foodDescription = ""
     @State private var isAnalyzing = false
+    @State private var isCapturingPhoto = false
     @State private var analysisResult: FoodAnalysis?
     @State private var errorMessage: String?
     @State private var geminiService = GeminiService()
@@ -43,6 +44,8 @@ struct FoodCameraView: View {
                 // Camera viewfinder - always present to stay "warm"
                 FoodCameraViewfinder(
                     cameraService: cameraService,
+                    isCameraReady: cameraService.isSessionReady,
+                    isCapturingPhoto: isCapturingPhoto,
                     description: $foodDescription,
                     onCapture: capturePhoto,
                     onManualEntry: { showingManualEntry = true },
@@ -78,6 +81,7 @@ struct FoodCameraView: View {
                                 Text("Retake")
                             }
                         }
+                        .disabled(isAnalyzing || isCapturingPhoto)
                     } else {
                         Button("Cancel", systemImage: "xmark") {
                             dismiss()
@@ -88,10 +92,13 @@ struct FoodCameraView: View {
             }
             .toolbarBackground(isReviewing ? .visible : .hidden, for: .navigationBar)
             .onChange(of: selectedPhotoItem) { _, newValue in
-                Task {
+                Task { @MainActor in
                     if let data = try? await newValue?.loadTransferable(type: Data.self),
                        let uiImage = UIImage(data: data) {
                         capturedImage = uiImage
+                        analysisResult = nil
+                        errorMessage = nil
+                        isAnalyzingTextOnly = false
                     }
                 }
             }
@@ -126,21 +133,30 @@ struct FoodCameraView: View {
     }
 
     private func capturePhoto() {
-        Task {
+        guard !isCapturingPhoto else { return }
+
+        Task { @MainActor in
+            isCapturingPhoto = true
+            defer { isCapturingPhoto = false }
+
             if let image = await cameraService.capturePhoto() {
                 HapticManager.mediumTap()
                 capturedImage = image
+                analysisResult = nil
+                errorMessage = nil
+                isAnalyzingTextOnly = false
             }
         }
     }
 
     private func analyzeFood() {
+        guard !isAnalyzing else { return }
         guard capturedImage != nil || !foodDescription.trimmingCharacters(in: .whitespaces).isEmpty else { return }
 
         isAnalyzing = true
         errorMessage = nil
 
-        Task {
+        Task { @MainActor in
             do {
                 let imageData = capturedImage?.jpegData(compressionQuality: 0.8)
                 let result = try await geminiService.analyzeFoodImage(

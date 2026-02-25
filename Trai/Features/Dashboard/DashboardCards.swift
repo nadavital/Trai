@@ -581,4 +581,3 @@ private struct TrendStatItem: View {
         .frame(maxWidth: .infinity)
     }
 }
-

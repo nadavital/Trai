@@ -96,8 +96,8 @@ final class CoachSignalService {
         return expiredCount
     }
 
-    func latestPulseContextSummary(maxCount: Int = 3, now: Date = .now) -> String {
-        activeSignals(now: now, limit: maxCount).pulseSummary(maxCount: maxCount, now: now)
+    func latestContextSummary(maxCount: Int = 3, now: Date = .now) -> String {
+        activeSignals(now: now, limit: maxCount).contextSummary(maxCount: maxCount, now: now)
     }
 
     private func encodeMetadata(_ metadata: [String: String]?) -> String? {

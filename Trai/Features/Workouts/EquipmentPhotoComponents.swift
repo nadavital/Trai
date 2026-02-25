@@ -49,6 +49,8 @@ struct EquipmentCameraView: View {
                                 .frame(width: 60, height: 60)
                         }
                     }
+                    .disabled(!cameraService.isSessionReady)
+                    .opacity(cameraService.isSessionReady ? 1 : 0.55)
                     .padding(.bottom, 40)
                 }
             }
@@ -63,6 +65,9 @@ struct EquipmentCameraView: View {
             }
             .task {
                 await cameraService.requestPermission()
+            }
+            .onDisappear {
+                cameraService.stopSession()
             }
         }
     }

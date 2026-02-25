@@ -56,15 +56,12 @@ struct DashboardView: View {
     @State private var remindersLoaded = false
     @State private var pendingScrollToReminders = false
     @State private var reminderCompletionHistory: [ReminderCompletion] = []
-    @State private var cachedDailyCoachContext: DailyCoachContext?
-    @State private var cachedRecoveryInfo: [MuscleRecoveryService.MuscleRecoveryInfo] = []
+    @State private var cachedRecommendedTemplateId: UUID?
     @State private var didPrimeInitialData = false
     @State private var coachContextRefreshTask: Task<Void, Never>?
     @State private var deferredInitialLoadTask: Task<Void, Never>?
     @State private var remindersLoadTask: Task<Void, Never>?
-    @State private var pulseHeroRevealTask: Task<Void, Never>?
     @State private var hasPerformedDeferredStartupWork = false
-    @State private var shouldRenderPulseHero = false
     @State private var isDashboardTabVisible = false
     @State private var latencyProbeEntries: [String] = []
     @State private var tabActivationPolicy = TabActivationPolicy(minimumDwellMilliseconds: 0)
@@ -85,7 +82,6 @@ struct DashboardView: View {
     @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
     @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest = false
-    @AppStorage("pendingPulseSeedPrompt") private var pendingPulseSeedPrompt: String = ""
     private static let dashboardHistoryWindowDays = 100
     private static let dashboardFastFoodWindowDays = 2
     private static let behaviorHistoryWindowDays = 90
@@ -112,12 +108,6 @@ struct DashboardView: View {
     }
     private static var dashboardHeavyRefreshMinimumDwellMilliseconds: Int {
         AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1600 : 320
-    }
-    private static var pulseHeroStartupRevealDelayMilliseconds: Int {
-        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 4200 : 900
-    }
-    private static var pulseHeroReactivationRevealDelayMilliseconds: Int {
-        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 2600 : 420
     }
 
     init(
@@ -267,15 +257,6 @@ struct DashboardView: View {
         return parts.joined(separator: "|")
     }
 
-    private var coachContextRefreshFingerprint: String {
-        [
-            weightEntriesRefreshFingerprint,
-            coachSignalsRefreshFingerprint,
-            behaviorEventsRefreshFingerprint,
-            suggestionUsageRefreshFingerprint
-        ].joined(separator: "||")
-    }
-
     private var weightEntriesRefreshFingerprint: String {
         guard !weightEntries.isEmpty else { return "0" }
         var parts: [String] = []
@@ -375,134 +356,49 @@ struct DashboardView: View {
     /// Only shows a name when set to recommended workout and a plan exists
     private var quickAddWorkoutName: String? {
         guard let profile,
-              profile.defaultWorkoutActionValue == .recommendedWorkout else {
+              profile.defaultWorkoutActionValue == .recommendedWorkout,
+              let plan = profile.workoutPlan else {
             return nil
         }
 
-        if let cachedName = cachedDailyCoachContext?.recommendedWorkoutName {
-            return cachedName
+        if let cachedId = cachedRecommendedTemplateId,
+           let template = plan.templates.first(where: { $0.id == cachedId }) {
+            return template.name
         }
 
-        return profile.workoutPlan?.templates.first?.name
+        return plan.templates.first?.name
     }
 
     private var hasActiveLiveWorkout: Bool {
         liveWorkouts.contains { $0.completedAt == nil }
     }
 
-    private var dailyCoachContext: DailyCoachContext? {
-        cachedDailyCoachContext
-    }
+    private func computeRecommendedTemplateId() -> UUID? {
+        guard isViewingToday, let plan = profile?.workoutPlan else { return nil }
 
-    private func computeDailyCoachContext() -> DailyCoachContext? {
-        guard isViewingToday, let profile else { return nil }
         let startedAt = LatencyProbe.timerStart()
         defer {
             recordDashboardLatencyProbe(
-                "computeDailyCoachContext",
+                "computeRecommendedTemplateId",
                 startedAt: startedAt,
                 counts: [
-                    "food": allFoodEntries.count,
+                    "templates": plan.templates.count,
                     "workouts": allWorkouts.count,
-                    "liveWorkouts": liveWorkouts.count,
-                    "weights": weightEntries.count,
-                    "signals": coachSignals.count,
-                    "behavior": behaviorEvents.count,
-                    "reminders": customReminders.count
+                    "liveWorkouts": liveWorkouts.count
                 ]
             )
         }
 
-        let recoveryInfo = cachedRecoveryInfo.isEmpty
-            ? recoveryService.getRecoveryStatus(modelContext: modelContext)
-            : cachedRecoveryInfo
-        let readyMuscleCount = recoveryInfo.filter { $0.status == .ready }.count
-        let recommendedWorkoutName = recommendedWorkoutName(
-            in: profile.workoutPlan,
-            recoveryInfo: recoveryInfo
-        )
-        let hasWorkout = todayTotalWorkoutCount > 0
-        let calorieGoal = profile.effectiveCalorieGoal(hasWorkoutToday: hasWorkout || hasActiveLiveWorkout)
-        let activeSignals = coachSignals.active(now: .now)
-        let behaviorProfile = BehaviorProfileService.buildProfile(now: .now, events: behaviorEvents)
-        let todayActionState = behaviorActionStateForToday()
-        let reminderCompletionRate = todaysReminderCompletionRate
-        let missedReminderCount = todaysMissedReminderCount
-        let daysSinceLatestWeightLog = daysSinceLastWeightLog
-            ?? behaviorProfile.daysSinceLastAction(BehaviorActionKey.logWeight, now: .now)
-        let weightLoggedThisWeek = loggedWeightThisWeek
-        let weightLoggedThisWeekDays = inferredWeightLogWeekdays
-        let weightLikelyLogTimes = mergeUniqueStrings(
-            inferredWeightLogTimes,
-            behaviorProfile.likelyTimeLabels(
-                for: BehaviorActionKey.logWeight,
-                maxLabels: 2,
-                minimumEvents: 2
-            )
-        )
-        let likelyReminderTimes = todaysReminderItemsAll.map(\.time)
-        let likelyWorkoutTimes = mergeUniqueStrings(
-            TraiPulsePatternService.learnedWorkoutTimeWindows(from: pulsePatternProfile),
-            behaviorProfile.likelyTimeLabels(
-                for: BehaviorActionKey.startWorkout,
-                maxLabels: 2,
-                minimumEvents: 2
-            )
-        )
-        let lastActiveWorkoutHour = lastRecentWorkoutHour
-        let lastActiveWorkoutAt = lastRecentWorkoutAt
-        let lastCompletedWorkoutName = lastRecentCompletedWorkoutName
-        let planReviewRecommendation = pendingPlanReviewRecommendation
-        let reminderCandidateScores = todaysReminderCandidateScores
-
-        return DailyCoachContext(
-            now: .now,
-            hasWorkoutToday: hasWorkout,
-            hasActiveWorkout: hasActiveLiveWorkout,
-            caloriesConsumed: totalCalories,
-            calorieGoal: calorieGoal,
-            proteinConsumed: Int(totalProtein.rounded()),
-            proteinGoal: profile.dailyProteinGoal,
-            readyMuscleCount: readyMuscleCount,
-            recommendedWorkoutName: recommendedWorkoutName,
-                activeSignals: activeSignals,
-                trend: pulseTrendSnapshot,
-                patternProfile: pulsePatternProfile,
-                reminderCompletionRate: reminderCompletionRate,
-                recentMissedReminderCount: missedReminderCount,
-            daysSinceLastWeightLog: daysSinceLatestWeightLog,
-            weightLoggedThisWeek: weightLoggedThisWeek,
-            weightLoggedThisWeekDays: weightLoggedThisWeekDays,
-            weightLikelyLogTimes: weightLikelyLogTimes,
-            weightRecentRangeKg: recentWeightRangeKg,
-                weightLogRoutineScore: inferredWeightLogRoutineScore,
-                todaysExerciseMinutes: todayExerciseMinutes,
-                lastActiveWorkoutHour: lastActiveWorkoutHour,
-                likelyReminderTimes: likelyReminderTimes,
-                likelyWorkoutTimes: likelyWorkoutTimes,
-                planReviewTrigger: planReviewRecommendation?.trigger.rawValue,
-                planReviewMessage: pendingPlanReviewMessage,
-                planReviewDaysSince: planReviewRecommendation?.details.daysSinceReview,
-                planReviewWeightDeltaKg: planReviewRecommendation?.details.weightChangeKg,
-                behaviorProfile: behaviorProfile,
-                todayOpenedActionKeys: todayActionState.openedActionKeys,
-                todayCompletedActionKeys: todayActionState.completedActionKeys,
-                lastActiveWorkoutAt: lastActiveWorkoutAt,
-                lastCompletedWorkoutName: lastCompletedWorkoutName,
-                pendingReminderCandidates: todaysReminderCandidates,
-                pendingReminderCandidateScores: reminderCandidateScores
-            )
+        return recoveryService.getRecommendedTemplateId(
+            plan: plan,
+            modelContext: modelContext
+        ) ?? plan.templates.first?.id
     }
 
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
-                if isViewingToday,
-                   profile != nil,
-                   !AppLaunchArguments.shouldSuppressStartupAnimations {
-                    DashboardPulseTopGradient()
-                }
-
+                DashboardTopGradient()
                 ScrollViewReader { scrollProxy in
                     GeometryReader { geometry in
                         ScrollView(.vertical) {
@@ -514,17 +410,6 @@ struct DashboardView: View {
                             )
 
                             if isViewingToday, profile != nil {
-                                if shouldRenderPulseHero, let coachContext = dailyCoachContext {
-                                    TraiPulseHeroCard(
-                                        context: coachContext,
-                                        onAction: handleCoachAction,
-                                        onQuestionAnswer: handleCoachQuestionAnswer,
-                                        onPlanProposalDecision: handlePlanProposalDecision,
-                                        onQuickChat: handlePulseQuickChat,
-                                        onPromptPresented: handlePulsePromptPresented
-                                    )
-                                }
-
                                 // Quick action buttons (only on today)
                                 QuickActionsCard(
                                     onLogFood: { openFoodCameraFromDashboard(source: "quick_actions") },
@@ -533,6 +418,9 @@ struct DashboardView: View {
                                     workoutName: quickAddWorkoutName
                                 )
                                 .traiEntrance(index: 0)
+
+                                ChatWithTraiCard(action: { openTraiChatFromDashboard() })
+                                    .traiEntrance(index: 1)
 
                                 // Today's reminders
                                 if !todaysReminderItems.isEmpty {
@@ -543,7 +431,7 @@ struct DashboardView: View {
                                         onViewAll: { /* Already viewing on dashboard */ }
                                     )
                                     .id("reminders-section")
-                                    .traiEntrance(index: 1)
+                                    .traiEntrance(index: 2)
                                 }
                             }
 
@@ -552,7 +440,7 @@ struct DashboardView: View {
                                 goal: profile?.dailyCalorieGoal ?? 2000,
                                 onTap: { openCalorieDetailFromDashboard(source: "calorie_progress_card") }
                             )
-                            .traiEntrance(index: 2)
+                            .traiEntrance(index: 3)
 
                             MacroBreakdownCard(
                                 protein: totalProtein,
@@ -568,7 +456,7 @@ struct DashboardView: View {
                                 enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
                                 onTap: { openMacroDetailFromDashboard(source: "macro_breakdown_card") }
                             )
-                            .traiEntrance(index: 3)
+                            .traiEntrance(index: 4)
 
                             DailyFoodTimeline(
                                 entries: selectedDayFoodEntries,
@@ -581,7 +469,7 @@ struct DashboardView: View {
                                 onEditEntry: { entryToEdit = $0 },
                                 onDeleteEntry: deleteFoodEntry
                             )
-                            .traiEntrance(index: 4)
+                            .traiEntrance(index: 5)
 
                             TodaysActivityCard(
                                 steps: todaySteps,
@@ -590,7 +478,7 @@ struct DashboardView: View {
                                 workoutCount: todayTotalWorkoutCount,
                                 isLoading: isLoadingActivity
                             )
-                            .traiEntrance(index: 5)
+                            .traiEntrance(index: 6)
 
                             if isViewingToday, let latestWeight = weightEntries.first {
                                 NavigationLink {
@@ -608,7 +496,7 @@ struct DashboardView: View {
                                     }
                                 )
                                 .buttonStyle(.plain)
-                                .traiEntrance(index: 6)
+                                .traiEntrance(index: 7)
                             }
                             }
                             .frame(width: max(0, geometry.size.width - 32), alignment: .leading)
@@ -659,9 +547,6 @@ struct DashboardView: View {
                 scheduleDeferredStartupWork(
                     delayMilliseconds: Self.deferredStartupWorkDelayMilliseconds
                 )
-                schedulePulseHeroReveal(
-                    delayMilliseconds: Self.pulseHeroStartupRevealDelayMilliseconds
-                )
             }
             .onAppear {
                 if tabActivationPolicy.activeSince == nil {
@@ -684,13 +569,7 @@ struct DashboardView: View {
                 if isViewingToday {
                     Task {
                         await loadActivityData()
-                        scheduleCoachContextRefresh(forceRefresh: true, immediate: true)
                     }
-                    schedulePulseHeroReveal(
-                        delayMilliseconds: Self.pulseHeroReactivationRevealDelayMilliseconds
-                    )
-                } else {
-                    scheduleCoachContextRefresh(immediate: true)
                 }
 
                 if !hasPerformedDeferredStartupWork {
@@ -702,62 +581,41 @@ struct DashboardView: View {
             .onChange(of: selectedDate) { _, newDate in
                 refreshDateScopedCaches()
                 if Calendar.current.isDateInToday(newDate) {
-                    schedulePulseHeroReveal(
-                        delayMilliseconds: Self.pulseHeroReactivationRevealDelayMilliseconds
-                    )
                     Task {
                         await loadActivityData()
-                        scheduleCoachContextRefresh(forceRefresh: true, immediate: true)
                     }
-                } else {
-                    scheduleCoachContextRefresh(immediate: true)
                 }
             }
             .onChange(of: foodEntriesRefreshFingerprint) { _, _ in
                 guard isDashboardTabActive else { return }
                 refreshFoodDateCaches()
-                guard !shouldDeferCoachContextRefreshDuringStartup else { return }
-                scheduleCoachContextRefresh(forceRefresh: true)
             }
             .onChange(of: allWorkouts.count) {
                 guard isDashboardTabActive else { return }
                 refreshWorkoutDateCache()
-                guard !shouldDeferCoachContextRefreshDuringStartup else { return }
-                scheduleCoachContextRefresh(forceRefresh: true)
             }
             .onChange(of: liveWorkouts.count) {
                 guard isDashboardTabActive else { return }
                 refreshLiveWorkoutDateCache()
-                guard !shouldDeferCoachContextRefreshDuringStartup else { return }
-                scheduleCoachContextRefresh(forceRefresh: true)
             }
             .onReceive(NotificationCenter.default.publisher(for: .workoutCompleted)) { _ in
                 guard isDashboardTabActive else { return }
                 // Refresh after workout completed to update muscle recovery
                 Task {
                     await loadActivityData()
-                    scheduleCoachContextRefresh(forceRefresh: true, immediate: true)
                 }
             }
             .onChange(of: activeWorkoutRuntimeState.isLiveWorkoutPresented) { _, isPresented in
                 guard isDashboardTabActive else { return }
                 if !isPresented {
                     guard !hasActiveLiveWorkout else { return }
-                    scheduleCoachContextRefresh(forceRefresh: true)
                 }
-            }
-            .onChange(of: coachContextRefreshFingerprint) { _, _ in
-                guard isDashboardTabActive else { return }
-                guard !shouldDeferCoachContextRefreshDuringStartup else { return }
-                scheduleCoachContextRefresh(forceRefresh: true)
             }
             .onDisappear {
                 isDashboardTabVisible = false
                 tabActivationPolicy.deactivate()
-                coachContextRefreshTask?.cancel()
                 deferredInitialLoadTask?.cancel()
                 remindersLoadTask?.cancel()
-                pulseHeroRevealTask?.cancel()
             }
             .refreshable {
                 await refreshHealthData()
@@ -912,32 +770,6 @@ struct DashboardView: View {
             await MainActor.run {
                 guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
                 runDeferredStartupWorkIfNeeded()
-            }
-        }
-    }
-
-    private func schedulePulseHeroReveal(delayMilliseconds: Int) {
-        guard isDashboardTabActive else { return }
-        guard isViewingToday else { return }
-        guard !shouldRenderPulseHero else { return }
-
-        pulseHeroRevealTask?.cancel()
-        let activationToken = tabActivationPolicy.activationToken
-        let effectiveDelayMilliseconds = tabActivationPolicy.effectiveDelayMilliseconds(
-            requested: delayMilliseconds
-        )
-        pulseHeroRevealTask = Task(priority: .utility) {
-            if effectiveDelayMilliseconds > 0 {
-                try? await Task.sleep(for: .milliseconds(effectiveDelayMilliseconds))
-            }
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
-                guard isDashboardTabActive else { return }
-                guard isViewingToday else { return }
-                guard !shouldRenderPulseHero else { return }
-                shouldRenderPulseHero = true
-                scheduleCoachContextRefresh(forceRefresh: true, immediate: true)
             }
         }
     }
@@ -1104,33 +936,6 @@ struct DashboardView: View {
         selectedDayNutritionTotals.sugar
     }
 
-    private var pulseTrendSnapshot: TraiPulseTrendSnapshot? {
-        guard isViewingToday else { return nil }
-
-        return TraiPulsePatternService.buildTrendSnapshot(
-            now: .now,
-            foodEntries: last7DaysFoodEntries,
-            workouts: allWorkouts,
-            liveWorkouts: liveWorkouts,
-            profile: profile,
-            daysWindow: 7
-        )
-    }
-
-    private var pulsePatternProfile: TraiPulsePatternProfile? {
-        guard isViewingToday else { return nil }
-
-        return TraiPulsePatternService.buildProfile(
-            now: .now,
-            foodEntries: insightFoodEntries,
-            workouts: allWorkouts,
-            liveWorkouts: liveWorkouts,
-            suggestionUsage: suggestionUsage,
-            behaviorEvents: behaviorEvents,
-            profile: profile
-        )
-    }
-
     private var todaysReminderItems: [TodaysRemindersCard.ReminderItem] {
         guard remindersLoaded, let profile else { return [] }
 
@@ -1163,88 +968,6 @@ struct DashboardView: View {
             workoutHour: profile.workoutReminderHour,
             workoutMinute: profile.workoutReminderMinute
         )
-    }
-
-    private var todaysReminderCandidates: [TraiPulseReminderCandidate] {
-        let candidates = todaysReminderItems.map {
-            TraiPulseReminderCandidate(
-                id: $0.id.uuidString,
-                title: $0.title,
-                time: $0.time,
-                hour: $0.hour,
-                minute: $0.minute
-            )
-        }
-
-        return candidates.sorted { lhs, rhs in
-            let lhsScore = todaysReminderCandidateScores[lhs.id] ?? 0
-            let rhsScore = todaysReminderCandidateScores[rhs.id] ?? 0
-            if lhsScore != rhsScore { return lhsScore > rhsScore }
-            if lhs.hour != rhs.hour { return lhs.hour < rhs.hour }
-            return lhs.minute < rhs.minute
-        }
-    }
-
-    private var todaysReminderCandidateScores: [String: Double] {
-        let groupedCompletions = reminderCompletionsByReminderId
-        return todaysReminderItems.reduce(into: [:]) { scores, item in
-            let candidate = TraiPulseReminderCandidate(
-                id: item.id.uuidString,
-                title: item.title,
-                time: item.time,
-                hour: item.hour,
-                minute: item.minute
-            )
-            let candidateCompletions = groupedCompletions[item.id] ?? []
-            scores[candidate.id] = reminderHabitScore(for: candidate, completions: candidateCompletions)
-        }
-    }
-
-    private var reminderCompletionsByReminderId: [UUID: [ReminderCompletion]] {
-        let start = Calendar.current.date(
-            byAdding: .day,
-            value: -reminderHabitWindowDays,
-            to: Date()
-        ) ?? Date()
-
-        return Dictionary(grouping: reminderCompletionHistory.filter { $0.completedAt >= start }) { $0.reminderId }
-    }
-
-    private func reminderHabitScore(
-        for reminder: TraiPulseReminderCandidate,
-        completions: [ReminderCompletion]
-    ) -> Double {
-        guard !completions.isEmpty else { return 0 }
-
-        let now = Date()
-        let calendar = Calendar.current
-        let currentWeekday = calendar.component(.weekday, from: now)
-        let scheduledMinutes = reminder.hour * 60 + reminder.minute
-        let maxClockDistance = 180.0
-
-        var weightedSum = 0.0
-        for completion in completions {
-            let dayDiff = max(0, calendar.dateComponents([.day], from: completion.completedAt, to: now).day ?? 0)
-            let recency = max(0.0, Double(reminderHabitWindowDays - dayDiff)) / Double(reminderHabitWindowDays)
-
-            let completionMinutes = calendar.component(.hour, from: completion.completedAt) * 60
-                + calendar.component(.minute, from: completion.completedAt)
-            let rawDistance = abs(completionMinutes - scheduledMinutes)
-            let circularDistance = min(rawDistance, (24 * 60) - rawDistance)
-            let timeMatch = 1.0 - min(1.0, Double(circularDistance) / maxClockDistance)
-            let weekdayMatch = calendar.component(.weekday, from: completion.completedAt) == currentWeekday ? 0.2 : 0.0
-            let onTimeMatch = completion.wasOnTime ? 0.15 : 0.0
-
-            weightedSum += (0.5 * recency) + (0.25 * timeMatch) + onTimeMatch + weekdayMatch
-        }
-
-        let completionRate = reminderHabitCompletionRate(completions)
-        let averageConfidence = min(1.0, (weightedSum / Double(completions.count)) / 1.35)
-        return clamp((0.75 * averageConfidence) + (0.25 * completionRate))
-    }
-
-    private func reminderHabitCompletionRate(_ completions: [ReminderCompletion]) -> Double {
-        min(1.0, Double(completions.count) / 3.0)
     }
 
     private func clamp(_ value: Double) -> Double {
@@ -1642,7 +1365,6 @@ struct DashboardView: View {
     }
 
     private func scheduleCoachContextRefresh(forceRefresh: Bool = false, immediate: Bool = false) {
-        guard shouldRenderPulseHero else { return }
         coachContextRefreshTask?.cancel()
         let requestedDelayMilliseconds = immediate ? 0 : Self.coachContextRefreshDelayMilliseconds
         let activationToken = tabActivationPolicy.activationToken
@@ -1657,84 +1379,31 @@ struct DashboardView: View {
             await MainActor.run {
                 guard tabActivationPolicy.shouldRunHeavyRefresh(for: activationToken) else { return }
                 guard isDashboardTabActive else { return }
-                refreshRecoveryInfoIfNeeded(forceRefresh: forceRefresh)
-                refreshDailyCoachContextCacheIfNeeded(forceRefresh: forceRefresh)
+                refreshRecommendedTemplateCacheIfNeeded(forceRefresh: forceRefresh)
             }
         }
     }
 
-    private func refreshRecoveryInfoIfNeeded(forceRefresh: Bool = false) {
+    private func refreshRecommendedTemplateCacheIfNeeded(forceRefresh: Bool = false) {
         let shouldRefresh = forceRefresh || DashboardRefreshPolicy.shouldRefreshRecovery(
             isWorkoutRuntimeActive: activeWorkoutRuntimeState.isLiveWorkoutPresented || hasActiveLiveWorkout
         )
-        guard shouldRefresh || cachedRecoveryInfo.isEmpty else {
+        guard shouldRefresh || cachedRecommendedTemplateId == nil else {
             return
         }
 
-        let interval = PerformanceTrace.begin("dashboard_recovery_refresh", category: .dataLoad)
+        let interval = PerformanceTrace.begin("dashboard_recommended_template_refresh", category: .dataLoad)
         let startedAt = LatencyProbe.timerStart()
-        cachedRecoveryInfo = recoveryService.getRecoveryStatus(
-            modelContext: modelContext,
-            forceRefresh: forceRefresh
-        )
-        PerformanceTrace.end("dashboard_recovery_refresh", interval, category: .dataLoad)
+        cachedRecommendedTemplateId = computeRecommendedTemplateId()
+        PerformanceTrace.end("dashboard_recommended_template_refresh", interval, category: .dataLoad)
         recordDashboardLatencyProbe(
-            "refreshRecoveryInfo",
+            "refreshRecommendedTemplateCache",
             startedAt: startedAt,
             counts: [
-                "recoveryItems": cachedRecoveryInfo.count,
+                "hasTemplate": cachedRecommendedTemplateId == nil ? 0 : 1,
                 "force": forceRefresh ? 1 : 0
             ]
         )
-    }
-
-    private func refreshDailyCoachContextCacheIfNeeded(forceRefresh: Bool = false) {
-        let shouldRefresh = forceRefresh || DashboardRefreshPolicy.shouldRefreshRecovery(
-            isWorkoutRuntimeActive: activeWorkoutRuntimeState.isLiveWorkoutPresented || hasActiveLiveWorkout
-        )
-        guard shouldRefresh || cachedDailyCoachContext == nil else {
-            return
-        }
-        let interval = PerformanceTrace.begin("dashboard_coach_context_refresh", category: .dataLoad)
-        let startedAt = LatencyProbe.timerStart()
-        cachedDailyCoachContext = computeDailyCoachContext()
-        PerformanceTrace.end("dashboard_coach_context_refresh", interval, category: .dataLoad)
-        recordDashboardLatencyProbe(
-            "refreshCoachContextCache",
-            startedAt: startedAt,
-            counts: [
-                "hasContext": cachedDailyCoachContext == nil ? 0 : 1,
-                "force": forceRefresh ? 1 : 0
-            ]
-        )
-    }
-
-    private func recommendedWorkoutName(
-        in plan: WorkoutPlan?,
-        recoveryInfo: [MuscleRecoveryService.MuscleRecoveryInfo]
-    ) -> String? {
-        guard let plan else { return nil }
-        return recommendedTemplate(in: plan, recoveryInfo: recoveryInfo)?.name
-    }
-
-    private func recommendedTemplate(
-        in plan: WorkoutPlan,
-        recoveryInfo: [MuscleRecoveryService.MuscleRecoveryInfo]
-    ) -> WorkoutPlan.WorkoutTemplate? {
-        guard !plan.templates.isEmpty else { return nil }
-
-        var bestTemplate: WorkoutPlan.WorkoutTemplate?
-        var bestScore = -Double.greatestFiniteMagnitude
-
-        for template in plan.templates {
-            let (score, _) = recoveryService.scoreTemplate(template, recoveryInfo: recoveryInfo)
-            if score > bestScore {
-                bestScore = score
-                bestTemplate = template
-            }
-        }
-
-        return bestTemplate ?? plan.templates.first
     }
 
     private func deleteFoodEntry(_ entry: FoodEntry) {
@@ -1793,6 +1462,17 @@ struct DashboardView: View {
         showingLogWeight = true
     }
 
+    private func openTraiChatFromDashboard() {
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: "engagement.dashboard_chat_shortcut",
+            domain: .engagement,
+            surface: .dashboard,
+            outcome: .opened
+        )
+        onSelectTab?(.trai)
+        HapticManager.selectionChanged()
+    }
+
     private func openCalorieDetailFromDashboard(source: String) {
         loadFoodTrendHistoryForSelectedDateIfNeeded()
         BehaviorTracker(modelContext: modelContext).record(
@@ -1843,38 +1523,6 @@ struct DashboardView: View {
         }
     }
 
-    private func startWorkoutTemplate(_ action: DailyCoachAction) {
-        guard let metadata = action.metadata else {
-            startWorkout()
-            return
-        }
-
-        let templateID = metadata["template_id"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let templateName = metadata["template_name"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-            ?? metadata["name"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-            ?? metadata["workout_name"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let profile, let plan = profile.workoutPlan else {
-            startCustomWorkout()
-            return
-        }
-
-        if let templateID,
-           let id = UUID(uuidString: templateID),
-           let template = plan.templates.first(where: { $0.id == id }) {
-            startWorkoutFromTemplate(template)
-            return
-        }
-
-        if let templateName, !templateName.isEmpty,
-           let template = plan.templates.first(where: { $0.name.caseInsensitiveCompare(templateName) == .orderedSame }) {
-            startWorkoutFromTemplate(template)
-            return
-        }
-
-        startWorkout()
-    }
-
     private func startWorkoutFromTemplate(_ template: WorkoutPlan.WorkoutTemplate) {
         let workout = workoutTemplateService.createStartWorkout(from: template)
         _ = workoutTemplateService.persistWorkout(workout, modelContext: modelContext)
@@ -1921,15 +1569,17 @@ struct DashboardView: View {
         }
 
         let template: WorkoutPlan.WorkoutTemplate?
-        if let cachedRecommendedName = cachedDailyCoachContext?.recommendedWorkoutName {
-            template = plan.templates.first {
-                $0.name.caseInsensitiveCompare(cachedRecommendedName) == .orderedSame
-            } ?? plan.templates.first
+        if let cachedTemplateId = cachedRecommendedTemplateId {
+            template = plan.templates.first(where: { $0.id == cachedTemplateId }) ?? plan.templates.first
         } else {
-            let recoveryInfo = cachedRecoveryInfo.isEmpty
-                ? recoveryService.getRecoveryStatus(modelContext: modelContext)
-                : cachedRecoveryInfo
-            template = recommendedTemplate(in: plan, recoveryInfo: recoveryInfo)
+            if let recommendedTemplateId = recoveryService.getRecommendedTemplateId(
+                plan: plan,
+                modelContext: modelContext
+            ) {
+                template = plan.templates.first(where: { $0.id == recommendedTemplateId }) ?? plan.templates.first
+            } else {
+                template = plan.templates.first
+            }
         }
 
         guard let template else {
@@ -1957,395 +1607,6 @@ struct DashboardView: View {
         HapticManager.selectionChanged()
     }
 
-    private func handleCoachAction(_ action: DailyCoachAction) {
-        recordPulseActionTap(action)
-        switch action.kind {
-        case .startWorkout:
-            trackPulseInteraction("pulse_action_start_workout")
-            startWorkout()
-        case .startWorkoutTemplate:
-            trackPulseInteraction("pulse_action_start_workout_template")
-            startWorkoutTemplate(action)
-        case .logFood:
-            trackPulseInteraction("pulse_action_log_food")
-            recordPulseActionExecution(action)
-            showingLogFood = true
-            HapticManager.selectionChanged()
-        case .logFoodCamera:
-            trackPulseInteraction("pulse_action_log_food_camera")
-            recordPulseActionExecution(action)
-            showingLogFood = true
-            HapticManager.selectionChanged()
-        case .logWeight:
-            trackPulseInteraction("pulse_action_log_weight")
-            recordPulseActionExecution(action)
-            showingLogWeight = true
-            HapticManager.selectionChanged()
-        case .openWeight:
-            trackPulseInteraction("pulse_action_open_weight")
-            recordPulseActionExecution(action)
-            selectedDate = .now
-            showingWeightTracking = true
-            HapticManager.selectionChanged()
-        case .openCalorieDetail:
-            trackPulseInteraction("pulse_action_open_calorie_detail")
-            recordPulseActionExecution(action)
-            selectedDate = .now
-            showingCalorieDetail = true
-            HapticManager.selectionChanged()
-        case .openMacroDetail:
-            trackPulseInteraction("pulse_action_open_macro_detail")
-            recordPulseActionExecution(action)
-            selectedDate = .now
-            showingMacroDetail = true
-            HapticManager.selectionChanged()
-        case .openProfile:
-            trackPulseInteraction("pulse_action_open_profile")
-            recordPulseActionExecution(action)
-            onSelectTab?(.profile)
-            HapticManager.selectionChanged()
-        case .openWorkouts:
-            trackPulseInteraction("pulse_action_open_workouts")
-            recordPulseActionExecution(action)
-            onSelectTab?(.workouts)
-            HapticManager.selectionChanged()
-        case .openWorkoutPlan:
-            trackPulseInteraction("pulse_action_open_workout_plan")
-            recordPulseActionExecution(action)
-            onSelectTab?(.workouts)
-            HapticManager.selectionChanged()
-        case .openRecovery:
-            trackPulseInteraction("pulse_action_open_recovery")
-            recordPulseActionExecution(action)
-            onSelectTab?(.workouts)
-            HapticManager.selectionChanged()
-        case .reviewNutritionPlan:
-            trackPulseInteraction("pulse_action_review_nutrition_plan")
-            recordPulseActionExecution(action)
-            pendingPlanReviewRequest = true
-            onSelectTab?(.trai)
-            HapticManager.selectionChanged()
-        case .reviewWorkoutPlan:
-            trackPulseInteraction("pulse_action_review_workout_plan")
-            recordPulseActionExecution(action)
-            pendingWorkoutPlanReviewRequest = true
-            onSelectTab?(.trai)
-            HapticManager.selectionChanged()
-        case .completeReminder:
-            trackPulseInteraction("pulse_action_complete_reminder")
-            guard let reminder = reminderToComplete(action: action) else {
-                return
-            }
-            selectedDate = .now
-            completeReminder(reminder)
-            HapticManager.selectionChanged()
-        }
-    }
-
-    private func reminderToComplete(action: DailyCoachAction) -> TodaysRemindersCard.ReminderItem? {
-        guard let metadata = action.metadata else { return nil }
-        let candidates = todaysReminderItems
-
-        if let reminderID = metadata["reminder_id"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-           let id = UUID(uuidString: reminderID),
-           let matched = candidates.first(where: { $0.id == id }) {
-            return matched
-        }
-
-        if let title = metadata["reminder_title"]?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
-            let byTitle = candidates.filter { $0.title == title }
-            if byTitle.count == 1 {
-                return byTitle.first
-            }
-
-            if let time = metadata["reminder_time"]?.trimmingCharacters(in: .whitespacesAndNewlines), !time.isEmpty {
-                let byTime = byTitle.filter { $0.time == time }
-                if byTime.count == 1 {
-                    return byTime.first
-                }
-            }
-        }
-
-        if let hourValue = parseInt(metadata["reminder_hour"]),
-           let minuteValue = parseInt(metadata["reminder_minute"]) {
-            let byClock = candidates.filter { $0.hour == hourValue && $0.minute == minuteValue }
-            if byClock.count == 1 {
-                return byClock.first
-            }
-            if let title = metadata["reminder_title"]?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
-                let exact = byClock.filter { $0.title == title }
-                if exact.count == 1 {
-                    return exact.first
-                }
-            }
-        }
-
-        if candidates.count == 1 {
-            return candidates.first
-        }
-
-        return nil
-    }
-
-    private func parseInt(_ raw: String?) -> Int? {
-        raw
-            .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .flatMap(Int.init)
-    }
-
-    private func handleCoachQuestionAnswer(_ question: TraiPulseQuestion, _ answer: String) {
-        let interpretation = TraiPulseResponseInterpreter.interpret(question: question, answer: answer)
-        let detail = "[PulseQuestion:\(question.id)] \(question.prompt) Answer: \(answer) [PulseAdaptation:\(interpretation.adaptationLine)]"
-
-        _ = CoachSignalService(modelContext: modelContext).addSignal(
-            title: interpretation.signalTitle,
-            detail: detail,
-            source: .dashboardNote,
-            domain: interpretation.domain,
-            severity: interpretation.severity,
-            confidence: interpretation.confidence,
-            expiresAfter: interpretation.expiresAfter,
-            metadata: [
-                "question_id": question.id,
-                "question_prompt": question.prompt
-            ]
-        )
-
-        savePulseMemoryIfNeeded(interpretation.memoryCandidate)
-        pendingPulseSeedPrompt = interpretation.handoffPrompt
-        trackPulseInteraction("pulse_question_answered_\(question.id)")
-        BehaviorTracker(modelContext: modelContext).record(
-            actionKey: "engagement.pulse_question.\(question.id)",
-            domain: .engagement,
-            surface: .dashboard,
-            outcome: .completed,
-            metadata: ["answer": answer]
-        )
-        HapticManager.success()
-    }
-
-    private func handlePlanProposalDecision(_ proposal: TraiPulsePlanProposal, _ decision: TraiPulsePlanProposalDecision) {
-        let decisionTitle: String
-        let prompt: String
-
-        switch decision {
-        case .apply:
-            decisionTitle = "Plan adjustment approved"
-            prompt = "Pulse plan proposal approved. Proposal: \(proposal.title). Changes: \(proposal.changes.joined(separator: "; ")). Rationale: \(proposal.rationale). Any plan mutation must still require explicit user confirmation."
-            onSelectTab?(.trai)
-        case .review:
-            decisionTitle = "Plan adjustment review requested"
-            prompt = "Pulse plan proposal review requested. Proposal: \(proposal.title). Changes: \(proposal.changes.joined(separator: "; ")). Impact: \(proposal.impact)."
-            onSelectTab?(.trai)
-        case .later:
-            decisionTitle = "Plan adjustment deferred"
-            prompt = "Pulse plan proposal deferred: \(proposal.title). Do not re-suggest daily; revisit later with lighter framing."
-        }
-
-        _ = CoachSignalService(modelContext: modelContext).addSignal(
-            title: decisionTitle,
-            detail: "[PulsePlanProposal:\(proposal.id)] \(proposal.title) [Decision:\(decision.rawValue)]",
-            source: .dashboardNote,
-            domain: .general,
-            severity: decision == .later ? 0.25 : 0.45,
-            confidence: 0.85,
-            expiresAfter: 5 * 24 * 60 * 60,
-            metadata: [
-                "proposal_id": proposal.id,
-                "decision": decision.rawValue
-            ]
-        )
-
-        pendingPulseSeedPrompt = prompt
-        trackPulseInteraction("pulse_plan_proposal_\(decision.rawValue)")
-        BehaviorTracker(modelContext: modelContext).record(
-            actionKey: "planning.pulse_plan_proposal.\(decision.rawValue)",
-            domain: .planning,
-            surface: .dashboard,
-            outcome: decision == .later ? .dismissed : .completed,
-            metadata: ["proposal_id": proposal.id]
-        )
-        HapticManager.success()
-    }
-
-    private func handlePulseQuickChat(_ prompt: String) {
-        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        pendingPulseSeedPrompt = trimmed
-        trackPulseInteraction("pulse_quick_chat")
-        BehaviorTracker(modelContext: modelContext).record(
-            actionKey: "engagement.pulse_quick_chat",
-            domain: .engagement,
-            surface: .dashboard,
-            outcome: .opened
-        )
-        onSelectTab?(.trai)
-        HapticManager.selectionChanged()
-    }
-
-    private func buildPulseHandoffPrompt() -> String {
-        var sections: [String] = []
-
-        if let context = dailyCoachContext {
-            let inferredWindow = TraiPulseAdaptivePreferences.inferWorkoutWindow(for: context)
-            let inferredMinutes = TraiPulseAdaptivePreferences.inferTomorrowWorkoutMinutes(for: context)
-            let window = inferredWindow.hours
-            let activeSnapshots = coachSignals.activeSnapshots(now: .now)
-            let pulseInput = TraiPulseInputContext(
-                now: context.now,
-                hasWorkoutToday: context.hasWorkoutToday,
-                hasActiveWorkout: context.hasActiveWorkout,
-                caloriesConsumed: context.caloriesConsumed,
-                calorieGoal: context.calorieGoal,
-                proteinConsumed: context.proteinConsumed,
-                proteinGoal: context.proteinGoal,
-                readyMuscleCount: context.readyMuscleCount,
-                recommendedWorkoutName: context.recommendedWorkoutName,
-                workoutWindowStartHour: window.start,
-                workoutWindowEndHour: window.end,
-                activeSignals: activeSnapshots,
-                tomorrowWorkoutMinutes: inferredMinutes,
-                trend: context.trend,
-                patternProfile: context.patternProfile,
-                reminderCompletionRate: context.reminderCompletionRate,
-                recentMissedReminderCount: context.recentMissedReminderCount,
-                daysSinceLastWeightLog: context.daysSinceLastWeightLog,
-                weightLoggedThisWeek: context.weightLoggedThisWeek,
-                weightLoggedThisWeekDays: context.weightLoggedThisWeekDays,
-                weightLikelyLogTimes: context.weightLikelyLogTimes,
-                weightRecentRangeKg: context.weightRecentRangeKg,
-                weightLogRoutineScore: context.weightLogRoutineScore,
-                todaysExerciseMinutes: context.todaysExerciseMinutes,
-                lastActiveWorkoutHour: context.lastActiveWorkoutHour,
-                likelyReminderTimes: context.likelyReminderTimes,
-                likelyWorkoutTimes: context.likelyWorkoutTimes,
-                planReviewTrigger: context.planReviewTrigger,
-                planReviewMessage: context.planReviewMessage,
-                planReviewDaysSince: context.planReviewDaysSince,
-                planReviewWeightDeltaKg: context.planReviewWeightDeltaKg,
-                pendingReminderCandidates: todaysReminderCandidates,
-                pendingReminderCandidateScores: context.pendingReminderCandidateScores,
-                contextPacket: nil
-            )
-
-            let packet = TraiPulseContextAssembler.assemble(
-                patternProfile: context.patternProfile ?? .empty,
-                activeSignals: activeSnapshots,
-                context: pulseInput,
-                tokenBudget: 550
-            )
-            sections.append("Pulse packet: \(packet.promptSummary)")
-        }
-
-        if let recentAnswer = TraiPulseResponseInterpreter.recentPulseAnswer(
-            from: coachSignals.activeSnapshots(now: .now),
-            now: .now
-        ) {
-            sections.append("Recent check-in: \(recentAnswer.answer).")
-        }
-
-        sections.append("User opened Trai from Pulse. Use this context when relevant.")
-        return sections.joined(separator: " ")
-    }
-
-    private func trackPulseInteraction(_ suggestionType: String) {
-        if let existing = suggestionUsage.first(where: { $0.suggestionType == suggestionType }) {
-            existing.recordTap()
-        } else {
-            let usage = SuggestionUsage(suggestionType: suggestionType)
-            usage.recordTap()
-            modelContext.insert(usage)
-        }
-        try? modelContext.save()
-    }
-
-    private func handlePulsePromptPresented(_ snapshot: TraiPulseContentSnapshot) {
-        switch snapshot.prompt {
-        case .question(let question):
-            BehaviorTracker(modelContext: modelContext).record(
-                actionKey: "engagement.pulse_question_presented.\(question.id)",
-                domain: .engagement,
-                surface: .dashboard,
-                outcome: .presented,
-                metadata: ["prompt": question.prompt]
-            )
-        case .action(let action):
-            let descriptor = behaviorDescriptor(for: action)
-            BehaviorTracker(modelContext: modelContext).record(
-                actionKey: descriptor.actionKey,
-                domain: descriptor.domain,
-                surface: .dashboard,
-                outcome: .presented,
-                metadata: pulseTelemetryMetadata(for: action)
-            )
-        case .planProposal(let proposal):
-            BehaviorTracker(modelContext: modelContext).record(
-                actionKey: "planning.pulse_plan_proposal.presented",
-                domain: .planning,
-                surface: .dashboard,
-                outcome: .presented,
-                metadata: ["proposal_id": proposal.id]
-            )
-        case .none:
-            break
-        }
-    }
-
-    private func recordPulseActionTap(_ action: DailyCoachAction) {
-        let descriptor = behaviorDescriptor(for: action)
-        BehaviorTracker(modelContext: modelContext).record(
-            actionKey: "engagement.pulse_action_tap.\(action.kind.rawValue)",
-            domain: descriptor.domain,
-            surface: .dashboard,
-            outcome: .suggestedTap,
-            metadata: pulseTelemetryMetadata(for: action)
-        )
-    }
-
-    private func recordPulseActionExecution(_ action: DailyCoachAction) {
-        let descriptor = behaviorDescriptor(for: action)
-        var metadata = pulseTelemetryMetadata(for: action)
-        metadata["source"] = "pulse"
-        BehaviorTracker(modelContext: modelContext).record(
-            actionKey: descriptor.actionKey,
-            domain: descriptor.domain,
-            surface: .dashboard,
-            outcome: .opened,
-            metadata: metadata
-        )
-    }
-
-    private func behaviorDescriptor(for action: DailyCoachAction) -> (actionKey: String, domain: BehaviorDomain) {
-        switch action.kind {
-        case .startWorkout, .startWorkoutTemplate:
-            return (BehaviorActionKey.startWorkout, .workout)
-        case .logFood, .logFoodCamera:
-            return (BehaviorActionKey.logFood, .nutrition)
-        case .logWeight:
-            return (BehaviorActionKey.logWeight, .body)
-        case .openWeight:
-            return (BehaviorActionKey.openWeight, .body)
-        case .openCalorieDetail:
-            return (BehaviorActionKey.openCalorieDetail, .nutrition)
-        case .openMacroDetail:
-            return (BehaviorActionKey.openMacroDetail, .nutrition)
-        case .openProfile:
-            return (BehaviorActionKey.openProfile, .profile)
-        case .openWorkouts:
-            return (BehaviorActionKey.openWorkouts, .workout)
-        case .openWorkoutPlan:
-            return (BehaviorActionKey.openWorkoutPlan, .planning)
-        case .openRecovery:
-            return (BehaviorActionKey.openRecovery, .workout)
-        case .reviewNutritionPlan:
-            return (BehaviorActionKey.reviewNutritionPlan, .planning)
-        case .reviewWorkoutPlan:
-            return (BehaviorActionKey.reviewWorkoutPlan, .planning)
-        case .completeReminder:
-            return (BehaviorActionKey.completeReminder, .reminder)
-        }
-    }
-
     private func mergeUniqueStrings(_ base: [String], _ extra: [String]) -> [String] {
         var ordered: [String] = []
         var seen = Set<String>()
@@ -2359,62 +1620,54 @@ struct DashboardView: View {
         return ordered
     }
 
-    private func pulseTelemetryMetadata(for action: DailyCoachAction) -> [String: String] {
-        var metadata: [String: String] = ["title": action.title]
-        let telemetryKeys = [
-            "pulse_recommendation_id",
-            "pulse_policy_version",
-            "pulse_rank_position",
-            "pulse_rank_score",
-            "pulse_reco_origin",
-            "pulse_candidate_set"
-        ]
-        if let actionMetadata = action.metadata {
-            for key in telemetryKeys {
-                if let value = actionMetadata[key], !value.isEmpty {
-                    metadata[key] = value
-                }
-            }
-        }
-        return metadata
+}
+
+private struct DashboardTopGradient: View {
+    private var lensColors: [Color] {
+        TraiLensPalette.energy.colors
     }
 
-    private func savePulseMemoryIfNeeded(_ candidate: TraiPulseMemoryCandidate?) {
-        guard let candidate else { return }
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    lensColors[0].opacity(0.34),
+                    lensColors[1].opacity(0.26),
+                    lensColors[2].opacity(0.20),
+                    lensColors[3].opacity(0.14),
+                    .clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
 
-        let descriptor = FetchDescriptor<CoachMemory>(
-            predicate: #Predicate { $0.isActive },
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
-        let activeMemories = (try? modelContext.fetch(descriptor)) ?? []
-        let normalizedCandidate = normalizeMemoryContent(candidate.content)
-        let duplicateExists = activeMemories.contains { memory in
-            let normalizedExisting = normalizeMemoryContent(memory.content)
-            return normalizedExisting == normalizedCandidate ||
-                normalizedExisting.contains(normalizedCandidate) ||
-                normalizedCandidate.contains(normalizedExisting)
+            Circle()
+                .fill(lensColors[2].opacity(0.22))
+                .frame(width: 320, height: 320)
+                .blur(radius: 50)
+                .offset(x: 130, y: -120)
+
+            Circle()
+                .fill(lensColors[0].opacity(0.20))
+                .frame(width: 260, height: 260)
+                .blur(radius: 44)
+                .offset(x: -130, y: -80)
         }
-
-        guard !duplicateExists else { return }
-
-        let memory = CoachMemory(
-            content: candidate.content,
-            category: candidate.category,
-            topic: candidate.topic,
-            source: "pulse",
-            importance: candidate.importance
+        .mask(
+            LinearGradient(
+                stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black, location: 0.45),
+                    .init(color: .clear, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         )
-        modelContext.insert(memory)
-        try? modelContext.save()
-    }
-
-    private func normalizeMemoryContent(_ raw: String) -> String {
-        raw
-            .lowercased()
-            .replacingOccurrences(of: ".", with: " ")
-            .replacingOccurrences(of: ",", with: " ")
-            .split(whereSeparator: { $0.isWhitespace })
-            .joined(separator: " ")
+        .frame(height: 420)
+        .offset(y: -140)
+        .ignoresSafeArea(edges: .top)
+        .allowsHitTesting(false)
     }
 }
 

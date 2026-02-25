@@ -2,6 +2,7 @@ import XCTest
 import Foundation
 
 final class TraiUITests: XCTestCase {
+    private static var didBootstrapPersistentStoreProfile = false
     private let startupToTabBarSmokeBudgetSeconds: TimeInterval = 5.8
     private let tabSwitchSmokeBudgetSeconds: TimeInterval = 3.5
     private let foregroundReopenSmokeBudgetSeconds: TimeInterval = 1.8
@@ -149,6 +150,7 @@ final class TraiUITests: XCTestCase {
     }
 
     func testStartupLatencySmokeWithExistingUserData() {
+        ensurePersistentStoreProfileForRealDataTests()
         let app = makeApp(includeUITestMode: false)
         let launchStart = ProcessInfo.processInfo.systemUptime
         app.launch()
@@ -198,6 +200,7 @@ final class TraiUITests: XCTestCase {
     }
 
     func testForegroundReopenLatencySmokeWithExistingUserData() {
+        ensurePersistentStoreProfileForRealDataTests()
         let app = makeApp(includeUITestMode: false)
         app.launch()
 
@@ -246,6 +249,7 @@ final class TraiUITests: XCTestCase {
     }
 
     func testTabSwitchContentReadyLatencySmokeWithExistingUserData() {
+        ensurePersistentStoreProfileForRealDataTests()
         let app = makeApp(
             extraArguments: ["--enable-latency-probe"],
             includeUITestMode: false
@@ -383,6 +387,22 @@ final class TraiUITests: XCTestCase {
         return app
     }
 
+    private func ensurePersistentStoreProfileForRealDataTests() {
+        guard !Self.didBootstrapPersistentStoreProfile else { return }
+
+        let bootstrapApp = makeApp(extraArguments: ["--use-persistent-store"])
+        bootstrapApp.launch()
+
+        let tabBar = bootstrapApp.tabBars.firstMatch
+        XCTAssertTrue(
+            tabBar.waitForExistence(timeout: 10),
+            "Failed to bootstrap persistent store before real-data UI tests"
+        )
+        assertReadiness(in: bootstrapApp, identifier: "dashboardRootReady", timeout: 10)
+        bootstrapApp.terminate()
+        Self.didBootstrapPersistentStoreProfile = true
+    }
+
     @discardableResult
     private func tapAndMeasureSelection(
         _ tab: XCUIElement,
@@ -432,6 +452,25 @@ final class TraiUITests: XCTestCase {
     ) -> TimeInterval {
         let start = ProcessInfo.processInfo.systemUptime
         tab.tap()
+
+        func waitForSelection(timeout: TimeInterval) -> XCTWaiter.Result {
+            let selectedExpectation = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "isSelected == true"),
+                object: tab
+            )
+            return XCTWaiter.wait(for: [selectedExpectation], timeout: timeout)
+        }
+
+        var selectionResult = waitForSelection(timeout: 2)
+        if selectionResult != .completed {
+            tab.tap()
+            selectionResult = waitForSelection(timeout: 2)
+        }
+        XCTAssertEqual(
+            selectionResult,
+            .completed,
+            "\(label) tab failed to become selected"
+        )
 
         let readinessElement = readinessElement(in: app, identifier: readinessIdentifier)
         if !readinessElement.exists {

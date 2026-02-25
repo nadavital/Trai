@@ -10,6 +10,8 @@ import PhotosUI
 
 struct FoodCameraViewfinder: View {
     let cameraService: CameraService
+    let isCameraReady: Bool
+    let isCapturingPhoto: Bool
     @Binding var description: String
     let onCapture: () -> Void
     let onManualEntry: () -> Void
@@ -112,8 +114,15 @@ struct FoodCameraViewfinder: View {
                             Circle()
                                 .fill(.white)
                                 .frame(width: 60, height: 60)
+
+                            if isCapturingPhoto {
+                                ProgressView()
+                                    .tint(.black)
+                            }
                         }
                     }
+                    .disabled(!isCameraReady || isCapturingPhoto)
+                    .opacity((isCameraReady && !isCapturingPhoto) ? 1 : 0.55)
 
                     // Manual entry
                     Button(action: onManualEntry) {
@@ -129,6 +138,16 @@ struct FoodCameraViewfinder: View {
                 }
                 .padding(.top, 20)
                 .padding(.bottom, 40)
+
+                if !isCameraReady {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .tint(.white)
+                        Text("Preparing camera...")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.9))
+                    }
+                }
             }
         }
     }

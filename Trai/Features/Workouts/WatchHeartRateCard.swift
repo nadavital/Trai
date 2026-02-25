@@ -76,7 +76,7 @@ struct WatchHeartRateCard: View {
                         Image(systemName: "heart.fill")
                             .font(.body)
                             .foregroundStyle(.red)
-                            .symbolEffect(.pulse, options: .repeating, isActive: heartRate != nil && !isStale)
+                            .symbolEffect(.bounce, options: .repeating, isActive: heartRate != nil && !isStale)
                     }
 
                     VStack(alignment: .leading, spacing: 0) {
