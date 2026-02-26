@@ -302,9 +302,7 @@ struct WorkoutsView: View {
             }
             .sheet(isPresented: $showingWorkoutSheet) {
                 if let workout = pendingWorkout {
-                    NavigationStack {
-                        LiveWorkoutView(workout: workout, template: pendingTemplate)
-                    }
+                    LiveWorkoutView(workout: workout, template: pendingTemplate)
                 }
             }
             .sheet(isPresented: $showingCustomWorkoutSetup) {

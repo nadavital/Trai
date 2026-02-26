@@ -187,6 +187,8 @@ struct LiveWorkoutView: View {
                 Text("Enable Live Activities in Settings to see workout progress on your Lock Screen and Dynamic Island.")
             }
         }
+        .tint(Color("AccentColor"))
+        .accentColor(Color("AccentColor"))
         .traiBackground()
         .accessibilityIdentifier("liveWorkoutView")
     }

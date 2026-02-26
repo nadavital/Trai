@@ -314,9 +314,7 @@ struct MainTabView: View {
             }
         }
         .sheet(item: $presentedWorkout) { workout in
-            NavigationStack {
-                LiveWorkoutView(workout: workout)
-            }
+            LiveWorkoutView(workout: workout)
         }
         .confirmationDialog(
             "End Workout?",
@@ -339,9 +337,7 @@ struct MainTabView: View {
             LogWeightSheet()
         }
         .sheet(item: $intentTriggeredWorkout) { workout in
-            NavigationStack {
-                LiveWorkoutView(workout: workout)
-            }
+            LiveWorkoutView(workout: workout)
         }
         .onAppear {
             consumePendingRoute()
