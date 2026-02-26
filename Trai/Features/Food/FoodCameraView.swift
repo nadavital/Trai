@@ -115,6 +115,8 @@ struct FoodCameraView: View {
                 })
             }
         }
+        .tint(Color("AccentColor"))
+        .accentColor(Color("AccentColor"))
     }
 
     // MARK: - Actions

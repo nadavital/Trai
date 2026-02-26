@@ -9,6 +9,8 @@ import SwiftUI
 
 // MARK: - Shared Button Tokens
 
+private let traiDefaultAccentColor = Color("AccentColor")
+
 enum TraiButtonSize {
     case compact
     case regular
@@ -51,7 +53,7 @@ enum TraiButtonSize {
 
 /// Vibrant filled CTA style (pill).
 struct TraiPrimaryButtonStyle: ButtonStyle {
-    var color: Color = .accentColor
+    var color: Color = traiDefaultAccentColor
     var size: TraiButtonSize = .regular
     var fullWidth: Bool = false
     var width: CGFloat? = nil
@@ -93,7 +95,7 @@ struct TraiPrimaryButtonStyle: ButtonStyle {
 
 /// Muted colored fill style (pill). Use for secondary actions.
 struct TraiSecondaryButtonStyle: ButtonStyle {
-    var color: Color = .accentColor
+    var color: Color = traiDefaultAccentColor
     var size: TraiButtonSize = .regular
     var fullWidth: Bool = false
     var width: CGFloat? = nil
@@ -133,7 +135,7 @@ struct TraiSecondaryButtonStyle: ButtonStyle {
 
 /// Neutral outlined style (pill). Use as tertiary.
 struct TraiTertiaryButtonStyle: ButtonStyle {
-    var color: Color = .accentColor
+    var color: Color = traiDefaultAccentColor
     var size: TraiButtonSize = .regular
     var fullWidth: Bool = false
     var width: CGFloat? = nil
@@ -172,7 +174,7 @@ struct TraiTertiaryButtonStyle: ButtonStyle {
 
 /// Backward-compatible alias for primary style.
 struct TraiPillProminentButtonStyle: ButtonStyle {
-    var color: Color = .accentColor
+    var color: Color = traiDefaultAccentColor
     var size: TraiButtonSize = .regular
     var fullWidth: Bool = false
     var width: CGFloat? = nil
@@ -193,7 +195,7 @@ struct TraiPillProminentButtonStyle: ButtonStyle {
 
 /// Backward-compatible alias for secondary style.
 struct TraiPillSubtleButtonStyle: ButtonStyle {
-    var color: Color = .accentColor
+    var color: Color = traiDefaultAccentColor
     var size: TraiButtonSize = .regular
     var fullWidth: Bool = false
     var width: CGFloat? = nil
@@ -218,7 +220,7 @@ extension ButtonStyle where Self == TraiPrimaryButtonStyle {
     static var traiPrimary: TraiPrimaryButtonStyle { TraiPrimaryButtonStyle() }
 
     static func traiPrimary(
-        color: Color = .accentColor,
+        color: Color = traiDefaultAccentColor,
         size: TraiButtonSize = .regular,
         fullWidth: Bool = false,
         width: CGFloat? = nil,
@@ -238,7 +240,7 @@ extension ButtonStyle where Self == TraiSecondaryButtonStyle {
     static var traiSecondary: TraiSecondaryButtonStyle { TraiSecondaryButtonStyle() }
 
     static func traiSecondary(
-        color: Color = .accentColor,
+        color: Color = traiDefaultAccentColor,
         size: TraiButtonSize = .regular,
         fullWidth: Bool = false,
         width: CGFloat? = nil,
@@ -262,7 +264,7 @@ extension ButtonStyle where Self == TraiTertiaryButtonStyle {
     }
 
     static func traiTertiary(
-        color: Color = .accentColor,
+        color: Color = traiDefaultAccentColor,
         size: TraiButtonSize = .regular,
         fullWidth: Bool = false,
         width: CGFloat? = nil,
@@ -284,7 +286,7 @@ extension ButtonStyle where Self == TraiPillProminentButtonStyle {
     static var traiPillProminent: TraiPillProminentButtonStyle { TraiPillProminentButtonStyle() }
 
     static func traiPillProminent(
-        color: Color = .accentColor,
+        color: Color = traiDefaultAccentColor,
         size: TraiButtonSize = .regular,
         fullWidth: Bool = false,
         width: CGFloat? = nil,
@@ -304,7 +306,7 @@ extension ButtonStyle where Self == TraiPillSubtleButtonStyle {
     static var traiPillSubtle: TraiPillSubtleButtonStyle { TraiPillSubtleButtonStyle() }
 
     static func traiPillSubtle(
-        color: Color = .accentColor,
+        color: Color = traiDefaultAccentColor,
         size: TraiButtonSize = .regular,
         fullWidth: Bool = false,
         width: CGFloat? = nil,
