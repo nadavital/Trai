@@ -32,9 +32,9 @@ final class ChatMessage {
     /// Local storage key for image data (blob is stored on-device, not in CloudKit).
     var imageStorageKey: String?
 
-    /// Legacy CloudKit-backed image blob. No `originalName` mapping because CloudKit stores
-    /// cannot perform in-place property renames during migration.
-    @Attribute(.externalStorage) private var legacyImageData: Data?
+    /// Legacy CloudKit-backed image blob. Keep `originalName` so existing rows that still
+    /// persist `imageData` hydrate into this field and can migrate to local storage.
+    @Attribute(.externalStorage, originalName: "imageData") private var legacyImageData: Data?
 
     /// Image data attached to this message (for food logging via chat, local-only).
     @Transient

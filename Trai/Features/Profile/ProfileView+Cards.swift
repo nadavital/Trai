@@ -381,9 +381,9 @@ extension ProfileView {
             HStack {
                 Image(systemName: "bubble.left.and.bubble.right.fill")
                     .font(.title2)
-                    .foregroundStyle(Color.blue)
+                    .foregroundStyle(Color.accentColor)
                     .frame(width: 40, height: 40)
-                    .background(Color.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Chat History")
@@ -466,9 +466,9 @@ extension ProfileView {
             HStack {
                 Image(systemName: "bell.fill")
                     .font(.title2)
-                    .foregroundStyle(Color.pink)
+                    .foregroundStyle(Color.accentColor)
                     .frame(width: 40, height: 40)
-                    .background(Color.pink.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Reminders")
