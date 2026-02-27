@@ -157,8 +157,11 @@ struct CardioExerciseCard: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                     }
-                    .buttonStyle(.traiTertiary())
-                    .tint(entry.completedAt != nil ? .green : .accent)
+                    .buttonStyle(
+                        .traiTertiary(
+                            color: entry.completedAt != nil ? .green : .accentColor
+                        )
+                    )
                 }
             }
         }

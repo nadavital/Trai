@@ -162,8 +162,7 @@ struct PlanUpdateSuggestionCard: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 }
-                .buttonStyle(.traiTertiary())
-                .tint(.secondary)
+                .buttonStyle(.traiTertiary(color: .secondary))
 
                 Button {
                     onAccept()
@@ -178,8 +177,7 @@ struct PlanUpdateSuggestionCard: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                 }
-                .buttonStyle(.traiPrimary())
-                .tint(.accentColor)
+                .buttonStyle(.traiPrimary(color: .accentColor))
             }
         }
         .padding(16)

@@ -28,6 +28,7 @@ struct FoodCameraView: View {
     @State private var errorMessage: String?
     @State private var geminiService = GeminiService()
     @State private var showingManualEntry = false
+    @State private var pendingDismissAfterManualSave = false
 
     /// True when reviewing a captured image OR analyzing a text description
     @State private var isAnalyzingTextOnly = false
@@ -111,8 +112,14 @@ struct FoodCameraView: View {
                     modelContext.insert(entry)
                     recordFoodLogBehavior(entry: entry, source: "manual_entry")
                     HapticManager.success()
-                    dismiss()
+                    pendingDismissAfterManualSave = true
+                    showingManualEntry = false
                 })
+            }
+            .onChange(of: showingManualEntry) { _, isShowing in
+                guard !isShowing, pendingDismissAfterManualSave else { return }
+                pendingDismissAfterManualSave = false
+                dismiss()
             }
         }
         .tint(Color("AccentColor"))
