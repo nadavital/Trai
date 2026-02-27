@@ -35,6 +35,8 @@ struct ExerciseListView: View {
     @State private var showingCamera = false
     @State private var showingEquipmentResult = false
     @State private var equipmentAnalysis: ExercisePhotoAnalysis?
+    @State private var pendingEquipmentResultPresentation = false
+    @State private var equipmentResultPresentationTask: Task<Void, Never>?
     @State private var isAnalyzingPhoto = false
     @State private var photoAnalysisError: String?
     @State private var lastCapturedImageData: Data?
@@ -397,6 +399,9 @@ struct ExerciseListView: View {
             }
             .fullScreenCover(isPresented: $showingCamera) {
                 EquipmentCameraView { imageData in
+                    showingEquipmentResult = false
+                    pendingEquipmentResultPresentation = false
+                    equipmentResultPresentationTask?.cancel()
                     showingCamera = false
                     lastCapturedImageData = imageData
                     Task { await analyzeEquipmentPhoto(imageData) }
@@ -415,6 +420,10 @@ struct ExerciseListView: View {
                 }
                 Button("Take New Photo") {
                     photoAnalysisError = nil
+                    showingEquipmentResult = false
+                    pendingEquipmentResultPresentation = false
+                    equipmentAnalysis = nil
+                    equipmentResultPresentationTask?.cancel()
                     showingCamera = true
                 }
                 Button("Cancel", role: .cancel) {
@@ -463,6 +472,13 @@ struct ExerciseListView: View {
             .onAppear {
                 refreshUsageSummaryIfNeeded(force: true)
             }
+            .onChange(of: showingCamera) { _, isShowing in
+                guard !isShowing else { return }
+                presentPendingEquipmentResultIfNeeded()
+            }
+            .onDisappear {
+                equipmentResultPresentationTask?.cancel()
+            }
             .accessibilityIdentifier("exerciseListView")
         }
     }
@@ -484,11 +500,29 @@ struct ExerciseListView: View {
                 existingExerciseNames: existingNames
             )
             equipmentAnalysis = analysis
-            showingEquipmentResult = true
+            pendingEquipmentResultPresentation = true
+            presentPendingEquipmentResultIfNeeded()
             HapticManager.success()
         } catch {
             HapticManager.error()
+            pendingEquipmentResultPresentation = false
+            equipmentResultPresentationTask?.cancel()
             photoAnalysisError = "Couldn't identify the equipment. Make sure the machine is clearly visible and try again."
+        }
+    }
+
+    @MainActor
+    private func presentPendingEquipmentResultIfNeeded() {
+        guard pendingEquipmentResultPresentation, !showingCamera, equipmentAnalysis != nil else {
+            return
+        }
+
+        equipmentResultPresentationTask?.cancel()
+        equipmentResultPresentationTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, !showingCamera, equipmentAnalysis != nil else { return }
+            pendingEquipmentResultPresentation = false
+            showingEquipmentResult = true
         }
     }
 

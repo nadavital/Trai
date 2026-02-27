@@ -112,7 +112,10 @@ struct WorkoutTrendDetailSheet: View {
                     ToolbarItem(placement: .primaryAction) {
                         Button("Start Workout") {
                             dismiss()
-                            onStartWorkout()
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(250))
+                                onStartWorkout()
+                            }
                         }
                     }
                 }

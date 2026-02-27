@@ -145,7 +145,6 @@ struct ManualFoodEntrySheet: View {
         }
 
         onSave(entry)
-        dismiss()
     }
 }
 

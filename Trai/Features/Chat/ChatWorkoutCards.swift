@@ -200,8 +200,7 @@ struct SuggestedWorkoutLogCard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
             }
-            .buttonStyle(.traiPrimary())
-            .tint(.green)
+            .buttonStyle(.traiPrimary(color: .green))
         }
         .padding(14)
         .background(Color(.secondarySystemBackground))

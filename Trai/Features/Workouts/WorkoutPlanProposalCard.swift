@@ -127,8 +127,7 @@ struct WorkoutPlanProposalCard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
             }
-            .buttonStyle(.traiPrimary())
-            .tint(.accent)
+            .buttonStyle(.traiPrimary(color: .accentColor))
 
             // Customize button (optional)
             if let customize = onCustomize {

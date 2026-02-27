@@ -9,6 +9,12 @@ import SwiftUI
 import SwiftData
 
 struct WorkoutsView: View {
+    private struct PendingCustomWorkoutStart {
+        let name: String
+        let type: LiveWorkout.WorkoutType
+        let muscles: [LiveWorkout.MuscleGroup]
+    }
+
     // MARK: - Queries
 
     @Query private var profiles: [UserProfile]
@@ -53,6 +59,7 @@ struct WorkoutsView: View {
     @State private var showingPersonalRecords = false
     @State private var pendingWorkout: LiveWorkout?
     @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
+    @State private var pendingCustomWorkoutStart: PendingCustomWorkoutStart?
     @State private var lastOpenTrackedAt: Date?
     @State private var historyRefreshTask: Task<Void, Never>?
     @State private var deferredRecoveryRefreshTask: Task<Void, Never>?
@@ -307,8 +314,17 @@ struct WorkoutsView: View {
             }
             .sheet(isPresented: $showingCustomWorkoutSetup) {
                 CustomWorkoutSetupSheet { name, type, muscles in
-                    startCustomWorkout(name: name, type: type, muscles: muscles)
+                    queueCustomWorkoutStart(name: name, type: type, muscles: muscles)
                 }
+            }
+            .onChange(of: showingCustomWorkoutSetup) { _, isShowing in
+                guard !isShowing, let pendingCustomWorkoutStart else { return }
+                self.pendingCustomWorkoutStart = nil
+                startCustomWorkout(
+                    name: pendingCustomWorkoutStart.name,
+                    type: pendingCustomWorkoutStart.type,
+                    muscles: pendingCustomWorkoutStart.muscles
+                )
             }
             .onChange(of: showingWorkoutSheet) { _, isShowing in
                 if !isShowing {
@@ -917,6 +933,19 @@ struct WorkoutsView: View {
         pendingWorkout = workout
         showingWorkoutSheet = true
         HapticManager.selectionChanged()
+    }
+
+    private func queueCustomWorkoutStart(
+        name: String,
+        type: LiveWorkout.WorkoutType,
+        muscles: [LiveWorkout.MuscleGroup]
+    ) {
+        let request = PendingCustomWorkoutStart(name: name, type: type, muscles: muscles)
+        guard showingCustomWorkoutSetup else {
+            startCustomWorkout(name: request.name, type: request.type, muscles: request.muscles)
+            return
+        }
+        pendingCustomWorkoutStart = request
     }
 
     private func deleteWorkout(_ workout: WorkoutSession) {

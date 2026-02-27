@@ -86,8 +86,7 @@ struct SuggestedEditCard: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.traiPrimary())
-                .tint(.orange)
+                .buttonStyle(.traiPrimary(color: .orange))
             }
         }
         .padding()
@@ -270,8 +269,7 @@ struct SuggestedMealCard: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
                 }
-                .buttonStyle(.traiPrimary())
-                .tint(.green)
+                .buttonStyle(.traiPrimary(color: .green))
                 .disabled(isLogging)
             }
         }
