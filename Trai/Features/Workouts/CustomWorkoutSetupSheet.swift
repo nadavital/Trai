@@ -68,6 +68,8 @@ struct CustomWorkoutSetupSheet: View {
                 }
             }
         }
+        .tint(Color("AccentColor"))
+        .accentColor(Color("AccentColor"))
     }
 
     private var setupHeaderCard: some View {
