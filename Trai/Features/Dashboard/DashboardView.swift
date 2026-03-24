@@ -32,6 +32,7 @@ struct DashboardView: View {
     /// Optional binding to control reminders sheet from parent (for notification taps)
     @Binding var showRemindersBinding: Bool
     let onSelectTab: ((AppTab) -> Void)?
+    let onPresentFoodCamera: ((UUID?) -> Void)?
 
     @Query private var profiles: [UserProfile]
     @Query private var allFoodEntries: [FoodEntry]
@@ -68,8 +69,7 @@ struct DashboardView: View {
     private let reminderCompletionHistoryCapPerWindow = 180
 
     // Sheet presentation state
-    @State private var foodCameraPresentation: FoodCameraPresentation?
-    @State private var isPreparingFoodCamera = false
+    @State private var localFoodCameraPresentation: FoodCameraPresentation?
     @State private var showingLogWeight = false
     @State private var showingWeightTracking = false
     @State private var showingCalorieDetail = false
@@ -112,10 +112,12 @@ struct DashboardView: View {
 
     init(
         showRemindersBinding: Binding<Bool> = .constant(false),
-        onSelectTab: ((AppTab) -> Void)? = nil
+        onSelectTab: ((AppTab) -> Void)? = nil,
+        onPresentFoodCamera: ((UUID?) -> Void)? = nil
     ) {
         _showRemindersBinding = showRemindersBinding
         self.onSelectTab = onSelectTab
+        self.onPresentFoodCamera = onPresentFoodCamera
 
         let now = Date()
         let calendar = Calendar.current
@@ -625,11 +627,8 @@ struct DashboardView: View {
             .refreshable {
                 await refreshHealthData()
             }
-            .fullScreenCover(item: $foodCameraPresentation) { presentation in
-                FoodCameraView(
-                    sessionId: presentation.sessionId,
-                    cameraService: presentation.cameraService
-                )
+            .fullScreenCover(item: $localFoodCameraPresentation) { presentation in
+                FoodCameraView(sessionId: presentation.sessionId)
             }
             .sheet(isPresented: $showingLogWeight) {
                 LogWeightSheet()
@@ -1444,76 +1443,74 @@ struct DashboardView: View {
     }
 
     private func openFoodCameraFromDashboard(source: String, sessionId: UUID? = nil) {
-        BehaviorTracker(modelContext: modelContext).record(
+        presentFoodCamera(sessionId: sessionId)
+        BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: BehaviorActionKey.logFood,
             domain: .nutrition,
             surface: .dashboard,
             outcome: .opened,
             metadata: ["source": source]
         )
-        presentFoodCamera(sessionId: sessionId)
     }
 
     private func presentFoodCamera(sessionId: UUID? = nil) {
-        guard foodCameraPresentation == nil, !isPreparingFoodCamera else { return }
-        isPreparingFoodCamera = true
-
-        Task { @MainActor in
-            let presentation = FoodCameraPresentation(sessionId: sessionId)
-            await presentation.cameraService.requestPermission()
-            foodCameraPresentation = presentation
-            isPreparingFoodCamera = false
+        if let onPresentFoodCamera {
+            onPresentFoodCamera(sessionId)
+            return
         }
+
+        guard localFoodCameraPresentation == nil else { return }
+        localFoodCameraPresentation = FoodCameraPresentation(sessionId: sessionId)
     }
 
     private func openLogWeightFromDashboard(source: String) {
-        BehaviorTracker(modelContext: modelContext).record(
+        showingLogWeight = true
+        BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: BehaviorActionKey.logWeight,
             domain: .body,
             surface: .dashboard,
             outcome: .opened,
             metadata: ["source": source]
         )
-        showingLogWeight = true
     }
 
     private func openTraiChatFromDashboard() {
-        BehaviorTracker(modelContext: modelContext).record(
+        onSelectTab?(.trai)
+        HapticManager.selectionChanged()
+        BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: "engagement.dashboard_chat_shortcut",
             domain: .engagement,
             surface: .dashboard,
             outcome: .opened
         )
-        onSelectTab?(.trai)
-        HapticManager.selectionChanged()
     }
 
     private func openCalorieDetailFromDashboard(source: String) {
         loadFoodTrendHistoryForSelectedDateIfNeeded()
-        BehaviorTracker(modelContext: modelContext).record(
+        showingCalorieDetail = true
+        BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: BehaviorActionKey.openCalorieDetail,
             domain: .nutrition,
             surface: .dashboard,
             outcome: .opened,
             metadata: ["source": source]
         )
-        showingCalorieDetail = true
     }
 
     private func openMacroDetailFromDashboard(source: String) {
         loadFoodTrendHistoryForSelectedDateIfNeeded()
-        BehaviorTracker(modelContext: modelContext).record(
+        showingMacroDetail = true
+        BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: BehaviorActionKey.openMacroDetail,
             domain: .nutrition,
             surface: .dashboard,
             outcome: .opened,
             metadata: ["source": source]
         )
-        showingMacroDetail = true
     }
 
     private func trackOpenWeightFromDashboard(source: String) {
-        BehaviorTracker(modelContext: modelContext).record(
+        BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: BehaviorActionKey.openWeight,
             domain: .body,
             surface: .dashboard,

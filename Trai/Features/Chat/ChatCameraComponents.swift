@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AVFoundation
 
 // MARK: - Chat Camera View
 
@@ -14,12 +13,12 @@ struct ChatCameraView: View {
     @Environment(\.dismiss) private var dismiss
     let onCapture: (UIImage) -> Void
 
-    @State private var cameraService = ChatCameraService()
+    @State private var cameraService = CameraService()
 
     var body: some View {
         NavigationStack {
             ZStack {
-                ChatCameraPreview(cameraService: cameraService)
+                CameraPreviewView(cameraService: cameraService)
                     .ignoresSafeArea()
 
                 VStack {
@@ -60,133 +59,6 @@ struct ChatCameraView: View {
             .task {
                 await cameraService.requestPermission()
             }
-        }
-    }
-}
-
-// MARK: - Chat Camera Preview
-
-private struct ChatCameraPreview: UIViewRepresentable {
-    let cameraService: ChatCameraService
-
-    func makeUIView(context: Context) -> ChatCameraPreviewUIView {
-        let view = ChatCameraPreviewUIView()
-        view.backgroundColor = .black
-        cameraService.setupPreviewLayer(in: view)
-        return view
-    }
-
-    func updateUIView(_ uiView: ChatCameraPreviewUIView, context: Context) {
-        uiView.updatePreviewFrame()
-    }
-}
-
-private class ChatCameraPreviewUIView: UIView {
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        updatePreviewFrame()
-    }
-
-    func updatePreviewFrame() {
-        layer.sublayers?.forEach { sublayer in
-            if sublayer is AVCaptureVideoPreviewLayer {
-                sublayer.frame = bounds
-            }
-        }
-    }
-}
-
-// MARK: - Chat Camera Service
-
-@Observable
-@MainActor
-final class ChatCameraService: NSObject {
-    private let captureSession = AVCaptureSession()
-    private var photoOutput = AVCapturePhotoOutput()
-    private var previewLayer: AVCaptureVideoPreviewLayer?
-    private var photoContinuation: CheckedContinuation<UIImage?, Never>?
-
-    var isAuthorized = false
-
-    func requestPermission() async {
-        let status = AVCaptureDevice.authorizationStatus(for: .video)
-
-        switch status {
-        case .authorized:
-            isAuthorized = true
-            await setupCamera()
-        case .notDetermined:
-            isAuthorized = await AVCaptureDevice.requestAccess(for: .video)
-            if isAuthorized {
-                await setupCamera()
-            }
-        default:
-            isAuthorized = false
-        }
-    }
-
-    private func setupCamera() async {
-        captureSession.beginConfiguration()
-        captureSession.sessionPreset = .photo
-
-        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-              let input = try? AVCaptureDeviceInput(device: camera) else {
-            return
-        }
-
-        if captureSession.canAddInput(input) {
-            captureSession.addInput(input)
-        }
-
-        if captureSession.canAddOutput(photoOutput) {
-            captureSession.addOutput(photoOutput)
-        }
-
-        captureSession.commitConfiguration()
-
-        Task.detached { [captureSession] in
-            captureSession.startRunning()
-        }
-    }
-
-    func setupPreviewLayer(in view: UIView) {
-        previewLayer?.removeFromSuperlayer()
-
-        let layer = AVCaptureVideoPreviewLayer(session: captureSession)
-        layer.videoGravity = .resizeAspectFill
-        layer.frame = view.bounds
-        layer.connection?.videoOrientation = .portrait
-
-        view.layer.addSublayer(layer)
-        previewLayer = layer
-    }
-
-    func capturePhoto() async -> UIImage? {
-        await withCheckedContinuation { continuation in
-            self.photoContinuation = continuation
-
-            let settings = AVCapturePhotoSettings()
-            photoOutput.capturePhoto(with: settings, delegate: self)
-        }
-    }
-}
-
-extension ChatCameraService: AVCapturePhotoCaptureDelegate {
-    nonisolated func photoOutput(
-        _ output: AVCapturePhotoOutput,
-        didFinishProcessingPhoto photo: AVCapturePhoto,
-        error: Error?
-    ) {
-        Task { @MainActor in
-            guard let data = photo.fileDataRepresentation(),
-                  let image = UIImage(data: data) else {
-                photoContinuation?.resume(returning: nil)
-                photoContinuation = nil
-                return
-            }
-
-            photoContinuation?.resume(returning: image)
-            photoContinuation = nil
         }
     }
 }

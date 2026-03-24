@@ -10,8 +10,6 @@ import PhotosUI
 
 struct FoodCameraViewfinder: View {
     let cameraService: CameraService
-    let isCameraAuthorized: Bool
-    let isCameraReady: Bool
     let isCapturingPhoto: Bool
     @Binding var description: String
     let onCapture: () -> Void
@@ -125,8 +123,8 @@ struct FoodCameraViewfinder: View {
                             }
                         }
                     }
-                    .disabled(!isCameraAuthorized || !isCameraReady || isCapturingPhoto)
-                    .opacity((isCameraAuthorized && isCameraReady && !isCapturingPhoto) ? 1 : 0.55)
+                    .disabled(isCapturingPhoto)
+                    .opacity(isCapturingPhoto ? 0.55 : 1)
 
                     // Manual entry
                     Button(action: onManualEntry) {

@@ -25,7 +25,7 @@ extension ChatView {
         // Save immediately to persist the tap
         try? modelContext.save()
 
-        BehaviorTracker(modelContext: modelContext).record(
+        BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: BehaviorTracker.suggestionActionKey(from: suggestionType),
             domain: behaviorDomain(forSuggestionType: suggestionType),
             surface: .chat,

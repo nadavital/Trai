@@ -228,7 +228,6 @@ struct MainTabView: View {
 
     // App Intent / Deep link triggered states
     @State private var foodCameraPresentation: FoodCameraPresentation?
-    @State private var isPreparingFoodCamera = false
     @State private var showingLogWeight = false
     @State private var intentTriggeredWorkout: LiveWorkout?
     @State private var workoutTemplateService = WorkoutTemplateService()
@@ -242,12 +241,98 @@ struct MainTabView: View {
     }
 
     var body: some View {
+        tabScene
+    }
+
+    @ViewBuilder
+    private var tabScene: some View {
+        if let workout = activeWorkout {
+            baseTabScene
+                .tabViewBottomAccessory {
+                    WorkoutBanner(
+                        workout: workout,
+                        onTap: { presentedWorkout = workout },
+                        onEnd: { showingEndConfirmation = true }
+                    )
+                }
+        } else {
+            baseTabScene
+        }
+    }
+
+    private var baseTabScene: some View {
+        tabViewContent
+            .scrollIndicators(.hidden)
+            .environment(\.appTabSelection, selectedTab)
+            .onAppear(perform: handleTabViewAppear)
+            .onChange(of: selectedTabState) { _, tab in
+                persistedSelectedTabRaw = tab.rawValue
+                scheduleTabPrewarmIfNeeded()
+            }
+            .onChange(of: persistedSelectedTabRaw) { _, newValue in
+                guard let tab = AppTab(rawValue: newValue) else { return }
+                guard tab != selectedTabState else { return }
+                selectedTabState = tab
+            }
+            .onChange(of: showRemindersFromNotification.wrappedValue) { _, shouldShow in
+                guard shouldShow else { return }
+                selectTab(.dashboard)
+                showingReminders = true
+                showRemindersFromNotification.wrappedValue = false
+            }
+            .sheet(item: $presentedWorkout) { workout in
+                LiveWorkoutView(workout: workout)
+            }
+            .confirmationDialog(
+                "End Workout?",
+                isPresented: $showingEndConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("End Workout", role: .destructive) {
+                    if let workout = activeWorkout {
+                        workout.completedAt = Date()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Are you sure you want to end this workout?")
+            }
+            .fullScreenCover(item: $foodCameraPresentation) { presentation in
+                FoodCameraView(sessionId: presentation.sessionId)
+            }
+            .sheet(isPresented: $showingLogWeight) {
+                LogWeightSheet()
+            }
+            .sheet(item: $intentTriggeredWorkout) { workout in
+                LiveWorkoutView(workout: workout)
+            }
+            .onAppear {
+                consumePendingRoute()
+                // Handle deep links that may have been set before this view appeared (cold launch from widget).
+                handleRoute(deepLinkDestination)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                consumePendingRoute()
+            }
+            .onChange(of: deepLinkDestination) { _, destination in
+                handleRoute(destination)
+            }
+            .onDisappear {
+                tabPrewarmTask?.cancel()
+            }
+    }
+
+    private var tabViewContent: some View {
         TabView(selection: selectedTab) {
             Tab("Dashboard", systemImage: "house.fill", value: .dashboard) {
                 cachedTabContent(for: .dashboard) {
                     DashboardView(
                         showRemindersBinding: $showingReminders,
-                        onSelectTab: selectTab
+                        onSelectTab: selectTab,
+                        onPresentFoodCamera: { sessionId in
+                            guard foodCameraPresentation == nil else { return }
+                            foodCameraPresentation = FoodCameraPresentation(sessionId: sessionId)
+                        }
                     )
                 }
             }
@@ -270,93 +355,23 @@ struct MainTabView: View {
                 }
             }
         }
-        .scrollIndicators(.hidden)
-        .environment(\.appTabSelection, selectedTab)
-        .onAppear {
-            if !hasInitializedSelection {
-                hasInitializedSelection = true
-                if AppLaunchArguments.isUITesting {
-                    selectedTabState = .dashboard
-                    persistedSelectedTabRaw = AppTab.dashboard.rawValue
-                } else {
-                    selectedTabState = AppTab(rawValue: persistedSelectedTabRaw) ?? .dashboard
-                }
-            }
-            if loadedTabs.isEmpty {
-                _ = loadedTabs.insert(selectedTabState)
-            }
-            scheduleTabPrewarmIfNeeded()
-            PerformanceTrace.event("main_tab_first_frame", category: .launch)
-        }
-        .onChange(of: selectedTabState) { _, tab in
-            persistedSelectedTabRaw = tab.rawValue
-            scheduleTabPrewarmIfNeeded()
-        }
-        .onChange(of: persistedSelectedTabRaw) { _, newValue in
-            guard let tab = AppTab(rawValue: newValue) else { return }
-            guard tab != selectedTabState else { return }
-            selectedTabState = tab
-        }
-        .onChange(of: showRemindersFromNotification.wrappedValue) { _, shouldShow in
-            if shouldShow {
-                // Switch to dashboard and show reminders
-                selectTab(.dashboard)
-                showingReminders = true
-                showRemindersFromNotification.wrappedValue = false
+    }
+
+    private func handleTabViewAppear() {
+        if !hasInitializedSelection {
+            hasInitializedSelection = true
+            if AppLaunchArguments.isUITesting {
+                selectedTabState = .dashboard
+                persistedSelectedTabRaw = AppTab.dashboard.rawValue
+            } else {
+                selectedTabState = AppTab(rawValue: persistedSelectedTabRaw) ?? .dashboard
             }
         }
-        .tabViewBottomAccessory(isEnabled: activeWorkout != nil) {
-            if let workout = activeWorkout {
-                WorkoutBanner(
-                    workout: workout,
-                    onTap: { presentedWorkout = workout },
-                    onEnd: { showingEndConfirmation = true }
-                )
-            }
+        if loadedTabs.isEmpty {
+            _ = loadedTabs.insert(selectedTabState)
         }
-        .sheet(item: $presentedWorkout) { workout in
-            LiveWorkoutView(workout: workout)
-        }
-        .confirmationDialog(
-            "End Workout?",
-            isPresented: $showingEndConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("End Workout", role: .destructive) {
-                if let workout = activeWorkout {
-                    workout.completedAt = Date()
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Are you sure you want to end this workout?")
-        }
-        .fullScreenCover(item: $foodCameraPresentation) { presentation in
-            FoodCameraView(
-                sessionId: presentation.sessionId,
-                cameraService: presentation.cameraService
-            )
-        }
-        .sheet(isPresented: $showingLogWeight) {
-            LogWeightSheet()
-        }
-        .sheet(item: $intentTriggeredWorkout) { workout in
-            LiveWorkoutView(workout: workout)
-        }
-        .onAppear {
-            consumePendingRoute()
-            // Handle deep links that may have been set before this view appeared (cold launch from widget).
-            handleRoute(deepLinkDestination)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            consumePendingRoute()
-        }
-        .onChange(of: deepLinkDestination) { _, destination in
-            handleRoute(destination)
-        }
-        .onDisappear {
-            tabPrewarmTask?.cancel()
-        }
+        scheduleTabPrewarmIfNeeded()
+        PerformanceTrace.event("main_tab_first_frame", category: .launch)
     }
 
     @ViewBuilder
@@ -423,16 +438,24 @@ struct MainTabView: View {
 
         switch destination {
         case .logFood:
-            guard foodCameraPresentation == nil, !isPreparingFoodCamera else { return }
-            isPreparingFoodCamera = true
-            Task { @MainActor in
-                let presentation = FoodCameraPresentation()
-                await presentation.cameraService.requestPermission()
-                foodCameraPresentation = presentation
-                isPreparingFoodCamera = false
-            }
+            guard foodCameraPresentation == nil else { return }
+            foodCameraPresentation = FoodCameraPresentation()
+            BehaviorTracker(modelContext: modelContext).recordDeferred(
+                actionKey: BehaviorActionKey.logFood,
+                domain: .nutrition,
+                surface: .intent,
+                outcome: .opened,
+                metadata: ["source": "deep_link"]
+            )
         case .logWeight:
             showingLogWeight = true
+            BehaviorTracker(modelContext: modelContext).recordDeferred(
+                actionKey: BehaviorActionKey.logWeight,
+                domain: .body,
+                surface: .intent,
+                outcome: .opened,
+                metadata: ["source": "deep_link"]
+            )
         case .workout(let templateName):
             startWorkoutFromIntent(name: templateName ?? "custom")
         case .chat:

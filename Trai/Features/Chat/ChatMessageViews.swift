@@ -569,8 +569,8 @@ struct SuggestionRowsView: View {
                             title: starter.title,
                             color: starter.color
                         ) {
-                            onTrackTap?(starter.type)
                             onSuggestionTapped(starter.prompt)
+                            onTrackTap?(starter.type)
                         }
                     }
                 }
@@ -586,8 +586,8 @@ struct SuggestionRowsView: View {
                             title: starter.title,
                             color: starter.color
                         ) {
-                            onTrackTap?(starter.type)
                             onSuggestionTapped(starter.prompt)
+                            onTrackTap?(starter.type)
                         }
                     }
                 }

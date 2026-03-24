@@ -874,13 +874,12 @@ struct WorkoutsView: View {
             return
         }
         lastOpenTrackedAt = now
-        BehaviorTracker(modelContext: modelContext).record(
+        BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: BehaviorActionKey.openWorkouts,
             domain: .workout,
             surface: .workouts,
             outcome: .opened,
-            metadata: ["source": "workouts_tab"],
-            saveImmediately: false
+            metadata: ["source": "workouts_tab"]
         )
     }
 

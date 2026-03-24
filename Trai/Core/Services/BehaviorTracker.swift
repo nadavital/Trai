@@ -44,6 +44,36 @@ final class BehaviorTracker {
         }
     }
 
+    func recordDeferred(
+        actionKey: String,
+        domain: BehaviorDomain,
+        surface: BehaviorSurface,
+        outcome: BehaviorOutcome = .performed,
+        relatedEntityId: UUID? = nil,
+        metadata: [String: String]? = nil,
+        occurredAt: Date = .now,
+        saveImmediately: Bool = true,
+        delay: Duration = .milliseconds(300)
+    ) {
+        // Use deferred tracking for non-critical "opened"/"presented" telemetry so
+        // navigation and sheet presentation happen before SwiftData work. Do not use
+        // this for actions that create, edit, or complete real user data.
+        Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            record(
+                actionKey: actionKey,
+                domain: domain,
+                surface: surface,
+                outcome: outcome,
+                relatedEntityId: relatedEntityId,
+                metadata: metadata,
+                occurredAt: occurredAt,
+                saveImmediately: saveImmediately
+            )
+        }
+    }
+
     static func suggestionActionKey(from suggestionType: String) -> String {
         let normalized = suggestionType.lowercased()
 

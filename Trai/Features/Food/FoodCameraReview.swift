@@ -12,17 +12,17 @@ struct FoodCameraReviewView: View {
     @Binding var description: String
     let isAnalyzing: Bool
     let analysisResult: FoodAnalysis?
+    let refinedSuggestion: SuggestedFoodEntry?
     let errorMessage: String?
+    let refinementErrorMessage: String?
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
+    let isLoadingRefinement: Bool
     let onAnalyze: () -> Void
-    let onSave: () -> Void
-    let onSaveRefined: (SuggestedFoodEntry) -> Void
+    let onSave: (SuggestedFoodEntry, Bool) -> Void
+    let onRefine: (String) -> Void
 
     @State private var isRefining = false
     @State private var refinementText = ""
-    @State private var refinedSuggestion: SuggestedFoodEntry?
-    @State private var isLoadingRefinement = false
-    @State private var geminiService = GeminiService()
     @FocusState private var isRefinementFocused: Bool
 
     private var isTextOnly: Bool {
@@ -95,11 +95,7 @@ struct FoodCameraReviewView: View {
                         isRefining: isRefining,
                         enabledMacros: enabledMacros,
                         onSave: {
-                            if refinedSuggestion != nil {
-                                onSaveRefined(suggestion)
-                            } else {
-                                onSave()
-                            }
+                            onSave(suggestion, refinedSuggestion != nil)
                         },
                         onStartRefine: {
                             withAnimation(.spring(response: 0.3)) {
@@ -114,18 +110,27 @@ struct FoodCameraReviewView: View {
 
                 // Refinement chat interface
                 if isRefining {
-                    FoodRefinementInput(
-                        text: $refinementText,
-                        isLoading: isLoadingRefinement,
-                        isFocused: $isRefinementFocused,
-                        onSend: sendRefinement,
-                        onCancel: {
-                            withAnimation(.spring(response: 0.3)) {
-                                isRefining = false
-                                refinementText = ""
+                    VStack(spacing: 12) {
+                        FoodRefinementInput(
+                            text: $refinementText,
+                            isLoading: isLoadingRefinement,
+                            isFocused: $isRefinementFocused,
+                            onSend: sendRefinement,
+                            onCancel: {
+                                withAnimation(.spring(response: 0.3)) {
+                                    isRefining = false
+                                    refinementText = ""
+                                }
                             }
+                        )
+
+                        if let refinementErrorMessage, !refinementErrorMessage.isEmpty {
+                            Text(refinementErrorMessage)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                    )
+                    }
                 }
 
                 // Initial analyze button
@@ -154,31 +159,11 @@ struct FoodCameraReviewView: View {
 
     private func sendRefinement() {
         guard !refinementText.trimmingCharacters(in: .whitespaces).isEmpty,
-              let current = currentSuggestion else { return }
+              currentSuggestion != nil else { return }
 
-        isLoadingRefinement = true
-        let correction = refinementText
+        let correction = refinementText.trimmingCharacters(in: .whitespacesAndNewlines)
         refinementText = ""
-
-        Task {
-            do {
-                let imageData = image?.jpegData(compressionQuality: 0.8)
-                let result = try await geminiService.refineFoodAnalysis(
-                    correction: correction,
-                    currentSuggestion: current,
-                    imageData: imageData
-                )
-
-                withAnimation(.spring(response: 0.3)) {
-                    refinedSuggestion = result
-                    isRefining = false
-                }
-                HapticManager.success()
-            } catch {
-                HapticManager.error()
-            }
-            isLoadingRefinement = false
-        }
+        onRefine(correction)
     }
 }
 
