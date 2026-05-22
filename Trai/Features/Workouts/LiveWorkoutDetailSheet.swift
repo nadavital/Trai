@@ -767,6 +767,12 @@ struct LiveWorkoutDetailSheet: View {
                 history.totalSets = completedSets.count
                 history.totalReps = entry.totalReps
                 history.estimatedOneRepMax = entry.estimatedOneRepMax
+                history.activityTypeName = entry.activityTypeName
+                history.activityKind = entry.activityKind ?? WorkoutPlan.TrainingBlock.BlockKind.liveWorkoutFallbackKind(for: entry.exerciseType)
+                history.activityTags = entry.targetTags
+                history.trackingFields = entry.trackingFields
+                history.durationSeconds = entry.trackedDurationSeconds
+                history.distanceMeters = entry.trackedDistanceMeters
 
                 // Update rep and weight patterns
                 history.repPattern = completedSets.map { "\($0.reps)" }.joined(separator: ",")

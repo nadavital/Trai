@@ -44,6 +44,24 @@ final class ExerciseHistory {
     /// Reference to the source workout entry
     var sourceWorkoutEntryId: UUID?
 
+    /// User-facing activity type for non-strength and mixed tracking contexts.
+    var activityTypeNameRaw: String = ""
+
+    /// Broad fallback kind copied from the live workout entry.
+    var activityKindRaw: String = ""
+
+    /// Comma-separated target tags copied from the live workout entry.
+    var activityTagsRaw: String = ""
+
+    /// Comma-separated tracking fields copied from the live workout entry.
+    var trackingFieldsRaw: String = ""
+
+    /// Logged duration for non-strength activity entries.
+    var durationSeconds: Int = 0
+
+    /// Logged distance for non-strength activity entries.
+    var distanceMeters: Double = 0
+
     /// Rep pattern as comma-separated values (e.g., "12,10,8")
     var repPattern: String?
 
@@ -69,6 +87,12 @@ final class ExerciseHistory {
         self.totalReps = entry.totalReps
         self.estimatedOneRepMax = entry.estimatedOneRepMax
         self.sourceWorkoutEntryId = entry.id
+        self.activityTypeName = entry.activityTypeName
+        self.activityKind = entry.activityKind ?? WorkoutPlan.TrainingBlock.BlockKind.liveWorkoutFallbackKind(for: entry.exerciseType)
+        self.activityTags = entry.targetTags
+        self.trackingFields = entry.trackingFields
+        self.durationSeconds = entry.trackedDurationSeconds
+        self.distanceMeters = entry.trackedDistanceMeters
 
         // Store rep and weight patterns from completed sets
         if let completedSets = entry.completedSets, !completedSets.isEmpty {
@@ -96,6 +120,65 @@ final class ExerciseHistory {
 // MARK: - Computed Properties
 
 extension ExerciseHistory {
+    var activityTypeName: String {
+        get { activityTypeNameRaw.trimmingCharacters(in: .whitespacesAndNewlines) }
+        set { activityTypeNameRaw = newValue.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
+    var activityKind: WorkoutPlan.TrainingBlock.BlockKind? {
+        get {
+            let rawValue = activityKindRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !rawValue.isEmpty else { return nil }
+            return WorkoutPlan.TrainingBlock.BlockKind(rawValue: rawValue)
+        }
+        set {
+            activityKindRaw = newValue?.rawValue ?? ""
+        }
+    }
+
+    var activityTags: [String] {
+        get {
+            activityTagsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            activityTagsRaw = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ",")
+        }
+    }
+
+    var trackingFields: [Exercise.TrackingField] {
+        get {
+            trackingFieldsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .compactMap(Exercise.TrackingField.init(rawValue:))
+                .filter { $0 != .calories }
+        }
+        set {
+            trackingFieldsRaw = newValue
+                .filter { $0 != .calories }
+                .map(\.rawValue)
+                .joined(separator: ",")
+        }
+    }
+
+    var semanticActivityTokens: Set<String> {
+        Set(
+            ([exerciseName, activityTypeName, activityKind?.displayName ?? ""] + activityTags)
+                .map(\.goalNormalizedKey)
+                .filter { !$0.isEmpty }
+        )
+    }
+
+    var hasStrengthMetrics: Bool {
+        bestSetWeightKg > 0 || bestSetReps > 0 || totalVolume > 0 || totalSets > 0 || totalReps > 0
+    }
+
     static func records(
         from workout: LiveWorkout,
         performedAt: Date? = nil
@@ -306,15 +389,16 @@ enum ExercisePerformanceService {
         history: [ExerciseHistory],
         volumePRMode: UserProfile.VolumePRMode = .perSet
     ) -> ExercisePerformanceSnapshot? {
-        guard !history.isEmpty else { return nil }
+        let strengthHistory = history.filter(\.hasStrengthMetrics)
+        guard !strengthHistory.isEmpty else { return nil }
 
         return ExercisePerformanceSnapshot(
             exerciseName: exerciseName,
-            lastSession: mostRecentRecord(in: history),
-            weightPR: bestWeightRecord(in: history),
-            repsPR: bestRepsRecord(in: history),
-            volumePR: bestVolumeRecord(in: history, mode: volumePRMode),
-            estimatedOneRepMax: history
+            lastSession: mostRecentRecord(in: strengthHistory),
+            weightPR: bestWeightRecord(in: strengthHistory),
+            repsPR: bestRepsRecord(in: strengthHistory),
+            volumePR: bestVolumeRecord(in: strengthHistory, mode: volumePRMode),
+            estimatedOneRepMax: strengthHistory
                 .compactMap { entry in
                     entry.estimatedOneRepMax ??
                         LiveWorkoutEntry.estimatedOneRepMax(
@@ -324,7 +408,7 @@ enum ExercisePerformanceService {
                 }
                 .filter { $0 > 0 }
                 .max(),
-            totalSessions: history.count
+            totalSessions: strengthHistory.count
         )
     }
 

@@ -351,7 +351,21 @@ struct ExerciseListView: View {
     }
 
     private var quickAddCategory: Exercise.Category {
-        selectedCategory ?? .strength
+        if let selectedCategory {
+            return selectedCategory
+        }
+
+        if let activityType = quickAddActivityTypeName {
+            let key = Exercise.normalizedActivityKey(activityType)
+            if let matchingExercise = exercises.first(where: { $0.activityMatchingTokens.contains(key) }) {
+                return matchingExercise.exerciseCategory.userFacingEquivalent
+            }
+            if let inferred = Exercise.Category.normalized(from: activityType) {
+                return inferred.userFacingEquivalent
+            }
+        }
+
+        return .strength
     }
 
     private var quickAddActivityTypeName: String? {
@@ -481,7 +495,11 @@ struct ExerciseListView: View {
                         }
 
                         // Recent exercises section
-                        if searchText.isEmpty && selectedCategory == nil && selectedMuscleGroup == nil && !listData.recentExercises.isEmpty {
+                        if searchText.isEmpty,
+                           selectedCategory == nil,
+                           selectedMuscleGroup == nil,
+                           selectedActivityTypeFilter == nil,
+                           !listData.recentExercises.isEmpty {
                             Section {
                                 ForEach(listData.recentExercises) { exercise in
                                     exerciseRow(exercise)
@@ -768,6 +786,7 @@ struct ExerciseListView: View {
                                     selectedActivityTypeFilter = nil
                                 } else {
                                     selectedActivityTypeFilter = activityType
+                                    selectedCategory = nil
                                     selectedMuscleGroup = nil
                                 }
                             }
