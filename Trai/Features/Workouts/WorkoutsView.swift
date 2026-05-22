@@ -13,6 +13,7 @@ struct WorkoutsView: View {
         let name: String
         let type: LiveWorkout.WorkoutType
         let muscles: [LiveWorkout.MuscleGroup]
+        let focusAreas: [String]
     }
 
     // MARK: - Queries
@@ -352,7 +353,7 @@ struct WorkoutsView: View {
                         liveWorkoutsByDate: liveWorkoutsByDate,
                         activeGoals: activeWorkoutGoals,
                         onWorkoutTap: { showingWorkoutDetail = $0 },
-                        onLiveWorkoutTap: { showingLiveWorkoutDetail = $0 },
+                        onLiveWorkoutTap: openLiveWorkout,
                         onDelete: deleteWorkout,
                         onDeleteLiveWorkout: deleteLiveWorkout
                     )
@@ -506,8 +507,8 @@ struct WorkoutsView: View {
             }
             .sheet(isPresented: $showingCustomWorkoutSetup) {
                 CustomWorkoutSetupSheet(
-                    onStart: { name, type, muscles in
-                        queueCustomWorkoutStart(name: name, type: type, muscles: muscles)
+                    onStart: { name, type, muscles, focusAreas in
+                        queueCustomWorkoutStart(name: name, type: type, muscles: muscles, focusAreas: focusAreas)
                     },
                     orderedWorkoutTypes: personalizedWorkoutTypes
                 )
@@ -519,7 +520,8 @@ struct WorkoutsView: View {
                 startCustomWorkout(
                     name: pendingCustomWorkoutStart.name,
                     type: pendingCustomWorkoutStart.type,
-                    muscles: pendingCustomWorkoutStart.muscles
+                    muscles: pendingCustomWorkoutStart.muscles,
+                    focusAreas: pendingCustomWorkoutStart.focusAreas
                 )
             }
             .onChange(of: showingWorkoutSheet) { _, isShowing in
@@ -1267,10 +1269,22 @@ struct WorkoutsView: View {
         HapticManager.selectionChanged()
     }
 
+    private func openLiveWorkout(_ workout: LiveWorkout) {
+        if workout.isInProgress {
+            pendingTemplate = nil
+            pendingWorkout = workout
+            showingWorkoutSheet = true
+        } else {
+            showingLiveWorkoutDetail = workout
+        }
+        HapticManager.selectionChanged()
+    }
+
     private func startCustomWorkout(
         name: String = "Custom Workout",
         type: LiveWorkout.WorkoutType = .strength,
-        muscles: [LiveWorkout.MuscleGroup] = []
+        muscles: [LiveWorkout.MuscleGroup] = [],
+        focusAreas: [String] = []
     ) {
         if let activeWorkout {
             pendingWorkout = activeWorkout
@@ -1282,7 +1296,8 @@ struct WorkoutsView: View {
         let workout = templateService.createCustomWorkout(
             name: name,
             type: type,
-            muscles: muscles
+            muscles: muscles,
+            focusAreas: focusAreas
         )
         _ = templateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
@@ -1293,7 +1308,8 @@ struct WorkoutsView: View {
             relatedEntityId: workout.id,
             metadata: [
                 "type": "custom",
-                "workout_type": type.rawValue
+                "workout_type": type.rawValue,
+                "focus_areas": focusAreas.joined(separator: ",")
             ]
         )
 
@@ -1306,14 +1322,16 @@ struct WorkoutsView: View {
     private func queueCustomWorkoutStart(
         name: String,
         type: LiveWorkout.WorkoutType,
-        muscles: [LiveWorkout.MuscleGroup]
+        muscles: [LiveWorkout.MuscleGroup],
+        focusAreas: [String]
     ) {
-        let request = PendingCustomWorkoutStart(name: name, type: type, muscles: muscles)
+        let request = PendingCustomWorkoutStart(name: name, type: type, muscles: muscles, focusAreas: focusAreas)
         guard showingCustomWorkoutSetup else {
             startCustomWorkout(
                 name: request.name,
                 type: request.type,
-                muscles: request.muscles
+                muscles: request.muscles,
+                focusAreas: request.focusAreas
             )
             return
         }

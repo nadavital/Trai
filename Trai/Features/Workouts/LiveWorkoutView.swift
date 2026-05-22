@@ -19,9 +19,50 @@ struct LiveWorkoutView: View {
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
     @Query private var profiles: [UserProfile]
     @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
+    @Query(sort: \Exercise.name) private var exerciseLibrary: [Exercise]
 
     private var usesMetricExerciseWeight: Bool {
         profiles.first?.usesMetricExerciseWeight ?? true
+    }
+    private var planTargets: [MuscleGroupSelector.PlanTarget] {
+        guard let templates = profiles.first?.workoutPlan?.templates else { return [] }
+
+        var seen: Set<String> = []
+        return templates
+            .sorted { $0.order < $1.order }
+            .compactMap { template in
+                let title = template.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !title.isEmpty else { return nil }
+                let key = title.lowercased()
+                guard seen.insert(key).inserted else { return nil }
+
+                return MuscleGroupSelector.PlanTarget(
+                    id: template.id,
+                    title: title,
+                    iconName: template.sessionType.iconName,
+                    muscles: template.sessionType.supportsMuscleTargets
+                        ? LiveWorkout.MuscleGroup.fromTargetStrings(template.resolvedTargetMuscleGroups)
+                        : [],
+                    categories: activityCategories(for: template)
+                )
+            }
+    }
+
+    private var activityTypeTargets: [MuscleGroupSelector.ActivityTypeTarget] {
+        var seen: Set<String> = []
+        return exerciseLibrary.compactMap { exercise in
+            guard exercise.exerciseCategory != .strength else { return nil }
+            let title = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { return nil }
+            let key = title.goalNormalizedKey
+            guard seen.insert(key).inserted else { return nil }
+            return MuscleGroupSelector.ActivityTypeTarget(
+                id: key,
+                title: title,
+                iconName: exercise.exerciseCategory.iconName,
+                categories: [exercise.exerciseCategory]
+            )
+        }
     }
     private let finishOnPresentation: Bool
 
@@ -146,14 +187,18 @@ struct LiveWorkoutView: View {
             }
             .sheet(isPresented: $showingExerciseList) {
                 ExerciseListView(
-                    targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup }
+                    targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup },
+                    targetActivityCategories: viewModel.targetActivityCategories,
+                    targetActivityTypes: viewModel.targetActivityTypes
                 ) { exercise in
                     viewModel.addExercise(exercise)
                 }
             }
             .sheet(isPresented: $showingExerciseReplacement) {
                 ExerciseListView(
-                    targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup }
+                    targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup },
+                    targetActivityCategories: viewModel.targetActivityCategories,
+                    targetActivityTypes: viewModel.targetActivityTypes
                 ) { exercise in
                     if let entry = entryToReplace {
                         viewModel.replaceExercise(entry, with: exercise)
@@ -390,24 +435,26 @@ struct LiveWorkoutView: View {
                                 get: { Set(viewModel.workout.muscleGroups) },
                                 set: { viewModel.updateMuscleGroups(Array($0)) }
                             ),
-                            isCustomWorkout: viewModel.exerciseSuggestions.isEmpty
+                            selectedActivityCategories: Binding(
+                                get: { Set(viewModel.targetActivityCategories) },
+                                set: { viewModel.updateActivityTargets(Array($0)) }
+                            ),
+                            selectedActivityTypes: Binding(
+                                get: { Set(viewModel.targetActivityTypes) },
+                                set: { selectedTypes in viewModel.updateActivityTypeTargets(Array(selectedTypes)) }
+                            ),
+                            isCustomWorkout: viewModel.exerciseSuggestions.isEmpty,
+                            planTargets: planTargets,
+                            activityTypeTargets: activityTypeTargets,
+                            onSelectPlanTarget: { target in
+                                viewModel.applyPlanTarget(
+                                    name: target.title,
+                                    muscles: target.muscles,
+                                    categories: target.categories
+                                )
+                            }
                         )
 
-                        if !viewModel.workout.muscleGroups.isEmpty {
-                            HStack {
-                                Spacer()
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        viewModel.refreshSuggestions()
-                                    }
-                                } label: {
-                                    Label("Refresh Suggestions", systemImage: "arrow.clockwise")
-                                        .font(.caption)
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.secondary)
-                            }
-                        }
                     }
 
                     // Logged workout items stay first so strength work is always the main surface.
@@ -422,9 +469,6 @@ struct LiveWorkoutView: View {
                                 onUpdateDistance: { meters in
                                     viewModel.updateCardioDistance(for: entry, meters: meters)
                                 },
-                                onUpdateCalories: { calories in
-                                    viewModel.updateEntryCalories(for: entry, calories: calories)
-                                },
                                 onUpdateSetCount: { count in
                                     viewModel.updateEntrySetCount(for: entry, count: count)
                                 },
@@ -437,8 +481,24 @@ struct LiveWorkoutView: View {
                                 onUpdateNotes: { notes in
                                     viewModel.updateEntryNotes(for: entry, notes: notes)
                                 },
-                                onComplete: {
-                                    viewModel.toggleGeneralEntryCompletion(for: entry)
+                                onAddSegment: { viewModel.addActivitySegment(to: entry) },
+                                onUpdateSegmentDuration: { index, seconds in
+                                    viewModel.updateActivitySegment(for: entry, at: index, durationSeconds: seconds)
+                                },
+                                onUpdateSegmentDistance: { index, meters in
+                                    viewModel.updateActivitySegment(for: entry, at: index, distanceMeters: meters)
+                                },
+                                onUpdateSegmentReps: { index, reps in
+                                    viewModel.updateActivitySegment(for: entry, at: index, reps: reps)
+                                },
+                                onUpdateSegmentWeightKg: { index, weightKg in
+                                    viewModel.updateActivitySegment(for: entry, at: index, weightKg: weightKg)
+                                },
+                                onUpdateSegmentNotes: { index, notes in
+                                    viewModel.updateActivitySegment(for: entry, at: index, notes: notes)
+                                },
+                                onRemoveSegment: { index in
+                                    viewModel.removeActivitySegment(from: entry, at: index)
                                 },
                                 onDeleteExercise: { removeEntry(entry) }
                             )
@@ -452,9 +512,6 @@ struct LiveWorkoutView: View {
                                 onUpdateDistance: { meters in
                                     viewModel.updateCardioDistance(for: entry, meters: meters)
                                 },
-                                onUpdateCalories: { calories in
-                                    viewModel.updateEntryCalories(for: entry, calories: calories)
-                                },
                                 onUpdateSetCount: { count in
                                     viewModel.updateEntrySetCount(for: entry, count: count)
                                 },
@@ -467,8 +524,24 @@ struct LiveWorkoutView: View {
                                 onUpdateNotes: { notes in
                                     viewModel.updateEntryNotes(for: entry, notes: notes)
                                 },
-                                onComplete: {
-                                    viewModel.toggleCardioCompletion(for: entry)
+                                onAddSegment: { viewModel.addActivitySegment(to: entry) },
+                                onUpdateSegmentDuration: { index, seconds in
+                                    viewModel.updateActivitySegment(for: entry, at: index, durationSeconds: seconds)
+                                },
+                                onUpdateSegmentDistance: { index, meters in
+                                    viewModel.updateActivitySegment(for: entry, at: index, distanceMeters: meters)
+                                },
+                                onUpdateSegmentReps: { index, reps in
+                                    viewModel.updateActivitySegment(for: entry, at: index, reps: reps)
+                                },
+                                onUpdateSegmentWeightKg: { index, weightKg in
+                                    viewModel.updateActivitySegment(for: entry, at: index, weightKg: weightKg)
+                                },
+                                onUpdateSegmentNotes: { index, notes in
+                                    viewModel.updateActivitySegment(for: entry, at: index, notes: notes)
+                                },
+                                onRemoveSegment: { index in
+                                    viewModel.removeActivitySegment(from: entry, at: index)
                                 },
                                 onDeleteExercise: { removeEntry(entry) }
                             )
@@ -501,15 +574,6 @@ struct LiveWorkoutView: View {
                         }
                     }
 
-                    if loggedEntries.isEmpty {
-                        ContentUnavailableView(
-                            "No Exercises Yet",
-                            systemImage: "dumbbell.fill",
-                            description: Text("Add the strength work you want to track in this session.")
-                        )
-                        .padding(.top, 4)
-                    }
-
                     // Up Next suggestion (smart rotation)
                     if let upNext {
                         UpNextSuggestionCard(
@@ -537,6 +601,15 @@ struct LiveWorkoutView: View {
                                 viewModel.addExerciseFromSuggestion(suggestion)
                             }
                         }
+                    }
+
+                    if loggedEntries.isEmpty && upNext == nil && availableSuggestions.isEmpty {
+                        ContentUnavailableView(
+                            "No Exercises Yet",
+                            systemImage: "dumbbell.fill",
+                            description: Text("Add what you want to track in this session.")
+                        )
+                        .padding(.top, 4)
                     }
 
                     if !plannedGuidanceEntries.isEmpty {
@@ -595,6 +668,53 @@ struct LiveWorkoutView: View {
         viewModel.removeExercise(at: index)
     }
 
+    private func activityCategories(for template: WorkoutPlan.WorkoutTemplate) -> [Exercise.Category] {
+        var categories: [Exercise.Category] = []
+
+        func append(_ category: Exercise.Category) {
+            guard !categories.contains(category) else { return }
+            categories.append(category)
+        }
+
+        switch template.sessionType {
+        case .strength:
+            break
+        case .cardio:
+            append(.cardio)
+        case .hiit:
+            append(.conditioning)
+        case .climbing:
+            append(.sportPractice)
+        case .yoga, .pilates, .mobility, .flexibility:
+            append(.mobility)
+        case .recovery:
+            append(.recovery)
+        case .mixed, .custom:
+            break
+        }
+
+        let tokens = (template.focusAreas + template.targetMuscleGroups + [template.name])
+            .joined(separator: " ")
+            .lowercased()
+        if tokens.contains("cardio") || tokens.contains("run") || tokens.contains("cycle") || tokens.contains("row") {
+            append(.cardio)
+        }
+        if tokens.contains("conditioning") || tokens.contains("hiit") || tokens.contains("interval") {
+            append(.conditioning)
+        }
+        if tokens.contains("mobility") || tokens.contains("flexibility") || tokens.contains("stretch") || tokens.contains("yoga") {
+            append(.mobility)
+        }
+        if tokens.contains("recovery") || tokens.contains("cooldown") {
+            append(.recovery)
+        }
+        if tokens.contains("sport") || tokens.contains("climb") || tokens.contains("practice") || tokens.contains("skill") {
+            append(.sportPractice)
+        }
+
+        return categories
+    }
+
     private func applyUITestStressMutationBurst() {
         guard AppLaunchArguments.isUITesting,
               AppLaunchArguments.shouldUseLiveWorkoutUITestPreset,
@@ -627,11 +747,11 @@ struct LiveWorkoutView: View {
 
         let completedExercises = entries.filter { entry in
             if entry.isCardio {
-                return entry.completedAt != nil || (entry.durationSeconds ?? 0) > 0 || (entry.distanceMeters ?? 0) > 0
+                return entry.completedAt != nil || entry.trackedDurationSeconds > 0 || entry.trackedDistanceMeters > 0
             }
             if entry.isGeneralActivity {
                 guard !entry.isPlannedActivityGuidance else { return false }
-                return entry.completedAt != nil || !entry.notes.isEmpty || (entry.durationSeconds ?? 0) > 0
+                return entry.completedAt != nil || !entry.notes.isEmpty || entry.trackedDurationSeconds > 0 || entry.trackedDistanceMeters > 0
             }
             return !entry.sets.isEmpty && entry.sets.allSatisfy { $0.reps > 0 }
         }.count
@@ -649,10 +769,10 @@ struct LiveWorkoutView: View {
         let setsWithData = entries.reduce(0) { total, entry in
             if entry.isGeneralActivity {
                 guard !entry.isPlannedActivityGuidance else { return total }
-                return total + ((entry.completedAt != nil || !entry.notes.isEmpty || (entry.durationSeconds ?? 0) > 0) ? 1 : 0)
+                return total + ((entry.completedAt != nil || !entry.notes.isEmpty || entry.trackedDurationSeconds > 0 || entry.trackedDistanceMeters > 0) ? 1 : 0)
             }
             if entry.isCardio {
-                return total + ((entry.completedAt != nil || !entry.notes.isEmpty || (entry.durationSeconds ?? 0) > 0) ? 1 : 0)
+                return total + ((entry.completedAt != nil || !entry.notes.isEmpty || entry.trackedDurationSeconds > 0 || entry.trackedDistanceMeters > 0) ? 1 : 0)
             }
             return total + entry.sets.filter { $0.reps > 0 && !$0.isWarmup }.count
         }

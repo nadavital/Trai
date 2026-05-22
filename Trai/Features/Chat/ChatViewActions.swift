@@ -349,20 +349,33 @@ extension ChatView {
         // Create a LiveWorkout with proper exercise details
         let workoutType = LiveWorkout.WorkoutType.normalized(from: workoutLog.workoutType)
             ?? (workoutLog.isStrength ? .strength : .cardio)
+        let semanticFocus = workoutLog.semanticFocusAreas
         let workout = LiveWorkout(
             name: workoutLog.displayName,
             workoutType: workoutType,
             targetMuscleGroups: [],
-            focusAreas: workoutType.supportsMuscleTargets ? [] : [workoutLog.displayName]
+            focusAreas: semanticFocus
         )
 
         // Add exercises as entries
         var entries: [LiveWorkoutEntry] = []
         for (index, exercise) in workoutLog.exercises.enumerated() {
-            let entry = LiveWorkoutEntry(exerciseName: exercise.name, orderIndex: index)
+            let category = exercise.resolvedCategory(fallbackWorkoutType: workoutType)
+            let entry = LiveWorkoutEntry(
+                exerciseName: exercise.name,
+                orderIndex: index,
+                exerciseType: category.rawValue
+            )
+            entry.activityTypeName = exercise.resolvedActivityName(category: category)
+            entry.activityKind = category.liveWorkoutActivityKind
+            entry.targetTags = exercise.resolvedTargetTags(category: category)
+            entry.trackingFields = exercise.resolvedTrackingFields(category: category)
+            if let exerciseNotes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !exerciseNotes.isEmpty {
+                entry.notes = exerciseNotes
+            }
 
             // Add each set with its specific reps/weight
-            for setData in exercise.sets {
+            for setData in exercise.sets where category == .strength {
                 let cleanWeight = WeightUtility.cleanWeightFromKg(setData.weightKg ?? 0)
                 entry.addSet(LiveWorkoutEntry.SetData(
                     reps: setData.reps,
@@ -370,6 +383,21 @@ extension ChatView {
                     completed: true,
                     isWarmup: false
                 ))
+            }
+            if category != .strength {
+                entry.durationSeconds = exercise.durationMinutes.map { max(0, $0) * 60 }
+                entry.distanceMeters = exercise.distanceMeters
+                let segments = exercise.activitySegments
+                if segments.isEmpty, entry.durationSeconds != nil || entry.distanceMeters != nil || !entry.notes.isEmpty {
+                    entry.addActivitySegment(LiveWorkoutEntry.ActivitySegment(
+                        durationSeconds: entry.durationSeconds,
+                        distanceMeters: entry.distanceMeters,
+                        notes: entry.notes
+                    ))
+                } else {
+                    segments.forEach { entry.addActivitySegment($0) }
+                }
+                entry.completedAt = Date()
             }
 
             entries.append(entry)
@@ -447,33 +475,54 @@ extension ChatView {
             ? LiveWorkout.MuscleGroup.fromTargetStrings(workout.targetMuscleGroups)
             : []
         let focusAreas = workoutType.supportsMuscleTargets ? [] : workout.targetMuscleGroups
+        let semanticFocus = workout.activityFocuses?.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? []
 
         // Create the LiveWorkout
         let liveWorkout = LiveWorkout(
             name: workout.name,
             workoutType: workoutType,
             targetMuscleGroups: targetMuscles,
-            focusAreas: focusAreas
+            focusAreas: semanticFocus.isEmpty ? focusAreas : semanticFocus
         )
 
         // Start with one ready exercise. The live workout view will continue
         // surfacing Trai suggestions instead of dumping the whole plan at once.
         var entries: [LiveWorkoutEntry] = []
         if let exercise = workout.exercises.first {
-            let entry = LiveWorkoutEntry(exerciseName: exercise.name, orderIndex: 0)
-            let setDefaults = WorkoutTemplateService().suggestedSetDefaults(
+            let category = exercise.resolvedCategory(fallbackWorkoutType: workoutType)
+            let entry = LiveWorkoutEntry(
                 exerciseName: exercise.name,
-                requestedReps: exercise.reps,
-                requestedWeightKg: exercise.weightKg,
-                progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
-                modelContext: modelContext
+                orderIndex: 0,
+                exerciseType: category.rawValue
             )
-            entry.addSet(LiveWorkoutEntry.SetData(
-                reps: setDefaults.reps,
-                weight: setDefaults.weight,
-                completed: false,
-                isWarmup: false
-            ))
+            entry.activityTypeName = exercise.resolvedActivityName(category: category)
+            entry.activityKind = category.liveWorkoutActivityKind
+            entry.targetTags = exercise.resolvedTargetTags(category: category)
+            entry.trackingFields = exercise.resolvedTrackingFields(category: category)
+            if let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+                entry.notes = notes
+            }
+
+            if category == .strength {
+                let setDefaults = WorkoutTemplateService().suggestedSetDefaults(
+                    exerciseName: exercise.name,
+                    requestedReps: exercise.reps,
+                    requestedWeightKg: exercise.weightKg,
+                    progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
+                    modelContext: modelContext
+                )
+                entry.addSet(LiveWorkoutEntry.SetData(
+                    reps: setDefaults.reps,
+                    weight: setDefaults.weight,
+                    completed: false,
+                    isWarmup: false
+                ))
+            } else {
+                entry.plannedDurationSeconds = exercise.durationMinutes.map { max(0, $0) * 60 }
+                if let distanceMeters = exercise.distanceMeters, distanceMeters > 0 {
+                    entry.plannedTarget = String(format: "%.0f m", distanceMeters)
+                }
+            }
             entries.append(entry)
         }
         liveWorkout.entries = entries
@@ -545,6 +594,112 @@ extension ChatView {
             return .nutrition
         }
         return .engagement
+    }
+}
+
+private extension SuggestedWorkoutLog {
+    var semanticFocusAreas: [String] {
+        var values = activityTags ?? []
+        if let activityName = activityName?.trimmingCharacters(in: .whitespacesAndNewlines), !activityName.isEmpty {
+            values.insert(activityName, at: 0)
+        } else if !displayName.isEmpty {
+            values.insert(displayName, at: 0)
+        }
+        return values.dedupedByGoalKey()
+    }
+}
+
+private extension SuggestedWorkoutLog.LoggedExercise {
+    func resolvedCategory(fallbackWorkoutType: LiveWorkout.WorkoutType) -> Exercise.Category {
+        if let category, let resolved = Exercise.Category(rawValue: category) {
+            return resolved
+        }
+        if fallbackWorkoutType.supportsMuscleTargets || !sets.isEmpty {
+            return .strength
+        }
+        return .cardio
+    }
+
+    func resolvedActivityName(category: Exercise.Category) -> String {
+        if let activityTypeName = activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines), !activityTypeName.isEmpty {
+            return activityTypeName
+        }
+        return Exercise.defaultActivityTypeName(for: name, category: category)
+    }
+
+    func resolvedTargetTags(category: Exercise.Category) -> [String] {
+        let explicitTags = targetTags?.dedupedByGoalKey() ?? []
+        if !explicitTags.isEmpty { return explicitTags }
+        return category == .strength ? [] : [resolvedActivityName(category: category)]
+    }
+
+    func resolvedTrackingFields(category: Exercise.Category) -> [Exercise.TrackingField] {
+        let explicitFields = trackingFields?
+            .compactMap(Exercise.TrackingField.init(rawValue:))
+            .filter { $0 != .calories } ?? []
+        return explicitFields.isEmpty
+            ? Exercise.defaultTrackingFields(for: category)
+            : Exercise.normalizedTrackingFields(explicitFields, for: category)
+    }
+
+    var activitySegments: [LiveWorkoutEntry.ActivitySegment] {
+        (segments ?? []).map {
+            LiveWorkoutEntry.ActivitySegment(
+                durationSeconds: $0.durationMinutes.map { max(0, $0) * 60 },
+                distanceMeters: $0.distanceMeters,
+                reps: $0.reps,
+                weightKg: $0.weightKg,
+                notes: $0.notes ?? ""
+            )
+        }
+    }
+}
+
+private extension SuggestedWorkoutEntry.SuggestedExercise {
+    func resolvedCategory(fallbackWorkoutType: LiveWorkout.WorkoutType) -> Exercise.Category {
+        if let category, let resolved = Exercise.Category(rawValue: category) {
+            return resolved
+        }
+        if fallbackWorkoutType.supportsMuscleTargets {
+            return .strength
+        }
+        return .cardio
+    }
+
+    func resolvedActivityName(category: Exercise.Category) -> String {
+        if let activityTypeName = activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines), !activityTypeName.isEmpty {
+            return activityTypeName
+        }
+        return Exercise.defaultActivityTypeName(for: name, category: category)
+    }
+
+    func resolvedTargetTags(category: Exercise.Category) -> [String] {
+        let explicitTags = targetTags?.dedupedByGoalKey() ?? []
+        if !explicitTags.isEmpty { return explicitTags }
+        return category == .strength ? [] : [resolvedActivityName(category: category)]
+    }
+
+    func resolvedTrackingFields(category: Exercise.Category) -> [Exercise.TrackingField] {
+        let explicitFields = trackingFields?
+            .compactMap(Exercise.TrackingField.init(rawValue:))
+            .filter { $0 != .calories } ?? []
+        return explicitFields.isEmpty
+            ? Exercise.defaultTrackingFields(for: category)
+            : Exercise.normalizedTrackingFields(explicitFields, for: category)
+    }
+}
+
+private extension Array where Element == String {
+    func dedupedByGoalKey() -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in self {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.goalNormalizedKey
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
     }
 }
 

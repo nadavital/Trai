@@ -404,10 +404,11 @@ extension AIService {
                     "status": "suggestion_ready",
                     "workout_name": workout.name,
                     "workout_type": workout.workoutType,
+                    "activity_focuses": workout.activityFocuses ?? [],
                     "exercise_count": workout.exercises.count,
                     "exercises_preview": exerciseNames,
                     "duration_minutes": workout.durationMinutes,
-                    "instruction": "The user will see a card with this workout suggestion. Please write a brief message about why this workout fits their goals/recovery. \(toneInstruction)"
+                    "instruction": "The user will see a card with this workout suggestion. Please write a brief message about why this workout fits their goals, recovery, and activity focus without reducing custom activities to broad workout categories. \(toneInstruction)"
                 ],
                 previousMessages: messages,
                 originalParts: accumulatedParts,
@@ -429,6 +430,8 @@ extension AIService {
                 response: [
                     "status": "suggestion_ready",
                     "workout_type": workoutLog.workoutType,
+                    "activity_name": workoutLog.activityName as Any,
+                    "activity_tags": workoutLog.activityTags ?? [],
                     "exercise_count": workoutLog.exercises.count,
                     "exercises": exercisesSummary,
                     "duration_minutes": workoutLog.durationMinutes as Any,

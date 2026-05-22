@@ -329,6 +329,8 @@ struct WorkoutPlan: Codable, Equatable {
         let title: String
         let detail: String
         let exercises: [ExerciseTemplate]
+        let activityTypeName: String?
+        let activityTags: [String]
         let durationMinutes: Int?
         let intensity: String?
         let target: String?
@@ -342,6 +344,8 @@ struct WorkoutPlan: Codable, Equatable {
             case title
             case detail
             case exercises
+            case activityTypeName
+            case activityTags
             case durationMinutes
             case intensity
             case target
@@ -469,6 +473,8 @@ struct WorkoutPlan: Codable, Equatable {
             title: String,
             detail: String,
             exercises: [ExerciseTemplate] = [],
+            activityTypeName: String? = nil,
+            activityTags: [String] = [],
             durationMinutes: Int? = nil,
             intensity: String? = nil,
             target: String? = nil,
@@ -481,6 +487,10 @@ struct WorkoutPlan: Codable, Equatable {
             self.title = title
             self.detail = detail
             self.exercises = exercises
+            self.activityTypeName = activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            self.activityTags = activityTags
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
             self.durationMinutes = durationMinutes
             self.intensity = intensity
             self.target = target
@@ -497,6 +507,12 @@ struct WorkoutPlan: Codable, Equatable {
             title = try container.decode(String.self, forKey: .title)
             detail = try container.decode(String.self, forKey: .detail)
             exercises = try container.decodeIfPresent([ExerciseTemplate].self, forKey: .exercises) ?? []
+            activityTypeName = try container.decodeIfPresent(String.self, forKey: .activityTypeName)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty
+            activityTags = (try container.decodeIfPresent([String].self, forKey: .activityTags) ?? [])
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
             durationMinutes = try container.decodeIfPresent(Int.self, forKey: .durationMinutes)
             intensity = try container.decodeIfPresent(String.self, forKey: .intensity)
             target = try container.decodeIfPresent(String.self, forKey: .target)
@@ -515,6 +531,19 @@ struct WorkoutPlan: Codable, Equatable {
                 return "\(trimmedTitle.isEmpty ? kind.displayName : trimmedTitle) \(durationMinutes)m"
             }
             return trimmedTitle.isEmpty ? kind.displayName : trimmedTitle
+        }
+
+        nonisolated var displayActivityName: String {
+            if let activityTypeName, !activityTypeName.isEmpty {
+                return activityTypeName
+            }
+
+            let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedTitle.isEmpty {
+                return trimmedTitle
+            }
+
+            return kind.displayName
         }
     }
 
@@ -729,6 +758,8 @@ private extension Array where Element == WorkoutPlan.TrainingBlock {
                 title: block.title,
                 detail: block.detail,
                 exercises: block.exercises,
+                activityTypeName: block.activityTypeName,
+                activityTags: block.activityTags,
                 durationMinutes: block.durationMinutes,
                 intensity: block.intensity,
                 target: block.target,
@@ -736,6 +767,12 @@ private extension Array where Element == WorkoutPlan.TrainingBlock {
                 notes: block.notes
             )
         }
+    }
+}
+
+private extension String {
+    nonisolated var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }
 

@@ -65,7 +65,7 @@ extension WorkoutPlan.WorkoutTemplate {
         }
 
         if let block = displayBlocks.first {
-            return block.kind.displayName
+            return block.displayActivityName
         }
 
         return sessionType.displayName

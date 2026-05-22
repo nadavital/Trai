@@ -37,9 +37,16 @@ enum ExerciseLibrarySeeder {
                 if existing.trackingFieldsRaw.isEmpty {
                     existing.trackingFields = Exercise.defaultTrackingFields(for: existing.exerciseCategory)
                     didMutate = true
+                } else if existing.trackingFields.contains(.calories) {
+                    existing.trackingFields = existing.trackingFields.filter { $0 != .calories }
+                    didMutate = true
                 }
                 if existing.targetTagsRaw.isEmpty {
                     existing.targetTags = defaultTargetTags(category: existing.exerciseCategory, muscleGroup: existing.targetMuscleGroup)
+                    didMutate = true
+                }
+                if existing.activityTypeNameRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    existing.activityTypeName = Exercise.defaultActivityTypeName(for: existing.name, category: existing.exerciseCategory)
                     didMutate = true
                 }
                 continue
@@ -48,6 +55,7 @@ enum ExerciseLibrarySeeder {
             let exercise = Exercise(name: name, category: category, muscleGroup: muscleGroup)
             exercise.equipmentName = equipment
             exercise.isCustom = false
+            exercise.activityTypeName = Exercise.defaultActivityTypeName(for: name, category: exercise.exerciseCategory)
             exercise.trackingFields = Exercise.defaultTrackingFields(for: exercise.exerciseCategory)
             exercise.targetTags = defaultTargetTags(category: exercise.exerciseCategory, muscleGroup: exercise.targetMuscleGroup)
             modelContext.insert(exercise)

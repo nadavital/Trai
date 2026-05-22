@@ -10,10 +10,65 @@ import SwiftUI
 // MARK: - Muscle Group Selector
 
 struct MuscleGroupSelector: View {
+    struct PlanTarget: Identifiable, Equatable {
+        let id: UUID
+        let title: String
+        let iconName: String
+        let muscles: [LiveWorkout.MuscleGroup]
+        let categories: [Exercise.Category]
+    }
+
+    struct ActivityTypeTarget: Identifiable, Equatable {
+        let id: String
+        let title: String
+        let iconName: String
+        let categories: [Exercise.Category]
+    }
+
     @Binding var selectedMuscles: Set<LiveWorkout.MuscleGroup>
+    @Binding var selectedActivityCategories: Set<Exercise.Category>
+    @Binding var selectedActivityTypes: Set<String>
     let isCustomWorkout: Bool
+    var planTargets: [PlanTarget] = []
+    var activityTypeTargets: [ActivityTypeTarget] = []
+    var onSelectPlanTarget: ((PlanTarget) -> Void)?
 
     @State private var isExpanded: Bool = false
+
+    private let activityTargets: [Exercise.Category] = [.cardio, .conditioning, .mobility, .sportPractice, .recovery]
+
+    private var activityTypeTargetCategoryKeys: Set<String> {
+        Set(
+            activityTypeTargets.flatMap { target in
+                target.categories.flatMap { category in
+                    category.suggestionCategories.map(\.rawValue) + [category.displayName]
+                } + [target.title]
+            }
+            .map { Exercise.normalizedActivityKey($0) }
+            .filter { !$0.isEmpty }
+        )
+    }
+
+    private var displayedActivityTargets: [Exercise.Category] {
+        activityTargets.filter { category in
+            let keys = category.suggestionCategories.flatMap { [$0.rawValue, $0.displayName] }
+                .map { Exercise.normalizedActivityKey($0) }
+            return keys.allSatisfy { !activityTypeTargetCategoryKeys.contains($0) }
+        }
+    }
+
+    private var displayedActivityCategories: [Exercise.Category] {
+        let impliedCategories = Set(
+            activityTypeTargets
+                .filter { selectedActivityTypes.contains($0.title) }
+                .flatMap { $0.categories.flatMap { Array($0.suggestionCategories) } }
+        )
+        return selectedActivityCategories
+            .filter { category in
+                impliedCategories.isDisjoint(with: category.suggestionCategories)
+            }
+            .sorted { $0.displayName < $1.displayName }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -23,27 +78,27 @@ struct MuscleGroupSelector: View {
                 HapticManager.lightTap()
             } label: {
                 HStack {
-                    if selectedMuscles.isEmpty {
+                    if selectedMuscles.isEmpty && selectedActivityCategories.isEmpty && selectedActivityTypes.isEmpty {
                         Image(systemName: "plus.circle.fill")
                             .foregroundStyle(.accent)
-                        Text("Select target muscles")
+                        Text("Choose workout targets")
                             .foregroundStyle(.secondary)
                     } else {
-                        Image(systemName: "figure.strengthtraining.traditional")
+                        Image(systemName: "scope")
                             .foregroundStyle(.accent)
                         Text("Targeting")
                             .foregroundStyle(.secondary)
 
-                        // Show selected muscles as chips
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 6) {
                                 ForEach(Array(selectedMuscles).sorted { $0.displayName < $1.displayName }) { muscle in
-                                    Text(muscle.displayName)
-                                        .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.accentColor.opacity(0.15))
-                                        .clipShape(.capsule)
+                                    SelectedTargetChip(title: muscle.displayName)
+                                }
+                                ForEach(displayedActivityCategories) { category in
+                                    SelectedTargetChip(title: category.displayName)
+                                }
+                                ForEach(Array(selectedActivityTypes).sorted(), id: \.self) { activityType in
+                                    SelectedTargetChip(title: activityType)
                                 }
                             }
                         }
@@ -61,22 +116,45 @@ struct MuscleGroupSelector: View {
 
             // Expanded selection
             if isExpanded {
-                VStack(alignment: .leading, spacing: 12) {
-                    // Quick presets
-                    HStack(spacing: 8) {
-                        PresetChip(title: "Push", isSelected: isPushSelected) {
-                            togglePreset(LiveWorkout.MuscleGroup.pushMuscles)
-                        }
-                        PresetChip(title: "Pull", isSelected: isPullSelected) {
-                            togglePreset(LiveWorkout.MuscleGroup.pullMuscles)
-                        }
-                        PresetChip(title: "Legs", isSelected: isLegsSelected) {
-                            togglePreset(LiveWorkout.MuscleGroup.legMuscles)
+                VStack(alignment: .leading, spacing: 10) {
+                    if !planTargets.isEmpty {
+                        horizontalTargetRow {
+                            ForEach(planTargets) { target in
+                                PlanTargetChip(
+                                    target: target,
+                                    isSelected: isPlanTargetSelected(target)
+                                ) {
+                                    selectPlanTarget(target)
+                                }
+                            }
                         }
                     }
 
-                    // Individual muscles
+                    if !activityTypeTargets.isEmpty {
+                        horizontalTargetRow {
+                            ForEach(activityTypeTargets) { target in
+                                ActivityTypeTargetChip(
+                                    target: target,
+                                    isSelected: isActivityTypeTargetSelected(target)
+                                ) {
+                                    toggleActivityTypeTarget(target)
+                                }
+                            }
+                        }
+                    }
+
                     FlowLayout(spacing: 8) {
+                        ForEach(displayedActivityTargets) { category in
+                            ActivityTargetChip(
+                                category: category,
+                                isSelected: isActivityCategorySelected(category)
+                            ) {
+                                toggleActivityCategory(category)
+                            }
+                        }
+                    }
+
+                    horizontalTargetRow {
                         ForEach(LiveWorkout.MuscleGroup.allCases.filter { $0 != .fullBody }) { muscle in
                             MuscleSelectChip(
                                 muscle: muscle,
@@ -86,18 +164,6 @@ struct MuscleGroupSelector: View {
                             }
                         }
                     }
-
-                    // Done button
-                    Button {
-                        withAnimation(.snappy) { isExpanded = false }
-                    } label: {
-                        Text("Done")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                    }
-                    .buttonStyle(.traiPrimary())
                 }
                 .padding(.top, 4)
             }
@@ -107,32 +173,10 @@ struct MuscleGroupSelector: View {
         .clipShape(.rect(cornerRadius: 12))
         .onAppear {
             // Auto-expand for custom workouts with no muscles selected
-            if isCustomWorkout && selectedMuscles.isEmpty {
+            if isCustomWorkout && selectedMuscles.isEmpty && selectedActivityCategories.isEmpty && selectedActivityTypes.isEmpty {
                 isExpanded = true
             }
         }
-    }
-
-    private var isPushSelected: Bool {
-        Set(LiveWorkout.MuscleGroup.pushMuscles).isSubset(of: selectedMuscles)
-    }
-
-    private var isPullSelected: Bool {
-        Set(LiveWorkout.MuscleGroup.pullMuscles).isSubset(of: selectedMuscles)
-    }
-
-    private var isLegsSelected: Bool {
-        Set(LiveWorkout.MuscleGroup.legMuscles).isSubset(of: selectedMuscles)
-    }
-
-    private func togglePreset(_ muscles: [LiveWorkout.MuscleGroup]) {
-        let muscleSet = Set(muscles)
-        if muscleSet.isSubset(of: selectedMuscles) {
-            selectedMuscles.subtract(muscleSet)
-        } else {
-            selectedMuscles.formUnion(muscleSet)
-        }
-        HapticManager.lightTap()
     }
 
     private func toggleMuscle(_ muscle: LiveWorkout.MuscleGroup) {
@@ -143,27 +187,117 @@ struct MuscleGroupSelector: View {
         }
         HapticManager.selectionChanged()
     }
+
+    private func toggleActivityCategory(_ category: Exercise.Category) {
+        if isActivityCategorySelected(category) {
+            selectedActivityCategories.subtract(category.suggestionCategories)
+        } else {
+            selectedActivityCategories.formUnion(category.suggestionCategories)
+        }
+        HapticManager.selectionChanged()
+    }
+
+    private func isActivityCategorySelected(_ category: Exercise.Category) -> Bool {
+        !selectedActivityCategories.isDisjoint(with: category.suggestionCategories)
+    }
+
+    private func selectPlanTarget(_ target: PlanTarget) {
+        selectedMuscles = Set(target.muscles)
+        selectedActivityCategories = Set(target.categories.flatMap { Array($0.suggestionCategories) })
+        selectedActivityTypes = []
+        onSelectPlanTarget?(target)
+        HapticManager.selectionChanged()
+    }
+
+    private func isPlanTargetSelected(_ target: PlanTarget) -> Bool {
+        guard !target.muscles.isEmpty || !target.categories.isEmpty else { return false }
+        let targetMuscles = Set(target.muscles)
+        let targetCategories = Set(target.categories.flatMap { Array($0.suggestionCategories) })
+        return selectedMuscles == targetMuscles && selectedActivityCategories == targetCategories && selectedActivityTypes.isEmpty
+    }
+
+    private func toggleActivityTypeTarget(_ target: ActivityTypeTarget) {
+        if isActivityTypeTargetSelected(target) {
+            selectedActivityTypes.remove(target.title)
+        } else {
+            selectedActivityTypes.insert(target.title)
+        }
+        HapticManager.selectionChanged()
+    }
+
+    private func isActivityTypeTargetSelected(_ target: ActivityTypeTarget) -> Bool {
+        selectedActivityTypes.contains(target.title)
+    }
+
+    private func horizontalTargetRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                content()
+            }
+            .padding(.horizontal, 1)
+        }
+        .scrollClipDisabled()
+    }
 }
 
-// MARK: - Preset Chip
-
-private struct PresetChip: View {
-    let title: String
+private struct PlanTargetChip: View {
+    let target: MuscleGroupSelector.PlanTarget
     let isSelected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(.caption)
-                .fontWeight(.medium)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(isSelected ? Color.accentColor : Color(.tertiarySystemFill))
-                .foregroundStyle(isSelected ? .white : .primary)
-                .clipShape(.capsule)
+            HStack(spacing: 6) {
+                Image(systemName: target.iconName)
+                    .font(.caption2)
+                Text(target.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(isSelected ? Color.accentColor : Color.accentColor.opacity(0.12))
+            .foregroundStyle(isSelected ? .white : Color.accentColor)
+            .clipShape(.capsule)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct ActivityTypeTargetChip: View {
+    let target: MuscleGroupSelector.ActivityTypeTarget
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: target.iconName)
+                    .font(.caption2)
+                Text(target.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(isSelected ? Color.accentColor : Color(.tertiarySystemFill))
+            .foregroundStyle(isSelected ? .white : .primary)
+            .clipShape(.capsule)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct SelectedTargetChip: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.caption)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.accentColor.opacity(0.15))
+            .clipShape(.capsule)
     }
 }
 
@@ -180,6 +314,29 @@ private struct MuscleSelectChip: View {
                 Image(systemName: muscle.iconName)
                     .font(.caption2)
                 Text(muscle.displayName)
+                    .font(.caption)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(isSelected ? Color.accentColor : Color(.tertiarySystemFill))
+            .foregroundStyle(isSelected ? .white : .primary)
+            .clipShape(.capsule)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ActivityTargetChip: View {
+    let category: Exercise.Category
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: category.iconName)
+                    .font(.caption2)
+                Text(category.displayName)
                     .font(.caption)
             }
             .padding(.horizontal, 10)

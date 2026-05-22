@@ -103,7 +103,7 @@ extension AIPromptBuilder {
         2. Custom, activity-first, hybrid, skill-based, and nontraditional weekly structures are all valid.
         3. Respect the user's selected weekly schedule. If Available Days Per Week is a number, return exactly that many workout templates and set daysPerWeek to that same number. Only choose a different session count when Available Days Per Week is Flexible.
         4. Design workout templates with exercises OR activities that match the user's actual preferences, equipment, and constraints.
-        5. Build every template from ordered blocks. Block kind describes what the work is: warmup, strength, cardio, conditioning, skill, mobility, recovery, sportPractice, cooldown, or custom. Block role describes how it fits: main, warmup, accessory, finisher, cooldown, or custom.
+        5. Build every template from ordered blocks. Block kind and role are stable behavior primitives. activityTypeName is the user-facing activity identity, so use specific names like Climbing, Cycling, Mobility Flow, Boxing, or Strength instead of relying on broad kinds as labels.
         6. Include 4-8 exercises inside strength blocks when it is an exercise-based session. For activity-based sessions, use blocks with duration, intensity, target, and detail instead of forcing fake sets/reps.
         7. Specify sets, reps, intervals, pace guidance, duration, intensity, or effort targets appropriate for each block.
         8. Include a modalityProgression that matches the plan. Do not force a lifting progression for cardio, mobility, climbing, sport, or hybrid plans.
@@ -116,21 +116,22 @@ extension AIPromptBuilder {
         15. If the user selected strength but did not give a split direction, choose the simplest structure that fits the schedule and goal. A 2-3 day full-body plan is valid only when it is genuinely the best fit or the user chose it.
         16. If the user says supportive cardio should happen once, on one day, or on a named day only, include exactly one cardio or conditioning block with role accessory or finisher in the entire plan and place it there. Do not duplicate it on a second day.
         17. Make mixed/support work visible in the template name or focusAreas when it materially changes the day, e.g. "Legs + Conditioning" or focusAreas including "Cardio support".
-        18. Do not use "Finisher" as the default label for supportive cardio. Use "finisher" only when the person explicitly asks for work at the end of the workout; otherwise name the block by its actual purpose, such as endurance support, conditioning, intervals, zone 2, or recovery.
-        19. Return a planIntent that explicitly summarizes the primary focus, supporting focuses, session allocation, honored user inputs, and anything intentionally avoided.
-        20. Write rationale, notes, and planIntent text as Trai speaking directly to the person using the app. Use "you" and "your"; do not refer to them as "the user".
-        21. For EVERY workout template, set:
+        18. Do not use "Finisher" as the default label for supportive cardio. Use "finisher" only when the person explicitly asks for work at the end of the workout; otherwise name the block by its actual purpose, such as endurance support, conditioning, intervals, steady cardio, or recovery.
+        19. Preserve every selected or stated modality as real plan structure unless the user explicitly says it is only background support or should be avoided. For example, if Strength and Climbing are selected, a strength-leading plan can still include a climbing/bouldering session or a meaningful skill block; do not replace climbing with only generic grip accessories unless the user asked for that.
+        20. Return a planIntent that explicitly summarizes the primary focus, supporting focuses, session allocation, honored user inputs, and anything intentionally avoided. The summary must be a natural first-person Trai message fragment, not a raw answer label.
+        21. Write rationale, notes, and planIntent text as Trai speaking directly to the person using the app. Use "you" and "your"; do not refer to them as "the user".
+        22. For EVERY workout template, set:
            - sessionType: one of strength, cardio, hiit, climbing, yoga, pilates, flexibility, mobility, mixed, recovery, custom
            - focusAreas: short labels describing the session focus (e.g. ["Push", "Chest"], ["Yoga Flow", "Recovery"], ["Climbing", "Technique"])
            - notes: one short explanation of why this day belongs in your week
-           - blocks: ordered training blocks that describe the actual session
+           - blocks: ordered training blocks that describe the actual session, including activityTypeName and activityTags whenever the block represents a specific activity family or personalized target
            - exercises belong inside the relevant blocks only; do not duplicate block exercises at the template level
-        22. Keep the JSON compact. Use short one-sentence notes/detail fields and avoid repeating the same coaching text in multiple places.
+        23. Keep the JSON compact. Use short one-sentence notes/detail fields and avoid repeating the same coaching text in multiple places.
 
         EXERCISE SELECTION RULES:
         - For full gym: Use barbells, dumbbells, cables, and machines
-        - For home advanced: Use barbells, dumbbells, and bodyweight
-        - For home basic: Use dumbbells, resistance bands, and bodyweight
+        - For home gym: Use barbells, dumbbells, bench, pull-up bar, and bodyweight
+        - For dumbbells/bands: Use dumbbells, resistance bands, and bodyweight
         - For bodyweight only: Use bodyweight exercises only
 
         TRAINING TYPE CONSIDERATIONS:
@@ -143,6 +144,7 @@ extension AIPromptBuilder {
         FINAL SELF-CHECK BEFORE RETURNING JSON:
         - Does the plan follow every answer in the personalization brief?
         - Does the session allocation match the user's requested days and modality balance?
+        - Is every explicitly selected modality still visible as a real template or block?
         - Are supportive modalities integrated as support rather than promoted to standalone days?
         - Are blocks specific enough that the app can show and start the plan without losing the user's intent?
         If any answer is no, revise the plan before returning it.
@@ -209,6 +211,16 @@ extension AIPromptBuilder {
                 ],
                 "title": ["type": "string"],
                 "detail": ["type": "string"],
+                "activityTypeName": [
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Specific user-facing activity identity for this block, such as Climbing, Cycling, Running, Mobility Flow, Boxing, or Strength. Do not use only the broad kind label when a more meaningful activity name exists."
+                ],
+                "activityTags": [
+                    "type": "array",
+                    "items": ["type": "string"],
+                    "description": "Short semantic tags for matching this block to goals, suggestions, and future edits."
+                ],
                 "exercises": [
                     "type": "array",
                     "items": exerciseSchema
@@ -219,7 +231,7 @@ extension AIPromptBuilder {
                 "order": ["type": "integer"],
                 "notes": ["type": "string", "nullable": true]
             ],
-            "required": ["id", "kind", "role", "title", "detail", "exercises", "order"]
+            "required": ["id", "kind", "role", "title", "detail", "activityTags", "exercises", "order"]
         ]
 
         return [
@@ -352,6 +364,11 @@ extension AIPromptBuilder {
                     "type": "string",
                     "nullable": true
                 ],
+                "linkedActivityTags": [
+                    "type": "array",
+                    "items": ["type": "string"],
+                    "nullable": true
+                ],
                 "linkedActivityKindRaw": [
                     "type": "string",
                     "enum": ["warmup", "strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom"],
@@ -481,7 +498,7 @@ extension AIPromptBuilder {
         - Session details:
         \(currentPlan.templates.map { template in
             let blocks = template.displayBlocks.map { block in
-                "\(block.kind.displayName): \(block.title)\(block.durationMinutes.map { " \($0)m" } ?? "")"
+                "\(block.displayActivityName) (\(block.kind.displayName)): \(block.title)\(block.durationMinutes.map { " \($0)m" } ?? "")"
             }.joined(separator: " | ")
             return "  - \(template.name): \(blocks)"
         }.joined(separator: "\n"))
@@ -509,6 +526,7 @@ extension AIPromptBuilder {
         - If they ask to change exercises or schedule directionally, make a reasonable proposal instead of starting a long clarification chain
         - Preserve and update planIntent, modalityProgression, and template blocks whenever a plan changes
         - Use blocks for modality-specific work: cardio, mobility flows, climbing/sport practice, conditioning, and recovery should not be flattened into fake strength exercises. Use role to describe whether a block is main work, a warmup, an accessory, a finisher, or a cooldown.
+        - Preserve specific activity identity with activityTypeName and activityTags. Kind remains a stable behavior primitive, not the user-facing name.
         - If the user says a support modality should happen once, only once, or on a named day only, include exactly one matching support block and place it on that day. Do not duplicate it elsewhere.
         - Make support work visible in the changed template name or focusAreas when it materially changes the day, so the plan card can show it without requiring a details sheet.
         - Keep the selected coach tone consistent with the rest of the app
@@ -548,6 +566,16 @@ extension AIPromptBuilder {
                 ],
                 "title": ["type": "string"],
                 "detail": ["type": "string"],
+                "activityTypeName": [
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Specific user-facing activity identity for this block, such as Climbing, Cycling, Running, Mobility Flow, Boxing, or Strength."
+                ],
+                "activityTags": [
+                    "type": "array",
+                    "items": ["type": "string"],
+                    "description": "Short semantic tags for matching this block to goals, suggestions, and future edits."
+                ],
                 "exercises": [
                     "type": "array",
                     "items": exerciseSchema
@@ -558,7 +586,7 @@ extension AIPromptBuilder {
                 "order": ["type": "integer"],
                 "notes": ["type": "string", "nullable": true]
             ],
-            "required": ["id", "kind", "role", "title", "detail", "exercises", "order"]
+            "required": ["id", "kind", "role", "title", "detail", "activityTags", "exercises", "order"]
         ]
 
         let templateSchema: [String: Any] = [

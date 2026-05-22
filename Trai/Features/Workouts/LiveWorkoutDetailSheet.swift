@@ -227,7 +227,11 @@ struct LiveWorkoutDetailSheet: View {
                     .traiSheetBranding()
             }
             .sheet(isPresented: $showingExercisePicker) {
-                ExerciseListView(targetMuscleGroups: targetExerciseMuscleGroups) { exercise in
+                ExerciseListView(
+                    targetMuscleGroups: targetExerciseMuscleGroups,
+                    targetActivityCategories: targetActivityCategories,
+                    targetActivityTypes: targetActivityTypeNames
+                ) { exercise in
                     addExercise(exercise)
                 }
             }
@@ -519,6 +523,28 @@ struct LiveWorkoutDetailSheet: View {
         }
     }
 
+    private var targetActivityCategories: [Exercise.Category] {
+        var seen = Set<Exercise.Category>()
+        return sortedEntries.compactMap { entry in
+            guard !entry.isStrength,
+                  let category = Exercise.Category(rawValue: entry.exerciseType),
+                  seen.insert(category).inserted else { return nil }
+            return category
+        }
+    }
+
+    private var targetActivityTypeNames: [String] {
+        var seen = Set<String>()
+        var values: [String] = []
+        for rawValue in workout.focusAreas + sortedEntries.flatMap({ [$0.activityTypeName] + $0.targetTags }) {
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = Exercise.normalizedActivityKey(trimmed)
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
+            values.append(trimmed)
+        }
+        return values
+    }
+
     private func addExercise(_ exercise: Exercise) {
         if workout.entries == nil {
             workout.entries = []
@@ -526,18 +552,20 @@ struct LiveWorkoutDetailSheet: View {
 
         let newOrder = workout.entries?.count ?? 0
         let entry = LiveWorkoutEntry(exercise: exercise, orderIndex: newOrder)
-        let lastPerformance = allExerciseHistory.first { $0.exerciseName == exercise.name }
+        if exercise.exerciseCategory == .strength {
+            let lastPerformance = allExerciseHistory.first { $0.exerciseName == exercise.name }
 
-        let suggestedReps = lastPerformance?.repPatternArray.first ?? lastPerformance?.bestSetReps ?? 10
-        let suggestedWeightKg = lastPerformance?.weightPatternArray.first ?? lastPerformance?.bestSetWeightKg ?? 0
-        let cleanWeight = WeightUtility.cleanWeightFromKg(suggestedWeightKg)
+            let suggestedReps = lastPerformance?.repPatternArray.first ?? lastPerformance?.bestSetReps ?? 10
+            let suggestedWeightKg = lastPerformance?.weightPatternArray.first ?? lastPerformance?.bestSetWeightKg ?? 0
+            let cleanWeight = WeightUtility.cleanWeightFromKg(suggestedWeightKg)
 
-        entry.addSet(LiveWorkoutEntry.SetData(
-            reps: suggestedReps,
-            weight: cleanWeight,
-            completed: true,
-            isWarmup: false
-        ))
+            entry.addSet(LiveWorkoutEntry.SetData(
+                reps: suggestedReps,
+                weight: cleanWeight,
+                completed: true,
+                isWarmup: false
+            ))
+        }
 
         modelContext.insert(entry)
         workout.entries?.append(entry)
@@ -567,6 +595,8 @@ struct LiveWorkoutDetailSheet: View {
         entry.durationSeconds = durationSeconds
         entry.activityKind = kind
         entry.activityRole = role
+        entry.activityTypeName = trimmedName
+        entry.targetTags = [trimmedName]
         entry.plannedDurationSeconds = durationSeconds
         if durationSeconds != nil {
             entry.completedAt = Date()

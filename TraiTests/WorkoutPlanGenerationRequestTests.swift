@@ -63,6 +63,36 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertFalse(request.limitsAccessoryCardioToOneSession)
     }
 
+    func testClimbingSelectionRequiresRealPlanRepresentation() {
+        let request = makeRequest(
+            workoutType: .mixed,
+            selectedWorkoutTypes: [.strength, .cardio],
+            preferences: "Strength should lead, but climbing should stay in the weekly plan.",
+            conversationContext: ["Requested training styles: Strength, Climbing"],
+            cardioTypes: [.climbing],
+            availableDays: 3
+        )
+
+        let directives = request.generationDirectives.joined(separator: " ")
+        XCTAssertTrue(directives.contains("Climbing was explicitly selected"))
+        XCTAssertTrue(directives.contains("real session or meaningful skill/sport block"))
+        XCTAssertTrue(directives.contains("Do not reduce the climbing selection to generic grip exercises alone"))
+    }
+
+    func testWorkoutPlanPromptSelfChecksSelectedModalities() {
+        let request = makeRequest(
+            workoutType: .mixed,
+            selectedWorkoutTypes: [.strength, .cardio],
+            conversationContext: ["Requested training styles: Strength, Climbing"],
+            cardioTypes: [.climbing]
+        )
+
+        let prompt = AIPromptBuilder.buildWorkoutPlanGenerationPrompt(request: request)
+
+        XCTAssertTrue(prompt.contains("Preserve every selected or stated modality as real plan structure"))
+        XCTAssertTrue(prompt.contains("Is every explicitly selected modality still visible as a real template or block?"))
+    }
+
     func testLegacyWorkoutPlanJSONSynthesizesBlocks() throws {
         let json = """
         {
@@ -352,6 +382,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             goalKindRaw: goalKindRaw,
             linkedWorkoutTypeRaw: WorkoutMode.mixed.rawValue,
             linkedActivityName: "Planned Habit",
+            linkedActivityTags: nil,
             linkedActivityKindRaw: nil,
             linkedActivityRoleRaw: nil,
             targetValue: targetValue,
@@ -371,6 +402,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         timePerWorkout: Int? = nil,
         preferences: String? = nil,
         conversationContext: [String]? = nil,
+        cardioTypes: [WorkoutPlanGenerationRequest.CardioType]? = nil,
         availableDays: Int? = 4
     ) -> WorkoutPlanGenerationRequest {
         WorkoutPlanGenerationRequest(
@@ -386,7 +418,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             availableDays: availableDays,
             timePerWorkout: timePerWorkout,
             preferredSplit: nil,
-            cardioTypes: nil,
+            cardioTypes: cardioTypes,
             customWorkoutType: nil,
             customExperience: nil,
             customEquipment: nil,

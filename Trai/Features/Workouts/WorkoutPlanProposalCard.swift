@@ -255,9 +255,7 @@ struct WorkoutPlanProposalCard: View {
                 }
             }
             .map { block in
-                block.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? block.kind.displayName
-                    : block.title
+                block.displayActivityName
             }
             .filter { !$0.isEmpty }
 
@@ -399,7 +397,7 @@ struct WorkoutPlanUpdatedBadge: View {
                 .font(.body)
                 .foregroundStyle(.accent)
 
-            Text("Plan updated")
+            Text("Draft updated")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -615,7 +613,7 @@ private struct CompactWorkoutDayDetailSheet: View {
                         WorkoutPlan.WorkoutTemplate(
                             name: "Trail Run",
                             sessionType: .cardio,
-                            focusAreas: ["Zone 2"],
+                            focusAreas: ["Steady Cardio"],
                             targetMuscleGroups: [],
                             exercises: [],
                             estimatedDurationMinutes: 40,

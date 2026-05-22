@@ -27,7 +27,7 @@ struct CustomExercisesView: View {
 
     private var exercisesByTarget: [String: [Exercise]] {
         Dictionary(grouping: filteredExercises) { exercise in
-            exercise.targetTags.first ?? exercise.exerciseCategory.displayName
+            exercise.activityTypeName
         }
     }
 
@@ -81,9 +81,11 @@ struct CustomExercisesView: View {
             fetchCustomExercises()
         }
         .sheet(isPresented: $showingAddCustomExercise) {
-            AddCustomExerciseSheet(initialName: "") { name, muscleGroup, category, secondaryMuscles, targetTags, trackingFields in
+            AddCustomExerciseSheet(initialName: "") { name, activityTypeName, activityAliases, muscleGroup, category, secondaryMuscles, targetTags, trackingFields in
                 addCustomExercise(
                     name: name,
+                    activityTypeName: activityTypeName,
+                    activityAliases: activityAliases,
                     muscleGroup: muscleGroup,
                     category: category,
                     secondaryMuscles: secondaryMuscles,
@@ -132,6 +134,8 @@ struct CustomExercisesView: View {
 
     private func addCustomExercise(
         name: String,
+        activityTypeName: String,
+        activityAliases: [String] = [],
         muscleGroup: Exercise.MuscleGroup?,
         category: Exercise.Category,
         secondaryMuscles: [String]? = nil,
@@ -157,6 +161,12 @@ struct CustomExercisesView: View {
             if !trackingFields.isEmpty {
                 existing.trackingFields = trackingFields
             }
+            if !activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                existing.activityTypeName = activityTypeName
+            }
+            if !activityAliases.isEmpty {
+                existing.activityAliases = activityAliases
+            }
             try? modelContext.save()
             fetchCustomExercises()
             HapticManager.success()
@@ -169,6 +179,8 @@ struct CustomExercisesView: View {
             muscleGroup: category == .strength ? muscleGroup : nil
         )
         exercise.isCustom = true
+        exercise.activityTypeName = activityTypeName
+        exercise.activityAliases = activityAliases
         exercise.targetTags = targetTags.isEmpty ? Exercise.defaultTargetTags(for: category) : targetTags
         exercise.trackingFields = trackingFields.isEmpty ? Exercise.defaultTrackingFields(for: category) : trackingFields
         if let secondaryMuscles, !secondaryMuscles.isEmpty {
@@ -205,7 +217,7 @@ private struct ExerciseManagementRow: View {
                     .font(.body)
 
                 HStack(spacing: 8) {
-                    Text(exercise.exerciseCategory.displayName)
+                    Text(exercise.activityTypeName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
 

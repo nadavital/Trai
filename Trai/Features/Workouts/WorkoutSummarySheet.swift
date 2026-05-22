@@ -699,8 +699,9 @@ struct ActivitySummaryRow: View {
             segments.append(role.displayName)
         }
 
-        if let kind = entry.activityKind {
-            segments.append(kind.displayName)
+        let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
+            segments.append(activityName)
         }
 
         if let duration = entry.formattedDuration {

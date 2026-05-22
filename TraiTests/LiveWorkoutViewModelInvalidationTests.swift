@@ -57,7 +57,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(viewModel.completedSets, 1)
     }
 
-    func testGeneralActivityEntryDoesNotMakeWorkoutCompleteUntilMarkedComplete() {
+    func testGeneralActivityEntryWithLoggedDataCountsAsComplete() {
         let workout = LiveWorkout(name: "Recovery Session", workoutType: .mobility)
         let entry = LiveWorkoutEntry(
             exerciseName: "Hip Mobility",
@@ -71,11 +71,97 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
 
         let viewModel = LiveWorkoutViewModel(workout: workout)
 
-        XCTAssertFalse(viewModel.isWorkoutComplete)
-
-        viewModel.toggleGeneralEntryCompletion(for: entry)
-
         XCTAssertTrue(viewModel.isWorkoutComplete)
+    }
+
+    func testActivitySegmentTotalsCountAsLoggedData() {
+        let workout = LiveWorkout(name: "Rowing Intervals", workoutType: .cardio)
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Rowing",
+            orderIndex: 0,
+            exerciseType: "cardio"
+        )
+        entry.trackingFields = [.duration, .distance]
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 300, distanceMeters: 1_000),
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 240, distanceMeters: 850)
+        ]
+        entry.workout = workout
+        workout.entries = [entry]
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        XCTAssertEqual(entry.trackedDurationSeconds, 540)
+        XCTAssertEqual(entry.trackedDistanceMeters, 1_850)
+        XCTAssertTrue(entry.hasExercisePreferenceSignal)
+        XCTAssertTrue(viewModel.isWorkoutComplete)
+    }
+
+    func testRepsOnlyActivitySegmentCountsAsLoggedData() {
+        let workout = LiveWorkout(name: "Conditioning", workoutType: .hiit)
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Battle Ropes",
+            orderIndex: 0,
+            exerciseType: "conditioning"
+        )
+        entry.trackingFields = [.reps, .notes]
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(reps: 40, notes: "Hard round")
+        ]
+        entry.workout = workout
+        workout.entries = [entry]
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        XCTAssertTrue(entry.hasExercisePreferenceSignal)
+        XCTAssertTrue(viewModel.isWorkoutComplete)
+    }
+
+    func testBlankActivitySegmentDoesNotCountAsLoggedData() {
+        let workout = LiveWorkout(name: "Rowing Intervals", workoutType: .cardio)
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Rowing",
+            orderIndex: 0,
+            exerciseType: "cardio"
+        )
+        entry.trackingFields = [.duration, .distance]
+        entry.activitySegments = [LiveWorkoutEntry.ActivitySegment()]
+        entry.workout = workout
+        workout.entries = [entry]
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        XCTAssertFalse(entry.hasExercisePreferenceSignal)
+        XCTAssertFalse(viewModel.isWorkoutComplete)
+    }
+
+    func testRemovingLastLoggedActivitySegmentClearsTrackedTotals() {
+        let workout = LiveWorkout(name: "Rowing Intervals", workoutType: .cardio)
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Rowing",
+            orderIndex: 0,
+            exerciseType: "cardio"
+        )
+        entry.trackingFields = [.duration, .distance]
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 300, distanceMeters: 1_000)
+        ]
+        entry.durationSeconds = 300
+        entry.distanceMeters = 1_000
+        entry.workout = workout
+        workout.entries = [entry]
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+        viewModel.removeActivitySegment(from: entry, at: 0)
+
+        XCTAssertNil(entry.durationSeconds)
+        XCTAssertNil(entry.distanceMeters)
+        XCTAssertFalse(entry.hasExercisePreferenceSignal)
+        XCTAssertFalse(viewModel.isWorkoutComplete)
     }
 
     func testActivityScopedFrequencyGoalCountsCompletedMatchingEntries() {
@@ -159,6 +245,47 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(insight?.progressFraction, 1)
     }
 
+    func testActivityTagGoalMatchesCustomLiveWorkoutAndSessionIdentity() {
+        let workout = LiveWorkout(
+            name: "Climbing Session",
+            workoutType: .climbing,
+            focusAreas: ["Bouldering", "Grip endurance"]
+        )
+        workout.completedAt = Date()
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 0,
+            exerciseType: "skill"
+        )
+        entry.activityTypeName = "Bouldering"
+        entry.targetTags = ["Climbing", "Grip endurance"]
+        entry.durationSeconds = 1_800
+        entry.completedAt = Date()
+        workout.entries = [entry]
+
+        let exercise = Exercise(name: "Limit Bouldering", category: .skill)
+        exercise.activityTypeName = "Bouldering"
+        exercise.targetTags = ["Climbing", "Grip endurance"]
+        let session = WorkoutSession(exercise: exercise, sets: 0, reps: 0, weightKg: nil)
+        session.durationMinutes = 30
+
+        let goal = WorkoutGoal(
+            title: "Climb twice weekly",
+            goalKind: .frequency,
+            linkedActivityTags: ["Bouldering"],
+            targetValue: 2,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete two bouldering sessions this week."
+        )
+
+        XCTAssertTrue(goal.matches(workout: workout))
+        XCTAssertTrue(goal.matches(entry: entry))
+        XCTAssertTrue(goal.matches(session: session))
+        XCTAssertEqual(goal.scopeSummary, "Bouldering")
+    }
+
     func testMixedWorkoutSuggestionsIncludeRelevantNonStrengthExercises() throws {
         container = try ModelContainer(
             for: LiveWorkout.self,
@@ -197,6 +324,8 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
             exerciseName: "Running",
             muscleGroup: "Cardio",
             category: .cardio,
+            activityTypeName: "Running",
+            activityMatchingTokens: ["running", "cardio", "endurance"],
             targetTags: ["Endurance"],
             trackingFields: [.duration, .distance],
             defaultSets: 3,
@@ -211,6 +340,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertTrue(entry?.sets.isEmpty == true)
         XCTAssertEqual(entry?.targetTags, ["Endurance"])
         XCTAssertEqual(entry?.trackingFields, [.duration, .distance])
+        XCTAssertFalse(entry?.hasExercisePreferenceSignal ?? true)
     }
 
     private func makeWorkout(initialReps: Int) -> (LiveWorkout, LiveWorkoutEntry) {

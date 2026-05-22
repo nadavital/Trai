@@ -222,11 +222,28 @@ extension LiveWorkout {
     }
 
     var displayFocusSummary: String {
-        if !focusAreas.isEmpty {
-            return focusAreas.joined(separator: " • ")
+        let displayAreas = displayFocusAreas
+        if !displayAreas.isEmpty {
+            return displayAreas.joined(separator: " • ")
         }
         let muscles = muscleGroups.map(\.displayName)
         return muscles.isEmpty ? type.displayName : muscles.joined(separator: " • ")
+    }
+
+    var displayFocusAreas: [String] {
+        var seen: Set<String> = []
+        return focusAreas.compactMap { focus in
+            let trimmed = focus.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+
+            let displayName = Exercise.Category.allCases.first { category in
+                let key = trimmed.goalNormalizedKey
+                return category.rawValue.goalNormalizedKey == key || category.displayName.goalNormalizedKey == key
+            }?.displayName ?? trimmed
+            let key = displayName.goalNormalizedKey
+            guard seen.insert(key).inserted else { return nil }
+            return displayName
+        }
     }
 
     var trimmedNotes: String {
@@ -269,8 +286,9 @@ extension LiveWorkout {
                 if let role = entry.activityRole {
                     parts.append(role.displayName.lowercased())
                 }
-                if let kind = entry.activityKind {
-                    parts.append(kind.displayName.lowercased())
+                let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
+                    parts.append(activityName)
                 }
                 if let duration = entry.formattedDuration {
                     parts.append(duration)

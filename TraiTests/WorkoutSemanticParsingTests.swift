@@ -114,4 +114,64 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         XCTAssertEqual(workoutLog.workoutType, WorkoutMode.cardio.rawValue)
     }
+
+    func testLogWorkoutAcceptsNonStrengthActivityWithoutSets() async {
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
+        let result = await executor.execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "type": "sports",
+                    "name": "Bouldering session",
+                    "activity_name": "Bouldering",
+                    "activity_tags": ["Climbing", "Grip"],
+                    "exercises": [
+                        [
+                            "name": "Limit bouldering",
+                            "category": "sportPractice",
+                            "activity_name": "Bouldering",
+                            "target_tags": ["Climbing", "Technique"],
+                            "tracking_fields": ["duration", "notes"],
+                            "duration_minutes": 45,
+                            "segments": [
+                                [
+                                    "duration_minutes": 20,
+                                    "notes": "Warm-up problems"
+                                ],
+                                [
+                                    "duration_minutes": 25,
+                                    "notes": "Limit attempts"
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutLog(let workoutLog) = result,
+              let exercise = workoutLog.exercises.first else {
+            return XCTFail("Expected suggested workout log with activity")
+        }
+
+        XCTAssertEqual(workoutLog.activityName, "Bouldering")
+        XCTAssertEqual(workoutLog.activityTags ?? [], ["Climbing", "Grip"])
+        XCTAssertEqual(exercise.category, "sportPractice")
+        XCTAssertEqual(exercise.activityTypeName, "Bouldering")
+        XCTAssertEqual(exercise.targetTags ?? [], ["Climbing", "Technique"])
+        XCTAssertEqual(exercise.trackingFields ?? [], ["duration", "notes"])
+        XCTAssertEqual(exercise.durationMinutes, 45)
+        XCTAssertEqual(exercise.segments?.count, 2)
+    }
+
+    func testLogWorkoutFunctionSchemaDoesNotRequireSetsForEveryActivity() throws {
+        let schema = AIFunctionDeclarations.logWorkout
+        let parameters = try XCTUnwrap(schema["parameters"] as? [String: Any])
+        let properties = try XCTUnwrap(parameters["properties"] as? [String: Any])
+        let exercises = try XCTUnwrap(properties["exercises"] as? [String: Any])
+        let items = try XCTUnwrap(exercises["items"] as? [String: Any])
+        let required = try XCTUnwrap(items["required"] as? [String])
+
+        XCTAssertEqual(required, ["name"])
+    }
 }

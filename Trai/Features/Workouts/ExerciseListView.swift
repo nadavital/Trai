@@ -24,8 +24,10 @@ struct ExerciseListView: View {
     private let onSelect: ((Exercise) -> Void)?
     @Binding private var selectedExercise: Exercise?
 
-    // Target muscle groups from current workout (for prioritized sorting)
+    // Target muscle groups and activity categories from current workout (for prioritized sorting)
     private let targetMuscleGroups: [Exercise.MuscleGroup]
+    private let targetActivityCategories: [Exercise.Category]
+    private let targetActivityTypes: [String]
 
     // Search and filter state
     @State private var searchText = ""
@@ -53,16 +55,26 @@ struct ExerciseListView: View {
     /// Closure-based initializer for adding exercises to workouts
     init(
         targetMuscleGroups: [Exercise.MuscleGroup] = [],
+        targetActivityCategories: [Exercise.Category] = [],
+        targetActivityTypes: [String] = [],
         onSelect: @escaping (Exercise) -> Void
     ) {
         self.targetMuscleGroups = targetMuscleGroups
+        self.targetActivityCategories = targetActivityCategories
+        self.targetActivityTypes = targetActivityTypes
         self.onSelect = onSelect
         self._selectedExercise = .constant(nil)
+        self._selectedCategory = State(initialValue: Self.initialCategory(
+            targetMuscleGroups: targetMuscleGroups,
+            targetActivityCategories: targetActivityCategories
+        ))
     }
 
     /// Binding-based initializer for form selection
     init(selectedExercise: Binding<Exercise?>) {
         self.targetMuscleGroups = []
+        self.targetActivityCategories = []
+        self.targetActivityTypes = []
         self.onSelect = nil
         self._selectedExercise = selectedExercise
     }
@@ -97,6 +109,8 @@ struct ExerciseListView: View {
 
     private struct PendingCustomExerciseCreation {
         let name: String
+        let activityTypeName: String
+        let activityAliases: [String]
         let muscleGroup: Exercise.MuscleGroup?
         let category: Exercise.Category
         let secondaryMuscles: [String]?
@@ -110,6 +124,33 @@ struct ExerciseListView: View {
             priority[muscle] = min(priority[muscle] ?? index, index)
         }
         return priority
+    }
+
+    private var targetCategoryPriority: [Exercise.Category: Int] {
+        var priority: [Exercise.Category: Int] = [:]
+        for (index, category) in targetActivityCategories.enumerated() {
+            for suggestionCategory in category.suggestionCategories {
+                priority[suggestionCategory] = min(priority[suggestionCategory] ?? index, index)
+            }
+        }
+        return priority
+    }
+
+    private var targetActivityTypePriority: [String: Int] {
+        var priority: [String: Int] = [:]
+        for (index, activityType) in targetActivityTypes.enumerated() {
+            let key = Exercise.normalizedActivityKey(activityType)
+            guard !key.isEmpty else { continue }
+            priority[key] = min(priority[key] ?? index, index)
+        }
+        return priority
+    }
+
+    private static func initialCategory(
+        targetMuscleGroups: [Exercise.MuscleGroup],
+        targetActivityCategories: [Exercise.Category]
+    ) -> Exercise.Category? {
+        return targetActivityCategories.first
     }
 
     private var muscleGroupDefaultOrder: [Exercise.MuscleGroup: Int] {
@@ -158,21 +199,26 @@ struct ExerciseListView: View {
     private func makeListData() -> ListData {
         let usageSummary = usageSummaryCache
         let targetPriority = targetMusclePriority
+        let categoryPriority = targetCategoryPriority
+        let activityTypePriority = targetActivityTypePriority
         let muscleOrder = muscleGroupDefaultOrder
 
         var result = exercises
 
-        // Apply search filter - include equipment name
+        // Apply search filter across visible names plus semantic aliases/tags.
         if !searchText.isEmpty {
             result = result.filter { exercise in
                 exercise.name.localizedStandardContains(searchText) ||
+                exercise.activityTypeName.localizedStandardContains(searchText) ||
+                exercise.activityAliases.contains { $0.localizedStandardContains(searchText) } ||
+                exercise.targetTags.contains { $0.localizedStandardContains(searchText) } ||
                 (exercise.equipmentName?.localizedStandardContains(searchText) ?? false)
             }
         }
 
         // Apply category filter
         if let category = selectedCategory {
-            result = result.filter { $0.exerciseCategory == category }
+            result = result.filter { category.suggestionCategories.contains($0.exerciseCategory) }
         }
 
         // Apply muscle group filter
@@ -184,6 +230,14 @@ struct ExerciseListView: View {
             let aTargetPriority = a.targetMuscleGroup.flatMap { targetPriority[$0] } ?? Int.max
             let bTargetPriority = b.targetMuscleGroup.flatMap { targetPriority[$0] } ?? Int.max
             if aTargetPriority != bTargetPriority { return aTargetPriority < bTargetPriority }
+
+            let aActivityTypePriority = bestActivityTypePriority(for: a, priorities: activityTypePriority)
+            let bActivityTypePriority = bestActivityTypePriority(for: b, priorities: activityTypePriority)
+            if aActivityTypePriority != bActivityTypePriority { return aActivityTypePriority < bActivityTypePriority }
+
+            let aCategoryPriority = categoryPriority[a.exerciseCategory] ?? Int.max
+            let bCategoryPriority = categoryPriority[b.exerciseCategory] ?? Int.max
+            if aCategoryPriority != bCategoryPriority { return aCategoryPriority < bCategoryPriority }
 
             // Keep section ordering stable by using muscle default order.
             let aMuscleOrder = a.targetMuscleGroup.flatMap { muscleOrder[$0] } ?? Int.max
@@ -207,6 +261,8 @@ struct ExerciseListView: View {
         var exercisesByMuscleGroup: [Exercise.MuscleGroup: [Exercise]] = [:]
         var noMuscleGroupExercises: [Exercise] = []
         let targetRawValues = Set(targetMuscleGroups.map(\.rawValue))
+        let targetExerciseCategories = Set(targetActivityCategories.flatMap(\.suggestionCategories))
+        let targetActivityTypeKeys = Set(targetActivityTypes.map(Exercise.normalizedActivityKey).filter { !$0.isEmpty })
         let exerciseByName = exercises.reduce(into: [String: Exercise]()) { result, exercise in
             if result[exercise.name] == nil {
                 result[exercise.name] = exercise
@@ -215,7 +271,13 @@ struct ExerciseListView: View {
 
         let recentExercises = usageSummary.recentExerciseNames.compactMap { name -> Exercise? in
             guard let exercise = exerciseByName[name] else { return nil }
-            guard !targetRawValues.isEmpty else { return exercise }
+            guard !targetRawValues.isEmpty || !targetExerciseCategories.isEmpty || !targetActivityTypeKeys.isEmpty else { return exercise }
+            if !targetActivityTypeKeys.isDisjoint(with: exercise.activityMatchingTokens) {
+                return exercise
+            }
+            if targetExerciseCategories.contains(exercise.exerciseCategory) {
+                return exercise
+            }
             guard let muscleGroup = exercise.muscleGroup else { return nil }
             return targetRawValues.contains(muscleGroup) ? exercise : nil
         }
@@ -248,6 +310,12 @@ struct ExerciseListView: View {
             noMuscleGroupExercises: noMuscleGroupExercises,
             showCustomOption: !searchText.isEmpty && result.isEmpty
         )
+    }
+
+    private func bestActivityTypePriority(for exercise: Exercise, priorities: [String: Int]) -> Int {
+        exercise.activityMatchingTokens
+            .compactMap { priorities[$0] }
+            .min() ?? Int.max
     }
 
     private var muscleGroupsForFilterChips: [Exercise.MuscleGroup] {
@@ -421,9 +489,11 @@ struct ExerciseListView: View {
             .sheet(isPresented: $showingAddCustom) {
                 AddCustomExerciseSheet(
                     initialName: searchText,
-                    onSave: { name, muscleGroup, category, secondaryMuscles, targetTags, trackingFields in
+                    onSave: { name, activityTypeName, activityAliases, muscleGroup, category, secondaryMuscles, targetTags, trackingFields in
                         queueCustomExerciseCreation(
                             name: name,
+                            activityTypeName: activityTypeName,
+                            activityAliases: activityAliases,
                             muscleGroup: muscleGroup,
                             category: category,
                             secondaryMuscles: secondaryMuscles,
@@ -474,12 +544,20 @@ struct ExerciseListView: View {
                 if let analysis = equipmentAnalysis {
                     EquipmentAnalysisSheet(
                         analysis: analysis,
-                        onSelectExercise: { exerciseName, muscleGroup, equipmentName in
+                        onSelectExercise: { suggestion, equipmentName in
+                            let category = Exercise.Category(rawValue: suggestion.category ?? "") ?? .strength
+                            let trackingFields = suggestion.trackingFields?
+                                .compactMap(Exercise.TrackingField.init(rawValue:))
+                                .filter { $0 != .calories }
                             addCustomExercise(
-                                name: exerciseName,
-                                muscleGroup: Exercise.MuscleGroup(rawValue: muscleGroup),
-                                category: .strength,
-                                equipmentName: equipmentName
+                                name: suggestion.name,
+                                activityTypeName: suggestion.activityTypeName ?? Exercise.defaultActivityTypeName(for: suggestion.name, category: category),
+                                activityAliases: suggestion.activityAliases ?? [],
+                                muscleGroup: suggestion.muscleGroup.flatMap(Exercise.MuscleGroup.init(rawValue:)),
+                                category: category,
+                                equipmentName: equipmentName,
+                                targetTags: suggestion.targetTags ?? [],
+                                trackingFields: trackingFields
                             )
                         }
                     )
@@ -525,6 +603,8 @@ struct ExerciseListView: View {
                 self.pendingCustomExerciseCreation = nil
                 addCustomExercise(
                     name: pendingCustomExerciseCreation.name,
+                    activityTypeName: pendingCustomExerciseCreation.activityTypeName,
+                    activityAliases: pendingCustomExerciseCreation.activityAliases,
                     muscleGroup: pendingCustomExerciseCreation.muscleGroup,
                     category: pendingCustomExerciseCreation.category,
                     secondaryMuscles: pendingCustomExerciseCreation.secondaryMuscles,
@@ -607,7 +687,7 @@ struct ExerciseListView: View {
                         selectedMuscleGroup = nil
                     }
 
-                    ForEach(Exercise.Category.allCases) { category in
+                    ForEach(Exercise.Category.userFacingCases) { category in
                         FilterChip(
                             label: category.displayName,
                             icon: category.iconName,
@@ -670,8 +750,8 @@ struct ExerciseListView: View {
                             Text(muscleGroup.displayName)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                        } else if exercise.exerciseCategory != .strength {
-                            Text(exercise.exerciseCategory.displayName)
+                        } else if !exercise.activityTypeName.isEmpty {
+                            Text(exercise.activityTypeName)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -712,6 +792,8 @@ struct ExerciseListView: View {
 
     private func queueCustomExerciseCreation(
         name: String,
+        activityTypeName: String,
+        activityAliases: [String],
         muscleGroup: Exercise.MuscleGroup?,
         category: Exercise.Category,
         secondaryMuscles: [String]?,
@@ -720,6 +802,8 @@ struct ExerciseListView: View {
     ) {
         let request = PendingCustomExerciseCreation(
             name: name,
+            activityTypeName: activityTypeName,
+            activityAliases: activityAliases,
             muscleGroup: muscleGroup,
             category: category,
             secondaryMuscles: secondaryMuscles,
@@ -730,6 +814,8 @@ struct ExerciseListView: View {
         guard showingAddCustom else {
             addCustomExercise(
                 name: request.name,
+                activityTypeName: request.activityTypeName,
+                activityAliases: request.activityAliases,
                 muscleGroup: request.muscleGroup,
                 category: request.category,
                 secondaryMuscles: request.secondaryMuscles,
@@ -745,6 +831,8 @@ struct ExerciseListView: View {
 
     private func addCustomExercise(
         name: String,
+        activityTypeName: String? = nil,
+        activityAliases: [String] = [],
         muscleGroup: Exercise.MuscleGroup? = nil,
         category: Exercise.Category = .strength,
         equipmentName: String? = nil,
@@ -773,6 +861,13 @@ struct ExerciseListView: View {
             if let trackingFields, !trackingFields.isEmpty {
                 existing.trackingFields = trackingFields
             }
+            if let activityTypeName,
+               !activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                existing.activityTypeName = activityTypeName
+            }
+            if !activityAliases.isEmpty {
+                existing.activityAliases = activityAliases
+            }
             try? modelContext.save()
             selectExercise(existing)
             return
@@ -786,6 +881,8 @@ struct ExerciseListView: View {
         )
         exercise.isCustom = true
         exercise.equipmentName = equipmentName
+        exercise.activityTypeName = activityTypeName ?? Exercise.defaultActivityTypeName(for: trimmed, category: category)
+        exercise.activityAliases = activityAliases
         exercise.targetTags = targetTags.isEmpty ? Exercise.defaultTargetTags(for: category) : targetTags
         exercise.trackingFields = trackingFields ?? Exercise.defaultTrackingFields(for: category)
         if let secondary = secondaryMuscles, !secondary.isEmpty {

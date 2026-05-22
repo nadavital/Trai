@@ -75,7 +75,7 @@ nonisolated enum WorkoutMode: String, Codable, CaseIterable, Identifiable {
         case .strength:
             return ["Push", "Pull", "Legs", "Upper", "Full Body"]
         case .cardio:
-            return ["Running", "Cycling", "Swimming", "Rowing", "Zone 2"]
+            return ["Running", "Cycling", "Swimming", "Rowing", "Steady Cardio"]
         case .hiit:
             return ["Intervals", "Conditioning", "Sprints", "Circuit"]
         case .climbing:

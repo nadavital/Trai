@@ -2462,10 +2462,19 @@ struct OnboardingWorkoutPlanSetupView: View {
     }
 
     private func generatedPlanIntroMessage(for plan: WorkoutPlan) -> String {
+        if let summary = plan.planIntent?.summary.trimmingCharacters(in: .whitespacesAndNewlines),
+           !summary.isEmpty {
+            let sentence = summary.trimmingCharacters(in: CharacterSet(charactersIn: ".!? "))
+            return "\(sentence). Open the details if you want to review each session, or tell me what to change before you save it."
+        }
+
         let focus = plan.planIntent?.primaryFocus.trimmingCharacters(in: .whitespacesAndNewlines)
-        let focusText = focus?.isEmpty == false
+        let rawFocusText = focus?.isEmpty == false
             ? focus!.trimmingCharacters(in: CharacterSet(charactersIn: ".!? "))
             : plan.splitType.displayName.lowercased()
+        let focusText = rawFocusText.contains(" is ") || rawFocusText.count > 42
+            ? "your setup"
+            : rawFocusText
         return "I built a \(plan.daysPerWeek)-day plan around \(focusText). Open the details if you want to review each session, or tell me what to change before you save it."
     }
 
@@ -3408,6 +3417,7 @@ private extension WorkoutGoal {
             successCriteria,
             notes,
             linkedActivityName ?? "",
+            linkedActivityTags.joined(separator: " "),
             linkedWorkoutTypeRaw ?? ""
         ]
         .joined(separator: " ")
@@ -3426,15 +3436,29 @@ private extension WorkoutGoal {
         }
 
         if goalKind == .frequency {
-            return [
+            let roundedTarget = targetValue.map { value in
+                String(Int(value.rounded()))
+            } ?? ""
+            let normalizedActivityName = linkedActivityName?.goalNormalizedKey ?? ""
+            let normalizedActivityTags = linkedActivityTags
+                .map(\.goalNormalizedKey)
+                .sorted()
+                .joined(separator: ",")
+            let normalizedTargetUnit = targetUnit.goalNormalizedKey
+            let periodCountText = periodCount.map(String.init) ?? ""
+            let parts: [String] = [
                 goalKind.rawValue,
                 linkedWorkoutTypeRaw ?? "any",
-                linkedActivityName?.goalNormalizedKey ?? "",
-                targetValue.map { String(Int($0.rounded())) } ?? "",
-                targetUnit.goalNormalizedKey,
+                normalizedActivityName,
+                normalizedActivityTags,
+                linkedActivityKindRaw ?? "",
+                linkedActivityRoleRaw ?? "",
+                roundedTarget,
+                normalizedTargetUnit,
                 periodUnitRaw ?? "",
-                periodCount.map(String.init) ?? ""
-            ].joined(separator: "|")
+                periodCountText
+            ]
+            return parts.joined(separator: "|")
         }
 
         return title

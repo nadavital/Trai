@@ -31,12 +31,14 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         let workout = service.createCustomWorkout(
             name: "Conditioning Circuit",
             type: .cardio,
-            muscles: [.quads, .glutes]
+            muscles: [.quads, .glutes],
+            focusAreas: ["Bouldering", "Grip endurance"]
         )
 
         XCTAssertEqual(workout.name, "Conditioning Circuit")
         XCTAssertEqual(workout.type, .cardio)
         XCTAssertEqual(workout.muscleGroups, [.quads, .glutes])
+        XCTAssertEqual(workout.focusAreas, ["Bouldering", "Grip endurance"])
     }
 
     func testCreateStartWorkoutFromTemplateMapsMuscleGroups() {
@@ -116,10 +118,10 @@ final class WorkoutTemplateServiceTests: XCTestCase {
                     kind: .cardio,
                     role: .finisher,
                     title: "Bike Finisher",
-                    detail: "Easy Zone 2 spin",
+                    detail: "Easy steady spin",
                     durationMinutes: 10,
                     intensity: "Easy",
-                    target: "Zone 2",
+                    target: "Conversational pace",
                     order: 1
                 )
             ],
@@ -141,7 +143,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(entries.last?.durationSeconds, 600)
         XCTAssertEqual(entries.last?.plannedDurationSeconds, 600)
         XCTAssertEqual(entries.last?.plannedIntensity, "Easy")
-        XCTAssertEqual(entries.last?.plannedTarget, "Zone 2")
+        XCTAssertEqual(entries.last?.plannedTarget, "Conversational pace")
         XCTAssertEqual(entries.last?.notes, "")
     }
 
@@ -202,7 +204,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
     func testCreateWorkoutFromTemplateCreatesEntriesForCardioSessionBlocks() throws {
         let context = try makeInMemoryContext()
         let template = WorkoutPlan.WorkoutTemplate(
-            name: "Zone 2 Ride",
+            name: "Steady Ride",
             sessionType: .cardio,
             focusAreas: ["Endurance"],
             targetMuscleGroups: [],
@@ -213,7 +215,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
                     title: "Bike Ride",
                     detail: "Steady aerobic work",
                     durationMinutes: 35,
-                    intensity: "Zone 2",
+                    intensity: "Easy",
                     target: "Conversational pace",
                     order: 0
                 ),
@@ -239,6 +241,51 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(entries.map(\.exerciseName), ["Bike Ride", "Cooldown"])
         XCTAssertEqual(entries.map(\.exerciseType), ["cardio", "flexibility"])
         XCTAssertEqual(entries.map(\.durationSeconds), [2100, 300])
+    }
+
+    func testCreateWorkoutFromTemplatePreservesGeneratedActivityIdentityAndTags() throws {
+        let context = try makeInMemoryContext()
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Climbing Session",
+            sessionType: .climbing,
+            focusAreas: ["Bouldering", "Grip endurance"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .skill,
+                    role: .main,
+                    title: "Limit Bouldering",
+                    detail: "Work short problems with full rest.",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Bouldering", "Climbing", "Grip endurance"],
+                    durationMinutes: 35,
+                    intensity: "Hard",
+                    target: "Power and precision",
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+
+        let workout = service.createWorkoutFromTemplate(
+            template,
+            progressionStrategy: .defaultStrategy,
+            modelContext: context
+        )
+
+        let entry = try XCTUnwrap(workout.entries?.first)
+        XCTAssertEqual(workout.focusAreas, ["Bouldering", "Grip endurance"])
+        XCTAssertEqual(entry.exerciseName, "Limit Bouldering")
+        XCTAssertEqual(entry.exerciseType, "activity")
+        XCTAssertEqual(entry.activityKind, WorkoutPlan.TrainingBlock.BlockKind.skill)
+        XCTAssertEqual(entry.activityRole, WorkoutPlan.TrainingBlock.Role.main)
+        XCTAssertEqual(entry.activityTypeName, "Bouldering")
+        XCTAssertEqual(entry.targetTags, ["Bouldering", "Climbing", "Grip endurance"])
+        XCTAssertEqual(entry.plannedDurationSeconds, 2100)
+        XCTAssertEqual(entry.plannedIntensity, "Hard")
+        XCTAssertEqual(entry.plannedTarget, "Power and precision")
     }
 
     func testCreateWorkoutFromTemplateDoesNotDuplicateTopLevelExercisesAcrossEmptyStrengthBlocks() throws {

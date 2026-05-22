@@ -16,9 +16,10 @@ struct AddCustomExerciseSheet: View {
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
 
     let initialName: String
-    let onSave: (String, Exercise.MuscleGroup?, Exercise.Category, [String]?, [String], [Exercise.TrackingField]) -> Void
+    let onSave: (String, String, [String], Exercise.MuscleGroup?, Exercise.Category, [String]?, [String], [Exercise.TrackingField]) -> Void
 
     @State private var exerciseName: String = ""
+    @State private var activityTypeName: String = ""
     @State private var selectedCategory: Exercise.Category = .strength
     @State private var selectedTargets: Set<String> = []
     @State private var selectedTrackingFields: Set<Exercise.TrackingField> = Set(Exercise.defaultTrackingFields(for: .strength))
@@ -29,6 +30,9 @@ struct AddCustomExerciseSheet: View {
     @State private var analysisResult: ExerciseAnalysis?
     @State private var hasAnalyzed = false
     @State private var presentedAccountSetupContext: AccountSetupContext?
+    @State private var isCategoryExpanded = false
+    @State private var isTargetsExpanded = false
+    @State private var isTrackingExpanded = false
 
     @FocusState private var isNameFocused: Bool
 
@@ -44,23 +48,16 @@ struct AddCustomExerciseSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
-                    nameInputCard
+                    exerciseSetupCard
                         .traiCard(cornerRadius: 16)
 
-                    if !canAccessExerciseAI {
-                        lockedExerciseAnalysisCard
-                    } else {
-                        aiAnalysisCard
-                            .traiCard(cornerRadius: 16)
-                    }
-
-                    categorySelector
+                    categoryDisclosure
                         .traiCard(cornerRadius: 16)
 
-                    targetSelector
+                    targetDisclosure
                         .traiCard(cornerRadius: 16)
 
-                    trackingFieldSelector
+                    trackingDisclosure
                         .traiCard(cornerRadius: 16)
                 }
                 .padding(.horizontal, 16)
@@ -80,6 +77,8 @@ struct AddCustomExerciseSheet: View {
                     Button("Add", systemImage: "checkmark") {
                         onSave(
                             exerciseName,
+                            resolvedActivityTypeName,
+                            resolvedActivityAliases,
                             primaryMuscleGroup,
                             selectedCategory,
                             secondaryMuscleGroups,
@@ -114,9 +113,9 @@ struct AddCustomExerciseSheet: View {
 
     // MARK: - Name Input Card
 
-    private var nameInputCard: some View {
+    private var exerciseSetupCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Exercise Name", icon: "figure.strengthtraining.traditional")
+            sectionHeader("Exercise", icon: "figure.strengthtraining.traditional")
 
             TextField("e.g. Incline DB Press", text: $exerciseName)
                 .textInputAutocapitalization(.words)
@@ -129,7 +128,27 @@ struct AddCustomExerciseSheet: View {
                         hasAnalyzed = false
                         analysisResult = nil
                     }
+                    if activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        activityTypeName = Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory)
+                    }
                 }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Activity")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                TextField("e.g. Climbing, Cycling, Mobility Flow", text: $activityTypeName)
+                    .textInputAutocapitalization(.words)
+                    .font(.traiLabel(15))
+                    .padding(12)
+                    .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+            }
+
+            if !canAccessExerciseAI {
+                lockedExerciseAnalysisCard
+            } else {
+                aiAnalysisCard
+            }
         }
     }
 
@@ -138,8 +157,6 @@ struct AddCustomExerciseSheet: View {
     private var aiAnalysisCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             if isAnalyzing {
-                sectionHeader("Trai Analysis", icon: "circle.hexagongrid.circle")
-
                 HStack(spacing: 10) {
                     ProgressView()
                     Text("Analyzing exercise...")
@@ -150,8 +167,6 @@ struct AddCustomExerciseSheet: View {
                 .padding(12)
                 .background(TraiColors.brandAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
             } else if let analysis = analysisResult {
-                sectionHeader("Trai Analysis", icon: "circle.hexagongrid.circle")
-
                 VStack(alignment: .leading, spacing: 10) {
                     Text(analysis.description)
                         .font(.traiHeadline(15))
@@ -176,8 +191,6 @@ struct AddCustomExerciseSheet: View {
                 .padding(12)
                 .background(TraiColors.brandAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
             } else {
-                sectionHeader("Trai Analysis", icon: "circle.hexagongrid.circle")
-
                 Button {
                     Task { await analyzeExercise() }
                 } label: {
@@ -193,7 +206,11 @@ struct AddCustomExerciseSheet: View {
     private var lockedExerciseAnalysisCard: some View {
         ProUpsellInlineCard(
             source: .exerciseAnalysis,
-            actionTitle: "Unlock Trai Pro"
+            title: "Let Trai set it up",
+            message: "Identify the exercise, choose targets, and pick the right tracking fields automatically.",
+            systemImage: "circle.hexagongrid.circle.fill",
+            actionTitle: "Unlock Trai Pro",
+            usesIconContainer: false
         ) {
             proUpsellCoordinator?.present(source: .exerciseAnalysis)
         }
@@ -201,25 +218,18 @@ struct AddCustomExerciseSheet: View {
 
     // MARK: - Category Selector
 
-    private var categorySelector: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Category", icon: "square.grid.2x2")
-
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 8) {
-                ForEach(Exercise.Category.allCases) { category in
-                    CategoryButton(
-                        category: category,
-                        isSelected: selectedCategory == category
-                    ) {
-                        withAnimation(.snappy(duration: 0.2)) {
-                            selectedCategory = category
-                            resetDefaultsForSelectedCategory()
-                            HapticManager.selectionChanged()
-                        }
+    private var categoryPickerContent: some View {
+        FlowLayout(spacing: 8) {
+            ForEach(Exercise.Category.userFacingCases) { category in
+                CategoryButton(
+                    category: category,
+                    isSelected: selectedCategory == category
+                ) {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        selectedCategory = category
+                        resetDefaultsForSelectedCategory()
+                        isCategoryExpanded = false
+                        HapticManager.selectionChanged()
                     }
                 }
             }
@@ -228,59 +238,124 @@ struct AddCustomExerciseSheet: View {
 
     // MARK: - Target Selector
 
-    private var targetSelector: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("What are you targeting?", icon: selectedCategory.iconName)
-
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 10) {
-                ForEach(visibleTargetOptions, id: \.self) { target in
-                    TargetButton(
-                        title: target,
-                        isSelected: selectedTargets.contains(target)
-                    ) {
-                        withAnimation(.snappy(duration: 0.2)) {
-                            if selectedTargets.contains(target) {
-                                selectedTargets.remove(target)
-                            } else {
-                                selectedTargets.insert(target)
-                            }
-                            HapticManager.selectionChanged()
+    private var targetPickerContent: some View {
+        FlowLayout(spacing: 8) {
+            ForEach(visibleTargetOptions, id: \.self) { target in
+                TargetButton(
+                    title: target,
+                    isSelected: selectedTargets.contains(target)
+                ) {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        if selectedTargets.contains(target) {
+                            selectedTargets.remove(target)
+                        } else {
+                            selectedTargets.insert(target)
                         }
+                        HapticManager.selectionChanged()
                     }
                 }
             }
         }
     }
 
-    private var trackingFieldSelector: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Track", icon: "slider.horizontal.3")
-
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 10) {
-                ForEach(Exercise.TrackingField.allCases) { field in
-                    TargetButton(
-                        title: field.displayName,
-                        icon: field.iconName,
-                        isSelected: selectedTrackingFields.contains(field)
-                    ) {
-                        withAnimation(.snappy(duration: 0.2)) {
-                            if selectedTrackingFields.contains(field) {
-                                selectedTrackingFields.remove(field)
-                            } else {
-                                selectedTrackingFields.insert(field)
-                            }
-                            HapticManager.selectionChanged()
+    private var trackingFieldPickerContent: some View {
+        FlowLayout(spacing: 8) {
+            ForEach(Exercise.trackingFieldOptions(for: selectedCategory)) { field in
+                TargetButton(
+                    title: trackingFieldTitle(field),
+                    icon: field.iconName,
+                    isSelected: selectedTrackingFields.contains(field),
+                    isDisabled: isTrackingFieldDisabled(field)
+                ) {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        if selectedTrackingFields.contains(field) {
+                            selectedTrackingFields.remove(field)
+                        } else {
+                            selectedTrackingFields.insert(field)
                         }
+                        HapticManager.selectionChanged()
                     }
                 }
+            }
+        }
+    }
+
+    private var categoryDisclosure: some View {
+        collapsibleManualSection(
+            isExpanded: $isCategoryExpanded,
+            title: "Suggestion behavior",
+            icon: "square.grid.2x2",
+            summary: selectedCategory.displayName
+        ) {
+            categoryPickerContent
+        }
+    }
+
+    private var targetDisclosure: some View {
+        collapsibleManualSection(
+            isExpanded: $isTargetsExpanded,
+            title: "Targets",
+            icon: selectedCategory.iconName,
+            summary: selectedTargets.isEmpty ? "None selected" : selectedTargets.sorted().prefix(3).joined(separator: ", ")
+        ) {
+            targetPickerContent
+        }
+    }
+
+    private var trackingDisclosure: some View {
+        collapsibleManualSection(
+            isExpanded: $isTrackingExpanded,
+            title: "Track",
+            icon: "slider.horizontal.3",
+            summary: orderedSelectedTrackingFields.map(trackingFieldTitle).joined(separator: ", ")
+        ) {
+            trackingFieldPickerContent
+        }
+    }
+
+    private func collapsibleManualSection<Content: View>(
+        isExpanded: Binding<Bool>,
+        title: String,
+        icon: String,
+        summary: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.snappy(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: icon)
+                        .font(.subheadline)
+                        .foregroundStyle(.accent)
+                        .frame(width: 28, height: 28)
+                        .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.traiHeadline())
+                            .foregroundStyle(.primary)
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: isExpanded.wrappedValue ? "chevron.up" : "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                content()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -319,6 +394,13 @@ struct AddCustomExerciseSheet: View {
                     resetDefaultsForSelectedCategory()
                 }
 
+                if let analyzedActivityType = analysis.activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !analyzedActivityType.isEmpty {
+                    activityTypeName = analyzedActivityType
+                } else {
+                    activityTypeName = Exercise.defaultActivityTypeName(for: name, category: selectedCategory)
+                }
+
                 if let targetTags = analysis.targetTags, !targetTags.isEmpty {
                     selectedTargets = Set(targetTags.map(Self.displayTargetTag))
                 }
@@ -326,7 +408,7 @@ struct AddCustomExerciseSheet: View {
                 if let fields = analysis.trackingFields?
                     .compactMap(Exercise.TrackingField.init(rawValue:)),
                    !fields.isEmpty {
-                    selectedTrackingFields = Set(fields)
+                    selectedTrackingFields = Set(Exercise.normalizedTrackingFields(fields, for: selectedCategory))
                 }
 
                 if let muscleGroupStr = analysis.muscleGroup,
@@ -357,8 +439,20 @@ struct AddCustomExerciseSheet: View {
     }
 
     private var orderedSelectedTrackingFields: [Exercise.TrackingField] {
-        let selected = Exercise.TrackingField.allCases.filter { selectedTrackingFields.contains($0) }
-        return selected.isEmpty ? Exercise.defaultTrackingFields(for: selectedCategory) : selected
+        let selected = Exercise.trackingFieldOptions(for: selectedCategory).filter { selectedTrackingFields.contains($0) }
+        return Exercise.normalizedTrackingFields(selected, for: selectedCategory)
+    }
+
+    private var resolvedActivityTypeName: String {
+        let explicit = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard explicit.isEmpty else { return explicit }
+        return Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory)
+    }
+
+    private var resolvedActivityAliases: [String] {
+        analysisResult?.activityAliases?
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
     }
 
     private var visibleTargetOptions: [String] {
@@ -373,6 +467,28 @@ struct AddCustomExerciseSheet: View {
         let defaults = Exercise.defaultTargetTags(for: selectedCategory)
         selectedTargets = Set(defaults)
         selectedTrackingFields = Set(Exercise.defaultTrackingFields(for: selectedCategory))
+        if activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            activityTypeName = Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory)
+        }
+    }
+
+    private func isTrackingFieldDisabled(_ field: Exercise.TrackingField) -> Bool {
+        guard !selectedTrackingFields.contains(field), field.isPrimaryMetric else { return false }
+        return selectedTrackingFields.filter(\.isPrimaryMetric).count >= 3
+    }
+
+    private func trackingFieldTitle(_ field: Exercise.TrackingField) -> String {
+        guard field == .reps else { return field.displayName }
+        switch selectedCategory {
+        case .conditioning:
+            return "Rounds"
+        case .skill, .sportPractice:
+            return "Attempts"
+        case .custom:
+            return "Count"
+        default:
+            return field.displayName
+        }
     }
 
     private static func displayTargetTag(_ tag: String) -> String {
@@ -395,27 +511,27 @@ private struct CategoryButton: View {
     let action: () -> Void
 
     var body: some View {
-        if isSelected {
-            Button(action: action) {
-                label
-            }
-            .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.18))
-        } else {
-            Button(action: action) {
-                label
-            }
-            .buttonStyle(.traiTertiary(color: .secondary, fullWidth: true))
+        Button(action: action) {
+            label
+                .padding(.horizontal, 12)
+                .frame(height: 38)
+                .background(
+                    isSelected ? Color.accentColor.opacity(0.18) : Color(.tertiarySystemFill),
+                    in: Capsule()
+                )
+                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
         }
+        .buttonStyle(.plain)
     }
 
     private var label: some View {
-        VStack(spacing: 6) {
+        HStack(spacing: 6) {
             Image(systemName: category.iconName)
-                .font(.traiHeadline(18))
+                .font(.traiLabel(12))
             Text(category.displayName)
                 .font(.traiLabel(12))
+                .lineLimit(1)
         }
-        .frame(maxWidth: .infinity)
     }
 }
 
@@ -425,24 +541,27 @@ private struct TargetButton: View {
     let title: String
     var icon: String?
     let isSelected: Bool
+    var isDisabled = false
     let action: () -> Void
 
     var body: some View {
-        if isSelected {
-            Button(action: action) {
-                label
-            }
-            .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fullWidth: true, fillOpacity: 0.18))
-        } else {
-            Button(action: action) {
-                label
-            }
-            .buttonStyle(.traiTertiary(color: .secondary, size: .compact, fullWidth: true))
+        Button(action: action) {
+            label
+                .padding(.horizontal, 12)
+                .frame(height: 36)
+                .background(
+                    isSelected ? Color.accentColor.opacity(0.18) : Color(.tertiarySystemFill),
+                    in: Capsule()
+                )
+                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
         }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.45 : 1)
     }
 
     private var label: some View {
-        VStack(spacing: 6) {
+        HStack(spacing: 6) {
             if let icon {
                 Image(systemName: icon)
                     .font(.traiLabel(13))
@@ -451,6 +570,5 @@ private struct TargetButton: View {
                 .font(.traiLabel(11))
                 .lineLimit(1)
         }
-        .frame(maxWidth: .infinity, minHeight: 54)
     }
 }

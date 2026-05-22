@@ -50,9 +50,15 @@ final class LiveWorkoutEntry {
     /// Comma-separated tracking fields copied from the exercise library.
     var trackingFieldsRaw: String = ""
 
+    /// User-facing activity type copied from the exercise library or generated plan.
+    var activityTypeNameRaw: String = ""
+
     /// JSON-encoded sets data for strength exercises
     /// Format: [{"reps": 10, "weightKg": 50.0, "completed": true, "isWarmup": false}]
     var setsData: String = "[]"
+
+    /// JSON-encoded repeatable activity segments for cardio, conditioning, sport, and mobility work.
+    var activitySegmentsData: String = "[]"
 
     /// Duration in seconds (for cardio/timed exercises)
     var durationSeconds: Int?
@@ -77,6 +83,12 @@ final class LiveWorkoutEntry {
     
     @Transient
     private var cachedSets: [SetData] = []
+
+    @Transient
+    private var cachedActivitySegmentsDataSnapshot: String?
+
+    @Transient
+    private var cachedActivitySegments: [ActivitySegment] = []
 
     init() {}
 
@@ -108,8 +120,9 @@ final class LiveWorkoutEntry {
             return false
         }
         return completedAt != nil
-            || (durationSeconds ?? 0) > 0
-            || (distanceMeters ?? 0) > 0
+            || trackedDurationSeconds > 0
+            || trackedDistanceMeters > 0
+            || activitySegments.contains { $0.hasLoggedData }
             || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -119,11 +132,16 @@ final class LiveWorkoutEntry {
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .compactMap(Exercise.TrackingField.init(rawValue:))
-            if !fields.isEmpty { return fields }
-            return Exercise.defaultTrackingFields(for: Exercise.Category(rawValue: exerciseType) ?? .custom)
+                .filter { $0 != .calories }
+            let category = Exercise.Category(rawValue: exerciseType) ?? .custom
+            if !fields.isEmpty {
+                return Exercise.normalizedTrackingFields(fields, for: category)
+            }
+            return Exercise.defaultTrackingFields(for: category)
         }
         set {
-            trackingFieldsRaw = newValue.map(\.rawValue).joined(separator: ",")
+            let category = Exercise.Category(rawValue: exerciseType) ?? .custom
+            trackingFieldsRaw = Exercise.normalizedTrackingFields(newValue, for: category).map(\.rawValue).joined(separator: ",")
         }
     }
 
@@ -139,6 +157,20 @@ final class LiveWorkoutEntry {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
                 .joined(separator: ",")
+        }
+    }
+
+    var activityTypeName: String {
+        get {
+            let explicit = activityTypeNameRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !explicit.isEmpty { return explicit }
+            return Exercise.defaultActivityTypeName(
+                for: exerciseName,
+                category: Exercise.Category(rawValue: exerciseType) ?? .custom
+            )
+        }
+        set {
+            activityTypeNameRaw = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
 
@@ -209,6 +241,7 @@ final class LiveWorkoutEntry {
         self.orderIndex = orderIndex
         self.trackingFields = exercise.trackingFields
         self.targetTags = exercise.targetTags
+        self.activityTypeName = exercise.activityTypeName
         if exercise.exerciseCategory != .strength {
             self.activityKind = exercise.exerciseCategory.liveWorkoutActivityKind
         }
@@ -220,6 +253,10 @@ final class LiveWorkoutEntry {
         self.exerciseId = exerciseId
         self.exerciseType = exerciseType
         self.equipmentName = equipmentName
+        self.activityTypeName = Exercise.defaultActivityTypeName(
+            for: exerciseName,
+            category: Exercise.Category(rawValue: exerciseType) ?? .custom
+        )
     }
 }
 
@@ -262,6 +299,39 @@ extension WorkoutPlan.TrainingBlock.BlockKind {
 // MARK: - Set Data Model
 
 extension LiveWorkoutEntry {
+    struct ActivitySegment: Codable, Identifiable, Equatable {
+        var id: UUID = UUID()
+        var durationSeconds: Int?
+        var distanceMeters: Double?
+        var reps: Int?
+        var weightKg: Double?
+        var notes: String
+
+        init(
+            id: UUID = UUID(),
+            durationSeconds: Int? = nil,
+            distanceMeters: Double? = nil,
+            reps: Int? = nil,
+            weightKg: Double? = nil,
+            notes: String = ""
+        ) {
+            self.id = id
+            self.durationSeconds = durationSeconds
+            self.distanceMeters = distanceMeters
+            self.reps = reps
+            self.weightKg = weightKg
+            self.notes = notes
+        }
+
+        var hasLoggedData: Bool {
+            (durationSeconds ?? 0) > 0
+                || (distanceMeters ?? 0) > 0
+                || (reps ?? 0) > 0
+                || (weightKg ?? 0) > 0
+                || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
     struct SetData: Codable, Identifiable, Equatable {
         var id: UUID = UUID()
         var reps: Int
@@ -357,6 +427,68 @@ extension LiveWorkoutEntry {
 // MARK: - Sets Management
 
 extension LiveWorkoutEntry {
+    var activitySegments: [ActivitySegment] {
+        get {
+            if cachedActivitySegmentsDataSnapshot == activitySegmentsData {
+                return cachedActivitySegments
+            }
+            guard let data = activitySegmentsData.data(using: .utf8),
+                  let decodedSegments = try? JSONDecoder().decode([ActivitySegment].self, from: data) else {
+                cachedActivitySegments = []
+                cachedActivitySegmentsDataSnapshot = activitySegmentsData
+                return []
+            }
+            cachedActivitySegments = decodedSegments
+            cachedActivitySegmentsDataSnapshot = activitySegmentsData
+            return decodedSegments
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            if activitySegmentsData != json {
+                activitySegmentsData = json
+            }
+            cachedActivitySegments = newValue
+            cachedActivitySegmentsDataSnapshot = json
+        }
+    }
+
+    func addActivitySegment(_ segment: ActivitySegment = ActivitySegment()) {
+        var segments = activitySegments
+        segments.append(segment)
+        activitySegments = segments
+    }
+
+    func updateActivitySegment(at index: Int, with segment: ActivitySegment) {
+        var segments = activitySegments
+        guard index < segments.count else { return }
+        segments[index] = segment
+        activitySegments = segments
+    }
+
+    func removeActivitySegment(at index: Int) {
+        var segments = activitySegments
+        guard index < segments.count else { return }
+        segments.remove(at: index)
+        activitySegments = segments
+    }
+
+    var trackedDurationSeconds: Int {
+        let segmentTotal = activitySegments
+            .compactMap(\.durationSeconds)
+            .filter { $0 > 0 }
+            .reduce(0, +)
+        return max(durationSeconds ?? 0, segmentTotal)
+    }
+
+    var trackedDistanceMeters: Double {
+        let segmentTotal = activitySegments
+            .compactMap(\.distanceMeters)
+            .filter { $0 > 0 }
+            .reduce(0, +)
+        return max(distanceMeters ?? 0, segmentTotal)
+    }
+
     /// Parsed sets from JSON
     var sets: [SetData] {
         get {
@@ -470,7 +602,8 @@ extension LiveWorkoutEntry {
 extension LiveWorkoutEntry {
     /// Formatted duration
     var formattedDuration: String? {
-        guard let seconds = durationSeconds else { return nil }
+        let seconds = trackedDurationSeconds
+        guard seconds > 0 else { return nil }
         let minutes = seconds / 60
         let remainingSeconds = seconds % 60
         if minutes >= 60 {
@@ -483,7 +616,8 @@ extension LiveWorkoutEntry {
 
     /// Formatted distance
     var formattedDistance: String? {
-        guard let meters = distanceMeters else { return nil }
+        let meters = trackedDistanceMeters
+        guard meters > 0 else { return nil }
         if meters >= 1000 {
             return String(format: "%.2f km", meters / 1000)
         }
@@ -492,8 +626,9 @@ extension LiveWorkoutEntry {
 
     /// Pace (min/km) for cardio
     var pacePerKm: Double? {
-        guard let meters = distanceMeters, meters > 0,
-              let seconds = durationSeconds, seconds > 0 else { return nil }
+        let meters = trackedDistanceMeters
+        let seconds = trackedDurationSeconds
+        guard meters > 0, seconds > 0 else { return nil }
         let km = meters / 1000
         let minutes = Double(seconds) / 60
         return minutes / km

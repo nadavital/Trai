@@ -33,6 +33,8 @@ struct WorkoutTimerHeader: View {
                 Text(formatTime(elapsed))
                     .font(.system(size: 48, weight: .light, design: .monospaced))
                     .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     .contentTransition(.numericText())
             }
 
@@ -135,10 +137,15 @@ struct WorkoutTimerHeader: View {
 
     private func formatTime(_ elapsed: TimeInterval) -> String {
         let totalSeconds = max(0, Int(elapsed))
+        let days = totalSeconds / 86_400
         let hours = totalSeconds / 3600
         let minutes = (totalSeconds % 3600) / 60
         let seconds = totalSeconds % 60
 
+        if days > 0 {
+            let remainingHours = (totalSeconds % 86_400) / 3600
+            return String(format: "%dd %02d:%02d", days, remainingHours, minutes)
+        }
         if hours > 0 {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         }

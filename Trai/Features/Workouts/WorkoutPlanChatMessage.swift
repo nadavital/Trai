@@ -111,8 +111,8 @@ enum WorkoutPlanQuestion: String, CaseIterable {
                 question: "What equipment do you have access to?",
                 suggestions: [
                     TraiSuggestion("Full Gym", subtitle: "Machines, cables, free weights"),
-                    TraiSuggestion("Home - Dumbbells", subtitle: "Basic dumbbells and bench"),
-                    TraiSuggestion("Home - Full Setup", subtitle: "Rack, barbell, weights"),
+                    TraiSuggestion("Dumbbells/Bands", subtitle: "Simple home equipment"),
+                    TraiSuggestion("Home Gym", subtitle: "Rack, barbell, bench"),
                     TraiSuggestion("Bodyweight Only", subtitle: "No equipment needed")
                 ],
                 selectionMode: .single,

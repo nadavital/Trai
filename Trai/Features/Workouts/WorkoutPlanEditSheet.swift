@@ -719,7 +719,7 @@ struct WorkoutDayEditorSheet: View {
         case .strength:
             return "e.g., Push Day"
         case .cardio:
-            return "e.g., Zone 2 Run"
+            return "e.g., Steady Run"
         case .hiit:
             return "e.g., Conditioning Circuit"
         case .climbing:
@@ -845,7 +845,7 @@ struct WorkoutDayEditorSheet: View {
                                     .foregroundStyle(.secondary)
                                     .padding(.top, 2)
 
-                                TextField("e.g., Flow, Bouldering, Zone 2, Conditioning", text: $focusAreasText, axis: .vertical)
+                                TextField("e.g., Flow, Bouldering, Steady Cardio, Conditioning", text: $focusAreasText, axis: .vertical)
                                     .lineLimit(2...4)
                                     .textInputAutocapitalization(.words)
                                     .disableAutocorrection(true)
@@ -975,7 +975,7 @@ struct WorkoutDayEditorSheet: View {
         case "full body":
             return "Full Body"
         case "zone 2":
-            return "Zone 2"
+            return "Steady Cardio"
         default:
             return raw.localizedCapitalized
         }

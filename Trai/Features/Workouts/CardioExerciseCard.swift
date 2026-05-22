@@ -12,20 +12,25 @@ struct CardioExerciseCard: View {
     let usesMetricWeight: Bool
     let onUpdateDuration: (Int) -> Void
     let onUpdateDistance: (Double) -> Void
-    var onUpdateCalories: ((Double?) -> Void)?
     var onUpdateSetCount: ((Int?) -> Void)?
     var onUpdateReps: ((Int?) -> Void)?
     var onUpdateWeightKg: ((Double?) -> Void)?
     var onUpdateNotes: ((String) -> Void)?
-    let onComplete: () -> Void
+    var onAddSegment: (() -> Void)?
+    var onUpdateSegmentDuration: ((Int, Int) -> Void)?
+    var onUpdateSegmentDistance: ((Int, Double) -> Void)?
+    var onUpdateSegmentReps: ((Int, Int) -> Void)?
+    var onUpdateSegmentWeightKg: ((Int, Double) -> Void)?
+    var onUpdateSegmentNotes: ((Int, String) -> Void)?
+    var onRemoveSegment: ((Int) -> Void)?
     var onDeleteExercise: (() -> Void)? = nil
 
     @State private var isExpanded = true
     @State private var showDeleteConfirmation = false
+    @State private var didEnsureInitialSegment = false
     @State private var durationMinutes = ""
     @State private var durationSeconds = ""
     @State private var distanceKm = ""
-    @State private var calories = ""
     @State private var sets = ""
     @State private var reps = ""
     @State private var weight = ""
@@ -43,53 +48,71 @@ struct CardioExerciseCard: View {
         usesMetricWeight ? "kg" : "lbs"
     }
 
+    private var countUnitLabel: String {
+        let category = Exercise.Category(rawValue: entry.exerciseType) ?? .custom
+        switch category {
+        case .conditioning:
+            return "rounds"
+        case .sportPractice, .skill:
+            return "attempts"
+        default:
+            return "count"
+        }
+    }
+
+    private var supportsSegments: Bool {
+        fields.contains(.duration)
+            || fields.contains(.distance)
+            || fields.contains(.reps)
+            || fields.contains(.weight)
+            || fields.contains(.notes)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
 
             if isExpanded {
                 VStack(spacing: 12) {
-                    if fields.contains(.sets) {
-                        setsRow
-                    }
-                    if fields.contains(.duration) {
-                        durationRow
-                    }
-                    if fields.contains(.distance) {
-                        distanceRow
-                    }
-                    if fields.contains(.reps) {
-                        repsRow
-                    }
-                    if fields.contains(.weight) {
-                        weightRow
-                    }
-                    if fields.contains(.calories) {
-                        caloriesRow
-                    }
-                    if fields.contains(.notes) {
-                        notesRow
-                    }
+                    if supportsSegments {
+                        segmentsSection
 
-                    Button(action: onComplete) {
-                        HStack {
-                            Image(systemName: entry.completedAt != nil ? "checkmark.circle.fill" : "circle")
-                            Text(entry.completedAt != nil ? "Completed" : "Mark Complete")
+                        Button {
+                            onAddSegment?()
+                        } label: {
+                            Label("Add segment", systemImage: "plus.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .frame(maxWidth: .infinity)
                         }
-                        .font(.subheadline.weight(.medium))
-                        .frame(maxWidth: .infinity)
+                        .buttonStyle(.traiTertiary(color: .accentColor, fullWidth: true))
+                    } else {
+                        if fields.contains(.sets) {
+                            setsRow
+                        }
+                        if fields.contains(.duration) {
+                            durationRow
+                        }
+                        if fields.contains(.distance) {
+                            distanceRow
+                        }
+                        if fields.contains(.reps) {
+                            repsRow
+                        }
+                        if fields.contains(.weight) {
+                            weightRow
+                        }
+                        if fields.contains(.notes) {
+                            notesRow
+                        }
                     }
-                    .buttonStyle(
-                        .traiTertiary(
-                            color: entry.completedAt != nil ? .green : .accentColor,
-                            fullWidth: true
-                        )
-                    )
                 }
             }
         }
         .traiCard()
-        .onAppear(perform: syncFieldsFromEntry)
+        .onAppear {
+            syncFieldsFromEntry()
+            ensureInitialSegment()
+        }
         .confirmationDialog(
             "Remove \(entry.exerciseName)?",
             isPresented: $showDeleteConfirmation,
@@ -120,15 +143,9 @@ struct CardioExerciseCard: View {
                         Text(entry.exerciseName)
                             .font(.headline)
 
-                        if !entry.targetTags.isEmpty {
-                            Text(entry.targetTags.prefix(3).joined(separator: " • "))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text(Exercise.Category(rawValue: entry.exerciseType)?.displayName ?? "Activity")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        Text(entry.activityTypeName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     Spacer()
@@ -222,15 +239,6 @@ struct CardioExerciseCard: View {
         }
     }
 
-    private var caloriesRow: some View {
-        trackingRow(icon: "flame.fill", title: "Calories") {
-            compactNumberField("0", text: $calories, width: 58)
-                .onChange(of: calories) { _, newValue in
-                    onUpdateCalories?(Double(newValue))
-                }
-        }
-    }
-
     private var notesRow: some View {
         VStack(alignment: .leading, spacing: 6) {
             Label("Notes", systemImage: "note.text")
@@ -245,6 +253,26 @@ struct CardioExerciseCard: View {
                 .onChange(of: notes) { _, value in
                     onUpdateNotes?(value)
                 }
+        }
+    }
+
+    private var segmentsSection: some View {
+        VStack(spacing: 6) {
+            ForEach(Array(entry.activitySegments.enumerated()), id: \.element.id) { index, segment in
+                ActivitySegmentRow(
+                    index: index,
+                    segment: segment,
+                    fields: fields,
+                    usesMetricWeight: usesMetricWeight,
+                onUpdateDuration: { seconds in onUpdateSegmentDuration?(index, seconds) },
+                onUpdateDistance: { meters in onUpdateSegmentDistance?(index, meters) },
+                onUpdateReps: { reps in onUpdateSegmentReps?(index, reps) },
+                onUpdateWeightKg: { weight in onUpdateSegmentWeightKg?(index, weight) },
+                onUpdateNotes: { notes in onUpdateSegmentNotes?(index, notes) },
+                    onRemove: { onRemoveSegment?(index) },
+                    countUnitLabel: countUnitLabel
+                )
+            }
         }
     }
 
@@ -289,15 +317,16 @@ struct CardioExerciseCard: View {
     }
 
     private func syncFieldsFromEntry() {
-        if let seconds = entry.durationSeconds {
+        let trackedSeconds = entry.trackedDurationSeconds
+        if trackedSeconds > 0 {
+            let seconds = trackedSeconds
             durationMinutes = "\(seconds / 60)"
             durationSeconds = String(format: "%02d", seconds % 60)
         }
-        if let meters = entry.distanceMeters {
+        let trackedMeters = entry.trackedDistanceMeters
+        if trackedMeters > 0 {
+            let meters = trackedMeters
             distanceKm = String(format: "%.2f", meters / 1000)
-        }
-        if let burned = entry.caloriesBurned, burned > 0 {
-            calories = String(format: "%.0f", burned)
         }
         if let firstSet = entry.sets.first {
             if !entry.sets.isEmpty {
@@ -312,5 +341,198 @@ struct CardioExerciseCard: View {
             }
         }
         notes = entry.notes
+    }
+
+    private func ensureInitialSegment() {
+        guard supportsSegments, !didEnsureInitialSegment, entry.activitySegments.isEmpty else { return }
+        didEnsureInitialSegment = true
+        onAddSegment?()
+    }
+}
+
+private struct ActivitySegmentRow: View {
+    let index: Int
+    let segment: LiveWorkoutEntry.ActivitySegment
+    let fields: [Exercise.TrackingField]
+    let usesMetricWeight: Bool
+    let onUpdateDuration: (Int) -> Void
+    let onUpdateDistance: (Double) -> Void
+    let onUpdateReps: (Int) -> Void
+    let onUpdateWeightKg: (Double) -> Void
+    let onUpdateNotes: (String) -> Void
+    let onRemove: () -> Void
+    let countUnitLabel: String
+
+    @State private var durationMinutes = ""
+    @State private var durationSeconds = ""
+    @State private var distanceKm = ""
+    @State private var reps = ""
+    @State private var weight = ""
+    @State private var notes = ""
+
+    private var weightUnitLabel: String {
+        usesMetricWeight ? "kg" : "lbs"
+    }
+
+    private var visibleMetricFields: [Exercise.TrackingField] {
+        fields.filter { field in
+            switch field {
+            case .duration, .distance, .reps, .weight:
+                return true
+            case .sets, .calories, .notes:
+                return false
+            }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                Text("\(index + 1)")
+                    .font(.subheadline.weight(.bold))
+                    .frame(width: 28, height: 28)
+                    .background(Color(.tertiarySystemFill), in: Circle())
+                    .foregroundStyle(.primary)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    if !visibleMetricFields.isEmpty {
+                        metricRows
+                    }
+
+                    if fields.contains(.notes) {
+                        TextField("Notes", text: $notes, axis: .vertical)
+                            .lineLimit(1...3)
+                            .font(.caption)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8))
+                            .onChange(of: notes) { _, value in onUpdateNotes(value) }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Delete segment \(index + 1)")
+            }
+        }
+        .padding(.vertical, 3)
+        .onAppear(perform: syncFields)
+    }
+
+    private var metricRows: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                ForEach(Array(visibleMetricFields.prefix(2)), id: \.self) { field in
+                    metricInput(for: field)
+                }
+            }
+
+            let remaining = Array(visibleMetricFields.dropFirst(2))
+            if !remaining.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(remaining, id: \.self) { field in
+                        metricInput(for: field)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func metricInput(for field: Exercise.TrackingField) -> some View {
+        switch field {
+        case .duration:
+            segmentDurationField
+        case .distance:
+            segmentValueField(label: "km", placeholder: "0.00", text: $distanceKm, keyboard: .decimalPad)
+                .onChange(of: distanceKm) { _, value in
+                    onUpdateDistance((Double(value) ?? 0) * 1000)
+                }
+        case .reps:
+            segmentValueField(label: countUnitLabel, placeholder: "0", text: $reps)
+                .onChange(of: reps) { _, value in
+                    onUpdateReps(Int(value) ?? 0)
+                }
+        case .weight:
+            segmentValueField(label: weightUnitLabel, placeholder: "0", text: $weight, keyboard: .decimalPad)
+                .onChange(of: weight) { _, value in
+                    let displayValue = Double(value) ?? 0
+                    onUpdateWeightKg(usesMetricWeight ? displayValue : displayValue / WeightUtility.kgToLbs)
+                }
+        case .sets, .calories, .notes:
+            EmptyView()
+        }
+    }
+
+    private var segmentDurationField: some View {
+        HStack(spacing: 4) {
+            TextField("00", text: $durationMinutes)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.center)
+                .frame(width: 30)
+                .onChange(of: durationMinutes) { _, _ in updateDuration() }
+            Text(":")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("00", text: $durationSeconds)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.center)
+                .frame(width: 30)
+                .onChange(of: durationSeconds) { _, _ in updateDuration() }
+            Text("min")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func segmentValueField(
+        label: String,
+        placeholder: String,
+        text: Binding<String>,
+        keyboard: UIKeyboardType = .numberPad
+    ) -> some View {
+        HStack(spacing: 4) {
+            TextField(placeholder, text: text)
+                .keyboardType(keyboard)
+                .multilineTextAlignment(.center)
+                .frame(width: 42)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func updateDuration() {
+        onUpdateDuration((Int(durationMinutes) ?? 0) * 60 + (Int(durationSeconds) ?? 0))
+    }
+
+    private func syncFields() {
+        if let seconds = segment.durationSeconds {
+            durationMinutes = "\(seconds / 60)"
+            durationSeconds = String(format: "%02d", seconds % 60)
+        }
+        if let meters = segment.distanceMeters {
+            distanceKm = String(format: "%.2f", meters / 1000)
+        }
+        if let segmentReps = segment.reps, segmentReps > 0 {
+            reps = "\(segmentReps)"
+        }
+        if let kg = segment.weightKg, kg > 0 {
+            let unit = WeightUnit(usesMetric: usesMetricWeight)
+            weight = WeightUtility.format(kg, displayUnit: unit, showUnit: false)
+        }
+        notes = segment.notes
     }
 }

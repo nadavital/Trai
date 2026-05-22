@@ -11,6 +11,7 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
     let goalKindRaw: String
     let linkedWorkoutTypeRaw: String?
     let linkedActivityName: String?
+    let linkedActivityTags: [String]?
     let linkedActivityKindRaw: String?
     let linkedActivityRoleRaw: String?
     let targetValue: Double?
@@ -28,6 +29,7 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
             goalKindRaw,
             linkedWorkoutTypeRaw ?? "",
             linkedActivityName ?? "",
+            linkedActivityTags?.joined(separator: ",") ?? "",
             linkedActivityKindRaw ?? "",
             linkedActivityRoleRaw ?? ""
         ].joined(separator: "|")
@@ -64,6 +66,7 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
             goalKind: goalKind,
             linkedWorkoutType: linkedWorkoutType,
             linkedActivityName: linkedActivityName?.trimmingCharacters(in: .whitespacesAndNewlines),
+            linkedActivityTags: linkedActivityTags ?? [],
             linkedActivityKind: linkedActivityKindRaw.flatMap(WorkoutPlan.TrainingBlock.BlockKind.init(rawValue:)),
             linkedActivityRole: linkedActivityRoleRaw.flatMap(WorkoutPlan.TrainingBlock.Role.init(rawValue:)),
             targetValue: goalKind.supportsNumericTarget ? targetValue : nil,
@@ -92,7 +95,7 @@ struct WorkoutGoalRecommendationContextBuilder {
             .sorted { ($0.completedAt ?? $0.startedAt) > ($1.completedAt ?? $1.startedAt) }
             .prefix(4)
             .map { workout in
-                let detail = [workout.type.displayName, workout.displayFocusSummary, workout.formattedDuration]
+                let detail = [workout.displayFocusSummary, workout.type.displayName, workout.formattedDuration]
                     .filter { !$0.isEmpty }
                     .joined(separator: " • ")
                 return "\(workout.name) (\(detail))"
@@ -102,7 +105,7 @@ struct WorkoutGoalRecommendationContextBuilder {
             .sorted { $0.loggedAt > $1.loggedAt }
             .prefix(4)
             .map { session in
-                let detail = [session.inferredWorkoutMode.displayName, session.formattedDuration, session.formattedDistance]
+                let detail = [session.activityDisplayName, session.formattedDuration, session.formattedDistance]
                     .compactMap { $0 }
                     .filter { !$0.isEmpty }
                     .joined(separator: " • ")
@@ -301,7 +304,7 @@ extension AIService {
             - Do not infer a strength baseline just because an exercise appears in the plan.
             - Weight/load goals require a known current baseline and should progress from that baseline.
             - Do not create vague progression goals unless the structured target and successCriteria make the exact achievement verifiable from app data.
-            - Broad goals are allowed, but the intent must be accurate: title, target fields, linkedWorkoutType/linkedActivityName/linkedActivityKindRaw/linkedActivityRoleRaw, and successCriteria should all describe the same behavior Trai can track.
+            - Broad goals are allowed, but the intent must be accurate: title, target fields, linkedWorkoutType/linkedActivityName/linkedActivityTags/linkedActivityKindRaw/linkedActivityRoleRaw, and successCriteria should all describe the same behavior Trai can track.
             - If the current plan includes a personalized constraint, habit, or recurring support block, prefer a goal for that specific plan behavior over generic progression.
             - For a brand-new workout plan with little history, use goals that establish the plan: weekly structure adherence, named-day/session-type completion across several weeks, requested recurring habits, check-in cadence, or logging enough sessions for Trai to personalize the next revision.
             - Every frequency, duration, distance, or weight goal must have a targetValue greater than 0 and a clear targetUnit.
@@ -319,7 +322,8 @@ extension AIService {
             - If an exercise clearly appears as a recurring anchor movement in the history, it is okay to recommend an exercise-specific goal tied to linkedActivityName.
             - Use linkedWorkoutType when the goal is broad to a session type.
             - Use linkedActivityName when the goal is tied to a specific exercise or activity like a route, lift, or interval format.
-            - Use linkedActivityKindRaw and linkedActivityRoleRaw when the goal is tied to a category of workout entry, such as cardio support work, mobility warmups, skill accessories, or recovery cooldowns. For support work inside another workout, prefer kind+role over an exact title.
+            - Use linkedActivityTags for semantic activity families, custom activity types, or personalized targets such as Climbing, grip, intervals, mobility, or technique.
+            - Use linkedActivityKindRaw and linkedActivityRoleRaw only as behavioral fallback metadata, such as support work, mobility warmups, skill accessories, or recovery cooldowns. For support work inside another workout, prefer linkedActivityTags plus linkedActivityRoleRaw when the activity has a meaningful semantic identity.
             - linkedWorkoutType must be one of: \(workoutModes)
             - linkedActivityKindRaw can be warmup, strength, cardio, conditioning, skill, mobility, recovery, sportPractice, cooldown, or custom.
             - linkedActivityRoleRaw can be main, warmup, accessory, finisher, cooldown, or custom.
@@ -422,6 +426,7 @@ extension WorkoutGoalSuggestion {
             goalKind.rawValue,
             linkedWorkoutTypeRaw?.goalNormalizedKey ?? "",
             linkedActivityName?.goalNormalizedKey ?? "",
+            linkedActivityTags?.map(\.goalNormalizedKey).sorted().joined(separator: ",") ?? "",
             linkedActivityKindRaw ?? "",
             linkedActivityRoleRaw ?? ""
         ].joined(separator: "|")

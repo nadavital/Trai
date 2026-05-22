@@ -31,12 +31,13 @@ extension AIFunctionExecutor {
         let workoutTypeString = args["workout_type"] as? String
         let workoutType = LiveWorkout.WorkoutType.normalized(from: workoutTypeString) ?? .strength
         let durationMinutes = args["duration_minutes"] as? Int ?? 45
+        let activityFocuses = stringArray(from: args["activity_focuses"])
 
         // Get target muscles - either from args or from recovery recommendations
         let targetMuscleStrings = args["target_muscle_groups"] as? [String] ?? []
         let targetMuscles: [LiveWorkout.MuscleGroup]
 
-        if targetMuscleStrings.isEmpty {
+        if targetMuscleStrings.isEmpty, activityFocuses.isEmpty {
             // Use recovery-based recommendations
             targetMuscles = recoveryService.getRecommendedMuscleGroups(modelContext: modelContext)
         } else {
@@ -247,21 +248,44 @@ extension AIFunctionExecutor {
 
         // Parse target muscle groups
         let muscleStrings = args["target_muscle_groups"] as? [String] ?? []
+        let activityFocuses = stringArray(from: args["activity_focuses"])
 
         // Parse suggested exercises
         var exercises: [SuggestedWorkoutEntry.SuggestedExercise] = []
         if let suggestedExercises = args["suggested_exercises"] as? [[String: Any]] {
             for exerciseData in suggestedExercises {
                 guard let exerciseName = exerciseData["name"] as? String else { continue }
+                let category = (exerciseData["category"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+                let activityTypeName = (exerciseData["activity_name"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+                let targetTags = stringArray(from: exerciseData["target_tags"])
+                let trackingFields = stringArray(from: exerciseData["tracking_fields"])
                 let sets = exerciseData["sets"] as? Int ?? 3
                 let reps = exerciseData["reps"] as? Int ?? 10
                 let weight = exerciseData["weight_kg"] as? Double
+                let durationMinutes = numericInt(from: exerciseData["duration_minutes"])
+                let distanceMeters = numericDouble(from: exerciseData["distance_meters"])
+                let notes = (exerciseData["notes"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+                let segments = parseSuggestedActivitySegments(exerciseData["segments"])
 
                 exercises.append(SuggestedWorkoutEntry.SuggestedExercise(
                     name: exerciseName,
+                    category: category,
+                    activityTypeName: activityTypeName,
+                    targetTags: targetTags,
+                    trackingFields: trackingFields,
                     sets: sets,
                     reps: reps,
-                    weightKg: weight
+                    weightKg: weight,
+                    durationMinutes: durationMinutes,
+                    distanceMeters: distanceMeters,
+                    notes: notes,
+                    segments: segments
                 ))
             }
         }
@@ -271,6 +295,8 @@ extension AIFunctionExecutor {
         let rationale: String
         if !muscleStrings.isEmpty {
             rationale = "Targeting \(muscleNames) based on your recovery status and preferences."
+        } else if !activityFocuses.isEmpty {
+            rationale = "Built around \(activityFocuses.joined(separator: ", ")) and ready for you to customize."
         } else {
             rationale = "A \(workoutType.displayName.lowercased()) workout ready for you to customize."
         }
@@ -280,11 +306,95 @@ extension AIFunctionExecutor {
             name: name,
             workoutType: workoutType.rawValue,
             targetMuscleGroups: muscleStrings,
+            activityFocuses: activityFocuses,
             exercises: exercises,
             durationMinutes: args["duration_minutes"] as? Int ?? 45,
             rationale: rationale
         )
 
         return .suggestedWorkoutStart(suggestion)
+    }
+
+    private func parseSuggestedActivitySegments(_ value: Any?) -> [SuggestedWorkoutEntry.SuggestedExercise.ActivitySegment] {
+        guard let values = value as? [[String: Any]] else { return [] }
+        return values.compactMap { rawSegment -> SuggestedWorkoutEntry.SuggestedExercise.ActivitySegment? in
+            let durationMinutes = numericInt(from: rawSegment["duration_minutes"])
+            let distanceMeters = numericDouble(from: rawSegment["distance_meters"])
+            let reps = numericInt(from: rawSegment["reps"])
+            let weightKg = numericDouble(from: rawSegment["weight_kg"])
+            let notes = (rawSegment["notes"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty
+
+            guard durationMinutes != nil || distanceMeters != nil || reps != nil || weightKg != nil || notes != nil else {
+                return nil
+            }
+
+            return SuggestedWorkoutEntry.SuggestedExercise.ActivitySegment(
+                durationMinutes: durationMinutes,
+                distanceMeters: distanceMeters,
+                reps: reps,
+                weightKg: weightKg,
+                notes: notes
+            )
+        }
+    }
+
+    private func numericInt(from value: Any?) -> Int? {
+        switch value {
+        case let number as Int:
+            return number
+        case let number as Double:
+            return Int(number.rounded())
+        case let number as NSNumber:
+            return number.intValue
+        case let string as String:
+            return Int(string.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
+    }
+
+    private func numericDouble(from value: Any?) -> Double? {
+        switch value {
+        case let number as Double:
+            return number
+        case let number as Int:
+            return Double(number)
+        case let number as NSNumber:
+            return number.doubleValue
+        case let string as String:
+            return Double(string.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
+    }
+
+    private func stringArray(from value: Any?) -> [String] {
+        switch value {
+        case let values as [String]:
+            return values
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        case let values as [Any]:
+            return values.compactMap { element in
+                (element as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+            }
+        case let value as String:
+            return value
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        default:
+            return []
+        }
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

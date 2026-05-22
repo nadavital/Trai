@@ -166,8 +166,10 @@ extension AIFunctionExecutor {
                     activities.append([
                         "name": entry.exerciseName,
                         "type": entry.exerciseType,
-                        "duration_minutes": entry.durationSeconds.map { $0 / 60 } ?? 0,
-                        "distance_meters": entry.distanceMeters ?? 0,
+                        "activity_type": entry.activityTypeName,
+                        "activity_tags": entry.targetTags,
+                        "duration_minutes": entry.trackedDurationSeconds / 60,
+                        "distance_meters": entry.trackedDistanceMeters,
                         "completed": entry.completedAt != nil,
                         "notes": trimmedNotes
                     ])
@@ -176,6 +178,8 @@ extension AIFunctionExecutor {
 
                 var exerciseData: [String: Any] = [
                     "name": entry.exerciseName,
+                    "activity_type": entry.activityTypeName,
+                    "activity_tags": entry.targetTags,
                     "sets_count": sets.count,
                     "total_reps": entry.totalReps,
                     "best_weight_kg": sets.map(\.weightKg).max() ?? 0,
@@ -318,6 +322,7 @@ extension AIFunctionExecutor {
                 "status": goal.status.rawValue,
                 "workout_type": goal.linkedWorkoutType?.rawValue ?? "",
                 "activity_name": goal.trimmedActivityName ?? "",
+                "activity_tags": goal.linkedActivityTags,
                 "target_value": goal.targetValue as Any,
                 "target_unit": goal.targetUnit,
                 "period_unit": goal.periodUnit?.rawValue ?? "",
@@ -369,6 +374,7 @@ extension AIFunctionExecutor {
 
         let workoutType = WorkoutMode.normalized(from: args["workout_type"] as? String)
         let activityName = (args["activity_name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let activityTags = stringArray(from: args["activity_tags"])
         let activityKind = (args["activity_kind"] as? String)
             .flatMap { WorkoutPlan.TrainingBlock.BlockKind(rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
         let activityRole = (args["activity_role"] as? String)
@@ -387,6 +393,7 @@ extension AIFunctionExecutor {
             goalKind: goalKind,
             linkedWorkoutType: workoutType,
             linkedActivityName: activityName?.isEmpty == false ? activityName : nil,
+            linkedActivityTags: activityTags,
             linkedActivityKind: activityKind,
             linkedActivityRole: activityRole,
             targetValue: goalKind.supportsNumericTarget ? targetValue : nil,
@@ -412,6 +419,7 @@ extension AIFunctionExecutor {
                     "status": goal.status.rawValue,
                     "workout_type": goal.linkedWorkoutType?.rawValue ?? "",
                     "activity_name": goal.trimmedActivityName ?? "",
+                    "activity_tags": goal.linkedActivityTags,
                     "target_value": goal.targetValue as Any,
                     "target_unit": goal.targetUnit,
                     "period_unit": goal.periodUnit?.rawValue ?? "",
@@ -481,6 +489,10 @@ extension AIFunctionExecutor {
             goal.linkedActivityName = trimmedActivity.isEmpty ? nil : trimmedActivity
         }
 
+        if args.keys.contains("activity_tags") {
+            goal.linkedActivityTags = stringArray(from: args["activity_tags"])
+        }
+
         if let rawActivityKind = args["activity_kind"] as? String {
             let trimmedKind = rawActivityKind.trimmingCharacters(in: .whitespacesAndNewlines)
             goal.linkedActivityKind = trimmedKind.isEmpty ? nil : WorkoutPlan.TrainingBlock.BlockKind(rawValue: trimmedKind)
@@ -538,6 +550,7 @@ extension AIFunctionExecutor {
                     "status": goal.status.rawValue,
                     "workout_type": goal.linkedWorkoutType?.rawValue ?? "",
                     "activity_name": goal.trimmedActivityName ?? "",
+                    "activity_tags": goal.linkedActivityTags,
                     "target_value": goal.targetValue as Any,
                     "target_unit": goal.targetUnit,
                     "period_unit": goal.periodUnit?.rawValue ?? "",
@@ -608,6 +621,28 @@ extension AIFunctionExecutor {
             return Int(string.trimmingCharacters(in: .whitespacesAndNewlines))
         default:
             return nil
+        }
+    }
+
+    private func stringArray(from value: Any?) -> [String] {
+        switch value {
+        case let values as [String]:
+            return values
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        case let values as [Any]:
+            return values.compactMap { element in
+                (element as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+            }
+        case let value as String:
+            return value
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        default:
+            return []
         }
     }
 
@@ -754,6 +789,10 @@ extension AIFunctionExecutor {
         }
         let workoutType = WorkoutMode.normalized(from: type)?.rawValue
             ?? type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let activityName = (args["activity_name"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let activityTags = stringArray(from: args["activity_tags"])
 
         let workoutName = args["name"] as? String  // Trai-generated name
         let durationMinutes = args["duration_minutes"] as? Int
@@ -764,6 +803,20 @@ extension AIFunctionExecutor {
         if let exercisesData = args["exercises"] as? [[String: Any]] {
             for exerciseData in exercisesData {
                 guard let name = exerciseData["name"] as? String else { continue }
+                let category = (exerciseData["category"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+                let exerciseActivityName = (exerciseData["activity_name"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+                let targetTags = stringArray(from: exerciseData["target_tags"])
+                let trackingFields = stringArray(from: exerciseData["tracking_fields"])
+                let exerciseDurationMinutes = numericInt(from: exerciseData["duration_minutes"])
+                let distanceMeters = numericDouble(from: exerciseData["distance_meters"])
+                let exerciseNotes = (exerciseData["notes"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+                let segments = parseLoggedActivitySegments(exerciseData["segments"])
 
                 var sets: [SuggestedWorkoutLog.LoggedExercise.SetData] = []
 
@@ -790,9 +843,17 @@ extension AIFunctionExecutor {
                     }
                 }
 
-                if !sets.isEmpty {
+                if !sets.isEmpty || exerciseDurationMinutes != nil || distanceMeters != nil || !segments.isEmpty {
                     exercises.append(SuggestedWorkoutLog.LoggedExercise(
                         name: name,
+                        category: category,
+                        activityTypeName: exerciseActivityName,
+                        targetTags: targetTags,
+                        trackingFields: trackingFields,
+                        durationMinutes: exerciseDurationMinutes,
+                        distanceMeters: distanceMeters,
+                        notes: exerciseNotes,
+                        segments: segments,
                         sets: sets
                     ))
                 }
@@ -803,12 +864,39 @@ extension AIFunctionExecutor {
         let suggestion = SuggestedWorkoutLog(
             name: workoutName,
             workoutType: workoutType,
+            activityName: activityName,
+            activityTags: activityTags,
             durationMinutes: durationMinutes,
             exercises: exercises,
             notes: notes
         )
 
         return .suggestedWorkoutLog(suggestion)
+    }
+
+    private func parseLoggedActivitySegments(_ value: Any?) -> [SuggestedWorkoutLog.LoggedExercise.ActivitySegment] {
+        guard let values = value as? [[String: Any]] else { return [] }
+        return values.compactMap { rawSegment -> SuggestedWorkoutLog.LoggedExercise.ActivitySegment? in
+            let durationMinutes = numericInt(from: rawSegment["duration_minutes"])
+            let distanceMeters = numericDouble(from: rawSegment["distance_meters"])
+            let reps = numericInt(from: rawSegment["reps"])
+            let weightKg = numericDouble(from: rawSegment["weight_kg"])
+            let notes = (rawSegment["notes"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty
+
+            guard durationMinutes != nil || distanceMeters != nil || reps != nil || weightKg != nil || notes != nil else {
+                return nil
+            }
+
+            return SuggestedWorkoutLog.LoggedExercise.ActivitySegment(
+                durationMinutes: durationMinutes,
+                distanceMeters: distanceMeters,
+                reps: reps,
+                weightKg: weightKg,
+                notes: notes
+            )
+        }
     }
 
     // MARK: - Weight Functions
@@ -1150,5 +1238,11 @@ extension AIFunctionExecutor {
         }
 
         return nil
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

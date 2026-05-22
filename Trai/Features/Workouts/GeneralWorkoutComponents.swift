@@ -8,6 +8,18 @@ import SwiftUI
 struct GeneralSessionOverviewCard: View {
     let workout: LiveWorkout
 
+    private var primaryTitle: String {
+        workout.displayFocusAreas.first ?? workout.type.displayName
+    }
+
+    private var subtitle: String {
+        primaryTitle == workout.type.displayName ? "Activity session" : "\(workout.type.displayName) session"
+    }
+
+    private var supportingFocusAreas: [String] {
+        workout.displayFocusAreas.filter { $0.goalNormalizedKey != primaryTitle.goalNormalizedKey }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
@@ -18,10 +30,10 @@ struct GeneralSessionOverviewCard: View {
                     .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(workout.type.displayName)
+                    Text(primaryTitle)
                         .font(.headline)
 
-                    Text("Activity session")
+                    Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -29,9 +41,9 @@ struct GeneralSessionOverviewCard: View {
                 Spacer()
             }
 
-            if !workout.focusAreas.isEmpty {
+            if !supportingFocusAreas.isEmpty {
                 FlowLayout(spacing: 8) {
-                    ForEach(workout.focusAreas, id: \.self) { focus in
+                    ForEach(supportingFocusAreas, id: \.self) { focus in
                         Text(focus)
                             .font(.caption)
                             .padding(.horizontal, 10)
@@ -77,7 +89,7 @@ struct SessionNotesCard: View {
 
 struct GeneralActivityCard: View {
     let entry: LiveWorkoutEntry
-    var allowsCompletionToggle: Bool = true
+    var allowsCompletionToggle: Bool = false
     var allowsDeletion: Bool = true
     var showsEditableFields: Bool = true
     var isPlannedGuidance: Bool = false
@@ -89,7 +101,8 @@ struct GeneralActivityCard: View {
     private var durationMinutesBinding: Binding<String> {
         Binding(
             get: {
-                guard let seconds = entry.durationSeconds, seconds > 0 else { return "" }
+                let seconds = entry.trackedDurationSeconds
+                guard seconds > 0 else { return "" }
                 return String(seconds / 60)
             },
             set: { newValue in
@@ -124,8 +137,9 @@ struct GeneralActivityCard: View {
             chips.append(ActivityMetadataChip(title: title, icon: icon))
         }
 
-        if let kind = entry.activityKind {
-            appendUnique(title: kind.displayName, icon: kind.iconName)
+        let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
+            appendUnique(title: activityName, icon: entry.activityIconName)
         }
         if let role = entry.activityRole {
             appendUnique(title: role.displayName, icon: role.iconName)
@@ -156,11 +170,11 @@ struct GeneralActivityCard: View {
 
                     if !isPlannedGuidance {
                         if let completedAt = entry.completedAt {
-                            Text("Completed \(completedAt.formatted(date: .omitted, time: .shortened))")
+                            Text("Logged \(completedAt.formatted(date: .omitted, time: .shortened))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {
-                            Text("In progress")
+                            Text("Added to this workout")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -267,15 +281,39 @@ struct AddGeneralActivitySheet: View {
     @State private var activityName = ""
     @State private var activityNotes = ""
     @State private var durationMinutes = ""
-    @State private var selectedKind: WorkoutPlan.TrainingBlock.BlockKind = .custom
-    @State private var selectedRole: WorkoutPlan.TrainingBlock.Role = .accessory
+    @State private var selectedRole: WorkoutPlan.TrainingBlock.Role = .main
 
-    private var addableKinds: [WorkoutPlan.TrainingBlock.BlockKind] {
-        [.cardio, .conditioning, .mobility, .skill, .sportPractice, .recovery, .custom]
+    private var placementOptions: [(role: WorkoutPlan.TrainingBlock.Role, label: String)] {
+        [
+            (.main, "Main"),
+            (.warmup, "Warm-up"),
+            (.accessory, "Add-on"),
+            (.finisher, "Finish"),
+            (.cooldown, "Cool down")
+        ]
     }
 
-    private var addableRoles: [WorkoutPlan.TrainingBlock.Role] {
-        [.main, .warmup, .accessory, .finisher, .cooldown, .custom]
+    private var inferredKind: WorkoutPlan.TrainingBlock.BlockKind {
+        let text = "\(activityName) \(activityNotes)"
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        if ["run", "running", "cycle", "cycling", "bike", "row", "rowing", "swim", "walk", "stair", "elliptical"].contains(where: text.contains) {
+            return .cardio
+        }
+        if ["interval", "conditioning", "hiit", "circuit", "sled", "battle rope"].contains(where: text.contains) {
+            return .conditioning
+        }
+        if ["mobility", "stretch", "yoga", "flow"].contains(where: text.contains) {
+            return .mobility
+        }
+        if ["breath", "recovery", "easy"].contains(where: text.contains) {
+            return .recovery
+        }
+        if ["climb", "boulder", "route", "skill", "drill", "practice", "sport"].contains(where: text.contains) {
+            return .sportPractice
+        }
+        return .custom
     }
 
     var body: some View {
@@ -290,22 +328,23 @@ struct AddGeneralActivitySheet: View {
                             .padding(12)
                             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
 
-                        HStack(spacing: 10) {
-                            Picker("Kind", selection: $selectedKind) {
-                                ForEach(addableKinds) { kind in
-                                    Label(kind.displayName, systemImage: kind.iconName)
-                                        .tag(kind)
+                        FlowLayout(spacing: 8) {
+                            ForEach(placementOptions, id: \.role) { option in
+                                Button {
+                                    selectedRole = option.role
+                                } label: {
+                                    Text(option.label)
+                                        .font(.caption.weight(.semibold))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            selectedRole == option.role ? Color.accentColor : Color(.tertiarySystemFill),
+                                            in: Capsule()
+                                        )
+                                        .foregroundStyle(selectedRole == option.role ? .white : .primary)
                                 }
+                                .buttonStyle(.plain)
                             }
-                            .pickerStyle(.menu)
-
-                            Picker("Role", selection: $selectedRole) {
-                                ForEach(addableRoles) { role in
-                                    Label(role.displayName, systemImage: role.iconName)
-                                        .tag(role)
-                                }
-                            }
-                            .pickerStyle(.menu)
                         }
                     }
                     .padding()
@@ -355,7 +394,7 @@ struct AddGeneralActivitySheet: View {
                             activityName,
                             activityNotes,
                             Int(durationMinutes.trimmingCharacters(in: .whitespacesAndNewlines)).map { $0 * 60 },
-                            selectedKind,
+                            inferredKind,
                             selectedRole
                         )
                         dismiss()

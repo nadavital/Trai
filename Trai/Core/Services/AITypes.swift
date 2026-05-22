@@ -509,16 +509,100 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
     let name: String
     let workoutType: String
     let targetMuscleGroups: [String]
+    let activityFocuses: [String]?
     let exercises: [SuggestedExercise]
     let durationMinutes: Int
     let rationale: String
 
+    init(
+        id: UUID = UUID(),
+        name: String,
+        workoutType: String,
+        targetMuscleGroups: [String],
+        activityFocuses: [String]? = nil,
+        exercises: [SuggestedExercise],
+        durationMinutes: Int,
+        rationale: String
+    ) {
+        self.id = id
+        self.name = name
+        self.workoutType = workoutType
+        self.targetMuscleGroups = targetMuscleGroups
+        self.activityFocuses = activityFocuses
+        self.exercises = exercises
+        self.durationMinutes = durationMinutes
+        self.rationale = rationale
+    }
+
     nonisolated struct SuggestedExercise: Codable, Sendable, Identifiable {
         var id: UUID = UUID()
         let name: String
+        let category: String?
+        let activityTypeName: String?
+        let targetTags: [String]?
+        let trackingFields: [String]?
         let sets: Int
         let reps: Int
         let weightKg: Double?
+        let durationMinutes: Int?
+        let distanceMeters: Double?
+        let notes: String?
+        let segments: [ActivitySegment]?
+
+        init(
+            id: UUID = UUID(),
+            name: String,
+            category: String? = nil,
+            activityTypeName: String? = nil,
+            targetTags: [String]? = nil,
+            trackingFields: [String]? = nil,
+            sets: Int,
+            reps: Int,
+            weightKg: Double? = nil,
+            durationMinutes: Int? = nil,
+            distanceMeters: Double? = nil,
+            notes: String? = nil,
+            segments: [ActivitySegment]? = nil
+        ) {
+            self.id = id
+            self.name = name
+            self.category = category
+            self.activityTypeName = activityTypeName
+            self.targetTags = targetTags
+            self.trackingFields = trackingFields
+            self.sets = sets
+            self.reps = reps
+            self.weightKg = weightKg
+            self.durationMinutes = durationMinutes
+            self.distanceMeters = distanceMeters
+            self.notes = notes
+            self.segments = segments
+        }
+
+        nonisolated struct ActivitySegment: Codable, Sendable, Identifiable {
+            var id: UUID = UUID()
+            let durationMinutes: Int?
+            let distanceMeters: Double?
+            let reps: Int?
+            let weightKg: Double?
+            let notes: String?
+
+            init(
+                id: UUID = UUID(),
+                durationMinutes: Int? = nil,
+                distanceMeters: Double? = nil,
+                reps: Int? = nil,
+                weightKg: Double? = nil,
+                notes: String? = nil
+            ) {
+                self.id = id
+                self.durationMinutes = durationMinutes
+                self.distanceMeters = distanceMeters
+                self.reps = reps
+                self.weightKg = weightKg
+                self.notes = notes
+            }
+        }
     }
 
     /// Summary for display
@@ -540,14 +624,95 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
     var id: UUID = UUID()
     let name: String?  // Trai-generated workout name
     let workoutType: String
+    let activityName: String?
+    let activityTags: [String]?
     let durationMinutes: Int?
     let exercises: [LoggedExercise]
     let notes: String?
 
+    init(
+        id: UUID = UUID(),
+        name: String?,
+        workoutType: String,
+        activityName: String? = nil,
+        activityTags: [String]? = nil,
+        durationMinutes: Int?,
+        exercises: [LoggedExercise],
+        notes: String?
+    ) {
+        self.id = id
+        self.name = name
+        self.workoutType = workoutType
+        self.activityName = activityName
+        self.activityTags = activityTags
+        self.durationMinutes = durationMinutes
+        self.exercises = exercises
+        self.notes = notes
+    }
+
     nonisolated struct LoggedExercise: Codable, Sendable, Identifiable {
         var id: UUID = UUID()
         let name: String
+        let category: String?
+        let activityTypeName: String?
+        let targetTags: [String]?
+        let trackingFields: [String]?
+        let durationMinutes: Int?
+        let distanceMeters: Double?
+        let notes: String?
+        let segments: [ActivitySegment]?
         let sets: [SetData]
+
+        init(
+            id: UUID = UUID(),
+            name: String,
+            category: String? = nil,
+            activityTypeName: String? = nil,
+            targetTags: [String]? = nil,
+            trackingFields: [String]? = nil,
+            durationMinutes: Int? = nil,
+            distanceMeters: Double? = nil,
+            notes: String? = nil,
+            segments: [ActivitySegment]? = nil,
+            sets: [SetData]
+        ) {
+            self.id = id
+            self.name = name
+            self.category = category
+            self.activityTypeName = activityTypeName
+            self.targetTags = targetTags
+            self.trackingFields = trackingFields
+            self.durationMinutes = durationMinutes
+            self.distanceMeters = distanceMeters
+            self.notes = notes
+            self.segments = segments
+            self.sets = sets
+        }
+
+        nonisolated struct ActivitySegment: Codable, Sendable, Identifiable {
+            var id: UUID = UUID()
+            let durationMinutes: Int?
+            let distanceMeters: Double?
+            let reps: Int?
+            let weightKg: Double?
+            let notes: String?
+
+            init(
+                id: UUID = UUID(),
+                durationMinutes: Int? = nil,
+                distanceMeters: Double? = nil,
+                reps: Int? = nil,
+                weightKg: Double? = nil,
+                notes: String? = nil
+            ) {
+                self.id = id
+                self.durationMinutes = durationMinutes
+                self.distanceMeters = distanceMeters
+                self.reps = reps
+                self.weightKg = weightKg
+                self.notes = notes
+            }
+        }
 
         nonisolated struct SetData: Codable, Sendable, Identifiable {
             var id: UUID = UUID()

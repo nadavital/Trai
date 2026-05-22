@@ -1217,7 +1217,8 @@ struct WorkoutPlanChatFlow: View {
         let customWorkoutTypes = workoutTypeAnswers.filter { !["Strength", "Cardio", "HIIT", "Flexibility", "Mixed"].contains($0) }
         let customWorkoutType = customWorkoutTypes.isEmpty ? nil : customWorkoutTypes.joined(separator: ", ")
         let customExperience = backgroundAnswers.first { !["Beginner", "Returning", "Intermediate", "Advanced"].contains($0) }
-        let customEquipment = equipmentAnswers.first { !["Full Gym", "Home - Dumbbells", "Home - Full Setup", "Bodyweight Only"].contains($0) }
+        let knownEquipmentAnswers = ["Full Gym", "Dumbbells/Bands", "Home Gym", "Home - Dumbbells", "Home - Full Setup", "Bodyweight Only"]
+        let customEquipment = equipmentAnswers.first { !knownEquipmentAnswers.contains($0) }
         let customModalities = (workoutTypeAnswers + constraintAnswers).filter {
             !["Strength", "Cardio", "HIIT", "Flexibility", "Mixed", "Climbing", "Yoga", "Pilates", "Mobility", "Running", "Cycling", "Swimming", "Rowing", "Walking", "Jump Rope", "Need cardio included", "Let Trai decide"].contains($0)
         }
@@ -1509,8 +1510,8 @@ struct WorkoutPlanChatFlow: View {
         guard let answer = answers.first else { return nil }
         switch answer {
         case "Full Gym": return .fullGym
-        case "Home - Dumbbells": return .homeBasic
-        case "Home - Full Setup": return .homeAdvanced
+        case "Dumbbells/Bands", "Home - Dumbbells": return .homeBasic
+        case "Home Gym", "Home - Full Setup": return .homeAdvanced
         case "Bodyweight Only": return .bodyweightOnly
         default: return nil
         }
@@ -1686,6 +1687,7 @@ private extension WorkoutGoal {
             successCriteria,
             notes,
             linkedActivityName ?? "",
+            linkedActivityTags.joined(separator: " "),
             linkedActivityKindRaw ?? "",
             linkedActivityRoleRaw ?? "",
             linkedWorkoutTypeRaw ?? ""
@@ -1705,12 +1707,17 @@ private extension WorkoutGoal {
                 String(Int(value.rounded()))
             } ?? ""
             let normalizedActivityName = linkedActivityName?.goalNormalizedKey ?? ""
+            let normalizedActivityTags = linkedActivityTags
+                .map(\.goalNormalizedKey)
+                .sorted()
+                .joined(separator: ",")
             let normalizedTargetUnit = targetUnit.goalNormalizedKey
             let periodCountText = periodCount.map(String.init) ?? ""
             let parts: [String] = [
                 goalKind.rawValue,
                 linkedWorkoutTypeRaw ?? "any",
                 normalizedActivityName,
+                normalizedActivityTags,
                 linkedActivityKindRaw ?? "",
                 linkedActivityRoleRaw ?? "",
                 roundedTarget,

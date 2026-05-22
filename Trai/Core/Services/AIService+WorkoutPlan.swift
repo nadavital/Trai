@@ -308,7 +308,7 @@ extension AIService {
         - Do not suggest goals that merely restate a single normal workout task; goals should reflect a habit, milestone, progression target, or follow-up loop over time.
         - For new users or thin context, avoid goals that sound like performance progression unless Trai has a baseline to compare against.
         - Do not create vague progression goals unless the structured target and successCriteria make the exact achievement verifiable from app data.
-        - Broad goals are allowed, but the intent must be accurate: goal title, target fields, linkedWorkoutType/linkedActivityName/linkedActivityKindRaw/linkedActivityRoleRaw, and successCriteria should all describe the same behavior Trai can track.
+        - Broad goals are allowed, but the intent must be accurate: goal title, target fields, linkedWorkoutType/linkedActivityName/linkedActivityTags/linkedActivityKindRaw/linkedActivityRoleRaw, and successCriteria should all describe the same behavior Trai can track.
         - If the plan includes a personalized constraint, habit, or recurring support block, prefer a goal for that specific plan behavior over generic progression.
         - Every goal must include successCriteria: one concise sentence that says how Trai and the person using the app will know the goal is achieved.
         - Write rationale, successCriteria, and notes directly to the person using the app with "you" and "your"; do not say "the user".
@@ -323,9 +323,11 @@ extension AIService {
         - When baseline context is thin, prefer goals tied to the generated plan itself: complete the planned weekly structure for several weeks, log each named day or session type, complete a requested recurring habit, build a training routine, or check in on the plan after enough sessions.
         - Avoid duplicating any existing goal.
         - linkedWorkoutType must be one of: \(workoutModes)
-        - linkedActivityKindRaw can scope a goal to one kind of logged workout entry: warmup, strength, cardio, conditioning, skill, mobility, recovery, sportPractice, cooldown, or custom.
+        - linkedActivityName can scope a goal to an exact exercise, session, or custom activity type name.
+        - linkedActivityTags can scope a goal semantically to activity families or targets such as Climbing, grip, intervals, mobility, or technique. Prefer this over a broad kind when the user-facing activity identity matters.
+        - linkedActivityKindRaw can scope a goal to one fallback behavior kind: warmup, strength, cardio, conditioning, skill, mobility, recovery, sportPractice, cooldown, or custom.
         - linkedActivityRoleRaw can scope a goal to how that entry fits inside a workout: main, warmup, accessory, finisher, cooldown, or custom.
-        - For a goal about completing support work inside another workout, prefer linkedActivityKindRaw plus linkedActivityRoleRaw over relying on an exact activity title.
+        - For a goal about completing support work inside another workout, prefer linkedActivityTags plus linkedActivityRoleRaw when the activity has a meaningful semantic identity; use linkedActivityKindRaw only as fallback behavior metadata.
         - goalKind must be one of: milestone, frequency, duration, distance, weight
         - For milestone goals, leave targetValue, targetUnit, periodUnitRaw, and periodCount empty.
         - For frequency goals, targetValue must be the count, targetUnit should usually be "sessions" or a specific activity unit, periodUnitRaw must be day, week, or month, and periodCount must be 1.

@@ -290,41 +290,18 @@ final class HealthKitService {
     func saveLiveWorkout(_ workout: LiveWorkout) async throws {
         guard let completedAt = workout.completedAt else { return }
 
-        // Map workout type to HealthKit activity type
-        let activityType: HKWorkoutActivityType
-        switch workout.type {
-        case .strength:
-            activityType = .traditionalStrengthTraining
-        case .cardio:
-            activityType = .mixedCardio
-        case .hiit:
-            activityType = .highIntensityIntervalTraining
-        case .climbing:
-            activityType = .climbing
-        case .yoga:
-            activityType = .yoga
-        case .pilates:
-            activityType = .pilates
-        case .flexibility:
-            activityType = .flexibility
-        case .mobility:
-            activityType = .cooldown
-        case .mixed:
-            activityType = .functionalStrengthTraining
-        case .recovery:
-            activityType = .cooldown
-        case .custom:
-            activityType = .other
-        }
+        let activityType = healthKitActivityType(for: workout)
 
         // Calculate estimated calories (rough estimate based on duration and intensity)
         let durationMinutes = workout.duration / 60
         let estimatedCalories = durationMinutes * 5.0 // ~5 cal/min for strength training
 
+        let activityTags = workout.displayFocusAreas.joined(separator: ",")
         let metadata: [String: Any] = [
             HKMetadataKeyWorkoutBrandName: "Trai",
             "workout_name": workout.name,
             "muscle_groups": workout.muscleGroups.map(\.rawValue).joined(separator: ","),
+            "activity_focus": activityTags,
             "total_volume_kg": workout.totalVolume,
             "total_sets": workout.totalSets
         ]
@@ -337,6 +314,69 @@ final class HealthKitService {
             totalEnergyBurned: estimatedCalories,
             metadata: metadata
         )
+    }
+
+    private func healthKitActivityType(for workout: LiveWorkout) -> HKWorkoutActivityType {
+        switch workout.type {
+        case .strength:
+            return .traditionalStrengthTraining
+        case .hiit:
+            return .highIntensityIntervalTraining
+        case .climbing:
+            return .climbing
+        case .yoga:
+            return .yoga
+        case .pilates:
+            return .pilates
+        case .flexibility:
+            return .flexibility
+        case .mobility, .recovery:
+            return .cooldown
+        case .mixed:
+            return .functionalStrengthTraining
+        case .cardio, .custom:
+            break
+        }
+
+        let semanticTokens = ([workout.name] + workout.focusAreas + (workout.entries ?? []).flatMap { entry in
+            [entry.exerciseName, entry.activityTypeName] + entry.targetTags
+        })
+        .joined(separator: " ")
+        .lowercased()
+
+        if semanticTokens.contains("climb") || semanticTokens.contains("boulder") {
+            return .climbing
+        }
+        if semanticTokens.contains("run") || semanticTokens.contains("jog") {
+            return .running
+        }
+        if semanticTokens.contains("cycle") || semanticTokens.contains("bike") {
+            return .cycling
+        }
+        if semanticTokens.contains("swim") {
+            return .swimming
+        }
+        if semanticTokens.contains("walk") || semanticTokens.contains("hike") {
+            return .walking
+        }
+        if semanticTokens.contains("row") {
+            return .rowing
+        }
+        if semanticTokens.contains("yoga") {
+            return .yoga
+        }
+        if semanticTokens.contains("pilates") {
+            return .pilates
+        }
+
+        switch workout.type {
+        case .cardio:
+            return .mixedCardio
+        case .custom:
+            return .other
+        case .strength, .hiit, .climbing, .yoga, .pilates, .flexibility, .mobility, .mixed, .recovery:
+            return .other
+        }
     }
 
     // MARK: - Nutrition

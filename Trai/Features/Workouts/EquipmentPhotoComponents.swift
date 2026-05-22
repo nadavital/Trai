@@ -87,8 +87,7 @@ struct EquipmentCameraView: View {
 struct EquipmentAnalysisSheet: View {
     @Environment(\.dismiss) private var dismiss
     let analysis: ExercisePhotoAnalysis
-    /// Callback with (exerciseName, muscleGroup, equipmentName)
-    let onSelectExercise: (String, String, String?) -> Void
+    let onSelectExercise: (ExercisePhotoAnalysis.SuggestedExercise, String?) -> Void
 
     var body: some View {
         NavigationStack {
@@ -138,7 +137,7 @@ struct EquipmentAnalysisSheet: View {
 
                         ForEach(analysis.suggestedExercises) { exercise in
                             Button {
-                                onSelectExercise(exercise.name, exercise.muscleGroup, analysis.equipmentName)
+                                onSelectExercise(exercise, analysis.equipmentName)
                                 dismiss()
                             } label: {
                                 HStack(alignment: .top) {
@@ -147,7 +146,7 @@ struct EquipmentAnalysisSheet: View {
                                             .font(.body)
                                             .fontWeight(.medium)
 
-                                        Text(exercise.muscleGroup.capitalized)
+                                        Text(exerciseLabel(for: exercise))
                                             .font(.caption)
                                             .padding(.horizontal, 8)
                                             .padding(.vertical, 2)
@@ -189,5 +188,15 @@ struct EquipmentAnalysisSheet: View {
                 }
             }
         }
+    }
+
+    private func exerciseLabel(for exercise: ExercisePhotoAnalysis.SuggestedExercise) -> String {
+        if let muscleGroup = exercise.muscleGroup, !muscleGroup.isEmpty {
+            return muscleGroup.capitalized
+        }
+        if let category = exercise.category, !category.isEmpty {
+            return Exercise.Category(rawValue: category)?.displayName ?? category.capitalized
+        }
+        return "Exercise"
     }
 }

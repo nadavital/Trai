@@ -297,8 +297,8 @@ private struct RecentWorkoutRow: View {
     }
 
     private var secondaryChips: [String] {
-        if !workout.focusAreas.isEmpty {
-            return Array(workout.focusAreas.prefix(2))
+        if !workout.displayFocusAreas.isEmpty {
+            return Array(workout.displayFocusAreas.prefix(2))
         }
 
         if !workout.muscleGroups.isEmpty {

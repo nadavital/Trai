@@ -75,7 +75,7 @@ struct WorkoutGoalAISheet: View {
         "Bench 185 for 5",
         "Climb 2x/week",
         "Send a V5 project",
-        "Build to 75 min zone 2"
+        "Build to a 75 min run"
     ]
 
     var body: some View {

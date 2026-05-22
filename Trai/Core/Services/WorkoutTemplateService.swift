@@ -30,12 +30,14 @@ struct WorkoutTemplateService {
     func createCustomWorkout(
         name: String = "Custom Workout",
         type: LiveWorkout.WorkoutType = .strength,
-        muscles: [LiveWorkout.MuscleGroup] = []
+        muscles: [LiveWorkout.MuscleGroup] = [],
+        focusAreas: [String] = []
     ) -> LiveWorkout {
         LiveWorkout(
             name: name,
             workoutType: type,
-            targetMuscleGroups: muscles
+            targetMuscleGroups: muscles,
+            focusAreas: focusAreas
         )
     }
 
@@ -119,12 +121,16 @@ struct WorkoutTemplateService {
                 usedTopLevelExerciseFallback = !blockExercises.isEmpty
             }
 
-            if !blockExercises.isEmpty, prefillStrengthExercises {
+            if block.kind == .strength, !blockExercises.isEmpty, prefillStrengthExercises {
                 for exerciseTemplate in blockExercises.sorted(by: { $0.order < $1.order }) {
                     let entry = LiveWorkoutEntry(
                         exerciseName: exerciseTemplate.exerciseName,
                         orderIndex: nextOrderIndex
                     )
+                    entry.activityKind = block.kind
+                    entry.activityRole = block.role
+                    entry.activityTypeName = block.displayActivityName
+                    entry.targetTags = block.resolvedActivityTags(including: exerciseTemplate.muscleGroup)
 
                     let lastPerformance = getLastPerformance(
                         exerciseName: exerciseTemplate.exerciseName,
@@ -152,7 +158,7 @@ struct WorkoutTemplateService {
                 }
             } else if prefillStrengthExercises && block.shouldCreateLiveWorkoutEntry {
                 let entry = LiveWorkoutEntry(
-                    exerciseName: block.title.isEmpty ? block.kind.displayName : block.title,
+                    exerciseName: block.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? block.displayActivityName : block.title,
                     orderIndex: nextOrderIndex,
                     exerciseType: block.liveWorkoutExerciseType(in: template)
                 )
@@ -163,6 +169,8 @@ struct WorkoutTemplateService {
                 }
                 entry.activityKind = block.kind
                 entry.activityRole = block.role
+                entry.activityTypeName = block.displayActivityName
+                entry.targetTags = block.resolvedActivityTags()
                 entry.sourcePlanBlockID = block.id
                 entry.plannedIntensity = block.intensity
                 entry.plannedTarget = block.target
@@ -443,6 +451,14 @@ private extension WorkoutPlan.TrainingBlock {
         case .strength:
             return false
         }
+    }
+
+    func resolvedActivityTags(including additionalTag: String? = nil) -> [String] {
+        var seen: Set<String> = []
+        return (activityTags + [additionalTag, displayActivityName])
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { seen.insert($0.goalNormalizedKey).inserted }
     }
 
     func liveWorkoutExerciseType(in template: WorkoutPlan.WorkoutTemplate) -> String {

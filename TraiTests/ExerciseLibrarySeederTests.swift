@@ -4,6 +4,49 @@ import XCTest
 
 @MainActor
 final class ExerciseLibrarySeederTests: XCTestCase {
+    func testExercisePhotoAnalysisCanDecodeCategoryTargetsAndTrackingFields() throws {
+        let json = """
+        {
+          "equipmentName": "Rowing Machine",
+          "description": "A cardio machine for rowing intervals.",
+          "tips": "Keep the stroke smooth.",
+          "suggestedExercises": [
+            {
+              "name": "Rowing",
+              "category": "cardio",
+              "muscleGroup": null,
+              "targetTags": ["Intervals", "Endurance"],
+              "trackingFields": ["duration", "distance", "notes"],
+              "howTo": "Use a steady drive and controlled recovery."
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let analysis = try JSONDecoder().decode(ExercisePhotoAnalysis.self, from: json)
+        let exercise = try XCTUnwrap(analysis.suggestedExercises.first)
+
+        XCTAssertEqual(exercise.category, "cardio")
+        XCTAssertNil(exercise.muscleGroup)
+        XCTAssertEqual(exercise.targetTags ?? [], ["Intervals", "Endurance"])
+        XCTAssertEqual(exercise.trackingFields ?? [], ["duration", "distance", "notes"])
+    }
+
+    func testTrackingFieldNormalizationKeepsRowsScannable() {
+        XCTAssertEqual(
+            Exercise.normalizedTrackingFields([.duration, .distance, .reps, .weight, .notes], for: .conditioning),
+            [.duration, .distance, .reps, .notes]
+        )
+        XCTAssertEqual(
+            Exercise.normalizedTrackingFields([.duration, .reps, .weight], for: .cardio),
+            [.duration]
+        )
+        XCTAssertEqual(
+            Exercise.normalizedTrackingFields([.sets, .weight, .reps, .duration, .notes], for: .strength),
+            [.sets, .weight, .reps, .notes]
+        )
+    }
+
     func testEnsureDefaultsSeedsBroadExerciseLibraryOnce() throws {
         let container = try ModelContainer(
             for: Exercise.self,
@@ -26,12 +69,12 @@ final class ExerciseLibrarySeederTests: XCTestCase {
 
         let running = try XCTUnwrap(exercises.first { $0.name == "Running" })
         XCTAssertEqual(running.exerciseCategory, .cardio)
-        XCTAssertEqual(running.trackingFields, [.duration, .distance, .calories])
-        XCTAssertTrue(running.targetTags.contains("Endurance"))
+        XCTAssertEqual(running.trackingFields, [.duration, .distance])
+        XCTAssertTrue(running.targetTags.isEmpty)
 
         let mobility = try XCTUnwrap(exercises.first { $0.name == "Hip Mobility Flow" })
         XCTAssertEqual(mobility.exerciseCategory, .mobility)
         XCTAssertEqual(mobility.trackingFields, [.duration, .notes])
-        XCTAssertTrue(mobility.targetTags.contains("Hips"))
+        XCTAssertTrue(mobility.targetTags.isEmpty)
     }
 }

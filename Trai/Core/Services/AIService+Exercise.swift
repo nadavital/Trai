@@ -12,6 +12,8 @@ import os.log
 
 struct ExerciseAnalysis: Codable {
     let category: String
+    let activityTypeName: String?
+    let activityAliases: [String]?
     let muscleGroup: String?   // Primary muscle group (nil for non-strength exercises)
     let secondaryMuscles: [String]?  // Secondary muscles worked
     let targetTags: [String]?
@@ -30,7 +32,12 @@ struct ExercisePhotoAnalysis: Codable {
     struct SuggestedExercise: Codable, Identifiable {
         var id: String { name }
         let name: String
-        let muscleGroup: String
+        let category: String?
+        let activityTypeName: String?
+        let activityAliases: [String]?
+        let muscleGroup: String?
+        let targetTags: [String]?
+        let trackingFields: [String]?
         let howTo: String?          // Brief instruction
     }
 }
@@ -48,22 +55,25 @@ extension AIService {
             Exercise name: "\(name)"
 
             Determine:
-            1. Category: Choose the best fit from strength, cardio, conditioning, mobility, skill, sportPractice, recovery, flexibility, or custom.
-            2. Primary muscle group for strength exercises only: chest, back, shoulders, biceps, triceps, legs, core, or fullBody.
-            3. Secondary muscles worked, when relevant.
-            4. Target tags that describe what the user is training with this exercise.
-            5. Tracking fields the user should see while logging it.
-            6. A brief 1-sentence description of the exercise.
-            7. Optional quick form or execution tip.
+            1. Category: Choose the broad behavior fallback from strength, cardio, conditioning, mobility, skill, sportPractice, recovery, flexibility, or custom.
+            2. activityTypeName: Choose the user-facing activity type, such as Climbing, Cycling, Running, Mobility Flow, Boxing, Basketball, or Strength.
+            3. activityAliases: Common names Trai should treat as the same activity type, when useful.
+            4. Primary muscle group for strength exercises only: chest, back, shoulders, biceps, triceps, legs, core, or fullBody.
+            5. Secondary muscles worked, when relevant.
+            6. Target tags that describe what the user is training with this exercise.
+            7. Tracking fields the user should see while logging it.
+            8. A brief 1-sentence description of the exercise.
+            9. Optional quick form or execution tip.
 
-            Use these tracking fields only: sets, reps, weight, duration, distance, calories, notes.
+            Use these tracking fields only: sets, reps, weight, duration, distance, notes.
             Pick fields that match how the exercise is actually tracked. For example:
             - Strength usually tracks sets, weight, and reps.
-            - Running usually tracks duration, distance, and calories.
+            - Running usually tracks duration and distance.
             - Mobility usually tracks duration and notes.
-            - Conditioning may track duration, reps, calories, and notes.
+            - Conditioning may track duration, reps, and notes.
             - Skill practice may track duration, reps, and notes.
 
+            Return targetTags as concise user-facing labels, not internal jargon. Do not use calories.
             If you don't recognize the exercise, make your best educated guess based on the name.
             """
 
@@ -73,6 +83,15 @@ extension AIService {
                     "category": [
                         "type": "string",
                         "enum": ["strength", "cardio", "conditioning", "mobility", "skill", "sportPractice", "recovery", "flexibility", "custom"]
+                    ],
+                    "activityTypeName": [
+                        "type": "string",
+                        "nullable": true
+                    ],
+                    "activityAliases": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "nullable": true
                     ],
                     "muscleGroup": [
                         "type": "string",
@@ -93,7 +112,7 @@ extension AIService {
                         "type": "array",
                         "items": [
                             "type": "string",
-                            "enum": ["sets", "reps", "weight", "duration", "distance", "calories", "notes"]
+                            "enum": ["sets", "reps", "weight", "duration", "distance", "notes"]
                         ],
                         "nullable": true
                     ],
@@ -131,7 +150,7 @@ extension AIService {
             }
 
             let analysis = try JSONDecoder().decode(ExerciseAnalysis.self, from: data)
-            log("Exercise analyzed: \(analysis.category), muscle: \(analysis.muscleGroup ?? "none")", type: .info)
+            log("Exercise analyzed: \(analysis.category), activity: \(analysis.activityTypeName ?? "none"), muscle: \(analysis.muscleGroup ?? "none")", type: .info)
 
             return analysis
         }
@@ -181,6 +200,11 @@ extension AIService {
             - If the image only shows a partial view or descriptive signage, use the visible clues but keep the answer generic if needed instead of forcing a highly specific machine name.
             - Be specific when similar machines exist, but only when the image supports that level of certainty.
             - If brand/model text is clearly visible on the machine, include that in equipmentName (e.g., "Life Fitness Seated Row Machine").
+            - For each suggested exercise, include category, activityTypeName, activityAliases, muscleGroup when it is strength, targetTags, and trackingFields so the app can save it correctly.
+            - Categories are broad fallback behaviors and must be one of: strength, cardio, conditioning, mobility, skill, sportPractice, recovery, flexibility, custom.
+            - activityTypeName is the user-facing identity and can be specific, such as Climbing, Cycling, Running, Mobility Flow, Boxing, Basketball, or Strength.
+            - Tracking fields must be chosen from: sets, reps, weight, duration, distance, notes. Do not use calories.
+            - Strength machine exercises usually track sets, weight, and reps. Cardio machines usually track duration and distance. Skill or mobility suggestions usually track duration and notes.
             - If the image is too unclear to confidently identify gym equipment, return:
               equipmentName: "Unclear gym equipment"
               suggestedExercises: []
@@ -205,16 +229,44 @@ extension AIService {
                             "type": "object",
                             "properties": [
                                 "name": ["type": "string"],
+                                "category": [
+                                    "type": "string",
+                                    "enum": ["strength", "cardio", "conditioning", "mobility", "skill", "sportPractice", "recovery", "flexibility", "custom"],
+                                    "nullable": true
+                                ],
+                                "activityTypeName": [
+                                    "type": "string",
+                                    "nullable": true
+                                ],
+                                "activityAliases": [
+                                    "type": "array",
+                                    "items": ["type": "string"],
+                                    "nullable": true
+                                ],
                                 "muscleGroup": [
                                     "type": "string",
-                                    "enum": ["chest", "back", "shoulders", "biceps", "triceps", "legs", "core", "fullBody"]
+                                    "enum": ["chest", "back", "shoulders", "biceps", "triceps", "legs", "core", "fullBody"],
+                                    "nullable": true
+                                ],
+                                "targetTags": [
+                                    "type": "array",
+                                    "items": ["type": "string"],
+                                    "nullable": true
+                                ],
+                                "trackingFields": [
+                                    "type": "array",
+                                    "items": [
+                                        "type": "string",
+                                        "enum": ["sets", "reps", "weight", "duration", "distance", "notes"]
+                                    ],
+                                    "nullable": true
                                 ],
                                 "howTo": [
                                     "type": "string",
                                     "nullable": true
                                 ]
                             ],
-                            "required": ["name", "muscleGroup"]
+                            "required": ["name"]
                         ]
                     ],
                     "description": [

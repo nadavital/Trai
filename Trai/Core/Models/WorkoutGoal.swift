@@ -14,6 +14,7 @@ final class WorkoutGoal {
     var statusRaw: String = GoalStatus.active.rawValue
     var linkedWorkoutTypeRaw: String?
     var linkedActivityName: String?
+    var linkedActivityTagsRaw: String = ""
     var linkedActivityKindRaw: String?
     var linkedActivityRoleRaw: String?
     var targetValue: Double?
@@ -39,6 +40,7 @@ final class WorkoutGoal {
         status: GoalStatus = .active,
         linkedWorkoutType: WorkoutMode? = nil,
         linkedActivityName: String? = nil,
+        linkedActivityTags: [String] = [],
         linkedActivityKind: WorkoutPlan.TrainingBlock.BlockKind? = nil,
         linkedActivityRole: WorkoutPlan.TrainingBlock.Role? = nil,
         targetValue: Double? = nil,
@@ -56,6 +58,7 @@ final class WorkoutGoal {
         self.statusRaw = status.rawValue
         self.linkedWorkoutTypeRaw = linkedWorkoutType?.rawValue
         self.linkedActivityName = linkedActivityName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.linkedActivityTags = linkedActivityTags
         self.linkedActivityKindRaw = linkedActivityKind?.rawValue
         self.linkedActivityRoleRaw = linkedActivityRole?.rawValue
         self.targetValue = targetValue
@@ -170,6 +173,21 @@ extension WorkoutGoal {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    var linkedActivityTags: [String] {
+        get {
+            linkedActivityTagsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            linkedActivityTagsRaw = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ",")
+        }
+    }
+
     var linkedActivityKind: WorkoutPlan.TrainingBlock.BlockKind? {
         get { linkedActivityKindRaw.flatMap(WorkoutPlan.TrainingBlock.BlockKind.init(rawValue:)) }
         set { linkedActivityKindRaw = newValue?.rawValue }
@@ -181,7 +199,7 @@ extension WorkoutGoal {
     }
 
     var hasActivityScope: Bool {
-        trimmedActivityName != nil || linkedActivityKind != nil || linkedActivityRole != nil
+        trimmedActivityName != nil || !linkedActivityTags.isEmpty || linkedActivityKind != nil || linkedActivityRole != nil
     }
 
     var trimmedNotes: String {
@@ -229,7 +247,11 @@ extension WorkoutGoal {
         if let activityName = trimmedActivityName {
             parts.append(activityName)
         }
-        if let linkedActivityKind {
+        if !linkedActivityTags.isEmpty {
+            parts.append(linkedActivityTags.prefix(2).joined(separator: ", "))
+        }
+        let hasSemanticActivityScope = trimmedActivityName != nil || !linkedActivityTags.isEmpty
+        if !hasSemanticActivityScope, let linkedActivityKind {
             parts.append(linkedActivityKind.displayName)
         }
         if let linkedActivityRole {
@@ -283,13 +305,31 @@ extension WorkoutGoal {
                 || workout.name.goalNormalizedKey == $0
         } ?? false
 
-        return (workout.entries ?? []).contains { matches(entry: $0) } || nameMatches
+        let tagMatches: Bool = {
+            let tags = normalizedLinkedActivityTags
+            guard !tags.isEmpty else { return false }
+            let workoutTokens = Set(workout.focusAreas.map(\.goalNormalizedKey) + [workout.name.goalNormalizedKey])
+            return !tags.isDisjoint(with: workoutTokens)
+        }()
+
+        return (workout.entries ?? []).contains { matches(entry: $0) } || nameMatches || tagMatches
     }
 
     func matches(entry: LiveWorkoutEntry) -> Bool {
         if let activityName = trimmedActivityName?.goalNormalizedKey,
-           entry.exerciseName.goalNormalizedKey != activityName {
+           entry.exerciseName.goalNormalizedKey != activityName,
+           entry.activityTypeName.goalNormalizedKey != activityName {
             return false
+        }
+
+        let activityTags = normalizedLinkedActivityTags
+        if !activityTags.isEmpty {
+            let entryTokens = Set(
+                ([entry.exerciseName, entry.activityTypeName] + entry.targetTags)
+                    .map(\.goalNormalizedKey)
+                    .filter { !$0.isEmpty }
+            )
+            guard !activityTags.isDisjoint(with: entryTokens) else { return false }
         }
 
         if let linkedActivityKind {
@@ -316,7 +356,17 @@ extension WorkoutGoal {
             return true
         }
 
+        let tags = normalizedLinkedActivityTags
         guard let activityName = trimmedActivityName?.goalNormalizedKey else {
+            guard !tags.isEmpty else { return false }
+            return !tags.isDisjoint(with: session.goalMatchingTokens)
+        }
+
+        if !tags.isEmpty, !tags.isDisjoint(with: session.goalMatchingTokens) {
+            return true
+        }
+
+        guard !activityName.isEmpty else {
             return false
         }
 
@@ -352,6 +402,10 @@ extension WorkoutGoal {
             formattedValue = String(format: "%.1f", value)
         }
         return trimmedUnit.isEmpty ? formattedValue : "\(formattedValue) \(trimmedUnit)"
+    }
+
+    private var normalizedLinkedActivityTags: Set<String> {
+        Set(linkedActivityTags.map(\.goalNormalizedKey).filter { !$0.isEmpty })
     }
 }
 

@@ -133,6 +133,16 @@ struct WorkoutPlanGenerationRequest {
 
         if let selectedWorkoutTypes, selectedWorkoutTypes.count > 1 {
             directives.append("Selected training styles are inputs, not equal session allocations. Use the personalization brief to decide priority and placement.")
+            directives.append("Every explicitly selected training style must remain visible in the returned plan as a dedicated template or meaningful block unless the personalization brief explicitly says that style should only be background support or avoided.")
+        }
+
+        if let cardioTypes, cardioTypes.contains(.climbing) {
+            directives.append("Climbing was explicitly selected. Include climbing or bouldering as a real session or meaningful skill/sport block with activityTypeName such as Climbing or Bouldering unless the personalization brief explicitly says climbing should only be supportive grip work. Do not reduce the climbing selection to generic grip exercises alone.")
+        }
+
+        if let customWorkoutType,
+           !customWorkoutType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            directives.append("The custom focus must be preserved as user-facing activity identity in template focusAreas, block activityTypeName, block activityTags, or goal linkedActivityTags when relevant.")
         }
 
         if let preferredSplit, preferredSplit != .letTraiDecide {
@@ -305,8 +315,8 @@ struct WorkoutPlanGenerationRequest {
         var displayName: String {
             switch self {
             case .fullGym: "Full Gym"
-            case .homeAdvanced: "Home Gym (Advanced)"
-            case .homeBasic: "Home Gym (Basic)"
+            case .homeAdvanced: "Home Gym"
+            case .homeBasic: "Dumbbells/Bands"
             case .bodyweightOnly: "Bodyweight Only"
             }
         }

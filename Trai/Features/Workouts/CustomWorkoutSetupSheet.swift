@@ -11,14 +11,26 @@ import SwiftUI
 
 struct CustomWorkoutSetupSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let onStart: (String, LiveWorkout.WorkoutType, [LiveWorkout.MuscleGroup]) -> Void
+    let onStart: (String, LiveWorkout.WorkoutType, [LiveWorkout.MuscleGroup], [String]) -> Void
     var orderedWorkoutTypes: [LiveWorkout.WorkoutType] = LiveWorkout.WorkoutType.allCases
 
     @State private var workoutName = ""
+    @State private var focusText = ""
     @State private var selectedType: LiveWorkout.WorkoutType = .strength
     @State private var selectedMuscles: Set<LiveWorkout.MuscleGroup> = []
 
+    private var focusAreas: [String] {
+        focusText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
     private var defaultName: String {
+        if let firstFocus = focusAreas.first {
+            return firstFocus
+        }
+
         if selectedType.supportsMuscleTargets, !selectedMuscles.isEmpty {
             let muscleNames = selectedMuscles.sorted { $0.displayName < $1.displayName }
                 .prefix(3)
@@ -41,6 +53,8 @@ struct CustomWorkoutSetupSheet: View {
                     nameCard
 
                     workoutTypeCard
+
+                    focusCard
 
                     if selectedType.supportsMuscleTargets {
                         targetMusclesCard
@@ -66,7 +80,7 @@ struct CustomWorkoutSetupSheet: View {
                         let name = workoutName.trimmingCharacters(in: .whitespacesAndNewlines)
                         let finalName = name.isEmpty ? defaultName : name
                         let muscles = selectedType.supportsMuscleTargets ? Array(selectedMuscles) : []
-                        onStart(finalName, selectedType, muscles)
+                        onStart(finalName, selectedType, muscles, resolvedFocusAreas(for: finalName))
                         dismiss()
                     }
                     .labelStyle(.iconOnly)
@@ -105,6 +119,26 @@ struct CustomWorkoutSetupSheet: View {
                     ) {
                         selectedType = type
                         HapticManager.selectionChanged()
+                    }
+                }
+            }
+        }
+        .traiCard(cornerRadius: 16)
+    }
+
+    private var focusCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Session Focus", systemImage: "scope")
+                .font(.traiHeadline())
+
+            TextField("e.g. Bouldering, Steady Cardio, Mobility Flow", text: $focusText)
+                .padding(12)
+                .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+
+            FlowLayout(spacing: 8) {
+                ForEach(selectedType.suggestedFocusPresets, id: \.self) { preset in
+                    PresetButton(title: preset, isSelected: focusAreas.contains { $0.caseInsensitiveCompare(preset) == .orderedSame }) {
+                        toggleFocus(preset)
                     }
                 }
             }
@@ -198,6 +232,33 @@ struct CustomWorkoutSetupSheet: View {
         }
         HapticManager.selectionChanged()
     }
+
+    private func toggleFocus(_ focus: String) {
+        var values = focusAreas
+        if let index = values.firstIndex(where: { $0.caseInsensitiveCompare(focus) == .orderedSame }) {
+            values.remove(at: index)
+        } else {
+            values.append(focus)
+        }
+        focusText = values.joined(separator: ", ")
+        HapticManager.selectionChanged()
+    }
+
+    private func resolvedFocusAreas(for workoutName: String) -> [String] {
+        if !focusAreas.isEmpty {
+            return focusAreas
+        }
+        if selectedType.supportsMuscleTargets {
+            return []
+        }
+
+        let trimmedName = workoutName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let defaultTypeName = "\(selectedType.displayName) Workout"
+        if !trimmedName.isEmpty, trimmedName != "Custom Workout", trimmedName != defaultTypeName {
+            return [trimmedName]
+        }
+        return [selectedType.displayName]
+    }
 }
 
 // MARK: - Workout Type Button
@@ -289,7 +350,7 @@ private struct WorkoutMuscleChip: View {
 // MARK: - Preview
 
 #Preview {
-    CustomWorkoutSetupSheet { name, type, muscles in
-        print("Starting: \(name), \(type), \(muscles)")
+    CustomWorkoutSetupSheet { name, type, muscles, focusAreas in
+        print("Starting: \(name), \(type), \(muscles), \(focusAreas)")
     }
 }

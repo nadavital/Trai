@@ -58,6 +58,7 @@ struct PlanReviewStepView: View {
                 }
             }
             .padding(.horizontal, 20)
+            .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)
         .overlay {
@@ -225,6 +226,7 @@ struct PlanReviewStepView: View {
 
             Spacer()
         }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Success Header
