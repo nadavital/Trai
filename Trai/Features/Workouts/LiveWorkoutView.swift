@@ -747,11 +747,11 @@ struct LiveWorkoutView: View {
 
         let completedExercises = entries.filter { entry in
             if entry.isCardio {
-                return entry.completedAt != nil || entry.trackedDurationSeconds > 0 || entry.trackedDistanceMeters > 0
+                return entry.completedAt != nil || entry.hasExercisePreferenceSignal
             }
             if entry.isGeneralActivity {
                 guard !entry.isPlannedActivityGuidance else { return false }
-                return entry.completedAt != nil || !entry.notes.isEmpty || entry.trackedDurationSeconds > 0 || entry.trackedDistanceMeters > 0
+                return entry.completedAt != nil || entry.hasExercisePreferenceSignal
             }
             return !entry.sets.isEmpty && entry.sets.allSatisfy { $0.reps > 0 }
         }.count
@@ -769,10 +769,10 @@ struct LiveWorkoutView: View {
         let setsWithData = entries.reduce(0) { total, entry in
             if entry.isGeneralActivity {
                 guard !entry.isPlannedActivityGuidance else { return total }
-                return total + ((entry.completedAt != nil || !entry.notes.isEmpty || entry.trackedDurationSeconds > 0 || entry.trackedDistanceMeters > 0) ? 1 : 0)
+                return total + ((entry.completedAt != nil || entry.hasExercisePreferenceSignal) ? 1 : 0)
             }
             if entry.isCardio {
-                return total + ((entry.completedAt != nil || !entry.notes.isEmpty || entry.trackedDurationSeconds > 0 || entry.trackedDistanceMeters > 0) ? 1 : 0)
+                return total + ((entry.completedAt != nil || entry.hasExercisePreferenceSignal) ? 1 : 0)
             }
             return total + entry.sets.filter { $0.reps > 0 && !$0.isWarmup }.count
         }
