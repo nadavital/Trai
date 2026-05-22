@@ -184,7 +184,7 @@ enum WorkoutGoalProgressResolver {
         in workouts: [LiveWorkout]
     ) -> [LiveWorkout] {
         workouts
-            .filter { $0.completedAt != nil && goal.matches(workout: $0) }
+            .filter { hasCompletedProgress(for: goal, in: $0) }
             .sorted {
                 ($0.completedAt ?? $0.startedAt) > ($1.completedAt ?? $1.startedAt)
             }
@@ -252,9 +252,7 @@ enum WorkoutGoalProgressResolver {
         exerciseHistory: [ExerciseHistory],
         useLbs: Bool
     ) -> WorkoutGoalInsight {
-        let matchingWorkouts = workouts.filter { workout in
-            workout.completedAt != nil && goal.matches(workout: workout)
-        }
+        let matchingWorkouts = matchingCompletedWorkouts(for: goal, in: workouts)
         let matchingSessions = sessions.filter { goal.matches(session: $0) }
 
         let matchingEntries = matchingWorkouts.flatMap { workout in
@@ -543,6 +541,23 @@ enum WorkoutGoalProgressResolver {
     private static func latestNote(in session: WorkoutSession) -> String? {
         let note = session.trimmedNotes
         return note.isEmpty ? nil : note
+    }
+
+    private static func hasCompletedProgress(
+        for goal: WorkoutGoal,
+        in workout: LiveWorkout
+    ) -> Bool {
+        guard workout.completedAt != nil, goal.matches(workout: workout) else {
+            return false
+        }
+
+        guard goal.hasActivityScope else {
+            return true
+        }
+
+        return (workout.entries ?? []).contains {
+            goal.matches(entry: $0) && $0.hasExercisePreferenceSignal
+        }
     }
 
     private static func latestNote(
