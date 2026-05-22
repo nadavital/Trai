@@ -96,6 +96,18 @@ final class ExerciseHistory {
 // MARK: - Computed Properties
 
 extension ExerciseHistory {
+    static func records(
+        from workout: LiveWorkout,
+        performedAt: Date? = nil
+    ) -> [ExerciseHistory] {
+        guard let entries = workout.entries else { return [] }
+        let date = performedAt ?? workout.completedAt ?? workout.startedAt
+        return entries.compactMap { entry in
+            guard entry.hasExercisePreferenceSignal else { return nil }
+            return ExerciseHistory(from: entry, performedAt: date)
+        }
+    }
+
     /// Best set volume (weight × reps)
     var bestSetVolume: Double {
         bestSetWeightKg * Double(bestSetReps)

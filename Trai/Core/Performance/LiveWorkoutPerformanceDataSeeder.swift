@@ -108,13 +108,14 @@ struct LiveWorkoutPerformanceDataSeeder {
                 totalEntriesInserted += 1
                 totalSetsInserted += entry.sets.count
 
-                if !isActive {
-                    let history = ExerciseHistory(from: entry, performedAt: workout.completedAt ?? workout.startedAt)
-                    modelContext.insert(history)
-                }
             }
 
             workout.entries = workoutEntries
+            if !isActive {
+                for history in ExerciseHistory.records(from: workout) {
+                    modelContext.insert(history)
+                }
+            }
             modelContext.insert(workout)
         }
 

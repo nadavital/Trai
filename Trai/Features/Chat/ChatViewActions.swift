@@ -418,6 +418,9 @@ extension ChatView {
 
         // Save to database
         modelContext.insert(workout)
+        for history in ExerciseHistory.records(from: workout) {
+            modelContext.insert(history)
+        }
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.completeWorkout,
             domain: .workout,

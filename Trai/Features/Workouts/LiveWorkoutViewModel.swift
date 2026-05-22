@@ -1955,14 +1955,11 @@ final class LiveWorkoutViewModel {
     }
 
     private func createExerciseHistoryEntries() {
-        for entry in entries {
-            guard entry.hasExercisePreferenceSignal else { continue }
-
-            let history = ExerciseHistory(from: entry, performedAt: workout.completedAt ?? Date())
+        for history in ExerciseHistory.records(from: workout, performedAt: workout.completedAt ?? Date()) {
             modelContext?.insert(history)
 
             // Check for PRs against canonical per-metric records.
-            let previousSnapshot = getPerformanceSnapshot(for: entry.exerciseName)
+            let previousSnapshot = getPerformanceSnapshot(for: history.exerciseName)
             let previousWeight = previousSnapshot?.weightPR?.bestSetWeightKg ?? 0
             let previousVolume = previousSnapshot?.volumePR?.volumeValue(for: volumePRModePreference) ?? 0
             let previousReps = Double(previousSnapshot?.repsPR?.bestSetReps ?? 0)
@@ -1970,9 +1967,9 @@ final class LiveWorkoutViewModel {
             let currentVolume = history.volumeValue(for: volumePRModePreference)
 
             if history.bestSetWeightKg > previousWeight {
-                achievedPRs[entry.exerciseName] = PRValue(
+                achievedPRs[history.exerciseName] = PRValue(
                     type: .weight,
-                    exerciseName: entry.exerciseName,
+                    exerciseName: history.exerciseName,
                     newValue: history.bestSetWeightKg,
                     previousValue: previousWeight,
                     isFirstTime: !hasHistory || previousWeight <= 0,
@@ -1981,10 +1978,10 @@ final class LiveWorkoutViewModel {
             }
             // Volume PR (only if no weight PR already detected)
             else if currentVolume > previousVolume,
-                    achievedPRs[entry.exerciseName] == nil {
-                achievedPRs[entry.exerciseName] = PRValue(
+                    achievedPRs[history.exerciseName] == nil {
+                achievedPRs[history.exerciseName] = PRValue(
                     type: .volume,
-                    exerciseName: entry.exerciseName,
+                    exerciseName: history.exerciseName,
                     newValue: currentVolume,
                     previousValue: previousVolume,
                     isFirstTime: false,
@@ -1993,10 +1990,10 @@ final class LiveWorkoutViewModel {
             }
             // Rep PR (only if nothing else detected)
             else if Double(history.bestSetReps) > previousReps,
-                    achievedPRs[entry.exerciseName] == nil {
-                achievedPRs[entry.exerciseName] = PRValue(
+                    achievedPRs[history.exerciseName] == nil {
+                achievedPRs[history.exerciseName] = PRValue(
                     type: .reps,
-                    exerciseName: entry.exerciseName,
+                    exerciseName: history.exerciseName,
                     newValue: Double(history.bestSetReps),
                     previousValue: previousReps,
                     isFirstTime: false,

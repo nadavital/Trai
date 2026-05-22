@@ -98,6 +98,55 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertTrue(viewModel.isWorkoutComplete)
     }
 
+    func testExerciseHistoryRecordsIncludeGeneralActivitiesWithLoggedData() {
+        let workout = LiveWorkout(
+            name: "Bouldering Session",
+            workoutType: .climbing,
+            focusAreas: ["Bouldering", "Climbing"]
+        )
+        workout.completedAt = Date()
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 0,
+            exerciseType: "skill"
+        )
+        entry.activityTypeName = "Bouldering"
+        entry.targetTags = ["Climbing", "Grip endurance"]
+        entry.trackingFields = [.duration, .reps, .notes]
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 1_200, reps: 8, notes: "Limit attempts")
+        ]
+        entry.workout = workout
+        workout.entries = [entry]
+
+        let records = ExerciseHistory.records(from: workout)
+
+        XCTAssertEqual(records.count, 1)
+        guard let history = records.first else {
+            return XCTFail("Expected one history record")
+        }
+        XCTAssertEqual(history.exerciseName, "Limit Bouldering")
+        XCTAssertEqual(history.sourceWorkoutEntryId, entry.id)
+        XCTAssertEqual(history.totalSets, 0)
+        XCTAssertEqual(history.totalReps, 0)
+    }
+
+    func testExerciseHistoryRecordsIgnoreBlankGeneralActivityGuidance() {
+        let workout = LiveWorkout(name: "Cardio Guidance", workoutType: .cardio)
+        workout.completedAt = Date()
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Steady Run",
+            orderIndex: 0,
+            exerciseType: "cardio"
+        )
+        entry.trackingFields = [.duration, .distance]
+        entry.activitySegments = [LiveWorkoutEntry.ActivitySegment()]
+        entry.workout = workout
+        workout.entries = [entry]
+
+        XCTAssertTrue(ExerciseHistory.records(from: workout).isEmpty)
+    }
+
     func testRepsOnlyActivitySegmentCountsAsLoggedData() {
         let workout = LiveWorkout(name: "Conditioning", workoutType: .hiit)
         let entry = LiveWorkoutEntry(
