@@ -537,7 +537,7 @@ struct LiveWorkoutDetailSheet: View {
         var seen = Set<Exercise.Category>()
         return sortedEntries.compactMap { entry in
             guard !entry.isStrength,
-                  let category = Exercise.Category(rawValue: entry.exerciseType),
+                  let category = Exercise.Category.normalized(from: entry.exerciseType),
                   seen.insert(category).inserted else { return nil }
             return category
         }

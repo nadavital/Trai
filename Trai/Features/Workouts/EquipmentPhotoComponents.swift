@@ -195,7 +195,7 @@ struct EquipmentAnalysisSheet: View {
             return muscleGroup.capitalized
         }
         if let category = exercise.category, !category.isEmpty {
-            return Exercise.Category(rawValue: category)?.displayName ?? category.capitalized
+            return Exercise.Category.normalized(from: category)?.displayName ?? category.capitalized
         }
         return "Exercise"
     }

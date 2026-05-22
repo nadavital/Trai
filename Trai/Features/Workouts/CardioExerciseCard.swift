@@ -49,7 +49,7 @@ struct CardioExerciseCard: View {
     }
 
     private var countUnitLabel: String {
-        let category = Exercise.Category(rawValue: entry.exerciseType) ?? .custom
+        let category = Exercise.Category.normalized(from: entry.exerciseType) ?? .custom
         switch category {
         case .conditioning:
             return "rounds"
