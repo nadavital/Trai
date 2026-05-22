@@ -511,7 +511,7 @@ extension Exercise {
         ("Bent Over Row", "strength", "back", "Barbell"),
         ("Lat Pulldown", "strength", "back", "Lat Pulldown Machine"),
         ("Pull-Ups", "strength", "back", "Pull-Up Bar"),
-        ("Rowing Machine", "strength", "back", "Cable Row Machine"),
+        ("Seated Cable Row", "strength", "back", "Cable Row Machine"),
 
         // Shoulders
         ("Overhead Press", "strength", "shoulders", "Barbell / Dumbbells"),
@@ -556,9 +556,9 @@ extension Exercise {
         ("Circuit Training", "conditioning", nil, "Various"),
 
         // Skill / sport practice
-        ("Bouldering", "skill", nil, "Climbing Wall"),
-        ("Top Rope Climbing", "skill", nil, "Climbing Wall"),
-        ("Technique Practice", "skill", nil, "Sport-Specific"),
+        ("Bouldering", "sportPractice", nil, "Climbing Wall"),
+        ("Top Rope Climbing", "sportPractice", nil, "Climbing Wall"),
+        ("Sport Technique", "sportPractice", nil, "Sport-Specific"),
 
         // Mobility / recovery
         ("Hip Mobility Flow", "mobility", nil, "Mat / Bodyweight"),

@@ -21,6 +21,17 @@ enum ExerciseLibrarySeeder {
         var insertedCount = 0
         var didMutate = false
 
+        if let legacyRow = existingByName["rowing machine"],
+           !legacyRow.isCustom,
+           legacyRow.exerciseCategory == .strength,
+           legacyRow.muscleGroup == Exercise.MuscleGroup.back.rawValue {
+            legacyRow.name = "Seated Cable Row"
+            legacyRow.activityTypeName = "Strength"
+            existingByName["seated cable row"] = legacyRow
+            existingByName["rowing machine"] = nil
+            didMutate = true
+        }
+
         for (name, category, muscleGroup, equipment) in Exercise.defaultExercises {
             let key = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             guard !key.isEmpty else { continue }

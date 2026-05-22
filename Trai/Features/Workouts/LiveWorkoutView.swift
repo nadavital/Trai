@@ -426,34 +426,33 @@ struct LiveWorkoutView: View {
                         calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
                     )
 
-                    // Target muscles selector (editable for custom workouts)
-                    if viewModel.workout.type.supportsMuscleTargets {
-                        MuscleGroupSelector(
-                            selectedMuscles: Binding(
-                                get: { Set(viewModel.workout.muscleGroups) },
-                                set: { viewModel.updateMuscleGroups(Array($0)) }
-                            ),
-                            selectedActivityCategories: Binding(
-                                get: { Set(viewModel.targetActivityCategories) },
-                                set: { viewModel.updateActivityTargets(Array($0)) }
-                            ),
-                            selectedActivityTypes: Binding(
-                                get: { Set(viewModel.targetActivityTypes) },
-                                set: { selectedTypes in viewModel.updateActivityTypeTargets(Array(selectedTypes)) }
-                            ),
-                            isCustomWorkout: viewModel.exerciseSuggestions.isEmpty,
-                            planTargets: planTargets,
-                            activityTypeTargets: activityTypeTargets,
-                            onSelectPlanTarget: { target in
-                                viewModel.applyPlanTarget(
-                                    name: target.title,
-                                    muscles: target.muscles,
-                                    categories: target.categories
-                                )
-                            }
-                        )
-
-                    }
+                    // Targets can include muscles, planned split days, broad activity
+                    // fallbacks, and user-defined activity types from the exercise library.
+                    MuscleGroupSelector(
+                        selectedMuscles: Binding(
+                            get: { Set(viewModel.workout.muscleGroups) },
+                            set: { viewModel.updateMuscleGroups(Array($0)) }
+                        ),
+                        selectedActivityCategories: Binding(
+                            get: { Set(viewModel.targetActivityCategories) },
+                            set: { viewModel.updateActivityTargets(Array($0)) }
+                        ),
+                        selectedActivityTypes: Binding(
+                            get: { Set(viewModel.targetActivityTypes) },
+                            set: { selectedTypes in viewModel.updateActivityTypeTargets(Array(selectedTypes)) }
+                        ),
+                        isCustomWorkout: viewModel.exerciseSuggestions.isEmpty,
+                        planTargets: planTargets,
+                        activityTypeTargets: activityTypeTargets,
+                        showsMuscleTargets: viewModel.workout.type.supportsMuscleTargets,
+                        onSelectPlanTarget: { target in
+                            viewModel.applyPlanTarget(
+                                name: target.title,
+                                muscles: target.muscles,
+                                categories: target.categories
+                            )
+                        }
+                    )
 
                     // Planned and ad hoc workout items share the same logging surface.
                     ForEach(entries, id: \.id) { entry in

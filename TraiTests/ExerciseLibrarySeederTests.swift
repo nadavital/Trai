@@ -162,6 +162,8 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertTrue(names.contains("Running"))
         XCTAssertTrue(names.contains("Hip Mobility Flow"))
         XCTAssertTrue(names.contains("Bouldering"))
+        XCTAssertTrue(names.contains("Seated Cable Row"))
+        XCTAssertFalse(names.contains("Rowing Machine"))
         XCTAssertEqual(exercises.filter { $0.name == "Running" }.count, 1)
 
         let running = try XCTUnwrap(exercises.first { $0.name == "Running" })
@@ -173,5 +175,31 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertEqual(mobility.exerciseCategory, .mobility)
         XCTAssertEqual(mobility.trackingFields, [.duration, .notes])
         XCTAssertTrue(mobility.targetTags.isEmpty)
+
+        let bouldering = try XCTUnwrap(exercises.first { $0.name == "Bouldering" })
+        XCTAssertEqual(bouldering.exerciseCategory, .sportPractice)
+        XCTAssertEqual(bouldering.activityTypeName, "Climbing")
+    }
+
+    func testEnsureDefaultsRenamesLegacyStrengthRowingMachine() throws {
+        let container = try ModelContainer(
+            for: Exercise.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+
+        let legacy = Exercise(name: "Rowing Machine", category: .strength, muscleGroup: .back)
+        legacy.isCustom = false
+        legacy.equipmentName = "Cable Row Machine"
+        context.insert(legacy)
+        try context.save()
+
+        _ = ExerciseLibrarySeeder.ensureDefaults(in: context)
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+
+        XCTAssertNil(exercises.first { $0.name == "Rowing Machine" })
+        let renamed = try XCTUnwrap(exercises.first { $0.name == "Seated Cable Row" })
+        XCTAssertEqual(renamed.exerciseCategory, .strength)
+        XCTAssertEqual(renamed.targetMuscleGroup, .back)
     }
 }

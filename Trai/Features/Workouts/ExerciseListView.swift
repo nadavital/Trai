@@ -33,6 +33,7 @@ struct ExerciseListView: View {
     @State private var searchText = ""
     @State private var selectedCategory: Exercise.Category?
     @State private var selectedMuscleGroup: Exercise.MuscleGroup?
+    @State private var selectedActivityTypeFilter: String?
     @State private var showingAddCustom = false
     @State private var customExerciseName = ""
 
@@ -221,6 +222,16 @@ struct ExerciseListView: View {
             result = result.filter { category.suggestionCategories.contains($0.exerciseCategory) }
         }
 
+        // Apply user-facing activity type filter. This is intentionally independent
+        // from the broad fallback category so custom types like climbing, boxing,
+        // rowing, or sport-specific practice can behave like first-class targets.
+        if let selectedActivityTypeFilter {
+            let key = Exercise.normalizedActivityKey(selectedActivityTypeFilter)
+            if !key.isEmpty {
+                result = result.filter { $0.activityMatchingTokens.contains(key) }
+            }
+        }
+
         // Apply muscle group filter
         if let muscleGroup = selectedMuscleGroup {
             result = result.filter { $0.targetMuscleGroup == muscleGroup }
@@ -343,9 +354,38 @@ struct ExerciseListView: View {
         selectedCategory ?? .strength
     }
 
+    private var quickAddActivityTypeName: String? {
+        let trimmed = selectedActivityTypeFilter?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     private var quickAddMuscleGroup: Exercise.MuscleGroup? {
         guard quickAddCategory == .strength else { return nil }
         return selectedMuscleGroup ?? targetMuscleGroups.first
+    }
+
+    private var activityTypesForFilterChips: [String] {
+        let targetKeys = targetActivityTypePriority
+        var bestNameByKey: [String: String] = [:]
+        for exercise in exercises where exercise.exerciseCategory != .strength {
+            let title = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = Exercise.normalizedActivityKey(title)
+            guard !title.isEmpty, !key.isEmpty else { continue }
+            if bestNameByKey[key] == nil {
+                bestNameByKey[key] = title
+            }
+        }
+
+        return bestNameByKey
+            .values
+            .sorted { lhs, rhs in
+                let lhsPriority = targetKeys[Exercise.normalizedActivityKey(lhs)] ?? Int.max
+                let rhsPriority = targetKeys[Exercise.normalizedActivityKey(rhs)] ?? Int.max
+                if lhsPriority != rhsPriority { return lhsPriority < rhsPriority }
+                return lhs.localizedStandardCompare(rhs) == .orderedAscending
+            }
+            .prefix(14)
+            .map { $0 }
     }
 
     private var canAccessExerciseAI: Bool {
@@ -422,6 +462,7 @@ struct ExerciseListView: View {
                                 Button {
                                     addCustomExercise(
                                         name: searchText,
+                                        activityTypeName: quickAddActivityTypeName,
                                         muscleGroup: quickAddMuscleGroup,
                                         category: quickAddCategory
                                     )
@@ -470,7 +511,10 @@ struct ExerciseListView: View {
                                     exerciseRow(exercise)
                                 }
                             } header: {
-                                Label(selectedCategory?.displayName ?? "Activities", systemImage: selectedCategory?.iconName ?? "figure.mixed.cardio")
+                                Label(
+                                    selectedActivityTypeFilter ?? selectedCategory?.displayName ?? "Activities",
+                                    systemImage: selectedCategory?.iconName ?? "figure.mixed.cardio"
+                                )
                             }
                         }
                     }
@@ -676,16 +720,19 @@ struct ExerciseListView: View {
     // MARK: - Filter Section
 
     private func filterSection(muscleGroups: [Exercise.MuscleGroup]) -> some View {
-        VStack(spacing: 0) {
+        let activityTypes = activityTypesForFilterChips
+
+        return VStack(spacing: 0) {
             // Row 1: Category filters
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     FilterChip(
                         label: "All",
-                        isSelected: selectedCategory == nil && selectedMuscleGroup == nil
+                        isSelected: selectedCategory == nil && selectedMuscleGroup == nil && selectedActivityTypeFilter == nil
                     ) {
                         selectedCategory = nil
                         selectedMuscleGroup = nil
+                        selectedActivityTypeFilter = nil
                     }
 
                     ForEach(Exercise.Category.userFacingCases) { category in
@@ -699,6 +746,7 @@ struct ExerciseListView: View {
                             } else {
                                 selectedCategory = category
                                 selectedMuscleGroup = nil
+                                selectedActivityTypeFilter = nil
                             }
                         }
                     }
@@ -707,7 +755,30 @@ struct ExerciseListView: View {
                 .padding(.vertical, 8)
             }
 
-            // Row 2: Muscle group filters (only for strength or all)
+            if !activityTypes.isEmpty && selectedMuscleGroup == nil {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(activityTypes, id: \.self) { activityType in
+                            FilterChip(
+                                label: activityType,
+                                isSelected: selectedActivityTypeFilter == activityType,
+                                isHighlighted: targetActivityTypes.contains { Exercise.normalizedActivityKey($0) == Exercise.normalizedActivityKey(activityType) }
+                            ) {
+                                if selectedActivityTypeFilter == activityType {
+                                    selectedActivityTypeFilter = nil
+                                } else {
+                                    selectedActivityTypeFilter = activityType
+                                    selectedMuscleGroup = nil
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                }
+            }
+
+            // Row 3: Muscle group filters (only for strength or all)
             if selectedCategory == .strength || selectedCategory == nil {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -723,6 +794,7 @@ struct ExerciseListView: View {
                                 } else {
                                     selectedMuscleGroup = muscleGroup
                                     selectedCategory = .strength
+                                    selectedActivityTypeFilter = nil
                                 }
                             }
                         }

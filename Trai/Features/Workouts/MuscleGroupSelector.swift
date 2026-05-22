@@ -31,6 +31,7 @@ struct MuscleGroupSelector: View {
     let isCustomWorkout: Bool
     var planTargets: [PlanTarget] = []
     var activityTypeTargets: [ActivityTypeTarget] = []
+    var showsMuscleTargets: Bool = true
     var onSelectPlanTarget: ((PlanTarget) -> Void)?
 
     @State private var isExpanded: Bool = false
@@ -154,13 +155,15 @@ struct MuscleGroupSelector: View {
                         }
                     }
 
-                    horizontalTargetRow {
-                        ForEach(LiveWorkout.MuscleGroup.allCases.filter { $0 != .fullBody }) { muscle in
-                            MuscleSelectChip(
-                                muscle: muscle,
-                                isSelected: selectedMuscles.contains(muscle)
-                            ) {
-                                toggleMuscle(muscle)
+                    if showsMuscleTargets {
+                        horizontalTargetRow {
+                            ForEach(LiveWorkout.MuscleGroup.allCases.filter { $0 != .fullBody }) { muscle in
+                                MuscleSelectChip(
+                                    muscle: muscle,
+                                    isSelected: selectedMuscles.contains(muscle)
+                                ) {
+                                    toggleMuscle(muscle)
+                                }
                             }
                         }
                     }
