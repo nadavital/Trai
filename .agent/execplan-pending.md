@@ -13,7 +13,7 @@ The key product change is replacing example-specific thinking with a broad model
 ## Progress
 
 - [x] (2026-05-21 05:59Z) Set the active Codex goal to implement generalized workout activity/accessory block support across plan generation, onboarding, live workout logging, summaries/details, goals, and progress tracking.
-- [x] (2026-05-21 06:02Z) Reviewed the current plan, live workout, activity card, summary, goal, and prompt paths; confirmed the app already converts non-strength plan blocks to `LiveWorkoutEntry` rows but still uses the overly specific `cardioFinisher` block kind and session-level frequency counting.
+- [x] (2026-05-21 06:02Z) Reviewed the current plan, live workout, activity card, summary, goal, and prompt paths; confirmed the app already converts non-strength plan blocks to `LiveWorkoutEntry` rows and identified the old overly specific `cardioFinisher` block kind plus session-level frequency counting as problems to remove.
 - [x] (2026-05-21 06:08Z) Authored this replacement ExecPlan.
 - [x] (2026-05-21 06:17Z) Milestone 1: Added a generalized activity taxonomy to plan blocks and live workout entries while preserving legacy decode compatibility.
 - [x] (2026-05-21 06:23Z) Milestone 2: Updated plan generation prompts, schemas, fallback defaults, and Pro setup questions so Trai asks useful broad questions and returns `kind + role` blocks instead of hardcoded example types.
@@ -21,14 +21,16 @@ The key product change is replacing example-specific thinking with a broad model
 - [x] (2026-05-21 06:25Z) Milestone 4: Updated workout summaries, plan cards, chat context, and Trai review prompts so logged activity blocks remain visible and understandable after the workout ends.
 - [x] (2026-05-21 06:30Z) Milestone 5: Strengthened workout-goal creation and progress tracking so goals can target activity entries by name, kind, role, duration, distance, or frequency without relying on brittle title matching.
 - [x] (2026-05-21 06:36Z) Milestone 6: Verified with a simulator build, focused tests, and a Pro setup walkthrough through generation start. The walkthrough exposed an auth/session error path, which is now mapped to the sign-in-required message instead of leaking `Session not found`.
+- [x] (2026-05-22 23:00Z) Tightened saved/manual workout surfaces so non-strength activity sessions use activity metric labels such as segments, attempts, or rounds instead of leaking strength-only sets/reps wording.
+- [x] (2026-05-22 23:06Z) Tightened AI-facing workout plan and goal schemas so warmup/cooldown are placement roles, not activity kinds, and user-created exercises normalize hidden AI primitives to visible categories.
 
 ## Surprises & Discoveries
 
 - Observation: `WorkoutTemplateService.createWorkoutFromTemplate` already converts plan blocks into live workout entries. Strength blocks with exercises become set-based entries; non-strength blocks become duration/note/completion entries.
   Evidence: `Trai/Core/Services/WorkoutTemplateService.swift` lines 111-165 create `LiveWorkoutEntry` values from every `WorkoutPlan.TrainingBlock`.
 
-- Observation: The current model hardcodes `cardioFinisher` as a `WorkoutPlan.TrainingBlock.BlockKind`, which makes one user example look like a product primitive.
-  Evidence: `Trai/Core/Models/WorkoutPlan.swift` defines `case cardioFinisher`; `Trai/Core/Models/WorkoutPlanDefaults.swift` adds `blocksWithAccessoryCardioFinisher`; tests assert `.cardioFinisher`.
+- Observation: The earlier implementation hardcoded `cardioFinisher` as a `WorkoutPlan.TrainingBlock.BlockKind`, which made one user example look like a product primitive. That has been removed from current app code; the remaining contract is broad activity kind plus placement role.
+  Evidence: current `rg cardioFinisher Trai TraiTests` only finds tests that assert the app does not depend on that phrase.
 
 - Observation: Live workout entries can already store much of what activity blocks need: name, exercise type, duration, distance, calories, notes, completion, and order.
   Evidence: `Trai/Core/Models/LiveWorkoutEntry.swift` has `exerciseType`, `durationSeconds`, `distanceMeters`, `caloriesBurned`, `notes`, and `completedAt`.
@@ -48,9 +50,9 @@ The key product change is replacing example-specific thinking with a broad model
   Rationale: The app should not grow one-off block types from examples. A cardio finisher is just cardio with a finisher role; the same pattern supports mobility warmups, skill accessories, conditioning finishers, and custom activity work.
   Date/Author: 2026-05-21 / Codex
 
-- Decision: Keep backward compatibility for legacy `cardioFinisher` JSON and saved plans.
-  Rationale: Existing generated plans and tests may contain that string. Decoding should map legacy `cardioFinisher` to `kind = cardio` and `role = finisher` instead of failing or losing the planned activity.
-  Date/Author: 2026-05-21 / Codex
+- Decision: Do not keep a `cardioFinisher` legacy decode path for this branch.
+  Rationale: This activity-block code has not shipped to users. Keeping a compatibility shim for one example would preserve the wrong product primitive and make future AI/tool schemas easier to misuse. Supportive work should be represented as a real activity kind plus a placement role.
+  Date/Author: 2026-05-22 / Codex
 
 - Decision: Store activity metadata on `LiveWorkoutEntry` rather than creating a separate SwiftData model.
   Rationale: Live workout rows are already the source of truth for user interaction, summaries, and goal progress. Adding optional fields keeps migration additive and avoids splitting one visible workout item across two persisted objects.
@@ -62,7 +64,7 @@ The key product change is replacing example-specific thinking with a broad model
 
 ## Outcomes & Retrospective
 
-Implemented the generalized activity model and connected it through plan generation, template-to-live-workout conversion, live activity logging, summaries, Trai review context, AI goal creation, manual goal editing, and goal progress. The old `cardioFinisher` raw value remains supported only as legacy decode input; new generation and defaults use broad block kinds plus roles.
+Implemented the generalized activity model and connected it through plan generation, template-to-live-workout conversion, live activity logging, summaries, Trai review context, AI goal creation, manual goal editing, and goal progress. New generation and defaults use broad activity kinds plus roles; `cardioFinisher` is not retained as a product or compatibility primitive for this unshipped branch.
 
 Validation completed:
 
@@ -92,7 +94,7 @@ The UI surfaces that must agree with this model are:
 
 ## Plan of Work
 
-Milestone 1 adds the data model vocabulary. In `WorkoutPlan.TrainingBlock`, add a nested `Role` enum with cases `main`, `warmup`, `accessory`, `finisher`, `cooldown`, and `custom`. Add a `role` property to `TrainingBlock`, include it in Codable keys, and default it during decoding. When old JSON contains `kind = cardioFinisher`, decode it as `kind = cardio` and `role = finisher`. Keep the Swift enum case temporarily only if needed for legacy decode, but new generation, defaults, tests, and UI should stop creating it. Add optional metadata fields to `LiveWorkoutEntry`: `activityKindRaw`, `activityRoleRaw`, `sourcePlanBlockIDRaw`, `plannedDurationSeconds`, `plannedIntensity`, and `plannedTarget`. Add computed helpers that expose kind and role in a safe way. Extend `WorkoutTemplateService.createWorkoutFromTemplate` so each non-strength block copies its kind, role, duration, intensity, target, detail, and source block ID to the `LiveWorkoutEntry`.
+Milestone 1 adds the data model vocabulary. In `WorkoutPlan.TrainingBlock`, add a nested `Role` enum with cases `main`, `warmup`, `accessory`, `finisher`, `cooldown`, and `custom`. Add a `role` property to `TrainingBlock`, include it in Codable keys, and default it during decoding. Do not add or keep a `cardioFinisher` kind; a cardio finisher is `kind = cardio` plus `role = finisher`. Add optional metadata fields to `LiveWorkoutEntry`: `activityKindRaw`, `activityRoleRaw`, `sourcePlanBlockIDRaw`, `plannedDurationSeconds`, `plannedIntensity`, and `plannedTarget`. Add computed helpers that expose kind and role in a safe way. Extend `WorkoutTemplateService.createWorkoutFromTemplate` so each non-strength block copies its kind, role, duration, intensity, target, detail, and source block ID to the `LiveWorkoutEntry`.
 
 Milestone 2 changes generation and onboarding. Update `AIWorkoutPlanPrompts` so the schema asks for block `kind` and `role`, not `cardioFinisher`. The valid block kinds should be broad activity categories. The prompt should say that a finisher, warmup, cooldown, or accessory is a role that can apply to many kinds. Update the Pro setup questions in `WorkoutPlanChatFlow` to ask what the plan should include or avoid in terms of priorities, split preferences, support work, and constraints, but do not ask fixed questions that only make sense for strength. The final shaping step should encourage concrete answers without forcing users to know the internal taxonomy. Update fallback defaults in `WorkoutPlanDefaults` so accessory support blocks are built as `kind = cardio`, `role = finisher` or `role = accessory`.
 
@@ -120,8 +122,8 @@ For each milestone, after tests/build pass, commit only the relevant files. Do n
 
 The feature is complete when all of the following are true:
 
-1. Generated plan JSON no longer needs a `cardioFinisher` kind. A support activity is represented as a broad kind plus role, such as cardio + finisher or mobility + warmup.
-2. Legacy plan JSON containing `cardioFinisher` still decodes and starts correctly.
+1. Generated plan JSON does not expose or accept a `cardioFinisher` kind. A support activity is represented as a broad kind plus role, such as cardio + finisher or mobility + warmup.
+2. AI-facing schemas use role for placement concepts such as warmup, finisher, and cooldown; activity kind describes what the work is.
 3. Starting a generated mixed workout creates live entries for strength exercises and non-strength activity blocks in the right order.
 4. A user can add an unplanned activity during Live Workout, set its kind/role/duration/notes, complete it, and see it in the workout summary and detail page.
 5. A goal tied to a support activity counts completed matching live entries, not just parent workouts.
@@ -131,7 +133,7 @@ The feature is complete when all of the following are true:
 The minimum automated checks are:
 
 - A focused simulator build with `xcodebuild` or `mcp__xcodebuildmcp__.build_sim`.
-- Unit tests for legacy block decoding, block-to-live-entry mapping, ad hoc activity completion, and entry-scoped goal frequency progress.
+- Unit tests for AI schema shape, block-to-live-entry mapping, ad hoc activity completion, and entry-scoped goal frequency progress.
 
 ## Idempotence and Recovery
 

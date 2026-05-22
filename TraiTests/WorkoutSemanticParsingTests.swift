@@ -257,6 +257,31 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertTrue(expected.isSubset(of: Set(startLiveWorkoutCategories)))
     }
 
+    func testPlanBlockSchemasUseRoleForPlacementNotKind() throws {
+        for schema in [AIPromptBuilder.workoutPlanSchema, AIPromptBuilder.workoutPlanRefinementSchema] {
+            let kindValues = try blockEnum(in: schema, field: "kind")
+            XCTAssertFalse(kindValues.contains("warmup"))
+            XCTAssertFalse(kindValues.contains("cooldown"))
+            XCTAssertTrue(kindValues.contains("mobility"))
+            XCTAssertTrue(kindValues.contains("recovery"))
+
+            let roleValues = try blockEnum(in: schema, field: "role")
+            XCTAssertTrue(roleValues.contains("warmup"))
+            XCTAssertTrue(roleValues.contains("cooldown"))
+            XCTAssertTrue(roleValues.contains("finisher"))
+        }
+
+        let createGoalKinds = try propertyEnum(in: AIFunctionDeclarations.createWorkoutGoal, property: "activity_kind")
+        XCTAssertFalse(createGoalKinds.contains("warmup"))
+        XCTAssertFalse(createGoalKinds.contains("cooldown"))
+        XCTAssertTrue(createGoalKinds.contains("sportPractice"))
+
+        let updateGoalKinds = try propertyEnum(in: AIFunctionDeclarations.updateWorkoutGoal, property: "activity_kind")
+        XCTAssertFalse(updateGoalKinds.contains("warmup"))
+        XCTAssertFalse(updateGoalKinds.contains("cooldown"))
+        XCTAssertTrue(updateGoalKinds.contains(""))
+    }
+
     func testRecentWorkoutsExposeLiveWorkoutActivityFocusesAndSegments() async throws {
         let context = try makeWorkoutHistoryContext()
         let workout = LiveWorkout(
@@ -401,6 +426,29 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         let itemProperties = try XCTUnwrap(items["properties"] as? [String: Any])
         let category = try XCTUnwrap(itemProperties["category"] as? [String: Any])
         return try XCTUnwrap(category["enum"] as? [String])
+    }
+
+    private func blockEnum(in schema: [String: Any], field: String) throws -> [String] {
+        let rootProperties = try XCTUnwrap(schema["properties"] as? [String: Any])
+        let planSchema = (rootProperties["templates"] == nil)
+            ? try XCTUnwrap(rootProperties["proposedPlan"] as? [String: Any])
+            : schema
+        let properties = try XCTUnwrap(planSchema["properties"] as? [String: Any])
+        let templates = try XCTUnwrap(properties["templates"] as? [String: Any])
+        let templateItems = try XCTUnwrap(templates["items"] as? [String: Any])
+        let templateProperties = try XCTUnwrap(templateItems["properties"] as? [String: Any])
+        let blocks = try XCTUnwrap(templateProperties["blocks"] as? [String: Any])
+        let blockItems = try XCTUnwrap(blocks["items"] as? [String: Any])
+        let blockProperties = try XCTUnwrap(blockItems["properties"] as? [String: Any])
+        let fieldSchema = try XCTUnwrap(blockProperties[field] as? [String: Any])
+        return try XCTUnwrap(fieldSchema["enum"] as? [String])
+    }
+
+    private func propertyEnum(in schema: [String: Any], property: String) throws -> [String] {
+        let parameters = try XCTUnwrap(schema["parameters"] as? [String: Any])
+        let properties = try XCTUnwrap(parameters["properties"] as? [String: Any])
+        let propertySchema = try XCTUnwrap(properties[property] as? [String: Any])
+        return try XCTUnwrap(propertySchema["enum"] as? [String])
     }
 
     private func makeWorkoutHistoryContext() throws -> ModelContext {

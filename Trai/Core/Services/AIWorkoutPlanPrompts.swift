@@ -197,13 +197,15 @@ extension AIPromptBuilder {
             "required": ["id", "exerciseName", "muscleGroup", "defaultSets", "defaultReps", "order"]
         ]
 
+        let activityKindValues = ["strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "custom"]
         let blockSchema: [String: Any] = [
             "type": "object",
             "properties": [
                 "id": ["type": "string"],
                 "kind": [
                     "type": "string",
-                    "enum": ["warmup", "strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom"]
+                    "description": "What the work is. Use role, not kind, for placement such as warmup, finisher, or cooldown.",
+                    "enum": activityKindValues
                 ],
                 "role": [
                     "type": "string",
@@ -371,7 +373,7 @@ extension AIPromptBuilder {
                 ],
                 "linkedActivityKindRaw": [
                     "type": "string",
-                    "enum": ["warmup", "strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom"],
+                    "enum": ["strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "custom"],
                     "nullable": true
                 ],
                 "linkedActivityRoleRaw": [
@@ -552,13 +554,15 @@ extension AIPromptBuilder {
             "required": ["id", "exerciseName", "muscleGroup", "defaultSets", "defaultReps", "order"]
         ]
 
+        let activityKindValues = ["strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "custom"]
         let blockSchema: [String: Any] = [
             "type": "object",
             "properties": [
                 "id": ["type": "string"],
                 "kind": [
                     "type": "string",
-                    "enum": ["warmup", "strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom"]
+                    "description": "What the work is. Use role, not kind, for placement such as warmup, finisher, or cooldown.",
+                    "enum": activityKindValues
                 ],
                 "role": [
                     "type": "string",

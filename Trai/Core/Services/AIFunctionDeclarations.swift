@@ -502,7 +502,7 @@ enum AIFunctionDeclarations {
                     "activity_kind": [
                         "type": "string",
                         "description": "Optional internal fallback behavior kind for goals tied to a workout entry instead of a whole session. Prefer activity_name or activity_tags when the user-facing activity identity matters.",
-                        "enum": ["warmup", "strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom"]
+                        "enum": ["strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "custom"]
                     ],
                     "activity_role": [
                         "type": "string",
@@ -588,7 +588,7 @@ enum AIFunctionDeclarations {
                     "activity_kind": [
                         "type": "string",
                         "description": "Updated internal fallback behavior kind. Prefer activity_name or activity_tags when the user-facing activity identity matters; pass empty string to clear it.",
-                        "enum": ["warmup", "strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom", ""]
+                        "enum": ["strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "custom", ""]
                     ],
                     "activity_role": [
                         "type": "string",
