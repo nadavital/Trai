@@ -22,11 +22,11 @@ struct ExerciseAnalysis: Codable {
     let tips: String?          // Optional form tips
 }
 
-/// Result from identifying exercise equipment from a photo
+/// Result from identifying an exercise, activity, or equipment from a photo
 struct ExercisePhotoAnalysis: Codable {
-    let equipmentName: String       // Name of the machine/equipment
-    let suggestedExercises: [SuggestedExercise]  // Exercises you can do with it
-    let description: String         // What this equipment is
+    let equipmentName: String       // Name of the visible exercise, activity setup, machine, or equipment
+    let suggestedExercises: [SuggestedExercise]  // Exercises or activities the user can add
+    let description: String         // What the photo appears to show
     let tips: String?               // Setup or usage tips
 
     struct SuggestedExercise: Codable, Identifiable {
@@ -156,12 +156,12 @@ extension AIService {
         }
     }
 
-    /// Identify gym equipment/machine from a photo and suggest exercises
+    /// Identify an exercise, activity, or piece of equipment from a photo and suggest trackable entries.
     /// - Parameters:
-    ///   - imageData: JPEG image data of the equipment
+    ///   - imageData: JPEG image data of the exercise, activity setup, or equipment
     ///   - existingExerciseNames: Names of exercises already in the user's library (for matching)
     func analyzeExercisePhoto(imageData: Data, existingExerciseNames: [String] = []) async throws -> ExercisePhotoAnalysis {
-        log("Analyzing exercise equipment photo", type: .info)
+        log("Analyzing exercise photo", type: .info)
         return try await performAIRequest(for: .exercisePhotoAnalysis) {
             let existingExercisesContext: String
             if !existingExerciseNames.isEmpty {
@@ -178,39 +178,40 @@ extension AIService {
             }
 
             let prompt = """
-            Look at this image related to gym equipment or an exercise machine.
+            Look at this image related to training. It may show a movement, sport setup, gym machine, cardio machine, free weights, mobility tool, placard, route/problem, field/court setup, or other exercise context.
 
             The image may show:
-            - the full machine
-            - part of the machine
+            - the person performing an exercise or activity
+            - the full machine or part of the machine
             - an instruction placard or diagram
             - a brand/model label
-            - close-up text describing how the machine is used
+            - close-up text describing how equipment or a movement is used
+            - activity context such as a climbing wall, bike, rower, running route, court, bands, mobility setup, or recovery tool
 
             Identify:
-            1. What equipment or machine this is (e.g., "Lat Pulldown Machine", "Cable Crossover", "Leg Press")
-            2. What exercises can be done with it (list 2-4 main exercises)
-            3. A brief description of what the equipment is for
+            1. What visible exercise, activity setup, machine, or equipment this is (e.g., "Lat Pulldown Machine", "Rowing Machine", "Climbing Wall", "Band Mobility Setup")
+            2. What trackable exercises or activities the user can add from it (list 1-4 main options)
+            3. A brief description of what the photo shows
             4. Any setup tips or key things to know
             \(existingExercisesContext)
             IMPORTANT:
-            - Use any visible text, diagrams, labels, or setup instructions in the image to help identify the equipment.
+            - Use any visible text, diagrams, labels, route/problem markings, or setup instructions in the image to help identify the exercise or equipment.
             - Prioritize what is clearly visible in the image over guessing.
-            - Do NOT invent hidden attachments, stations, exercise variants, or machine names that are not supported by the visible image.
-            - If the image only shows a partial view or descriptive signage, use the visible clues but keep the answer generic if needed instead of forcing a highly specific machine name.
-            - Be specific when similar machines exist, but only when the image supports that level of certainty.
-            - If brand/model text is clearly visible on the machine, include that in equipmentName (e.g., "Life Fitness Seated Row Machine").
+            - Do NOT invent hidden attachments, stations, exercise variants, routes, grades, machines, or activity details that are not supported by the visible image.
+            - If the image only shows a partial view or descriptive signage, use the visible clues but keep the answer generic if needed instead of forcing a highly specific name.
+            - Be specific when similar exercises or machines exist, but only when the image supports that level of certainty.
+            - If brand/model text is clearly visible on the machine, include that in equipmentName. If the image is an activity setup rather than equipment, use a concise visible activity name such as "Climbing Wall" or "Mobility Band Setup".
             - For each suggested exercise, include category, activityTypeName, activityAliases, muscleGroup when it is strength, targetTags, and trackingFields so the app can save it correctly.
             - Categories are broad fallback behaviors and must be one of: strength, cardio, conditioning, mobility, skill, sportPractice, recovery, flexibility, custom.
             - activityTypeName is the user-facing identity and can be specific, such as Climbing, Cycling, Running, Mobility Flow, Boxing, Basketball, or Strength.
             - Tracking fields must be chosen from: sets, reps, weight, duration, distance, notes. Do not use calories.
-            - Strength machine exercises usually track sets, weight, and reps. Cardio machines usually track duration and distance. Skill or mobility suggestions usually track duration and notes.
-            - If the image is too unclear to confidently identify gym equipment, return:
-              equipmentName: "Unclear gym equipment"
+            - Strength exercises usually track sets, weight, and reps. Cardio activities usually track duration and distance. Skill, sport, mobility, recovery, and custom activities usually track duration, reps/count, distance when relevant, and notes.
+            - If the image is too unclear to confidently identify an exercise, activity, or equipment, return:
+              equipmentName: "Unclear exercise photo"
               suggestedExercises: []
-              description: "The image does not clearly show identifiable gym equipment."
-              tips: "Retake the photo with the full machine, placard, or visible labels."
-            - If the image is not gym equipment, do not force it into a gym machine category. Use a generic visible label, keep suggestedExercises empty unless they are clearly supported by the object shown, and explain the uncertainty in description or tips.
+              description: "The image does not clearly show an identifiable exercise, activity, or equipment setup."
+              tips: "Retake the photo with the full movement, setup, placard, or visible labels."
+            - If the image is not exercise-related, do not force it into a workout category. Use a generic visible label, keep suggestedExercises empty unless they are clearly supported by the image, and explain the uncertainty in description or tips.
             """
 
             let preparedImageData = AIImagePayloadPreparer.prepareJPEGData(from: imageData) ?? imageData
@@ -221,7 +222,7 @@ extension AIService {
                 "properties": [
                     "equipmentName": [
                         "type": "string",
-                        "description": "Name of the machine or equipment"
+                        "description": "Name of the visible exercise, activity setup, machine, or equipment"
                     ],
                     "suggestedExercises": [
                         "type": "array",
@@ -271,7 +272,7 @@ extension AIService {
                     ],
                     "description": [
                         "type": "string",
-                        "description": "Brief description of what this equipment is for"
+                        "description": "Brief description of what the photo appears to show"
                     ],
                     "tips": [
                         "type": "string",
@@ -311,7 +312,7 @@ extension AIService {
             }
 
             let analysis = try JSONDecoder().decode(ExercisePhotoAnalysis.self, from: data)
-            log("Equipment identified: \(analysis.equipmentName) with \(analysis.suggestedExercises.count) exercises", type: .info)
+            log("Exercise photo identified: \(analysis.equipmentName) with \(analysis.suggestedExercises.count) suggestions", type: .info)
 
             return analysis
         }

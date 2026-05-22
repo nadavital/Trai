@@ -32,6 +32,38 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertEqual(exercise.trackingFields ?? [], ["duration", "distance", "notes"])
     }
 
+    func testExercisePhotoAnalysisCanDecodeActivitySetupSuggestions() throws {
+        let json = """
+        {
+          "equipmentName": "Climbing Wall",
+          "description": "A visible climbing setup for bouldering practice.",
+          "tips": "Warm up fingers and shoulders before hard attempts.",
+          "suggestedExercises": [
+            {
+              "name": "Limit Bouldering",
+              "category": "sportPractice",
+              "activityTypeName": "Climbing",
+              "activityAliases": ["Bouldering", "Climb"],
+              "muscleGroup": null,
+              "targetTags": ["Technique", "Power", "Grip"],
+              "trackingFields": ["duration", "reps", "notes"],
+              "howTo": "Track focused attempts and note the problem style."
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let analysis = try JSONDecoder().decode(ExercisePhotoAnalysis.self, from: json)
+        let exercise = try XCTUnwrap(analysis.suggestedExercises.first)
+
+        XCTAssertEqual(analysis.equipmentName, "Climbing Wall")
+        XCTAssertEqual(exercise.category, "sportPractice")
+        XCTAssertEqual(exercise.activityTypeName, "Climbing")
+        XCTAssertEqual(exercise.activityAliases ?? [], ["Bouldering", "Climb"])
+        XCTAssertEqual(exercise.targetTags ?? [], ["Technique", "Power", "Grip"])
+        XCTAssertEqual(exercise.trackingFields ?? [], ["duration", "reps", "notes"])
+    }
+
     func testTrackingFieldNormalizationKeepsRowsScannable() {
         XCTAssertEqual(
             Exercise.normalizedTrackingFields([.duration, .distance, .reps, .weight, .notes], for: .conditioning),

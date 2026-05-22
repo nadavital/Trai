@@ -449,8 +449,16 @@ struct AddCustomExerciseSheet: View {
     }
 
     private var secondaryMuscleGroups: [String]? {
+        guard selectedCategory == .strength else { return nil }
         let secondary = selectedMuscleTargets.dropFirst().map(\.rawValue)
-        return secondary.isEmpty ? analysisResult?.secondaryMuscles : Array(secondary)
+        if !secondary.isEmpty {
+            return Array(secondary)
+        }
+
+        let rawAnalyzed = analysisResult?.secondaryMuscles?
+            .compactMap(Self.normalizedMuscleGroupRawValue) ?? []
+        let analyzed = Self.dedupedNormalizedValues(rawAnalyzed)
+        return analyzed.isEmpty ? nil : analyzed
     }
 
     private var selectedMuscleTargets: [Exercise.MuscleGroup] {
@@ -525,7 +533,7 @@ struct AddCustomExerciseSheet: View {
         }
     }
 
-    private static func displayTargetTag(_ tag: String) -> String {
+    nonisolated private static func displayTargetTag(_ tag: String) -> String {
         tag
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "-", with: " ")
@@ -534,6 +542,39 @@ struct AddCustomExerciseSheet: View {
                 word.prefix(1).uppercased() + word.dropFirst()
             }
             .joined(separator: " ")
+    }
+
+    nonisolated private static func normalizedMuscleGroupRawValue(_ value: String) -> String? {
+        let normalized = Exercise.normalizedActivityKey(value)
+        return Exercise.MuscleGroup.allCases.first { muscle in
+            Exercise.normalizedActivityKey(muscle.rawValue) == normalized
+                || Exercise.normalizedActivityKey(displayName(for: muscle)) == normalized
+        }?.rawValue
+    }
+
+    nonisolated private static func displayName(for muscle: Exercise.MuscleGroup) -> String {
+        switch muscle {
+        case .chest: "Chest"
+        case .back: "Back"
+        case .shoulders: "Shoulders"
+        case .biceps: "Biceps"
+        case .triceps: "Triceps"
+        case .legs: "Legs"
+        case .core: "Core"
+        case .fullBody: "Full Body"
+        }
+    }
+
+    nonisolated private static func dedupedNormalizedValues(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = Exercise.normalizedActivityKey(trimmed)
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
     }
 }
 
@@ -549,6 +590,7 @@ private struct CategoryButton: View {
             label
                 .padding(.horizontal, 12)
                 .frame(height: 38)
+                .frame(maxWidth: 180)
                 .background(
                     isSelected ? Color.accentColor.opacity(0.18) : Color(.tertiarySystemFill),
                     in: Capsule()
@@ -565,6 +607,7 @@ private struct CategoryButton: View {
             Text(category.displayName)
                 .font(.traiLabel(12))
                 .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 }
@@ -583,6 +626,7 @@ private struct TargetButton: View {
             label
                 .padding(.horizontal, 12)
                 .frame(height: 36)
+                .frame(maxWidth: 190)
                 .background(
                     isSelected ? Color.accentColor.opacity(0.18) : Color(.tertiarySystemFill),
                     in: Capsule()
@@ -603,6 +647,7 @@ private struct TargetButton: View {
             Text(title)
                 .font(.traiLabel(11))
                 .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 }

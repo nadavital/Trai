@@ -405,7 +405,7 @@ struct ExerciseListView: View {
                                 HStack {
                                     Image(systemName: "camera.fill")
                                         .foregroundStyle(.accent)
-                                    Text("Identify Machine from Photo")
+                                    Text("Identify Exercise from Photo")
                                     Spacer()
                                     Image(systemName: "chevron.right")
                                         .font(.caption)
@@ -538,7 +538,7 @@ struct ExerciseListView: View {
                     photoAnalysisError = nil
                 }
             } message: {
-                Text(photoAnalysisError ?? "Unable to identify equipment. Try taking a clearer photo.")
+                Text(photoAnalysisError ?? "Unable to identify the exercise. Try taking a clearer photo.")
             }
             .sheet(isPresented: $showingEquipmentResult) {
                 if let analysis = equipmentAnalysis {
@@ -578,10 +578,10 @@ struct ExerciseListView: View {
                             ProgressView()
                                 .scaleEffect(1.5)
                                 .tint(.white)
-                            Text("Analyzing equipment...")
+                            Text("Analyzing exercise...")
                                 .font(.headline)
                                 .foregroundStyle(.white)
-                            Text("Identifying exercises for this machine")
+                            Text("Identifying tracking and setup details")
                                 .font(.caption)
                                 .foregroundStyle(.white.opacity(0.7))
                         }
@@ -653,7 +653,7 @@ struct ExerciseListView: View {
             HapticManager.error()
             pendingEquipmentResultPresentation = false
             equipmentResultPresentationTask?.cancel()
-            photoAnalysisError = "Couldn't identify the equipment. Make sure the machine is clearly visible and try again."
+            photoAnalysisError = "Couldn't identify the exercise. Make sure the movement, equipment, or label is clearly visible and try again."
         }
     }
 
@@ -843,6 +843,7 @@ struct ExerciseListView: View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let normalizedMuscleGroup = category == .strength ? muscleGroup : nil
+        let normalizedSecondaryMuscles = category == .strength ? secondaryMuscles : nil
 
         // Check if exercise already exists
         if let existing = exercises.first(where: { $0.name.lowercased() == trimmed.lowercased() }) {
@@ -852,8 +853,10 @@ struct ExerciseListView: View {
                let normalizedMuscleGroup {
                 existing.targetMuscleGroup = normalizedMuscleGroup
             }
-            if let secondary = secondaryMuscles, !secondary.isEmpty {
+            if let secondary = normalizedSecondaryMuscles, !secondary.isEmpty {
                 existing.secondaryMuscles = secondary.joined(separator: ",")
+            } else if existing.exerciseCategory != .strength {
+                existing.secondaryMuscles = nil
             }
             if !targetTags.isEmpty {
                 existing.targetTags = targetTags
@@ -885,7 +888,7 @@ struct ExerciseListView: View {
         exercise.activityAliases = activityAliases
         exercise.targetTags = targetTags.isEmpty ? Exercise.defaultTargetTags(for: category) : targetTags
         exercise.trackingFields = trackingFields ?? Exercise.defaultTrackingFields(for: category)
-        if let secondary = secondaryMuscles, !secondary.isEmpty {
+        if let secondary = normalizedSecondaryMuscles, !secondary.isEmpty {
             exercise.secondaryMuscles = secondary.joined(separator: ",")
         }
         modelContext.insert(exercise)
