@@ -704,8 +704,8 @@ enum AIFunctionDeclarations {
                                 ],
                                 "category": [
                                     "type": "string",
-                                    "description": "Stable behavior category for this item. Use strength for sets/reps/weight; cardio for timed or distance activities; conditioning, mobility, recovery, sportPractice, or custom when those better describe how the app should track it.",
-                                    "enum": ["strength", "cardio", "conditioning", "mobility", "recovery", "sportPractice", "custom"]
+                                    "description": "Stable tracking behavior primitive for this item. Use strength for sets/reps/weight; cardio for timed or distance activities; conditioning, mobility, flexibility, recovery, skill, sportPractice, or custom when those better describe how the app should track it. Keep the user-facing identity in activity_name and target_tags.",
+                                    "enum": ["strength", "cardio", "conditioning", "mobility", "skill", "sportPractice", "recovery", "flexibility", "custom"]
                                 ],
                                 "activity_name": [
                                     "type": "string",
@@ -855,8 +855,8 @@ enum AIFunctionDeclarations {
                                 "name": ["type": "string", "description": "Exercise name"],
                                 "category": [
                                     "type": "string",
-                                    "description": "Stable behavior category for tracking fields.",
-                                    "enum": ["strength", "cardio", "conditioning", "mobility", "recovery", "sportPractice", "custom"]
+                                    "description": "Stable tracking behavior primitive for tracking fields. Keep the user-facing identity in activity_name and target_tags.",
+                                    "enum": ["strength", "cardio", "conditioning", "mobility", "skill", "sportPractice", "recovery", "flexibility", "custom"]
                                 ],
                                 "activity_name": ["type": "string", "description": "User-facing activity identity for this item."],
                                 "target_tags": [

@@ -47,6 +47,13 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         )
     }
 
+    func testHiddenStablePrimitivesMapToVisibleTrackingStyles() {
+        XCTAssertEqual(Exercise.Category.skill.userFacingEquivalent, .sportPractice)
+        XCTAssertEqual(Exercise.Category.flexibility.userFacingEquivalent, .mobility)
+        XCTAssertTrue(Exercise.Category.sportPractice.suggestionCategories.contains(.skill))
+        XCTAssertTrue(Exercise.Category.mobility.suggestionCategories.contains(.flexibility))
+    }
+
     func testEnsureDefaultsSeedsBroadExerciseLibraryOnce() throws {
         let container = try ModelContainer(
             for: Exercise.self,

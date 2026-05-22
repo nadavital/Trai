@@ -131,6 +131,17 @@ extension Exercise {
             [.strength, .cardio, .conditioning, .mobility, .sportPractice, .recovery, .custom]
         }
 
+        var userFacingEquivalent: Category {
+            switch self {
+            case .skill:
+                return .sportPractice
+            case .flexibility:
+                return .mobility
+            default:
+                return self
+            }
+        }
+
         var suggestionCategories: Set<Category> {
             switch self {
             case .sportPractice, .skill:

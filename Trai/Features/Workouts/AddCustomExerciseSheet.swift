@@ -223,7 +223,7 @@ struct AddCustomExerciseSheet: View {
             ForEach(Exercise.Category.userFacingCases) { category in
                 CategoryButton(
                     category: category,
-                    isSelected: selectedCategory == category
+                    isSelected: category.suggestionCategories.contains(selectedCategory)
                 ) {
                     withAnimation(.snappy(duration: 0.2)) {
                         selectedCategory = category
@@ -283,9 +283,9 @@ struct AddCustomExerciseSheet: View {
     private var categoryDisclosure: some View {
         collapsibleManualSection(
             isExpanded: $isCategoryExpanded,
-            title: "Suggestion behavior",
+            title: "Tracking style",
             icon: "square.grid.2x2",
-            summary: selectedCategory.displayName
+            summary: selectedCategory.userFacingEquivalent.displayName
         ) {
             categoryPickerContent
         }

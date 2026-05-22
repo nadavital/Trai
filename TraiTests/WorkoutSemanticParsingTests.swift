@@ -174,4 +174,24 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         XCTAssertEqual(required, ["name"])
     }
+
+    func testWorkoutFunctionSchemasSupportAllStableActivityPrimitives() throws {
+        let expected = Set(["strength", "cardio", "conditioning", "mobility", "skill", "sportPractice", "recovery", "flexibility", "custom"])
+
+        let logWorkoutCategories = try exerciseCategoryEnum(in: AIFunctionDeclarations.logWorkout, exercisesKey: "exercises")
+        XCTAssertTrue(expected.isSubset(of: Set(logWorkoutCategories)))
+
+        let startLiveWorkoutCategories = try exerciseCategoryEnum(in: AIFunctionDeclarations.startLiveWorkout, exercisesKey: "suggested_exercises")
+        XCTAssertTrue(expected.isSubset(of: Set(startLiveWorkoutCategories)))
+    }
+
+    private func exerciseCategoryEnum(in schema: [String: Any], exercisesKey: String) throws -> [String] {
+        let parameters = try XCTUnwrap(schema["parameters"] as? [String: Any])
+        let properties = try XCTUnwrap(parameters["properties"] as? [String: Any])
+        let exercises = try XCTUnwrap(properties[exercisesKey] as? [String: Any])
+        let items = try XCTUnwrap(exercises["items"] as? [String: Any])
+        let itemProperties = try XCTUnwrap(items["properties"] as? [String: Any])
+        let category = try XCTUnwrap(itemProperties["category"] as? [String: Any])
+        return try XCTUnwrap(category["enum"] as? [String])
+    }
 }
