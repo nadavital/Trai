@@ -25,6 +25,7 @@ The key product change is replacing example-specific thinking with a broad model
 - [x] (2026-05-22 23:06Z) Tightened AI-facing workout plan and goal schemas so warmup/cooldown are placement roles, not activity kinds, and user-created exercises normalize hidden AI primitives to visible categories.
 - [x] (2026-05-22 23:19Z) Made planned non-strength plan blocks loggable in Live Workout while preserving planned duration separately from actual logged duration.
 - [x] (2026-05-22 23:24Z) Removed category-specific metric locks for non-strength custom exercises; users can now configure the same stable tracking primitives across cardio, conditioning, mobility, sport, recovery, and custom activities while calories stay hidden.
+- [x] (2026-05-22 23:28Z) Fixed the custom exercise save flow so saving a configured activity dismisses the sheet and lets the live-workout add flow create/select it.
 
 ## Surprises & Discoveries
 
@@ -80,6 +81,7 @@ Recent validation completed:
     mcp__xcodebuildmcp__.test_sim, scheme TraiTests, WorkoutSemanticParsingTests: 14 passed, 0 failed.
     mcp__xcodebuildmcp__.test_sim, scheme TraiTests, ExerciseLibrarySeederTests: 8 passed, 0 failed.
     mcp__xcodebuildmcp__.test_sim, scheme TraiTests, LiveWorkoutViewModelInvalidationTests: 20 passed, 0 failed.
+    mcp__xcodebuildmcp__.build_sim, scheme TraiTests, iPhone 16e simulator: succeeded with no warnings or errors after the custom exercise save-flow fix.
 
 Simulator walkthrough status: the Pro setup UI reached the mandatory chat-style personalization step, showed the revised "What are you training for?" screen without the old banner line, and advanced to generation after three answers. The test launch intentionally did not include `--ui-test-live-ai-backend`, so the backend rejected the debug session; the user-facing error mapping was fixed.
 
