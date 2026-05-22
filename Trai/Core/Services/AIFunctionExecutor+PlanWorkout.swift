@@ -161,8 +161,10 @@ extension AIFunctionExecutor {
             var exercises: [[String: Any]] = []
             var activities: [[String: Any]] = []
             for entry in sortedEntries {
-                let sets = entry.sets
-                if entry.isCardio || entry.isGeneralActivity || sets.isEmpty {
+                guard entry.hasExercisePreferenceSignal else { continue }
+
+                let completedSets = entry.completedSets ?? []
+                if !entry.isStrength {
                     let trimmedNotes = entry.notes.trimmingCharacters(in: .whitespacesAndNewlines)
                     activities.append([
                         "name": entry.exerciseName,
@@ -183,23 +185,26 @@ extension AIFunctionExecutor {
                                 ] as [String: Any]
                             },
                         "completed": entry.completedAt != nil,
+                        "logged": entry.isLoggedActivity,
                         "notes": trimmedNotes
                     ])
                     continue
                 }
 
+                guard !completedSets.isEmpty else { continue }
+
                 var exerciseData: [String: Any] = [
                     "name": entry.exerciseName,
                     "activity_type": entry.activityTypeName,
                     "activity_tags": entry.targetTags,
-                    "sets_count": sets.count,
+                    "sets_count": completedSets.count,
                     "total_reps": entry.totalReps,
-                    "best_weight_kg": sets.map(\.weightKg).max() ?? 0,
+                    "best_weight_kg": completedSets.map(\.weightKg).max() ?? 0,
                     "total_volume_kg": entry.totalVolume
                 ]
 
                 // Include set-by-set breakdown
-                exerciseData["sets_detail"] = sets.map { set -> [String: Any] in
+                exerciseData["sets_detail"] = completedSets.map { set -> [String: Any] in
                     [
                         "reps": set.reps,
                         "weight_kg": set.weightKg,

@@ -279,7 +279,18 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         ]
         entry.completedAt = Date()
         entry.workout = workout
-        workout.entries = [entry]
+
+        let plannedGuidance = LiveWorkoutEntry(
+            exerciseName: "Easy Spin",
+            orderIndex: 1,
+            exerciseType: "cardio"
+        )
+        plannedGuidance.activityTypeName = "Cycling"
+        plannedGuidance.targetTags = ["Recovery"]
+        plannedGuidance.sourcePlanBlockID = UUID()
+        plannedGuidance.workout = workout
+
+        workout.entries = [entry, plannedGuidance]
         context.insert(workout)
         try context.save()
 
@@ -303,9 +314,56 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(payload["activity_count"] as? Int, 1)
         XCTAssertEqual(activity["activity_type"] as? String, "Bouldering")
         XCTAssertEqual(activity["activity_tags"] as? [String], ["Climbing", "Grip endurance"])
+        XCTAssertEqual(activity["logged"] as? Bool, true)
         XCTAssertEqual(segment["duration_minutes"] as? Int, 20)
         XCTAssertEqual(segment["reps"] as? Int, 8)
         XCTAssertEqual(segment["notes"] as? String, "Limit attempts")
+    }
+
+    func testRecentWorkoutsExcludeUnloggedPlannedItemsAndIncompleteSets() async throws {
+        let context = try makeWorkoutHistoryContext()
+        let workout = LiveWorkout(name: "Strength + Support", workoutType: .mixed)
+        workout.startedAt = Date().addingTimeInterval(-3_600)
+        workout.completedAt = Date()
+
+        let strengthEntry = LiveWorkoutEntry(exerciseName: "Back Squat", orderIndex: 0)
+        strengthEntry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: .zero, completed: true))
+        strengthEntry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: .zero, completed: false))
+        strengthEntry.workout = workout
+
+        let plannedGuidance = LiveWorkoutEntry(
+            exerciseName: "Mobility Cooldown",
+            orderIndex: 1,
+            exerciseType: "mobility"
+        )
+        plannedGuidance.activityTypeName = "Mobility"
+        plannedGuidance.sourcePlanBlockID = UUID()
+        plannedGuidance.workout = workout
+
+        workout.entries = [strengthEntry, plannedGuidance]
+        context.insert(workout)
+        try context.save()
+
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(name: "get_recent_workouts", arguments: ["limit": 5])
+        )
+
+        guard case .dataResponse(let functionResult) = result,
+              let workouts = functionResult.response["workouts"] as? [[String: Any]],
+              let payload = workouts.first(where: { $0["id"] as? String == workout.id.uuidString }),
+              let exercises = payload["exercises"] as? [[String: Any]],
+              let exercise = exercises.first,
+              let setDetails = exercise["sets_detail"] as? [[String: Any]] else {
+            return XCTFail("Expected recent workout payload with one completed strength set")
+        }
+
+        XCTAssertNil(payload["activities"])
+        XCTAssertEqual(payload["summary_segments"] as? [String], ["1 exercise", "1 set", "60 min"])
+        XCTAssertEqual(payload["exercise_count"] as? Int, 1)
+        XCTAssertEqual(payload["activity_count"] as? Int, 0)
+        XCTAssertEqual(exercise["sets_count"] as? Int, 1)
+        XCTAssertEqual(setDetails.count, 1)
+        XCTAssertEqual(setDetails.first?["reps"] as? Int, 8)
     }
 
     func testRecentWorkoutsExposeManualSessionSemanticTags() async throws {
