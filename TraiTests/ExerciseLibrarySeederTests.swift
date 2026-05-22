@@ -103,6 +103,20 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertEqual(liveEntry.trackingFields, [.duration, .reps, .notes])
     }
 
+    func testRepCountActivitySessionDoesNotBecomeStrength() {
+        let exercise = Exercise(name: "Limit Bouldering", category: .sportPractice)
+        exercise.activityTypeName = "Climbing"
+        exercise.targetTags = ["Power", "Technique"]
+
+        let session = WorkoutSession(exercise: exercise, sets: 0, reps: 8, weightKg: nil)
+        session.durationMinutes = 45
+
+        XCTAssertFalse(session.isStrengthTraining)
+        XCTAssertEqual(session.displayTypeName, "Climbing")
+        XCTAssertEqual(session.inferredWorkoutMode, .climbing)
+        XCTAssertNil(session.totalVolume)
+    }
+
     func testEnsureDefaultsSeedsBroadExerciseLibraryOnce() throws {
         let container = try ModelContainer(
             for: Exercise.self,

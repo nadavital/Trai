@@ -170,7 +170,10 @@ extension WorkoutSession {
 
     /// Check if this is a strength training session
     var isStrengthTraining: Bool {
-        exercise?.category == "strength" || (sets > 0 && reps > 0)
+        if let exercise {
+            return exercise.exerciseCategory == .strength
+        }
+        return healthKitWorkoutType == nil && sets > 0 && reps > 0
     }
 
     /// Check if this is a cardio session
