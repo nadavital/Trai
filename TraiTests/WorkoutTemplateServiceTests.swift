@@ -175,8 +175,9 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(entries.last?.exerciseType, "activity")
         XCTAssertEqual(entries.last?.activityKind, .cardio)
         XCTAssertEqual(entries.last?.activityRole, .finisher)
-        XCTAssertEqual(entries.last?.durationSeconds, 600)
+        XCTAssertNil(entries.last?.durationSeconds)
         XCTAssertEqual(entries.last?.plannedDurationSeconds, 600)
+        XCTAssertEqual(entries.last?.isPlannedActivityGuidance, true)
         XCTAssertEqual(entries.last?.plannedIntensity, "Easy")
         XCTAssertEqual(entries.last?.plannedTarget, "Conversational pace")
         XCTAssertEqual(entries.last?.notes, "")
@@ -232,7 +233,9 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(entries.last?.exerciseType, "activity")
         XCTAssertEqual(entries.last?.activityKind, .conditioning)
         XCTAssertEqual(entries.last?.activityRole, .accessory)
-        XCTAssertEqual(entries.last?.durationSeconds, 480)
+        XCTAssertNil(entries.last?.durationSeconds)
+        XCTAssertEqual(entries.last?.plannedDurationSeconds, 480)
+        XCTAssertEqual(entries.last?.isPlannedActivityGuidance, true)
         XCTAssertEqual(entries.last?.notes, "")
     }
 
@@ -275,7 +278,9 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         let entries = try XCTUnwrap(workout.entries)
         XCTAssertEqual(entries.map(\.exerciseName), ["Bike Ride", "Cooldown"])
         XCTAssertEqual(entries.map(\.exerciseType), ["cardio", "flexibility"])
-        XCTAssertEqual(entries.map(\.durationSeconds), [2100, 300])
+        XCTAssertEqual(entries.map(\.durationSeconds), [nil, nil])
+        XCTAssertEqual(entries.map(\.plannedDurationSeconds), [2100, 300])
+        XCTAssertEqual(entries.map(\.isPlannedActivityGuidance), [true, true])
     }
 
     func testCreateWorkoutFromTemplatePreservesGeneratedActivityIdentityAndTags() throws {
@@ -319,6 +324,9 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(entry.activityTypeName, "Bouldering")
         XCTAssertEqual(entry.targetTags, ["Bouldering", "Climbing", "Grip endurance"])
         XCTAssertEqual(entry.plannedDurationSeconds, 2100)
+        XCTAssertNil(entry.durationSeconds)
+        XCTAssertTrue(entry.isPlannedActivityGuidance)
+        XCTAssertFalse(entry.hasExercisePreferenceSignal)
         XCTAssertEqual(entry.plannedIntensity, "Hard")
         XCTAssertEqual(entry.plannedTarget, "Power and precision")
     }

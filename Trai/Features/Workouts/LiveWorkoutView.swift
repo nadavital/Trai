@@ -396,8 +396,6 @@ struct LiveWorkoutView: View {
         ZStack(alignment: .bottom) {
             ScrollView(showsIndicators: false) {
                 let entries = viewModel.entries
-                let loggedEntries = entries.filter { !$0.isPlannedActivityGuidance }
-                let plannedGuidanceEntries = entries.filter(\.isPlannedActivityGuidance)
                 let upNext = viewModel.upNextSuggestion
                 let availableSuggestions = viewModel.availableSuggestions
                 let suggestionsByMuscle = viewModel.suggestionsByMuscle
@@ -457,8 +455,8 @@ struct LiveWorkoutView: View {
 
                     }
 
-                    // Logged workout items stay first so strength work is always the main surface.
-                    ForEach(loggedEntries, id: \.id) { entry in
+                    // Planned and ad hoc workout items share the same logging surface.
+                    ForEach(entries, id: \.id) { entry in
                         if entry.isGeneralActivity {
                             CardioExerciseCard(
                                 entry: entry,
@@ -603,32 +601,13 @@ struct LiveWorkoutView: View {
                         }
                     }
 
-                    if loggedEntries.isEmpty && upNext == nil && availableSuggestions.isEmpty {
+                    if entries.isEmpty && upNext == nil && availableSuggestions.isEmpty {
                         ContentUnavailableView(
                             "No Exercises Yet",
                             systemImage: "dumbbell.fill",
                             description: Text("Add what you want to track in this session.")
                         )
                         .padding(.top, 4)
-                    }
-
-                    if !plannedGuidanceEntries.isEmpty {
-                        VStack(spacing: 8) {
-                            ForEach(plannedGuidanceEntries, id: \.id) { entry in
-                                GeneralActivityCard(
-                                    entry: entry,
-                                    allowsCompletionToggle: false,
-                                    allowsDeletion: false,
-                                    showsEditableFields: false,
-                                    isPlannedGuidance: true,
-                                    onUpdateNotes: { _ in },
-                                    onUpdateDuration: { _ in },
-                                    onToggleComplete: {},
-                                    onDelete: {}
-                                )
-                            }
-                        }
-                        .padding(.top, 2)
                     }
 
                     // Bottom padding for the bar

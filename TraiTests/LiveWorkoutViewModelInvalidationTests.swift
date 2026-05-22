@@ -148,6 +148,36 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertTrue(ExerciseHistory.records(from: workout).isEmpty)
     }
 
+    func testPlannedActivityCountsAfterUserLogsData() {
+        let workout = LiveWorkout(name: "Strength + Mobility", workoutType: .mixed)
+        workout.completedAt = Date()
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Shoulder Mobility",
+            orderIndex: 0,
+            exerciseType: "mobility"
+        )
+        entry.activityTypeName = "Mobility Flow"
+        entry.sourcePlanBlockID = UUID()
+        entry.plannedDurationSeconds = 300
+        entry.trackingFields = [.duration, .notes]
+        entry.workout = workout
+        workout.entries = [entry]
+
+        XCTAssertTrue(entry.isPlannedActivityGuidance)
+        XCTAssertFalse(entry.hasExercisePreferenceSignal)
+        XCTAssertFalse(entry.isLoggedActivity)
+
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 300, notes: "Shoulder prep")
+        ]
+
+        XCTAssertFalse(entry.isPlannedActivityGuidance)
+        XCTAssertTrue(entry.hasExercisePreferenceSignal)
+        XCTAssertTrue(entry.isLoggedActivity)
+        XCTAssertEqual(workout.entrySummaryStats.activityEntryCount, 1)
+        XCTAssertEqual(ExerciseHistory.records(from: workout).count, 1)
+    }
+
     func testMixedWorkoutHistorySummarySeparatesExercisesAndActivities() {
         let workout = LiveWorkout(name: "Strength + Climb", workoutType: .mixed)
         workout.startedAt = Date(timeIntervalSince1970: 1_000)

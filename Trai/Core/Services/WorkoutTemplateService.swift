@@ -164,7 +164,6 @@ struct WorkoutTemplateService {
                 )
                 if let durationMinutes = block.durationMinutes, durationMinutes > 0 {
                     let seconds = durationMinutes * 60
-                    entry.durationSeconds = seconds
                     entry.plannedDurationSeconds = seconds
                 }
                 entry.activityKind = block.kind

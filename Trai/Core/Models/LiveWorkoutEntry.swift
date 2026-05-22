@@ -107,28 +107,29 @@ final class LiveWorkoutEntry {
         !isStrength && !isCardio
     }
 
-    /// Passive plan guidance shown in live workouts, not a user-added logged item.
+    /// Passive plan guidance shown in live workouts before the user logs any real data.
     var isPlannedActivityGuidance: Bool {
-        isGeneralActivity && sourcePlanBlockID != nil
+        !isStrength && sourcePlanBlockID != nil && !hasActivityLogData
     }
 
     var hasExercisePreferenceSignal: Bool {
         if isStrength {
             return completedSets?.isEmpty == false
         }
-        if isPlannedActivityGuidance {
-            return false
-        }
-        return completedAt != nil
-            || trackedDurationSeconds > 0
-            || trackedDistanceMeters > 0
-            || activitySegments.contains { $0.hasLoggedData }
-            || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return hasActivityLogData
     }
 
     var isLoggedActivity: Bool {
         guard !isStrength else { return false }
-        return completedAt != nil || (!isPlannedActivityGuidance && hasExercisePreferenceSignal)
+        return hasActivityLogData
+    }
+
+    private var hasActivityLogData: Bool {
+        completedAt != nil
+            || trackedDurationSeconds > 0
+            || trackedDistanceMeters > 0
+            || activitySegments.contains { $0.hasLoggedData }
+            || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var trackingFields: [Exercise.TrackingField] {
