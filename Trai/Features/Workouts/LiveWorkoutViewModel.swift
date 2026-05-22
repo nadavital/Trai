@@ -2114,9 +2114,33 @@ final class LiveWorkoutViewModel {
             ?? entries.last(where: \.isStrength)
     }
 
+    private func liveActivityProgress() -> (completed: Int, total: Int, label: String, supportsSetShortcut: Bool) {
+        let supportsSetShortcut = entries.contains(where: \.isStrength)
+        let usesItemProgress = entries.contains { $0.isCardio || $0.isGeneralActivity }
+
+        if usesItemProgress {
+            let totalItems = entries.count
+            let loggedItems = entries.filter { isEntryStartedForLiveActivity($0) }.count
+            return (
+                completed: loggedItems,
+                total: totalItems,
+                label: totalItems == 1 ? "item" : "items",
+                supportsSetShortcut: supportsSetShortcut
+            )
+        }
+
+        return (
+            completed: completedSets,
+            total: totalSets,
+            label: totalSets == 1 ? "set" : "sets",
+            supportsSetShortcut: supportsSetShortcut
+        )
+    }
+
     private func updateLiveActivity() {
         // Track progression from logged data (or cardio completion), not the legacy set.completed flag.
         let currentEntry = liveActivityCurrentEntry()
+        let progress = liveActivityProgress()
 
         let currentExercise = currentEntry?.exerciseName
         let currentEquipment = currentEntry?.equipmentName
@@ -2153,7 +2177,11 @@ final class LiveWorkoutViewModel {
             totalVolumeKg: totalVolumeKg,
             totalVolumeLbs: totalVolumeLbs,
             nextExercise: nextExercise,
-            usesMetricWeight: usesMetricWeightPreference
+            usesMetricWeight: usesMetricWeightPreference,
+            progressCompleted: progress.completed,
+            progressTotal: progress.total,
+            progressLabel: progress.label,
+            supportsSetShortcut: progress.supportsSetShortcut
         )
     }
 }

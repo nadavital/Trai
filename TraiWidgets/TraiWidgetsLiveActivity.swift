@@ -168,7 +168,7 @@ private struct LockScreenWorkoutView: View {
 
                 Spacer(minLength: 8)
 
-                Text("\(context.state.completedSets)/\(context.state.totalSets)")
+                Text(context.state.progressCountDisplay)
                     .font(.system(.headline, design: .rounded, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(LiveActivityTheme.accent)
@@ -243,7 +243,7 @@ private struct LockScreenWorkoutView: View {
             }
             .frame(height: 5)
 
-            Text("\(context.state.completedSets)/\(context.state.totalSets)")
+            Text(context.state.progressCountDisplay)
                 .font(.caption2)
                 .monospacedDigit()
                 .foregroundStyle(LiveActivityTheme.textSecondary)
@@ -338,12 +338,12 @@ private struct LockScreenWorkoutView: View {
                             .frame(width: isMediumFamily ? 36 : 44, height: isMediumFamily ? 36 : 44)
                             .rotationEffect(.degrees(-90))
 
-                        Text("\(context.state.completedSets)")
+                        Text("\(context.state.progressCompletedValue)")
                             .font(.system(isMediumFamily ? .caption2 : .caption, design: .rounded, weight: .bold))
                             .monospacedDigit()
                     }
 
-                    Text("\(context.state.completedSets)/\(context.state.totalSets)")
+                    Text(context.state.progressCountDisplay)
                         .font(.caption2)
                         .monospacedDigit()
                         .foregroundStyle(LiveActivityTheme.textSecondary)
@@ -382,13 +382,15 @@ private struct LockScreenWorkoutView: View {
             // Action buttons
             if !isSupplementalFamily {
                 HStack(spacing: 12) {
-                    Button(intent: AddSetIntent()) {
-                        Label("Add Set", systemImage: "plus.circle.fill")
-                            .font(.caption)
-                            .frame(maxWidth: .infinity)
+                    if context.state.canUseSetShortcut {
+                        Button(intent: AddSetIntent()) {
+                            Label("Add Set", systemImage: "plus.circle.fill")
+                                .font(.caption)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(LiveActivityTheme.accent)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(LiveActivityTheme.accent)
 
                     Button(intent: TogglePauseIntent()) {
                         Label(
@@ -465,7 +467,7 @@ private struct ExpandedTrailingView: View {
                     .foregroundStyle(LiveActivityTheme.accent)
             }
 
-            Text(context.state.setsDisplay)
+            Text(context.state.progressDisplay)
                 .font(.caption)
                 .foregroundStyle(LiveActivityTheme.textSecondary)
         }
@@ -552,7 +554,7 @@ private struct CompactTrailingView: View {
     let context: ActivityViewContext<TraiWorkoutAttributes>
 
     var body: some View {
-        Text("\(context.state.completedSets)/\(context.state.totalSets)")
+        Text(context.state.progressCountDisplay)
             .font(.system(.caption, design: .rounded, weight: .semibold))
             .foregroundStyle(LiveActivityTheme.accent)
     }

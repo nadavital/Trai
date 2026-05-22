@@ -28,6 +28,10 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         let totalVolumeLbs: Double?
         let nextExercise: String?
         let usesMetricWeight: Bool
+        let progressCompleted: Int?
+        let progressTotal: Int?
+        let progressLabel: String?
+        let supportsSetShortcut: Bool?
 
         init(
             elapsedSeconds: Int,
@@ -43,7 +47,11 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             totalVolumeKg: Double? = nil,
             totalVolumeLbs: Double? = nil,
             nextExercise: String? = nil,
-            usesMetricWeight: Bool = true
+            usesMetricWeight: Bool = true,
+            progressCompleted: Int? = nil,
+            progressTotal: Int? = nil,
+            progressLabel: String? = nil,
+            supportsSetShortcut: Bool = true
         ) {
             self.elapsedSeconds = elapsedSeconds
             self.currentExercise = currentExercise
@@ -59,6 +67,10 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             self.totalVolumeLbs = totalVolumeLbs
             self.nextExercise = nextExercise
             self.usesMetricWeight = usesMetricWeight
+            self.progressCompleted = progressCompleted
+            self.progressTotal = progressTotal
+            self.progressLabel = progressLabel
+            self.supportsSetShortcut = supportsSetShortcut
         }
 
         var formattedTime: String {
@@ -73,12 +85,37 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         }
 
         var progress: Double {
-            guard totalSets > 0 else { return 0 }
-            return Double(completedSets) / Double(totalSets)
+            guard progressTotalValue > 0 else { return 0 }
+            return Double(progressCompletedValue) / Double(progressTotalValue)
         }
 
         var setsDisplay: String {
-            "\(completedSets)/\(totalSets) sets"
+            progressDisplay
+        }
+
+        var progressCompletedValue: Int {
+            progressCompleted ?? completedSets
+        }
+
+        var progressTotalValue: Int {
+            progressTotal ?? totalSets
+        }
+
+        var progressCountDisplay: String {
+            guard progressTotalValue > 0 else { return "Live" }
+            return "\(progressCompletedValue)/\(progressTotalValue)"
+        }
+
+        var progressDisplay: String {
+            let total = progressTotalValue
+            guard total > 0 else { return "Live workout" }
+            let baseLabel = progressLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let label = (baseLabel?.isEmpty == false ? baseLabel : "sets") ?? "sets"
+            return "\(progressCompletedValue)/\(total) \(label)"
+        }
+
+        var canUseSetShortcut: Bool {
+            supportsSetShortcut ?? true
         }
 
         var volumeDisplay: String? {

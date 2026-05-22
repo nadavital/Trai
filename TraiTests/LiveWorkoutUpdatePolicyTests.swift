@@ -1,7 +1,59 @@
 import XCTest
 @testable import Trai
 
+@MainActor
 final class LiveWorkoutUpdatePolicyTests: XCTestCase {
+    func testLiveActivityStateUsesDisplayProgressForMixedWorkouts() {
+        let state = TraiWorkoutAttributes.ContentState(
+            elapsedSeconds: 120,
+            completedSets: 4,
+            totalSets: 12,
+            heartRate: nil,
+            isPaused: false,
+            progressCompleted: 2,
+            progressTotal: 3,
+            progressLabel: "items",
+            supportsSetShortcut: false
+        )
+
+        XCTAssertEqual(state.progressCompletedValue, 2)
+        XCTAssertEqual(state.progressTotalValue, 3)
+        XCTAssertEqual(state.progressCountDisplay, "2/3")
+        XCTAssertEqual(state.progressDisplay, "2/3 items")
+        XCTAssertEqual(state.setsDisplay, "2/3 items")
+        XCTAssertEqual(state.progress, 2.0 / 3.0, accuracy: 0.001)
+        XCTAssertFalse(state.canUseSetShortcut)
+    }
+
+    func testLiveActivityStateDecodesLegacySetOnlyPayloads() throws {
+        let json = """
+        {
+          "elapsedSeconds": 90,
+          "currentExercise": "Bench Press",
+          "currentEquipment": null,
+          "completedSets": 2,
+          "totalSets": 5,
+          "heartRate": null,
+          "isPaused": false,
+          "currentWeightKg": null,
+          "currentWeightLbs": null,
+          "currentReps": null,
+          "totalVolumeKg": null,
+          "totalVolumeLbs": null,
+          "nextExercise": null,
+          "usesMetricWeight": true
+        }
+        """
+        let data = try XCTUnwrap(json.data(using: .utf8))
+
+        let state = try JSONDecoder().decode(TraiWorkoutAttributes.ContentState.self, from: data)
+
+        XCTAssertEqual(state.progressCompletedValue, 2)
+        XCTAssertEqual(state.progressTotalValue, 5)
+        XCTAssertEqual(state.progressDisplay, "2/5 sets")
+        XCTAssertTrue(state.canUseSetShortcut)
+    }
+
     func testLiveActivityIntentPollingBacksOffWhenAppForegrounded() {
         let policy = LiveWorkoutUpdatePolicy(
             foregroundIntentPollInterval: 2.0,
