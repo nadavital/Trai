@@ -33,6 +33,47 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(WorkoutMode.normalized(from: "stretching"), .flexibility)
     }
 
+    func testSuggestedWorkoutLogSummaryPreservesActivityItems() {
+        let log = SuggestedWorkoutLog(
+            name: "Climb + Conditioning",
+            workoutType: "mixed",
+            durationMinutes: 55,
+            exercises: [
+                SuggestedWorkoutLog.LoggedExercise(
+                    name: "Back Squat",
+                    category: "strength",
+                    sets: [
+                        .init(reps: 5, weightKg: 100),
+                        .init(reps: 5, weightKg: 100)
+                    ]
+                ),
+                SuggestedWorkoutLog.LoggedExercise(
+                    name: "Limit Bouldering",
+                    category: "skill",
+                    activityTypeName: "Bouldering",
+                    targetTags: ["Climbing", "Power"],
+                    trackingFields: ["duration", "reps", "notes"],
+                    durationMinutes: 30,
+                    notes: "Hard attempts",
+                    segments: [
+                        .init(durationMinutes: 10, reps: 4, notes: "V4 attempts")
+                    ],
+                    sets: []
+                )
+            ],
+            notes: nil
+        )
+
+        XCTAssertEqual(log.strengthExerciseCount, 1)
+        XCTAssertEqual(log.activityCount, 1)
+        XCTAssertEqual(log.totalSets, 2)
+        XCTAssertEqual(log.summary, "1 exercise • 1 activity • 2 sets • 55 min")
+        XCTAssertEqual(
+            log.exercises[1].activitySummarySegments,
+            ["30 min", "1 segment", "Hard attempts"]
+        )
+    }
+
     func testTargetMuscleParsingHandlesDisplayNames() {
         XCTAssertEqual(LiveWorkout.MuscleGroup.fromTargetStrings(["Full Body"]), [.fullBody])
         XCTAssertEqual(
@@ -226,6 +267,9 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         }
 
         XCTAssertEqual(payload["focus_areas"] as? [String], ["Bouldering", "Climbing", "Grip endurance"])
+        XCTAssertEqual(payload["summary_segments"] as? [String], ["1 activity", "1 logged", "60 min"])
+        XCTAssertEqual(payload["exercise_count"] as? Int, 0)
+        XCTAssertEqual(payload["activity_count"] as? Int, 1)
         XCTAssertEqual(activity["activity_type"] as? String, "Bouldering")
         XCTAssertEqual(activity["activity_tags"] as? [String], ["Climbing", "Grip endurance"])
         XCTAssertEqual(segment["duration_minutes"] as? Int, 20)

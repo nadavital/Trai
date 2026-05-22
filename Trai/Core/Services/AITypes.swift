@@ -734,6 +734,14 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
         /// Total sets count
         var setCount: Int { sets.count }
 
+        var isStrengthLog: Bool {
+            !sets.isEmpty
+        }
+
+        var isActivityLog: Bool {
+            sets.isEmpty
+        }
+
         /// Summary string for display (e.g., "3×10" or "12, 10, 8")
         var setsSummary: String {
             guard !sets.isEmpty else { return "" }
@@ -760,6 +768,33 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
                 return "\(Int(weight)) kg"
             }
         }
+
+        var activitySummarySegments: [String] {
+            var parts: [String] = []
+
+            if let durationMinutes, durationMinutes > 0 {
+                parts.append("\(durationMinutes) min")
+            }
+
+            if let distanceMeters, distanceMeters > 0 {
+                if distanceMeters >= 1000 {
+                    parts.append(String(format: "%.1f km", distanceMeters / 1000))
+                } else {
+                    parts.append("\(Int(distanceMeters.rounded())) m")
+                }
+            }
+
+            if let segments, !segments.isEmpty {
+                parts.append("\(segments.count) \(segments.count == 1 ? "segment" : "segments")")
+            }
+
+            let trimmedNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmedNotes.isEmpty {
+                parts.append(trimmedNotes)
+            }
+
+            return parts
+        }
     }
 
     /// Display name for the workout (uses Trai-generated name or falls back to type)
@@ -775,11 +810,24 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
         exercises.reduce(0) { $0 + $1.setCount }
     }
 
+    var strengthExerciseCount: Int {
+        exercises.filter(\.isStrengthLog).count
+    }
+
+    var activityCount: Int {
+        exercises.filter(\.isActivityLog).count
+    }
+
     /// Summary for display
     var summary: String {
         var parts: [String] = []
-        if !exercises.isEmpty {
-            parts.append("\(exercises.count) exercise\(exercises.count == 1 ? "" : "s")")
+        if strengthExerciseCount > 0 {
+            parts.append("\(strengthExerciseCount) exercise\(strengthExerciseCount == 1 ? "" : "s")")
+        }
+        if activityCount > 0 {
+            parts.append("\(activityCount) activit\(activityCount == 1 ? "y" : "ies")")
+        }
+        if totalSets > 0 {
             parts.append("\(totalSets) sets")
         }
         if let duration = durationMinutes, duration > 0 {
