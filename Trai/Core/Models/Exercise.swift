@@ -299,15 +299,7 @@ extension Exercise {
         switch category {
         case .strength:
             return [.sets, .reps, .weight, .notes]
-        case .cardio:
-            return [.duration, .distance, .notes]
-        case .conditioning:
-            return [.duration, .distance, .reps, .weight, .notes]
-        case .mobility, .flexibility, .recovery:
-            return [.duration, .reps, .notes]
-        case .skill, .sportPractice:
-            return [.duration, .distance, .reps, .notes]
-        case .custom:
+        case .cardio, .conditioning, .mobility, .flexibility, .skill, .sportPractice, .recovery, .custom:
             return TrackingField.userConfigurableCases
         }
     }

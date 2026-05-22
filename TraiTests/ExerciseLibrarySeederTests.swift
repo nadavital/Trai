@@ -71,11 +71,30 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         )
         XCTAssertEqual(
             Exercise.normalizedTrackingFields([.duration, .reps, .weight], for: .cardio),
-            [.duration]
+            [.duration, .reps, .weight]
         )
         XCTAssertEqual(
             Exercise.normalizedTrackingFields([.sets, .weight, .reps, .duration, .notes], for: .strength),
             [.sets, .weight, .reps, .notes]
+        )
+    }
+
+    func testNonStrengthTrackingFieldsAreUserConfigurableAcrossCategories() {
+        XCTAssertEqual(
+            Exercise.trackingFieldOptions(for: .cardio),
+            [.sets, .reps, .weight, .duration, .distance, .notes]
+        )
+        XCTAssertEqual(
+            Exercise.trackingFieldOptions(for: .sportPractice),
+            [.sets, .reps, .weight, .duration, .distance, .notes]
+        )
+        XCTAssertEqual(
+            Exercise.trackingFieldOptions(for: .mobility),
+            [.sets, .reps, .weight, .duration, .distance, .notes]
+        )
+        XCTAssertEqual(
+            Exercise.normalizedTrackingFields([.duration, .distance, .weight, .notes], for: .sportPractice),
+            [.duration, .distance, .weight, .notes]
         )
     }
 

@@ -23,6 +23,8 @@ The key product change is replacing example-specific thinking with a broad model
 - [x] (2026-05-21 06:36Z) Milestone 6: Verified with a simulator build, focused tests, and a Pro setup walkthrough through generation start. The walkthrough exposed an auth/session error path, which is now mapped to the sign-in-required message instead of leaking `Session not found`.
 - [x] (2026-05-22 23:00Z) Tightened saved/manual workout surfaces so non-strength activity sessions use activity metric labels such as segments, attempts, or rounds instead of leaking strength-only sets/reps wording.
 - [x] (2026-05-22 23:06Z) Tightened AI-facing workout plan and goal schemas so warmup/cooldown are placement roles, not activity kinds, and user-created exercises normalize hidden AI primitives to visible categories.
+- [x] (2026-05-22 23:19Z) Made planned non-strength plan blocks loggable in Live Workout while preserving planned duration separately from actual logged duration.
+- [x] (2026-05-22 23:24Z) Removed category-specific metric locks for non-strength custom exercises; users can now configure the same stable tracking primitives across cardio, conditioning, mobility, sport, recovery, and custom activities while calories stay hidden.
 
 ## Surprises & Discoveries
 
@@ -62,14 +64,22 @@ The key product change is replacing example-specific thinking with a broad model
   Rationale: A goal about an accessory block is achieved by completing that block, not merely by completing the parent workout.
   Date/Author: 2026-05-21 / Codex
 
+- Decision: Keep stable internal activity primitives, but do not use them to hard-limit non-strength tracking metrics.
+  Rationale: Categories help defaults, icons, suggestions, AI schema stability, and semantic matching. They should not prevent a user from creating something like rowing intervals, climbing attempts, weighted carries, laps, or any other activity that combines duration, distance, count, weight, segments, and notes.
+  Date/Author: 2026-05-22 / Codex
+
 ## Outcomes & Retrospective
 
 Implemented the generalized activity model and connected it through plan generation, template-to-live-workout conversion, live activity logging, summaries, Trai review context, AI goal creation, manual goal editing, and goal progress. New generation and defaults use broad activity kinds plus roles; `cardioFinisher` is not retained as a product or compatibility primitive for this unshipped branch.
 
-Validation completed:
+Recent validation completed:
 
     mcp__xcodebuildmcp__.build_sim, scheme Trai, iPhone 16e simulator: succeeded with no warnings or errors.
     mcp__xcodebuildmcp__.test_sim, scheme TraiTests, focused suites WorkoutPlanGenerationRequestTests, WorkoutTemplateServiceTests, LiveWorkoutViewModelInvalidationTests: 31 passed, 0 failed.
+    mcp__xcodebuildmcp__.test_sim, scheme TraiTests, focused suites WorkoutTemplateServiceTests and LiveWorkoutViewModelInvalidationTests: 35 passed, 0 failed.
+    mcp__xcodebuildmcp__.test_sim, scheme TraiTests, WorkoutSemanticParsingTests: 14 passed, 0 failed.
+    mcp__xcodebuildmcp__.test_sim, scheme TraiTests, ExerciseLibrarySeederTests: 8 passed, 0 failed.
+    mcp__xcodebuildmcp__.test_sim, scheme TraiTests, LiveWorkoutViewModelInvalidationTests: 20 passed, 0 failed.
 
 Simulator walkthrough status: the Pro setup UI reached the mandatory chat-style personalization step, showed the revised "What are you training for?" screen without the old banner line, and advanced to generation after three answers. The test launch intentionally did not include `--ui-test-live-ai-backend`, so the backend rejected the debug session; the user-facing error mapping was fixed.
 

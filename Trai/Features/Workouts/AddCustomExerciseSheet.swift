@@ -520,8 +520,13 @@ struct AddCustomExerciseSheet: View {
     }
 
     private func trackingFieldTitle(_ field: Exercise.TrackingField) -> String {
+        if field == .sets, selectedCategory != .strength {
+            return "Segments"
+        }
         guard field == .reps else { return field.displayName }
         switch selectedCategory {
+        case .cardio, .mobility, .flexibility, .recovery:
+            return "Count"
         case .conditioning:
             return "Rounds"
         case .skill, .sportPractice:
