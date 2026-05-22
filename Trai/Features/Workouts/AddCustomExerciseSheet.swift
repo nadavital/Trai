@@ -413,7 +413,7 @@ struct AddCustomExerciseSheet: View {
 
             withAnimation(.snappy(duration: 0.2)) {
                 if let category = Exercise.Category.normalized(from: analysis.category) {
-                    selectedCategory = category
+                    selectedCategory = category.userFacingEquivalent
                     resetDefaultsForSelectedCategory()
                 }
 

@@ -545,7 +545,8 @@ struct ExerciseListView: View {
                     EquipmentAnalysisSheet(
                         analysis: analysis,
                         onSelectExercise: { suggestion, equipmentName in
-                            let category = Exercise.Category.normalized(from: suggestion.category) ?? .strength
+                            let category = (Exercise.Category.normalized(from: suggestion.category) ?? .strength)
+                                .userFacingEquivalent
                             let trackingFields = suggestion.trackingFields?
                                 .compactMap(Exercise.TrackingField.init(rawValue:))
                                 .filter { $0 != .calories }
@@ -800,12 +801,13 @@ struct ExerciseListView: View {
         targetTags: [String],
         trackingFields: [Exercise.TrackingField]
     ) {
+        let resolvedCategory = category.userFacingEquivalent
         let request = PendingCustomExerciseCreation(
             name: name,
             activityTypeName: activityTypeName,
             activityAliases: activityAliases,
             muscleGroup: muscleGroup,
-            category: category,
+            category: resolvedCategory,
             secondaryMuscles: secondaryMuscles,
             targetTags: targetTags,
             trackingFields: trackingFields
@@ -842,8 +844,9 @@ struct ExerciseListView: View {
     ) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let normalizedMuscleGroup = category == .strength ? muscleGroup : nil
-        let normalizedSecondaryMuscles = category == .strength ? secondaryMuscles : nil
+        let resolvedCategory = category.userFacingEquivalent
+        let normalizedMuscleGroup = resolvedCategory == .strength ? muscleGroup : nil
+        let normalizedSecondaryMuscles = resolvedCategory == .strength ? secondaryMuscles : nil
 
         // Check if exercise already exists
         if let existing = exercises.first(where: { $0.name.lowercased() == trimmed.lowercased() }) {
@@ -879,15 +882,15 @@ struct ExerciseListView: View {
         // Create new custom exercise
         let exercise = Exercise(
             name: trimmed,
-            category: category,
+            category: resolvedCategory,
             muscleGroup: normalizedMuscleGroup
         )
         exercise.isCustom = true
         exercise.equipmentName = equipmentName
-        exercise.activityTypeName = activityTypeName ?? Exercise.defaultActivityTypeName(for: trimmed, category: category)
+        exercise.activityTypeName = activityTypeName ?? Exercise.defaultActivityTypeName(for: trimmed, category: resolvedCategory)
         exercise.activityAliases = activityAliases
-        exercise.targetTags = targetTags.isEmpty ? Exercise.defaultTargetTags(for: category) : targetTags
-        exercise.trackingFields = trackingFields ?? Exercise.defaultTrackingFields(for: category)
+        exercise.targetTags = targetTags.isEmpty ? Exercise.defaultTargetTags(for: resolvedCategory) : targetTags
+        exercise.trackingFields = trackingFields ?? Exercise.defaultTrackingFields(for: resolvedCategory)
         if let secondary = normalizedSecondaryMuscles, !secondary.isEmpty {
             exercise.secondaryMuscles = secondary.joined(separator: ",")
         }

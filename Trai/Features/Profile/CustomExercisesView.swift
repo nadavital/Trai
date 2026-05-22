@@ -144,11 +144,12 @@ struct CustomExercisesView: View {
     ) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        let resolvedCategory = category.userFacingEquivalent
 
         if let existing = existingExercise(named: trimmed) {
             if existing.exerciseCategory == .strength,
                existing.targetMuscleGroup == nil,
-               category == .strength,
+               resolvedCategory == .strength,
                let muscleGroup {
                 existing.targetMuscleGroup = muscleGroup
             }
@@ -175,14 +176,14 @@ struct CustomExercisesView: View {
 
         let exercise = Exercise(
             name: trimmed,
-            category: category,
-            muscleGroup: category == .strength ? muscleGroup : nil
+            category: resolvedCategory,
+            muscleGroup: resolvedCategory == .strength ? muscleGroup : nil
         )
         exercise.isCustom = true
         exercise.activityTypeName = activityTypeName
         exercise.activityAliases = activityAliases
-        exercise.targetTags = targetTags.isEmpty ? Exercise.defaultTargetTags(for: category) : targetTags
-        exercise.trackingFields = trackingFields.isEmpty ? Exercise.defaultTrackingFields(for: category) : trackingFields
+        exercise.targetTags = targetTags.isEmpty ? Exercise.defaultTargetTags(for: resolvedCategory) : targetTags
+        exercise.trackingFields = trackingFields.isEmpty ? Exercise.defaultTrackingFields(for: resolvedCategory) : trackingFields
         if let secondaryMuscles, !secondaryMuscles.isEmpty {
             exercise.secondaryMuscles = secondaryMuscles.joined(separator: ",")
         }
