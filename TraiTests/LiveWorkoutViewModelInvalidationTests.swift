@@ -1,4 +1,5 @@
 import Observation
+import HealthKit
 import SwiftData
 import XCTest
 @testable import Trai
@@ -207,6 +208,44 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(day?.workoutCount, 1)
         XCTAssertEqual(day?.totalEntries, 2)
         XCTAssertEqual(day?.totalSets, 1)
+    }
+
+    func testHealthKitLiveWorkoutMetadataIncludesActivitySummary() {
+        let workout = LiveWorkout(
+            name: "Strength + Climb",
+            workoutType: .mixed,
+            focusAreas: ["Climbing", "Power"]
+        )
+        workout.startedAt = Date(timeIntervalSince1970: 1_000)
+        workout.completedAt = Date(timeIntervalSince1970: 4_600)
+
+        let strengthEntry = LiveWorkoutEntry(exerciseName: "Back Squat", orderIndex: 0)
+        strengthEntry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: .zero, completed: true))
+
+        let activityEntry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 1,
+            exerciseType: "skill"
+        )
+        activityEntry.activityTypeName = "Bouldering"
+        activityEntry.targetTags = ["Climbing", "Grip endurance"]
+        activityEntry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 1_200, reps: 8, notes: "Limit attempts")
+        ]
+        activityEntry.completedAt = workout.completedAt
+
+        workout.entries = [strengthEntry, activityEntry]
+
+        let metadata = HealthKitService.liveWorkoutMetadata(for: workout)
+
+        XCTAssertEqual(metadata[HKMetadataKeyWorkoutBrandName] as? String, "Trai")
+        XCTAssertEqual(metadata["summary_segments"] as? String, "1 exercise | 1 activity | 1 set | 60 min")
+        XCTAssertEqual(metadata["exercise_count"] as? Int, 1)
+        XCTAssertEqual(metadata["activity_count"] as? Int, 1)
+        XCTAssertEqual(metadata["logged_activity_count"] as? Int, 1)
+        XCTAssertEqual(metadata["activity_names"] as? String, "Bouldering")
+        XCTAssertEqual(metadata["activity_tags"] as? String, "Climbing,Power,Grip endurance")
+        XCTAssertEqual(metadata["activity_duration_minutes"] as? Int, 20)
     }
 
     func testRepsOnlyActivitySegmentCountsAsLoggedData() {

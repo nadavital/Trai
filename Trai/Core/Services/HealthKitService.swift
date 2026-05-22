@@ -279,6 +279,10 @@ final class HealthKitService {
             try await builder.addSamples([energySample])
         }
 
+        if let metadata, !metadata.isEmpty {
+            try await builder.addMetadata(metadata)
+        }
+
         try await builder.endCollection(at: endDate)
 
         let workout = try await builder.finishWorkout()
@@ -296,15 +300,7 @@ final class HealthKitService {
         let durationMinutes = workout.duration / 60
         let estimatedCalories = durationMinutes * 5.0 // ~5 cal/min for strength training
 
-        let activityTags = workout.displayFocusAreas.joined(separator: ",")
-        let metadata: [String: Any] = [
-            HKMetadataKeyWorkoutBrandName: "Trai",
-            "workout_name": workout.name,
-            "muscle_groups": workout.muscleGroups.map(\.rawValue).joined(separator: ","),
-            "activity_focus": activityTags,
-            "total_volume_kg": workout.totalVolume,
-            "total_sets": workout.totalSets
-        ]
+        let metadata = Self.liveWorkoutMetadata(for: workout)
 
         _ = try await saveWorkout(
             type: activityType,
@@ -755,5 +751,67 @@ final class HealthKitService {
             return workout.loggedAt.addingTimeInterval(60 * 60)
         }
         return workout.loggedAt.addingTimeInterval(duration * 60)
+    }
+}
+
+extension HealthKitService {
+    static func liveWorkoutMetadata(for workout: LiveWorkout) -> [String: Any] {
+        let stats = workout.entrySummaryStats
+        let activityEntries = (workout.entries ?? [])
+            .filter { $0.isCardio || $0.isGeneralActivity }
+        let activityNames = activityEntries
+            .map { entry in
+                let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+                return activityName.isEmpty ? entry.exerciseName : activityName
+            }
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .dedupedHealthKitMetadataValues()
+        let activityTags = (workout.displayFocusAreas + activityEntries.flatMap(\.targetTags))
+            .dedupedHealthKitMetadataValues()
+        let activityDurationSeconds = activityEntries.reduce(0) { $0 + $1.trackedDurationSeconds }
+        let activityDistanceMeters = activityEntries.reduce(0.0) { $0 + $1.trackedDistanceMeters }
+
+        var metadata: [String: Any] = [
+            HKMetadataKeyWorkoutBrandName: "Trai",
+            "workout_name": workout.name,
+            "muscle_groups": workout.muscleGroups.map(\.rawValue).joined(separator: ","),
+            "activity_focus": workout.displayFocusAreas.joined(separator: ","),
+            "summary_segments": workout.historySummarySegments.joined(separator: " | "),
+            "entry_count": stats.entryCount,
+            "exercise_count": stats.strengthEntryCount,
+            "activity_count": stats.activityEntryCount,
+            "logged_activity_count": stats.loggedActivityCount,
+            "total_volume_kg": workout.totalVolume,
+            "total_sets": workout.totalSets
+        ]
+
+        if !activityNames.isEmpty {
+            metadata["activity_names"] = activityNames.joined(separator: ",")
+        }
+        if !activityTags.isEmpty {
+            metadata["activity_tags"] = activityTags.joined(separator: ",")
+        }
+        if activityDurationSeconds > 0 {
+            metadata["activity_duration_minutes"] = activityDurationSeconds / 60
+        }
+        if activityDistanceMeters > 0 {
+            metadata["activity_distance_meters"] = activityDistanceMeters
+        }
+
+        return metadata
+    }
+}
+
+private extension Array where Element == String {
+    func dedupedHealthKitMetadataValues() -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in self {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.goalNormalizedKey
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
     }
 }
