@@ -283,17 +283,20 @@ private struct StatItem: View {
 private struct RecentWorkoutRow: View {
     let workout: LiveWorkout
 
-    private var entryCount: Int {
-        workout.entries?.count ?? 0
+    private var activitySummary: String? {
+        let duration = workout.formattedDuration
+        let segments = workout.historySummarySegments
+            .filter { $0 != duration }
+            .prefix(2)
+        let summary = segments.joined(separator: " • ")
+        return summary.isEmpty ? nil : summary
     }
 
-    private var activitySummary: String? {
-        if workout.totalSets > 0 {
-            return "\(workout.totalSets) \(workout.totalSets == 1 ? "set" : "sets")"
+    private var activitySummaryIcon: String {
+        if workout.entrySummaryStats.activityEntryCount > 0 {
+            return "list.bullet.rectangle"
         }
-
-        guard entryCount > 0 else { return nil }
-        return "\(entryCount) \(entryCount == 1 ? "item" : "items")"
+        return "repeat"
     }
 
     private var secondaryChips: [String] {
@@ -323,7 +326,7 @@ private struct RecentWorkoutRow: View {
                     Label(workout.formattedDuration, systemImage: "clock")
 
                     if let activitySummary {
-                        Label(activitySummary, systemImage: workout.totalSets > 0 ? "repeat" : "list.bullet.rectangle")
+                        Label(activitySummary, systemImage: activitySummaryIcon)
                     }
                 }
                 .font(.caption)
