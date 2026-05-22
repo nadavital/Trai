@@ -263,7 +263,9 @@ extension AIFunctionExecutor {
                     .nilIfEmpty
                 let targetTags = stringArray(from: exerciseData["target_tags"])
                 let trackingFields = stringArray(from: exerciseData["tracking_fields"])
-                let sets = exerciseData["sets"] as? Int ?? 3
+                let resolvedCategory = Exercise.Category.normalized(from: category)
+                    ?? (workoutType.supportsMuscleTargets ? .strength : .cardio)
+                let sets = numericInt(from: exerciseData["sets"]) ?? (resolvedCategory == .strength ? 3 : 0)
                 let reps = exerciseData["reps"] as? Int ?? 10
                 let weight = exerciseData["weight_kg"] as? Double
                 let durationMinutes = numericInt(from: exerciseData["duration_minutes"])

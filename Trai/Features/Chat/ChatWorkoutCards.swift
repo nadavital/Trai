@@ -32,13 +32,17 @@ struct SuggestedWorkoutCard: View {
                     .font(.headline)
 
                 HStack(spacing: 12) {
-                    Label("\(workout.exercises.count) exercises", systemImage: "list.bullet")
+                    Label(workout.exercisesSummary, systemImage: "list.bullet")
                     Label("\(workout.durationMinutes) min", systemImage: "clock")
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-                if !workout.targetMuscleGroups.isEmpty {
+                if let activityFocuses = workout.activityFocuses, !activityFocuses.isEmpty {
+                    Text(activityFocuses.prefix(3).joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if !workout.targetMuscleGroups.isEmpty {
                     Text(workout.muscleGroupsSummary)
                         .font(.caption)
                         .foregroundStyle(.secondary)

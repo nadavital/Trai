@@ -603,12 +603,28 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
                 self.notes = notes
             }
         }
+
+        var isStrengthStartItem: Bool {
+            sets > 0
+        }
+
+        var isActivityStartItem: Bool {
+            !isStrengthStartItem
+        }
     }
 
     /// Summary for display
     var exercisesSummary: String {
-        let count = exercises.count
-        return "\(count) exercise\(count == 1 ? "" : "s")"
+        var parts: [String] = []
+        let strengthCount = exercises.filter(\.isStrengthStartItem).count
+        let activityCount = exercises.filter(\.isActivityStartItem).count
+        if strengthCount > 0 {
+            parts.append("\(strengthCount) exercise\(strengthCount == 1 ? "" : "s")")
+        }
+        if activityCount > 0 {
+            parts.append("\(activityCount) activit\(activityCount == 1 ? "y" : "ies")")
+        }
+        return parts.isEmpty ? "Workout" : parts.joined(separator: " • ")
     }
 
     /// Muscle groups summary

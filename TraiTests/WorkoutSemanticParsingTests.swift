@@ -74,6 +74,37 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         )
     }
 
+    func testStartLiveWorkoutKeepsActivitySuggestionsSetFree() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "start_live_workout",
+                arguments: [
+                    "name": "Easy Run",
+                    "workout_type": "cardio",
+                    "activity_focuses": ["Running", "Aerobic base"],
+                    "suggested_exercises": [
+                        [
+                            "name": "Easy Run",
+                            "category": "cardio",
+                            "activity_name": "Running",
+                            "tracking_fields": ["duration", "distance"],
+                            "duration_minutes": 30
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutStart(let suggestion) = result else {
+            return XCTFail("Expected start workout suggestion")
+        }
+
+        XCTAssertEqual(suggestion.exercisesSummary, "1 activity")
+        XCTAssertEqual(suggestion.activityFocuses, ["Running", "Aerobic base"])
+        XCTAssertEqual(suggestion.exercises.first?.sets, 0)
+        XCTAssertEqual(suggestion.exercises.first?.durationMinutes, 30)
+    }
+
     func testTargetMuscleParsingHandlesDisplayNames() {
         XCTAssertEqual(LiveWorkout.MuscleGroup.fromTargetStrings(["Full Body"]), [.fullBody])
         XCTAssertEqual(
