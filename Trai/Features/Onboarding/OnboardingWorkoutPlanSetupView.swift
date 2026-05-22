@@ -1686,20 +1686,50 @@ struct OnboardingWorkoutPlanSetupView: View {
     private var isCardioSupportOnlyForPersonalization: Bool {
         let text = proPersonalizationContextText
         let supportSignals = [
-            "cardio supports",
-            "supporting cardio",
-            "cardio finisher",
-            "short finisher",
-            "easy finisher",
+            "support",
+            "supportive",
+            "supporting",
+            "add-on",
+            "addon",
+            "warmup",
+            "warm-up",
+            "cooldown",
+            "cool-down",
+            "finisher",
             "after one lift",
             "after a lift",
             "after strength",
             "after lifting",
             "at the end",
+            "not standalone",
+            "not a dedicated",
             "not a full cardio day",
             "not a cardio day"
         ]
-        return supportSignals.contains { text.contains($0) }
+        return mentionsCardioLikePersonalization(text) &&
+            supportSignals.contains { text.contains($0) }
+    }
+
+    private func mentionsCardioLikePersonalization(_ text: String) -> Bool {
+        [
+            "cardio",
+            "conditioning",
+            "endurance",
+            "aerobic",
+            "run",
+            "running",
+            "bike",
+            "cycling",
+            "row",
+            "rowing",
+            "swim",
+            "swimming",
+            "walk",
+            "walking",
+            "hike",
+            "hiking",
+            "intervals"
+        ].contains { text.contains($0) }
     }
 
     private var isStrengthLeadingForPersonalization: Bool {

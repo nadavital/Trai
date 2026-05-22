@@ -34,6 +34,18 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertTrue(request.limitsAccessoryCardioToOneSession)
     }
 
+    func testSupportiveEnduranceDirectiveDoesNotDependOnCardioFinisherPhrase() {
+        let request = makeRequest(
+            workoutType: .mixed,
+            selectedWorkoutTypes: [.strength, .cardio],
+            preferences: "Strength is the priority. Add easy running after one lower-body workout, not as a dedicated endurance day."
+        )
+
+        XCTAssertTrue(request.requestsCardioAsAccessory)
+        XCTAssertTrue(request.limitsAccessoryCardioToOneSession)
+        XCTAssertFalse(request.generationDirectives.joined(separator: " ").contains("cardio finisher"))
+    }
+
     func testAccessoryCardioDefaultPlanUsesFinisherInsteadOfStandaloneCardioDay() {
         let request = makeRequest(
             workoutType: .mixed,

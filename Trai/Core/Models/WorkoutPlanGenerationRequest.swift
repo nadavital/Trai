@@ -56,27 +56,37 @@ struct WorkoutPlanGenerationRequest {
     }
 
     var requestsCardioAsAccessory: Bool {
+        guard includesCardio else { return false }
         let text = generationContextText
 
-        let accessorySignals = [
-            "cardio finisher",
-            "cardio at the end",
-            "cardio at end",
-            "cardio after",
-            "short finisher",
-            "as a finisher",
+        let supportivePlacementSignals = [
+            "support",
+            "supportive",
+            "supporting",
+            "add-on",
+            "addon",
+            "warmup",
+            "warm-up",
+            "cooldown",
+            "cool-down",
+            "finisher",
+            "at the end",
+            "at end",
+            "after",
             "after strength",
             "after lifting",
             "after one lift",
             "after a lift",
             "after my lift",
             "after my strength",
+            "not a full",
+            "not standalone",
+            "not a dedicated",
             "end of one",
             "end of a strength",
             "end of my strength",
-            "finish with cardio",
-            "add some cardio",
-            "some cardio at the end"
+            "finish with",
+            "add some"
         ]
 
         let dedicatedSignals = [
@@ -91,7 +101,8 @@ struct WorkoutPlanGenerationRequest {
             "marathon"
         ]
 
-        return accessorySignals.contains { text.contains($0) } &&
+        return mentionsCardioLikeTraining(text) &&
+            supportivePlacementSignals.contains { text.contains($0) } &&
             !dedicatedSignals.contains { text.contains($0) }
     }
 
@@ -103,6 +114,10 @@ struct WorkoutPlanGenerationRequest {
             "one workout",
             "one session",
             "one day",
+            "one lower",
+            "one lower-body",
+            "one upper",
+            "one upper-body",
             "once",
             "1x",
             "only",
@@ -159,8 +174,43 @@ struct WorkoutPlanGenerationRequest {
             customWorkoutType ?? "",
             customCardioType ?? ""
         ] + (specificGoals ?? []) + (conversationContext ?? []))
-            .joined(separator: " ")
-            .lowercased()
+        .joined(separator: " ")
+        .lowercased()
+    }
+
+    private func mentionsCardioLikeTraining(_ text: String) -> Bool {
+        var terms = [
+            "cardio",
+            "conditioning",
+            "endurance",
+            "aerobic",
+            "run",
+            "running",
+            "bike",
+            "cycling",
+            "row",
+            "rowing",
+            "swim",
+            "swimming",
+            "walk",
+            "walking",
+            "hike",
+            "hiking",
+            "intervals"
+        ]
+
+        if let cardioTypes {
+            terms.append(contentsOf: cardioTypes.map { $0.displayName.lowercased() })
+        }
+
+        if let customCardioType {
+            terms.append(customCardioType.lowercased())
+        }
+
+        return terms.contains { term in
+            let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !trimmed.isEmpty && text.contains(trimmed)
+        }
     }
 
     // MARK: - Workout Type
