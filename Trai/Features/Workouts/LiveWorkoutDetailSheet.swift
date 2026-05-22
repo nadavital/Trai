@@ -44,6 +44,10 @@ struct LiveWorkoutDetailSheet: View {
         (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
     }
 
+    private var visibleEntries: [LiveWorkoutEntry] {
+        isEditing ? sortedEntries : sortedEntries.filter(\.hasExercisePreferenceSignal)
+    }
+
     private var entryStats: LiveWorkout.EntrySummaryStats {
         workout.entrySummaryStats
     }
@@ -82,7 +86,7 @@ struct LiveWorkoutDetailSheet: View {
         if usesFlexibleSessionPresentation {
             return "Activities"
         }
-        return sortedEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
+        return visibleEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
     }
 
     private var addButtonLabel: String {
@@ -154,8 +158,8 @@ struct LiveWorkoutDetailSheet: View {
                     }
 
                     // Exercises list
-                    if !sortedEntries.isEmpty {
-                        exercisesSection(entries: sortedEntries)
+                    if !visibleEntries.isEmpty {
+                        exercisesSection(entries: visibleEntries)
                     }
 
                     // Notes (if any)

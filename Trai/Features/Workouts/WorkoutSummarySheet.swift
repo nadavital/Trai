@@ -48,6 +48,10 @@ struct WorkoutSummarySheet: View {
         (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
     }
 
+    private var loggedEntries: [LiveWorkoutEntry] {
+        sortedEntries.filter(\.hasExercisePreferenceSignal)
+    }
+
     private var entryStats: LiveWorkout.EntrySummaryStats {
         workout.entrySummaryStats
     }
@@ -64,7 +68,7 @@ struct WorkoutSummarySheet: View {
         if usesFlexibleSessionPresentation {
             return "Activities"
         }
-        return sortedEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
+        return loggedEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
     }
 
     private var goalInsights: [WorkoutGoalInsight] {
@@ -192,13 +196,13 @@ struct WorkoutSummarySheet: View {
                     .traiCard()
 
                     // Exercises completed with full detail
-                    if !sortedEntries.isEmpty {
+                    if !loggedEntries.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
                             Text(entriesTitle)
                                 .font(.headline)
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                            ForEach(sortedEntries) { entry in
+                            ForEach(loggedEntries) { entry in
                                 if entry.isStrength {
                                     ExerciseSummaryRow(entry: entry, usesMetric: usesMetric) {
                                         selectedExercise = IdentifiableExerciseName(id: entry.exerciseName)
@@ -334,6 +338,10 @@ struct WorkoutSummaryContent: View {
         (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
     }
 
+    private var loggedEntries: [LiveWorkoutEntry] {
+        sortedEntries.filter(\.hasExercisePreferenceSignal)
+    }
+
     private var entryStats: LiveWorkout.EntrySummaryStats {
         workout.entrySummaryStats
     }
@@ -350,7 +358,7 @@ struct WorkoutSummaryContent: View {
         if usesFlexibleSessionPresentation {
             return "Activities"
         }
-        return sortedEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
+        return loggedEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
     }
 
     private var goalInsights: [WorkoutGoalInsight] {
@@ -477,13 +485,13 @@ struct WorkoutSummaryContent: View {
                 .traiCard()
 
                 // Exercises completed with full detail
-                if !sortedEntries.isEmpty {
+                if !loggedEntries.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(entriesTitle)
                             .font(.headline)
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                        ForEach(sortedEntries) { entry in
+                        ForEach(loggedEntries) { entry in
                             if entry.isStrength {
                                 ExerciseSummaryRow(entry: entry, usesMetric: usesMetric)
                             } else {

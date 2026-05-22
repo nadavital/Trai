@@ -155,6 +155,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
 
         let strengthEntry = LiveWorkoutEntry(exerciseName: "Back Squat", orderIndex: 0)
         strengthEntry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: .zero, completed: true))
+        strengthEntry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: .zero, completed: false))
 
         let activityEntry = LiveWorkoutEntry(
             exerciseName: "Bouldering",
@@ -164,9 +165,18 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         activityEntry.activityTypeName = "Bouldering"
         activityEntry.completedAt = workout.completedAt
 
+        let plannedActivity = LiveWorkoutEntry(
+            exerciseName: "Mobility Cooldown",
+            orderIndex: 2,
+            exerciseType: "mobility"
+        )
+        plannedActivity.activityTypeName = "Mobility"
+        plannedActivity.sourcePlanBlockID = UUID()
+
         strengthEntry.workout = workout
         activityEntry.workout = workout
-        workout.entries = [strengthEntry, activityEntry]
+        plannedActivity.workout = workout
+        workout.entries = [strengthEntry, activityEntry, plannedActivity]
 
         XCTAssertEqual(workout.entrySummaryStats.strengthEntryCount, 1)
         XCTAssertEqual(workout.entrySummaryStats.activityEntryCount, 1)
@@ -234,7 +244,16 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         ]
         activityEntry.completedAt = workout.completedAt
 
-        workout.entries = [strengthEntry, activityEntry]
+        let plannedActivity = LiveWorkoutEntry(
+            exerciseName: "Easy Spin",
+            orderIndex: 2,
+            exerciseType: "cardio"
+        )
+        plannedActivity.activityTypeName = "Cycling"
+        plannedActivity.targetTags = ["Recovery"]
+        plannedActivity.sourcePlanBlockID = UUID()
+
+        workout.entries = [strengthEntry, activityEntry, plannedActivity]
 
         let metadata = HealthKitService.liveWorkoutMetadata(for: workout)
 

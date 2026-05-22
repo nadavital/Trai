@@ -758,7 +758,7 @@ extension HealthKitService {
     static func liveWorkoutMetadata(for workout: LiveWorkout) -> [String: Any] {
         let stats = workout.entrySummaryStats
         let activityEntries = (workout.entries ?? [])
-            .filter { $0.isCardio || $0.isGeneralActivity }
+            .filter(\.isLoggedActivity)
         let activityNames = activityEntries
             .map { entry in
                 let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)

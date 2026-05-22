@@ -329,10 +329,12 @@ extension LiveWorkout {
 
     var entrySummaryStats: EntrySummaryStats {
         let entries = entries ?? []
-        let strengthEntryCount = entries.filter(\.isStrength).count
-        let activityEntryCount = entries.count - strengthEntryCount
+        let strengthEntryCount = entries.filter { $0.isStrength && $0.hasExercisePreferenceSignal }.count
+        let activityEntryCount = entries.filter(\.isLoggedActivity).count
         let loggedActivityCount = entries.filter(\.isLoggedActivity).count
-        let totalSets = entries.reduce(0) { $0 + $1.sets.count }
+        let totalSets = entries.reduce(0) { total, entry in
+            total + (entry.completedSets?.count ?? 0)
+        }
         let durationMinutes = Int(duration / 60)
 
         return EntrySummaryStats(
