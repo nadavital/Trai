@@ -279,7 +279,7 @@ extension WorkoutPlan.TrainingBlock.BlockKind {
             return .skill
         case .sportPractice:
             return .sportPractice
-        case .mobility, .warmup, .cooldown:
+        case .mobility:
             return .mobility
         case .recovery:
             return .recovery
@@ -315,7 +315,7 @@ extension WorkoutPlan.TrainingBlock.BlockKind {
         switch self {
         case .cardio, .conditioning:
             return "cardio"
-        case .mobility, .recovery, .cooldown, .warmup:
+        case .mobility, .recovery:
             return "flexibility"
         case .skill, .sportPractice, .custom, .strength:
             return "activity"

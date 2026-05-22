@@ -250,7 +250,7 @@ struct WorkoutPlanProposalCard: View {
                 switch block.kind {
                 case .cardio, .conditioning, .mobility, .recovery, .skill, .sportPractice:
                     true
-                case .warmup, .strength, .cooldown, .custom:
+                case .strength, .custom:
                     false
                 }
             }

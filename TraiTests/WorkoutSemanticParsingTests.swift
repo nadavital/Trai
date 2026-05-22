@@ -258,6 +258,17 @@ final class WorkoutSemanticParsingTests: XCTestCase {
     }
 
     func testPlanBlockSchemasUseRoleForPlacementNotKind() throws {
+        XCTAssertEqual(
+            Set(AIPromptBuilder.workoutGoalActivityKindRawValues),
+            Set(["strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "custom"])
+        )
+        XCTAssertFalse(AIPromptBuilder.workoutGoalActivityKindRawValues.contains("warmup"))
+        XCTAssertFalse(AIPromptBuilder.workoutGoalActivityKindRawValues.contains("cooldown"))
+        XCTAssertTrue(AIPromptBuilder.workoutGoalActivityRoleRawValues.contains("warmup"))
+        XCTAssertTrue(AIPromptBuilder.workoutGoalActivityRoleRawValues.contains("cooldown"))
+        XCTAssertFalse(WorkoutPlan.TrainingBlock.BlockKind.allCases.map(\.rawValue).contains("warmup"))
+        XCTAssertFalse(WorkoutPlan.TrainingBlock.BlockKind.allCases.map(\.rawValue).contains("cooldown"))
+
         for schema in [AIPromptBuilder.workoutPlanSchema, AIPromptBuilder.workoutPlanRefinementSchema] {
             let kindValues = try blockEnum(in: schema, field: "kind")
             XCTAssertFalse(kindValues.contains("warmup"))
@@ -271,10 +282,15 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             XCTAssertTrue(roleValues.contains("finisher"))
         }
 
+        let suggestionProperties = try XCTUnwrap(AIPromptBuilder.workoutGoalSuggestionSchema["properties"] as? [String: Any])
+        let suggestionKind = try XCTUnwrap(suggestionProperties["linkedActivityKindRaw"] as? [String: Any])
+        let suggestionKindValues = try XCTUnwrap(suggestionKind["enum"] as? [String])
+        XCTAssertEqual(Set(suggestionKindValues), Set(AIPromptBuilder.workoutGoalActivityKindRawValues))
+        XCTAssertFalse(suggestionKindValues.contains("warmup"))
+        XCTAssertFalse(suggestionKindValues.contains("cooldown"))
+
         let createGoalKinds = try propertyEnum(in: AIFunctionDeclarations.createWorkoutGoal, property: "activity_kind")
-        XCTAssertFalse(createGoalKinds.contains("warmup"))
-        XCTAssertFalse(createGoalKinds.contains("cooldown"))
-        XCTAssertTrue(createGoalKinds.contains("sportPractice"))
+        XCTAssertEqual(Set(createGoalKinds), Set(AIPromptBuilder.workoutGoalActivityKindRawValues))
 
         let updateGoalKinds = try propertyEnum(in: AIFunctionDeclarations.updateWorkoutGoal, property: "activity_kind")
         XCTAssertFalse(updateGoalKinds.contains("warmup"))

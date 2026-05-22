@@ -325,8 +325,8 @@ extension AIService {
         - linkedWorkoutType must be one of: \(workoutModes)
         - linkedActivityName can scope a goal to an exact exercise, session, or custom activity type name.
         - linkedActivityTags can scope a goal semantically to activity families or targets such as Climbing, grip, intervals, mobility, or technique. Prefer this over a broad kind when the user-facing activity identity matters.
-        - linkedActivityKindRaw can scope a goal to one fallback behavior kind: warmup, strength, cardio, conditioning, skill, mobility, recovery, sportPractice, cooldown, or custom.
-        - linkedActivityRoleRaw can scope a goal to how that entry fits inside a workout: main, warmup, accessory, finisher, cooldown, or custom.
+        - linkedActivityKindRaw can scope a goal to one fallback behavior kind: \(AIPromptBuilder.workoutGoalActivityKindPromptList). Warmup and cooldown are placement roles, not activity kinds.
+        - linkedActivityRoleRaw can scope a goal to how that entry fits inside a workout: \(AIPromptBuilder.workoutGoalActivityRolePromptList).
         - For a goal about completing support work inside another workout, prefer linkedActivityTags plus linkedActivityRoleRaw when the activity has a meaningful semantic identity; use linkedActivityKindRaw only as fallback behavior metadata.
         - goalKind must be one of: milestone, frequency, duration, distance, weight
         - For milestone goals, leave targetValue, targetUnit, periodUnitRaw, and periodCount empty.
@@ -538,7 +538,7 @@ private extension WorkoutPlan.WorkoutTemplate {
             switch block.kind {
             case .cardio, .conditioning:
                 return block.role == .finisher || block.role == .accessory
-            case .warmup, .strength, .skill, .mobility, .recovery, .sportPractice, .cooldown, .custom:
+            case .strength, .skill, .mobility, .recovery, .sportPractice, .custom:
                 return false
             }
         }

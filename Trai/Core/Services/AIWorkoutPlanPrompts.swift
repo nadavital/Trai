@@ -11,6 +11,17 @@ import Foundation
 
 extension AIPromptBuilder {
 
+    static let workoutGoalActivityKindRawValues = ["strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "custom"]
+    static let workoutGoalActivityRoleRawValues = ["main", "warmup", "accessory", "finisher", "cooldown", "custom"]
+
+    static var workoutGoalActivityKindPromptList: String {
+        workoutGoalActivityKindRawValues.joined(separator: ", ")
+    }
+
+    static var workoutGoalActivityRolePromptList: String {
+        workoutGoalActivityRoleRawValues.joined(separator: ", ")
+    }
+
     static func buildWorkoutPlanGenerationPrompt(
         request: WorkoutPlanGenerationRequest,
         tone: TraiCoachTone = .sharedPreference
@@ -373,12 +384,12 @@ extension AIPromptBuilder {
                 ],
                 "linkedActivityKindRaw": [
                     "type": "string",
-                    "enum": ["strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "custom"],
+                    "enum": workoutGoalActivityKindRawValues,
                     "nullable": true
                 ],
                 "linkedActivityRoleRaw": [
                     "type": "string",
-                    "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom"],
+                    "enum": workoutGoalActivityRoleRawValues,
                     "nullable": true
                 ],
                 "targetValue": [

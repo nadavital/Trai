@@ -258,7 +258,8 @@ final class WorkoutTemplateServiceTests: XCTestCase {
                     order: 0
                 ),
                 WorkoutPlan.TrainingBlock(
-                    kind: .cooldown,
+                    kind: .recovery,
+                    role: .cooldown,
                     title: "Cooldown",
                     detail: "Easy spin",
                     durationMinutes: 5,
@@ -381,7 +382,8 @@ final class WorkoutTemplateServiceTests: XCTestCase {
             exercises: [],
             blocks: [
                 WorkoutPlan.TrainingBlock(
-                    kind: .warmup,
+                    kind: .mobility,
+                    role: .warmup,
                     title: "Warm-up",
                     detail: "Prepare to press",
                     durationMinutes: 5,

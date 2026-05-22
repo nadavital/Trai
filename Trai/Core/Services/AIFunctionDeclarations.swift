@@ -502,12 +502,12 @@ enum AIFunctionDeclarations {
                     "activity_kind": [
                         "type": "string",
                         "description": "Optional internal fallback behavior kind for goals tied to a workout entry instead of a whole session. Prefer activity_name or activity_tags when the user-facing activity identity matters.",
-                        "enum": ["strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "custom"]
+                        "enum": AIPromptBuilder.workoutGoalActivityKindRawValues
                     ],
                     "activity_role": [
                         "type": "string",
                         "description": "Optional placement role inside a workout, such as warmup, add-on, finish, or cooldown.",
-                        "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom"]
+                        "enum": AIPromptBuilder.workoutGoalActivityRoleRawValues
                     ],
                     "target_value": [
                         "type": "number",
@@ -588,12 +588,12 @@ enum AIFunctionDeclarations {
                     "activity_kind": [
                         "type": "string",
                         "description": "Updated internal fallback behavior kind. Prefer activity_name or activity_tags when the user-facing activity identity matters; pass empty string to clear it.",
-                        "enum": ["strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "custom", ""]
+                        "enum": AIPromptBuilder.workoutGoalActivityKindRawValues + [""]
                     ],
                     "activity_role": [
                         "type": "string",
                         "description": "Updated placement role inside a workout; pass empty string to clear it.",
-                        "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom", ""]
+                        "enum": AIPromptBuilder.workoutGoalActivityRoleRawValues + [""]
                     ],
                     "target_value": [
                         "type": "number",

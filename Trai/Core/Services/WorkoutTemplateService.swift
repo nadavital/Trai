@@ -468,7 +468,7 @@ struct WorkoutTemplateService {
 private extension WorkoutPlan.TrainingBlock {
     var shouldCreateLiveWorkoutEntry: Bool {
         switch kind {
-        case .warmup, .cardio, .conditioning, .skill, .mobility, .recovery, .sportPractice, .cooldown, .custom:
+        case .cardio, .conditioning, .skill, .mobility, .recovery, .sportPractice, .custom:
             return true
         case .strength:
             return false

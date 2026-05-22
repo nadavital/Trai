@@ -482,7 +482,8 @@ extension WorkoutPlan {
                 exercises: [],
                 blocks: [
                     WorkoutPlan.TrainingBlock(
-                        kind: .warmup,
+                        kind: .mobility,
+                        role: .warmup,
                         title: "Warmup",
                         detail: "Build gradually",
                         durationMinutes: 8,
@@ -499,7 +500,8 @@ extension WorkoutPlan {
                         order: 1
                     ),
                     WorkoutPlan.TrainingBlock(
-                        kind: .cooldown,
+                        kind: .recovery,
+                        role: .cooldown,
                         title: "Cooldown",
                         detail: "Return to easy breathing",
                         durationMinutes: 5,
@@ -518,7 +520,8 @@ extension WorkoutPlan {
                 exercises: [],
                 blocks: [
                     WorkoutPlan.TrainingBlock(
-                        kind: .warmup,
+                        kind: .mobility,
+                        role: .warmup,
                         title: "Warmup",
                         detail: "Build to moderate effort",
                         durationMinutes: 10,
@@ -535,7 +538,8 @@ extension WorkoutPlan {
                         order: 1
                     ),
                     WorkoutPlan.TrainingBlock(
-                        kind: .cooldown,
+                        kind: .recovery,
+                        role: .cooldown,
                         title: "Cooldown",
                         detail: "Return to easy pace",
                         durationMinutes: 5,
@@ -560,7 +564,8 @@ extension WorkoutPlan {
                     exercises: [],
                     blocks: [
                         WorkoutPlan.TrainingBlock(
-                            kind: .warmup,
+                            kind: .mobility,
+                            role: .warmup,
                             title: "Easy ramp",
                             detail: "Ease into the session",
                             durationMinutes: 8,

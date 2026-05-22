@@ -354,7 +354,6 @@ struct WorkoutPlan: Codable, Equatable {
         }
 
         nonisolated enum BlockKind: String, Codable, CaseIterable, Identifiable {
-            case warmup
             case strength
             case cardio
             case conditioning
@@ -362,14 +361,12 @@ struct WorkoutPlan: Codable, Equatable {
             case mobility
             case recovery
             case sportPractice
-            case cooldown
             case custom
 
             nonisolated var id: String { rawValue }
 
             nonisolated var displayName: String {
                 switch self {
-                case .warmup: "Warmup"
                 case .strength: "Strength"
                 case .cardio: "Cardio"
                 case .conditioning: "Conditioning"
@@ -377,14 +374,12 @@ struct WorkoutPlan: Codable, Equatable {
                 case .mobility: "Mobility"
                 case .recovery: "Recovery"
                 case .sportPractice: "Practice"
-                case .cooldown: "Cooldown"
                 case .custom: "Block"
                 }
             }
 
             nonisolated var iconName: String {
                 switch self {
-                case .warmup: "figure.walk"
                 case .strength: "dumbbell.fill"
                 case .cardio: "figure.run"
                 case .conditioning: "bolt.heart.fill"
@@ -392,7 +387,6 @@ struct WorkoutPlan: Codable, Equatable {
                 case .mobility: "figure.mind.and.body"
                 case .recovery: "heart.text.square.fill"
                 case .sportPractice: "sportscourt.fill"
-                case .cooldown: "figure.cooldown"
                 case .custom: "slider.horizontal.3"
                 }
             }
@@ -453,10 +447,6 @@ struct WorkoutPlan: Codable, Equatable {
 
             nonisolated static func defaultRole(for kind: BlockKind) -> Role {
                 switch kind {
-                case .warmup:
-                    return .warmup
-                case .cooldown:
-                    return .cooldown
                 case .custom:
                     return .custom
                 case .strength, .cardio, .conditioning, .skill, .mobility, .recovery, .sportPractice:
@@ -501,8 +491,20 @@ struct WorkoutPlan: Codable, Equatable {
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             let rawKind = try container.decode(String.self, forKey: .kind)
-            kind = BlockKind(rawValue: rawKind) ?? .custom
+            let decodedKind = BlockKind(rawValue: rawKind)
+            let legacyPlacementRole = Role(rawValue: rawKind)
+            kind = decodedKind ?? {
+                switch legacyPlacementRole {
+                case .warmup:
+                    return .mobility
+                case .cooldown:
+                    return .recovery
+                default:
+                    return .custom
+                }
+            }()
             role = try container.decodeIfPresent(Role.self, forKey: .role)
+                ?? legacyPlacementRole
                 ?? Role.defaultRole(for: kind)
             title = try container.decode(String.self, forKey: .title)
             detail = try container.decode(String.self, forKey: .detail)

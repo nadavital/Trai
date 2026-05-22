@@ -359,7 +359,8 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
                     order: 2
                 ),
                 WorkoutPlan.TrainingBlock(
-                    kind: .warmup,
+                    kind: .mobility,
+                    role: .warmup,
                     title: "Warmup",
                     detail: "Move",
                     order: 0

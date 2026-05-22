@@ -325,8 +325,8 @@ extension AIService {
             - Use linkedActivityTags for semantic activity families, custom activity types, or personalized targets such as Climbing, grip, intervals, mobility, or technique.
             - Use linkedActivityKindRaw and linkedActivityRoleRaw only as behavioral fallback metadata, such as support work, mobility warmups, skill accessories, or recovery cooldowns. For support work inside another workout, prefer linkedActivityTags plus linkedActivityRoleRaw when the activity has a meaningful semantic identity.
             - linkedWorkoutType must be one of: \(workoutModes)
-            - linkedActivityKindRaw can be warmup, strength, cardio, conditioning, skill, mobility, recovery, sportPractice, cooldown, or custom.
-            - linkedActivityRoleRaw can be main, warmup, accessory, finisher, cooldown, or custom.
+            - linkedActivityKindRaw can be \(AIPromptBuilder.workoutGoalActivityKindPromptList). Warmup and cooldown are placement roles, not activity kinds.
+            - linkedActivityRoleRaw can be \(AIPromptBuilder.workoutGoalActivityRolePromptList).
             - goalKind must be one of: milestone, frequency, duration, distance, weight
             - For milestone goals, leave targetValue and targetUnit empty.
             - For frequency goals, targetValue must be the count, targetUnit should usually be "sessions" or another unit matching the tracked activity, periodUnitRaw must be day, week, or month, and periodCount must be 1.
