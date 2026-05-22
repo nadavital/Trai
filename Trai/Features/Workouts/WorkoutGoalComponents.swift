@@ -667,11 +667,11 @@ enum WorkoutGoalProgressResolver {
             workoutCount = workouts.reduce(0) { count, workout in
                 count + (workout.entries ?? []).filter { entry in
                     guard goal.matches(entry: entry),
-                          let completedAt = entry.completedAt,
-                          completedAt >= periodStart else {
+                          entry.hasExercisePreferenceSignal else {
                         return false
                     }
-                    return true
+                    let progressDate = entry.completedAt ?? workout.completedAt ?? workout.startedAt
+                    return progressDate >= periodStart
                 }.count
             }
         } else {
