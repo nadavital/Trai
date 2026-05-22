@@ -90,6 +90,41 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.muscleGroups, [.chest])
     }
 
+    func testCreateStartWorkoutFromTemplatePreservesBlockActivityFocuses() {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Mixed Week Day",
+            sessionType: .mixed,
+            focusAreas: ["Strength"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Main lifts",
+                    activityTypeName: "Strength",
+                    activityTags: ["Strength"],
+                    order: 0
+                ),
+                WorkoutPlan.TrainingBlock(
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Work short problems with full rest.",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing", "Grip endurance"],
+                    durationMinutes: 30,
+                    order: 1
+                )
+            ],
+            estimatedDurationMinutes: 60,
+            order: 0
+        )
+
+        let workout = service.createStartWorkout(from: template)
+
+        XCTAssertEqual(workout.focusAreas, ["Strength", "Bouldering", "Climbing", "Grip endurance"])
+    }
+
     func testCreateWorkoutFromTemplateKeepsSupportiveCardioBlockAsActivity() throws {
         let context = try makeInMemoryContext()
         let lift = WorkoutPlan.ExerciseTemplate(
@@ -276,7 +311,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         )
 
         let entry = try XCTUnwrap(workout.entries?.first)
-        XCTAssertEqual(workout.focusAreas, ["Bouldering", "Grip endurance"])
+        XCTAssertEqual(workout.focusAreas, ["Bouldering", "Grip endurance", "Climbing"])
         XCTAssertEqual(entry.exerciseName, "Limit Bouldering")
         XCTAssertEqual(entry.exerciseType, "activity")
         XCTAssertEqual(entry.activityKind, WorkoutPlan.TrainingBlock.BlockKind.skill)
@@ -351,6 +386,16 @@ final class WorkoutTemplateServiceTests: XCTestCase {
                     exercises: [lift],
                     durationMinutes: 30,
                     order: 1
+                ),
+                WorkoutPlan.TrainingBlock(
+                    kind: .mobility,
+                    role: .warmup,
+                    title: "Shoulder Prep",
+                    detail: "Open the shoulders before pressing.",
+                    activityTypeName: "Mobility Flow",
+                    activityTags: ["Shoulder prep"],
+                    durationMinutes: 5,
+                    order: 2
                 )
             ],
             estimatedDurationMinutes: 45,
@@ -366,6 +411,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
 
         let entries = try XCTUnwrap(workout.entries)
         XCTAssertTrue(entries.isEmpty)
+        XCTAssertEqual(workout.focusAreas, ["Push", "Mobility Flow", "Shoulder prep"])
     }
 
     func testCreateWorkoutForIntentMatchesTemplateByCaseInsensitiveContains() throws {

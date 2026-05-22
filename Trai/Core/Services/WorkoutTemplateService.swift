@@ -50,7 +50,7 @@ struct WorkoutTemplateService {
             name: template.name,
             workoutType: template.sessionType,
             targetMuscleGroups: muscleGroups,
-            focusAreas: template.focusAreas
+            focusAreas: focusAreasPreservingBlockActivities(from: template)
         )
     }
 
@@ -102,7 +102,7 @@ struct WorkoutTemplateService {
             name: template.name,
             workoutType: template.sessionType,
             targetMuscleGroups: template.sessionType.supportsMuscleTargets ? muscleGroups : [],
-            focusAreas: template.focusAreas
+            focusAreas: focusAreasPreservingBlockActivities(from: template)
         )
 
         var entries: [LiveWorkoutEntry] = []
@@ -182,6 +182,29 @@ struct WorkoutTemplateService {
 
         workout.entries = entries
         return workout
+    }
+
+    private func focusAreasPreservingBlockActivities(from template: WorkoutPlan.WorkoutTemplate) -> [String] {
+        var seen: Set<String> = []
+        var values: [String] = []
+
+        func append(_ rawValue: String?) {
+            guard let rawValue else { return }
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            let key = Exercise.normalizedActivityKey(trimmed)
+            guard !key.isEmpty, seen.insert(key).inserted else { return }
+            values.append(trimmed)
+        }
+
+        template.focusAreas.forEach(append)
+
+        for block in template.displayBlocks {
+            append(block.activityTypeName)
+            block.activityTags.forEach(append)
+        }
+
+        return values
     }
 
     // MARK: - Get Last Performance
