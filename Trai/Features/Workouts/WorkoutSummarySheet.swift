@@ -48,12 +48,12 @@ struct WorkoutSummarySheet: View {
         (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
     }
 
-    private var usesFlexibleSessionPresentation: Bool {
-        !workout.type.prefersStructuredEntries && workout.totalSets == 0
+    private var entryStats: LiveWorkout.EntrySummaryStats {
+        workout.entrySummaryStats
     }
 
-    private var completedActivityCount: Int {
-        sortedEntries.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count
+    private var usesFlexibleSessionPresentation: Bool {
+        !workout.type.prefersStructuredEntries && workout.totalSets == 0
     }
 
     private var summaryTitle: String {
@@ -157,17 +157,37 @@ struct WorkoutSummarySheet: View {
                             icon: "clock.fill"
                         )
 
-                        SummaryStatRow(
-                            label: usesFlexibleSessionPresentation ? "Activities" : "Exercises",
-                            value: "\(sortedEntries.count)",
-                            icon: usesFlexibleSessionPresentation ? "list.bullet.rectangle" : "dumbbell.fill"
-                        )
+                        if entryStats.strengthEntryCount > 0 {
+                            SummaryStatRow(
+                                label: "Exercises",
+                                value: "\(entryStats.strengthEntryCount)",
+                                icon: "dumbbell.fill"
+                            )
+                        }
 
-                        SummaryStatRow(
-                            label: usesFlexibleSessionPresentation ? "Completed" : "Total Sets",
-                            value: usesFlexibleSessionPresentation ? "\(completedActivityCount)" : "\(workout.totalSets)",
-                            icon: usesFlexibleSessionPresentation ? "checkmark.circle.fill" : "square.stack.3d.up.fill"
-                        )
+                        if entryStats.activityEntryCount > 0 {
+                            SummaryStatRow(
+                                label: "Activities",
+                                value: "\(entryStats.activityEntryCount)",
+                                icon: "list.bullet.rectangle"
+                            )
+                        }
+
+                        if entryStats.totalSets > 0 {
+                            SummaryStatRow(
+                                label: "Total Sets",
+                                value: "\(entryStats.totalSets)",
+                                icon: "square.stack.3d.up.fill"
+                            )
+                        }
+
+                        if entryStats.loggedActivityCount > 0 {
+                            SummaryStatRow(
+                                label: "Logged",
+                                value: "\(entryStats.loggedActivityCount)",
+                                icon: "checkmark.circle.fill"
+                            )
+                        }
                     }
                     .traiCard()
 
@@ -314,12 +334,12 @@ struct WorkoutSummaryContent: View {
         (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
     }
 
-    private var usesFlexibleSessionPresentation: Bool {
-        !workout.type.prefersStructuredEntries && workout.totalSets == 0
+    private var entryStats: LiveWorkout.EntrySummaryStats {
+        workout.entrySummaryStats
     }
 
-    private var completedActivityCount: Int {
-        sortedEntries.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count
+    private var usesFlexibleSessionPresentation: Bool {
+        !workout.type.prefersStructuredEntries && workout.totalSets == 0
     }
 
     private var summaryTitle: String {
@@ -422,17 +442,37 @@ struct WorkoutSummaryContent: View {
                         icon: "clock.fill"
                     )
 
-                    SummaryStatRow(
-                        label: usesFlexibleSessionPresentation ? "Activities" : "Exercises",
-                        value: "\(sortedEntries.count)",
-                        icon: usesFlexibleSessionPresentation ? "list.bullet.rectangle" : "dumbbell.fill"
-                    )
+                    if entryStats.strengthEntryCount > 0 {
+                        SummaryStatRow(
+                            label: "Exercises",
+                            value: "\(entryStats.strengthEntryCount)",
+                            icon: "dumbbell.fill"
+                        )
+                    }
 
-                    SummaryStatRow(
-                        label: usesFlexibleSessionPresentation ? "Completed" : "Total Sets",
-                        value: usesFlexibleSessionPresentation ? "\(completedActivityCount)" : "\(workout.totalSets)",
-                        icon: usesFlexibleSessionPresentation ? "checkmark.circle.fill" : "square.stack.3d.up.fill"
-                    )
+                    if entryStats.activityEntryCount > 0 {
+                        SummaryStatRow(
+                            label: "Activities",
+                            value: "\(entryStats.activityEntryCount)",
+                            icon: "list.bullet.rectangle"
+                        )
+                    }
+
+                    if entryStats.totalSets > 0 {
+                        SummaryStatRow(
+                            label: "Total Sets",
+                            value: "\(entryStats.totalSets)",
+                            icon: "square.stack.3d.up.fill"
+                        )
+                    }
+
+                    if entryStats.loggedActivityCount > 0 {
+                        SummaryStatRow(
+                            label: "Logged",
+                            value: "\(entryStats.loggedActivityCount)",
+                            icon: "checkmark.circle.fill"
+                        )
+                    }
                 }
                 .traiCard()
 
@@ -712,8 +752,8 @@ struct ActivitySummaryRow: View {
             segments.append(distance)
         }
 
-        if entry.completedAt != nil {
-            segments.append("Completed")
+        if entry.isLoggedActivity {
+            segments.append("Logged")
         }
 
         return segments
@@ -724,7 +764,7 @@ struct ActivitySummaryRow: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: entry.activityIconName)
                     .font(.subheadline)
-                    .foregroundStyle(entry.completedAt != nil ? .green : .secondary)
+                    .foregroundStyle(entry.isLoggedActivity ? .green : .secondary)
                     .frame(width: 28, height: 28)
                     .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8))
 

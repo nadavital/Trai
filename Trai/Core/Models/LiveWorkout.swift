@@ -293,8 +293,8 @@ extension LiveWorkout {
                 if let duration = entry.formattedDuration {
                     parts.append(duration)
                 }
-                if entry.completedAt != nil {
-                    parts.append("completed")
+                if entry.isLoggedActivity {
+                    parts.append("logged")
                 }
                 return parts.joined(separator: " • ")
             }
@@ -315,6 +315,66 @@ extension LiveWorkout {
 // MARK: - Computed Properties
 
 extension LiveWorkout {
+    struct EntrySummaryStats {
+        let strengthEntryCount: Int
+        let activityEntryCount: Int
+        let loggedActivityCount: Int
+        let totalSets: Int
+        let durationMinutes: Int
+
+        var entryCount: Int {
+            strengthEntryCount + activityEntryCount
+        }
+    }
+
+    var entrySummaryStats: EntrySummaryStats {
+        let entries = entries ?? []
+        let strengthEntryCount = entries.filter(\.isStrength).count
+        let activityEntryCount = entries.count - strengthEntryCount
+        let loggedActivityCount = entries.filter(\.isLoggedActivity).count
+        let totalSets = entries.reduce(0) { $0 + $1.sets.count }
+        let durationMinutes = Int(duration / 60)
+
+        return EntrySummaryStats(
+            strengthEntryCount: strengthEntryCount,
+            activityEntryCount: activityEntryCount,
+            loggedActivityCount: loggedActivityCount,
+            totalSets: totalSets,
+            durationMinutes: durationMinutes
+        )
+    }
+
+    var historySummarySegments: [String] {
+        let stats = entrySummaryStats
+        var segments: [String] = []
+
+        if stats.strengthEntryCount > 0 {
+            segments.append("\(stats.strengthEntryCount) \(stats.strengthEntryCount == 1 ? "exercise" : "exercises")")
+        }
+
+        if stats.activityEntryCount > 0 {
+            segments.append("\(stats.activityEntryCount) \(stats.activityEntryCount == 1 ? "activity" : "activities")")
+        }
+
+        if stats.totalSets > 0 {
+            segments.append("\(stats.totalSets) \(stats.totalSets == 1 ? "set" : "sets")")
+        }
+
+        if stats.strengthEntryCount == 0, stats.loggedActivityCount > 0 {
+            segments.append("\(stats.loggedActivityCount) logged")
+        }
+
+        if stats.durationMinutes > 0 {
+            segments.append("\(stats.durationMinutes) min")
+        }
+
+        if let calories = healthKitCalories {
+            segments.append("\(Int(calories)) kcal")
+        }
+
+        return segments
+    }
+
     /// Whether the workout is still in progress
     var isInProgress: Bool {
         completedAt == nil

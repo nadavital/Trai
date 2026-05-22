@@ -126,6 +126,11 @@ final class LiveWorkoutEntry {
             || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    var isLoggedActivity: Bool {
+        guard !isStrength else { return false }
+        return completedAt != nil || (!isPlannedActivityGuidance && hasExercisePreferenceSignal)
+    }
+
     var trackingFields: [Exercise.TrackingField] {
         get {
             let fields = trackingFieldsRaw

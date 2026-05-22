@@ -44,29 +44,31 @@ struct LiveWorkoutDetailSheet: View {
         (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
     }
 
+    private var entryStats: LiveWorkout.EntrySummaryStats {
+        workout.entrySummaryStats
+    }
+
     private var entryCount: Int {
-        sortedEntries.count
+        entryStats.entryCount
     }
 
     private var totalSets: Int {
-        sortedEntries.reduce(0) { $0 + $1.sets.count }
+        entryStats.totalSets
     }
 
     private var completedSets: Int {
         sortedEntries.reduce(0) { $0 + ($1.completedSets?.count ?? 0) }
     }
 
-    private var completedActivities: Int {
-        sortedEntries.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count
+    private var loggedActivities: Int {
+        entryStats.loggedActivityCount
     }
 
     private var maxWeightKg: Double? {
         sortedEntries.flatMap(\.sets).compactMap(\.weightKg).filter { $0 > 0 }.max()
     }
 
-    private var durationMinutes: Int {
-        Int(workout.duration / 60)
-    }
+    private var durationMinutes: Int { entryStats.durationMinutes }
 
     private var volumePRMode: UserProfile.VolumePRMode {
         profiles.first?.volumePRModeValue ?? .perSet
@@ -332,35 +334,43 @@ struct LiveWorkoutDetailSheet: View {
             }
 
             // Stats row
-            HStack(spacing: 16) {
+            FlowLayout(spacing: 10) {
                 if durationMinutes > 0 {
                     StatPill(icon: "clock.fill", value: formatDuration(Double(durationMinutes)), label: "time", color: .blue)
                 }
 
-                if usesFlexibleSessionPresentation {
-                    StatPill(
-                        icon: "list.bullet.rectangle",
-                        value: "\(entryCount)",
-                        label: entryCount == 1 ? "activity" : "activities",
-                        color: .green
-                    )
-                    StatPill(
-                        icon: "checkmark.circle.fill",
-                        value: "\(completedActivities)",
-                        label: completedActivities == 1 ? "done" : "done",
-                        color: .orange
-                    )
-                } else {
+                if entryStats.strengthEntryCount > 0 {
                     StatPill(
                         icon: "dumbbell.fill",
-                        value: "\(entryCount)",
-                        label: entryCount == 1 ? "exercise" : "exercises",
+                        value: "\(entryStats.strengthEntryCount)",
+                        label: entryStats.strengthEntryCount == 1 ? "exercise" : "exercises",
                         color: .green
                     )
+                }
+
+                if entryStats.activityEntryCount > 0 {
+                    StatPill(
+                        icon: "list.bullet.rectangle",
+                        value: "\(entryStats.activityEntryCount)",
+                        label: entryStats.activityEntryCount == 1 ? "activity" : "activities",
+                        color: .orange
+                    )
+                }
+
+                if totalSets > 0 {
                     StatPill(
                         icon: "square.stack.3d.up.fill",
                         value: "\(totalSets)",
                         label: totalSets == 1 ? "set" : "sets",
+                        color: .green
+                    )
+                }
+
+                if loggedActivities > 0 {
+                    StatPill(
+                        icon: "checkmark.circle.fill",
+                        value: "\(loggedActivities)",
+                        label: "logged",
                         color: .orange
                     )
                 }
@@ -422,7 +432,7 @@ struct LiveWorkoutDetailSheet: View {
                     if usesFlexibleSessionPresentation || !entry.isStrength {
                         GeneralActivityCard(
                             entry: entry,
-                            allowsCompletionToggle: isEditing,
+                            allowsCompletionToggle: false,
                             allowsDeletion: isEditing,
                             showsEditableFields: isEditing,
                             onUpdateNotes: { updateNotes(for: entry, notes: $0) },

@@ -18,45 +18,6 @@ extension LiveWorkout {
             !$0.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
-
-    var historySummarySegments: [String] {
-        let entries = entries ?? []
-        let strengthEntryCount = entries.filter(\.isStrength).count
-        let activityEntryCount = entries.count - strengthEntryCount
-        let completedActivityCount = entries.filter {
-            !$0.isStrength && $0.completedAt != nil
-        }.count
-        let totalSets = entries.reduce(0) { $0 + $1.sets.count }
-        let durationMinutes = Int(duration / 60)
-
-        var segments: [String] = []
-
-        if strengthEntryCount > 0 {
-            segments.append("\(strengthEntryCount) \(strengthEntryCount == 1 ? "exercise" : "exercises")")
-        }
-
-        if activityEntryCount > 0 {
-            segments.append("\(activityEntryCount) \(activityEntryCount == 1 ? "activity" : "activities")")
-        }
-
-        if totalSets > 0 {
-            segments.append("\(totalSets) \(totalSets == 1 ? "set" : "sets")")
-        }
-
-        if strengthEntryCount == 0, completedActivityCount > 0 {
-            segments.append("\(completedActivityCount) done")
-        }
-
-        if durationMinutes > 0 {
-            segments.append("\(durationMinutes) min")
-        }
-
-        if let calories = healthKitCalories {
-            segments.append("\(Int(calories)) kcal")
-        }
-
-        return segments
-    }
 }
 
 struct WorkoutHistoryInsightBadges: View {

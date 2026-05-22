@@ -167,6 +167,9 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         activityEntry.workout = workout
         workout.entries = [strengthEntry, activityEntry]
 
+        XCTAssertEqual(workout.entrySummaryStats.strengthEntryCount, 1)
+        XCTAssertEqual(workout.entrySummaryStats.activityEntryCount, 1)
+        XCTAssertEqual(workout.entrySummaryStats.loggedActivityCount, 1)
         XCTAssertEqual(
             workout.historySummarySegments,
             ["1 exercise", "1 activity", "1 set", "60 min"]
