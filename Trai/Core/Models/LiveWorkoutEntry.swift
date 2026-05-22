@@ -266,6 +266,27 @@ final class LiveWorkoutEntry {
 }
 
 extension WorkoutPlan.TrainingBlock.BlockKind {
+    var exerciseCategoryFallback: Exercise.Category {
+        switch self {
+        case .strength:
+            return .strength
+        case .cardio:
+            return .cardio
+        case .conditioning:
+            return .conditioning
+        case .skill:
+            return .skill
+        case .sportPractice:
+            return .sportPractice
+        case .mobility, .warmup, .cooldown:
+            return .mobility
+        case .recovery:
+            return .recovery
+        case .custom:
+            return .custom
+        }
+    }
+
     static func liveWorkoutFallbackKind(for exerciseType: String) -> WorkoutPlan.TrainingBlock.BlockKind? {
         switch exerciseType {
         case "strength":

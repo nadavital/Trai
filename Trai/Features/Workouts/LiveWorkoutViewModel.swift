@@ -1241,11 +1241,12 @@ final class LiveWorkoutViewModel {
     }
 
     func addExerciseByName(_ name: String, exerciseType: String = "strength") {
-        let entry = LiveWorkoutEntry(exerciseName: name, orderIndex: entries.count, exerciseType: exerciseType)
-        let category = Exercise.Category(rawValue: exerciseType) ?? .custom
+        let category = Exercise.Category.normalized(from: exerciseType) ?? .custom
+        let entry = LiveWorkoutEntry(exerciseName: name, orderIndex: entries.count, exerciseType: category.rawValue)
         entry.activityTypeName = Exercise.defaultActivityTypeName(for: name, category: category)
         entry.trackingFields = Exercise.defaultTrackingFields(for: category)
-        guard exerciseType == "strength" else {
+        guard category == .strength else {
+            entry.activityKind = category.liveWorkoutActivityKind
             ensureInitialActivitySegment(for: entry)
             appendEntry(entry)
             return
@@ -1684,7 +1685,7 @@ final class LiveWorkoutViewModel {
         entry.activityTypeName = trimmedName
         entry.targetTags = [trimmedName]
         entry.plannedDurationSeconds = durationSeconds
-        entry.trackingFields = Exercise.defaultTrackingFields(for: Exercise.Category(rawValue: entry.exerciseType) ?? .custom)
+        entry.trackingFields = Exercise.defaultTrackingFields(for: kind.exerciseCategoryFallback)
         ensureInitialActivitySegment(for: entry)
 
         if workout.entries == nil {

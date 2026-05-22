@@ -614,7 +614,7 @@ private extension SuggestedWorkoutLog {
 
 private extension SuggestedWorkoutLog.LoggedExercise {
     func resolvedCategory(fallbackWorkoutType: LiveWorkout.WorkoutType) -> Exercise.Category {
-        if let category, let resolved = Exercise.Category(rawValue: category) {
+        if let resolved = Exercise.Category.normalized(from: category) {
             return resolved
         }
         if fallbackWorkoutType.supportsMuscleTargets || !sets.isEmpty {
@@ -660,7 +660,7 @@ private extension SuggestedWorkoutLog.LoggedExercise {
 
 private extension SuggestedWorkoutEntry.SuggestedExercise {
     func resolvedCategory(fallbackWorkoutType: LiveWorkout.WorkoutType) -> Exercise.Category {
-        if let category, let resolved = Exercise.Category(rawValue: category) {
+        if let resolved = Exercise.Category.normalized(from: category) {
             return resolved
         }
         if fallbackWorkoutType.supportsMuscleTargets {

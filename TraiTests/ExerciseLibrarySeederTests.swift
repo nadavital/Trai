@@ -66,6 +66,9 @@ final class ExerciseLibrarySeederTests: XCTestCase {
 
         let userFacingCategory = Exercise(name: "Padel", category: "sport")
         XCTAssertEqual(userFacingCategory.exerciseCategory, .sportPractice)
+
+        let liveEntry = LiveWorkoutEntry(exerciseName: "Padel", orderIndex: 0, exerciseType: "sport")
+        XCTAssertEqual(liveEntry.trackingFields, [.duration, .reps, .notes])
     }
 
     func testEnsureDefaultsSeedsBroadExerciseLibraryOnce() throws {
