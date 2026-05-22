@@ -155,7 +155,7 @@ final class TrendsService {
             guard dayStart >= startDate else { continue }
 
             let durationMinutes = Int(workout.duration / 60)
-            let entryCount = workout.entries?.count ?? 0
+            let entryCount = workout.entries?.filter(\.hasExercisePreferenceSignal).count ?? 0
 
             if let existing = dailyData[dayStart] {
                 dailyData[dayStart] = DailyWorkout(

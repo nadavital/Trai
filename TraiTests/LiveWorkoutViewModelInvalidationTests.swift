@@ -176,6 +176,39 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         )
     }
 
+    func testWorkoutTrendAggregationCountsLoggedItemsOnly() {
+        let workout = LiveWorkout(name: "Strength + Planned Climb", workoutType: .mixed)
+        workout.startedAt = Date()
+        workout.completedAt = Date()
+
+        let strengthEntry = LiveWorkoutEntry(exerciseName: "Back Squat", orderIndex: 0)
+        strengthEntry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: .zero, completed: true))
+
+        let loggedActivity = LiveWorkoutEntry(
+            exerciseName: "Bouldering",
+            orderIndex: 1,
+            exerciseType: "skill"
+        )
+        loggedActivity.activityTypeName = "Bouldering"
+        loggedActivity.durationSeconds = 1_200
+
+        let plannedGuidance = LiveWorkoutEntry(
+            exerciseName: "Mobility Cooldown",
+            orderIndex: 2,
+            exerciseType: "activity"
+        )
+        plannedGuidance.activityTypeName = "Mobility"
+        plannedGuidance.sourcePlanBlockID = UUID()
+
+        workout.entries = [strengthEntry, loggedActivity, plannedGuidance]
+
+        let day = TrendsService.aggregateWorkoutsByDay(workouts: [workout], days: 1).first
+
+        XCTAssertEqual(day?.workoutCount, 1)
+        XCTAssertEqual(day?.totalEntries, 2)
+        XCTAssertEqual(day?.totalSets, 1)
+    }
+
     func testRepsOnlyActivitySegmentCountsAsLoggedData() {
         let workout = LiveWorkout(name: "Conditioning", workoutType: .hiit)
         let entry = LiveWorkoutEntry(
