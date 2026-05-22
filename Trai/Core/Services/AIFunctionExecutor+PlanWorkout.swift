@@ -137,6 +137,7 @@ extension AIFunctionExecutor {
                     "name": workout.displayName,
                     "type": workout.inferredWorkoutMode.rawValue,
                     "display_type": workout.displayTypeName,
+                    "activity_tags": workout.semanticActivityTags,
                     "date": dateFormatter.string(from: workout.loggedAt),
                     "duration_minutes": workout.durationMinutes ?? 0,
                     "sets": workout.sets,
@@ -170,6 +171,17 @@ extension AIFunctionExecutor {
                         "activity_tags": entry.targetTags,
                         "duration_minutes": entry.trackedDurationSeconds / 60,
                         "distance_meters": entry.trackedDistanceMeters,
+                        "segments": entry.activitySegments
+                            .filter(\.hasLoggedData)
+                            .map { segment in
+                                [
+                                    "duration_minutes": (segment.durationSeconds ?? 0) / 60,
+                                    "distance_meters": segment.distanceMeters ?? 0,
+                                    "reps": segment.reps ?? 0,
+                                    "weight_kg": segment.weightKg ?? 0,
+                                    "notes": segment.notes
+                                ] as [String: Any]
+                            },
                         "completed": entry.completedAt != nil,
                         "notes": trimmedNotes
                     ])
@@ -207,6 +219,7 @@ extension AIFunctionExecutor {
                 "total_sets": liveWorkout.totalSets,
                 "total_volume_kg": liveWorkout.totalVolume,
                 "muscle_groups": liveWorkout.muscleGroups.map(\.displayName),
+                "focus_areas": liveWorkout.focusAreas,
                 "tracked_in_app": true,
                 "source": "trai_live_workout",
                 "notes": liveWorkout.notes.trimmingCharacters(in: .whitespacesAndNewlines)
