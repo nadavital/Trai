@@ -81,7 +81,7 @@ struct WorkoutDetailSheet: View {
         if workout.sets > 0 {
             items.append(WorkoutStatItem(
                 value: "\(workout.sets)",
-                label: "Sets",
+                label: workout.setMetricLabel,
                 icon: "square.stack.3d.up.fill",
                 color: .blue
             ))
@@ -90,7 +90,7 @@ struct WorkoutDetailSheet: View {
         if workout.reps > 0 {
             items.append(WorkoutStatItem(
                 value: "\(workout.reps)",
-                label: "Reps",
+                label: workout.repMetricLabel,
                 icon: "repeat",
                 color: .green
             ))

@@ -123,7 +123,7 @@ extension WorkoutSession {
 
     /// Total volume (sets * reps * weight) for strength exercises
     var totalVolume: Double? {
-        guard let weightKg, sets > 0, reps > 0 else { return nil }
+        guard isStrengthTraining, let weightKg, sets > 0, reps > 0 else { return nil }
         return Double(sets * reps) * weightKg
     }
 
@@ -189,6 +189,73 @@ extension WorkoutSession {
         return activityDisplayName
     }
 
+    var setMetricLabel: String {
+        guard !isStrengthTraining else { return "Sets" }
+
+        switch exercise?.exerciseCategory.userFacingEquivalent {
+        case .conditioning:
+            return "Rounds"
+        case .cardio, .mobility, .recovery, .sportPractice, .custom, .none:
+            return "Segments"
+        case .strength:
+            return "Sets"
+        case .skill, .flexibility:
+            return "Segments"
+        }
+    }
+
+    var repMetricLabel: String {
+        guard !isStrengthTraining else { return "Reps" }
+
+        switch exercise?.exerciseCategory.userFacingEquivalent {
+        case .sportPractice:
+            return "Attempts"
+        case .conditioning:
+            return "Rounds"
+        case .mobility, .recovery:
+            return "Reps"
+        case .cardio, .custom, .none:
+            return "Count"
+        case .strength:
+            return "Reps"
+        case .skill:
+            return "Attempts"
+        case .flexibility:
+            return "Reps"
+        }
+    }
+
+    var setMetricPhrase: String? {
+        metricPhrase(value: sets, pluralLabel: setMetricLabel)
+    }
+
+    var repMetricPhrase: String? {
+        metricPhrase(value: reps, pluralLabel: repMetricLabel)
+    }
+
+    private func metricPhrase(value: Int, pluralLabel: String) -> String? {
+        guard value > 0 else { return nil }
+        return "\(value) \(metricName(for: value, pluralLabel: pluralLabel))"
+    }
+
+    private func metricName(for value: Int, pluralLabel: String) -> String {
+        let lowercased = pluralLabel.lowercased()
+        guard value == 1 else { return lowercased }
+
+        switch lowercased {
+        case "sets": return "set"
+        case "reps": return "rep"
+        case "rounds": return "round"
+        case "segments": return "segment"
+        case "attempts": return "attempt"
+        default:
+            if lowercased.hasSuffix("s") {
+                return String(lowercased.dropLast())
+            }
+            return lowercased
+        }
+    }
+
     var inferredWorkoutMode: WorkoutMode {
         if isStrengthTraining {
             return .strength
@@ -225,11 +292,11 @@ extension WorkoutSession {
         if let formattedDistance {
             details.append("distance \(formattedDistance)")
         }
-        if sets > 0 {
-            details.append("\(sets) sets")
+        if let setMetricPhrase {
+            details.append(setMetricPhrase)
         }
-        if reps > 0 {
-            details.append("\(reps) reps")
+        if let repMetricPhrase {
+            details.append(repMetricPhrase)
         }
         if let caloriesBurned {
             details.append("\(caloriesBurned) kcal")

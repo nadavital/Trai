@@ -108,13 +108,21 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         exercise.activityTypeName = "Climbing"
         exercise.targetTags = ["Power", "Technique"]
 
-        let session = WorkoutSession(exercise: exercise, sets: 0, reps: 8, weightKg: nil)
+        let session = WorkoutSession(exercise: exercise, sets: 2, reps: 8, weightKg: 20)
         session.durationMinutes = 45
 
         XCTAssertFalse(session.isStrengthTraining)
         XCTAssertEqual(session.displayTypeName, "Climbing")
         XCTAssertEqual(session.inferredWorkoutMode, .climbing)
         XCTAssertNil(session.totalVolume)
+        XCTAssertEqual(session.setMetricLabel, "Segments")
+        XCTAssertEqual(session.repMetricLabel, "Attempts")
+        XCTAssertEqual(session.setMetricPhrase, "2 segments")
+        XCTAssertEqual(session.repMetricPhrase, "8 attempts")
+        XCTAssertTrue(session.traiReviewPrompt.contains("2 segments"))
+        XCTAssertTrue(session.traiReviewPrompt.contains("8 attempts"))
+        XCTAssertFalse(session.traiReviewPrompt.contains("2 sets"))
+        XCTAssertFalse(session.traiReviewPrompt.contains("8 reps"))
     }
 
     func testEnsureDefaultsSeedsBroadExerciseLibraryOnce() throws {

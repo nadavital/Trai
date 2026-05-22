@@ -207,6 +207,12 @@ private struct WorkoutSessionListRow: View {
             if let distance = workout.formattedDistance {
                 segments.append(distance)
             }
+            if let setMetricPhrase = workout.setMetricPhrase {
+                segments.append(setMetricPhrase)
+            }
+            if let repMetricPhrase = workout.repMetricPhrase {
+                segments.append(repMetricPhrase)
+            }
         }
 
         if let calories = workout.caloriesBurned {
