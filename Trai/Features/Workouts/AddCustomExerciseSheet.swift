@@ -23,6 +23,7 @@ struct AddCustomExerciseSheet: View {
     @State private var selectedCategory: Exercise.Category = .strength
     @State private var selectedTargets: Set<String> = []
     @State private var selectedTrackingFields: Set<Exercise.TrackingField> = Set(Exercise.defaultTrackingFields(for: .strength))
+    @State private var customTargetText = ""
 
     // AI Analysis state
     @State private var aiService = AIService()
@@ -239,21 +240,43 @@ struct AddCustomExerciseSheet: View {
     // MARK: - Target Selector
 
     private var targetPickerContent: some View {
-        FlowLayout(spacing: 8) {
-            ForEach(visibleTargetOptions, id: \.self) { target in
-                TargetButton(
-                    title: target,
-                    isSelected: selectedTargets.contains(target)
-                ) {
-                    withAnimation(.snappy(duration: 0.2)) {
-                        if selectedTargets.contains(target) {
-                            selectedTargets.remove(target)
-                        } else {
-                            selectedTargets.insert(target)
+        VStack(alignment: .leading, spacing: 10) {
+            FlowLayout(spacing: 8) {
+                ForEach(visibleTargetOptions, id: \.self) { target in
+                    TargetButton(
+                        title: target,
+                        isSelected: selectedTargets.contains(target)
+                    ) {
+                        withAnimation(.snappy(duration: 0.2)) {
+                            if selectedTargets.contains(target) {
+                                selectedTargets.remove(target)
+                            } else {
+                                selectedTargets.insert(target)
+                            }
+                            HapticManager.selectionChanged()
                         }
-                        HapticManager.selectionChanged()
                     }
                 }
+            }
+
+            HStack(spacing: 8) {
+                TextField("Add a target", text: $customTargetText)
+                    .textInputAutocapitalization(.words)
+                    .font(.traiLabel(14))
+                    .padding(.horizontal, 12)
+                    .frame(height: 38)
+                    .background(Color(.tertiarySystemBackground), in: Capsule())
+
+                Button {
+                    addCustomTarget()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.traiLabel(13).weight(.semibold))
+                        .frame(width: 38, height: 38)
+                        .background(Color.accentColor.opacity(0.16), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(customTargetText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }
@@ -389,7 +412,7 @@ struct AddCustomExerciseSheet: View {
             hasAnalyzed = true
 
             withAnimation(.snappy(duration: 0.2)) {
-                if let category = Exercise.Category(rawValue: analysis.category) {
+                if let category = Exercise.Category.normalized(from: analysis.category) {
                     selectedCategory = category
                     resetDefaultsForSelectedCategory()
                 }
@@ -470,6 +493,17 @@ struct AddCustomExerciseSheet: View {
         if activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             activityTypeName = Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory)
         }
+    }
+
+    private func addCustomTarget() {
+        let target = Self.displayTargetTag(customTargetText)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !target.isEmpty else { return }
+        withAnimation(.snappy(duration: 0.2)) {
+            selectedTargets.insert(target)
+            customTargetText = ""
+        }
+        HapticManager.selectionChanged()
     }
 
     private func isTrackingFieldDisabled(_ field: Exercise.TrackingField) -> Bool {

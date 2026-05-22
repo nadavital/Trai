@@ -138,14 +138,14 @@ final class LiveWorkoutEntry {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .compactMap(Exercise.TrackingField.init(rawValue:))
                 .filter { $0 != .calories }
-            let category = Exercise.Category(rawValue: exerciseType) ?? .custom
+            let category = Exercise.Category.normalized(from: exerciseType) ?? .custom
             if !fields.isEmpty {
                 return Exercise.normalizedTrackingFields(fields, for: category)
             }
             return Exercise.defaultTrackingFields(for: category)
         }
         set {
-            let category = Exercise.Category(rawValue: exerciseType) ?? .custom
+            let category = Exercise.Category.normalized(from: exerciseType) ?? .custom
             trackingFieldsRaw = Exercise.normalizedTrackingFields(newValue, for: category).map(\.rawValue).joined(separator: ",")
         }
     }
@@ -171,7 +171,7 @@ final class LiveWorkoutEntry {
             if !explicit.isEmpty { return explicit }
             return Exercise.defaultActivityTypeName(
                 for: exerciseName,
-                category: Exercise.Category(rawValue: exerciseType) ?? .custom
+                category: Exercise.Category.normalized(from: exerciseType) ?? .custom
             )
         }
         set {
@@ -260,7 +260,7 @@ final class LiveWorkoutEntry {
         self.equipmentName = equipmentName
         self.activityTypeName = Exercise.defaultActivityTypeName(
             for: exerciseName,
-            category: Exercise.Category(rawValue: exerciseType) ?? .custom
+            category: Exercise.Category.normalized(from: exerciseType) ?? .custom
         )
     }
 }

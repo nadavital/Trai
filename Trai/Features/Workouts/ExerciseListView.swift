@@ -545,7 +545,7 @@ struct ExerciseListView: View {
                     EquipmentAnalysisSheet(
                         analysis: analysis,
                         onSelectExercise: { suggestion, equipmentName in
-                            let category = Exercise.Category(rawValue: suggestion.category ?? "") ?? .strength
+                            let category = Exercise.Category.normalized(from: suggestion.category) ?? .strength
                             let trackingFields = suggestion.trackingFields?
                                 .compactMap(Exercise.TrackingField.init(rawValue:))
                                 .filter { $0 != .calories }

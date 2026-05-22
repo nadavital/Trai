@@ -54,6 +54,20 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertTrue(Exercise.Category.mobility.suggestionCategories.contains(.flexibility))
     }
 
+    func testExerciseCategoryNormalizationAcceptsUserFacingActivityNames() {
+        XCTAssertEqual(Exercise.Category.normalized(from: "sport"), .sportPractice)
+        XCTAssertEqual(Exercise.Category.normalized(from: "sport practice"), .sportPractice)
+        XCTAssertEqual(Exercise.Category.normalized(from: "climbing"), .sportPractice)
+        XCTAssertEqual(Exercise.Category.normalized(from: "yoga"), .mobility)
+        XCTAssertEqual(Exercise.Category.normalized(from: "activity"), .custom)
+
+        let hiddenPrimitive = Exercise(name: "Limit Bouldering", category: .skill)
+        XCTAssertEqual(hiddenPrimitive.exerciseCategory, .skill)
+
+        let userFacingCategory = Exercise(name: "Padel", category: "sport")
+        XCTAssertEqual(userFacingCategory.exerciseCategory, .sportPractice)
+    }
+
     func testEnsureDefaultsSeedsBroadExerciseLibraryOnce() throws {
         let container = try ModelContainer(
             for: Exercise.self,

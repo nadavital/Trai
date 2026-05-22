@@ -152,10 +152,46 @@ extension Exercise {
                 return [self]
             }
         }
+
+        static func normalized(from rawValue: String?) -> Category? {
+            guard let rawValue else { return nil }
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let exact = Category(rawValue: trimmed) {
+                return exact
+            }
+
+            let token = rawValue
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: " ", with: "")
+
+            switch token {
+            case "strength", "lifting", "weights", "weighttraining", "resistancetraining":
+                return .strength
+            case "cardio", "endurance", "aerobic":
+                return .cardio
+            case "conditioning", "hiit", "circuit":
+                return .conditioning
+            case "mobility", "stretching", "stretch", "yoga", "flow":
+                return .mobility
+            case "sport", "sports", "sportpractice", "practice", "climbing", "bouldering", "boxing", "basketball", "tennis", "soccer", "padel":
+                return .sportPractice
+            case "recovery", "recover", "cooldown", "easy":
+                return .recovery
+            case "flexibility":
+                return .flexibility
+            case "custom", "activity", "other":
+                return .custom
+            default:
+                return nil
+            }
+        }
     }
 
     var exerciseCategory: Category {
-        get { Category(rawValue: category) ?? .custom }
+        get { Category.normalized(from: category) ?? .custom }
         set { category = newValue.rawValue }
     }
 
