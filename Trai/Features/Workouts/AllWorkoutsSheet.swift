@@ -132,45 +132,12 @@ private struct LiveWorkoutListRow: View {
     let activeGoals: [WorkoutGoal]
     let onTap: () -> Void
 
-    private var entryCount: Int { workout.entries?.count ?? 0 }
-    private var strengthEntryCount: Int { workout.entries?.filter(\.isStrength).count ?? 0 }
-    private var totalSets: Int { workout.entries?.reduce(0) { $0 + $1.sets.count } ?? 0 }
-    private var completedActivityCount: Int {
-        workout.entries?.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count ?? 0
-    }
-    private var durationMinutes: Int { Int(workout.duration / 60) }
     private var matchedGoalCount: Int { activeGoals.filter { $0.matches(workout: workout) }.count }
 
     private var focusSummary: String? {
         let summary = workout.displayFocusSummary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !summary.isEmpty, summary.caseInsensitiveCompare(workout.name) != .orderedSame else { return nil }
         return summary
-    }
-
-    private var summarySegments: [String] {
-        var segments: [String] = []
-
-        if workout.type.prefersStructuredEntries || strengthEntryCount > 0 {
-            if entryCount > 0 {
-                segments.append("\(entryCount) \(entryCount == 1 ? "exercise" : "exercises")")
-            }
-            if totalSets > 0 {
-                segments.append("\(totalSets) \(totalSets == 1 ? "set" : "sets")")
-            }
-        } else {
-            if entryCount > 0 {
-                segments.append("\(entryCount) \(entryCount == 1 ? "activity" : "activities")")
-            }
-            if completedActivityCount > 0 {
-                segments.append("\(completedActivityCount) done")
-            }
-        }
-
-        if durationMinutes > 0 {
-            segments.append("\(durationMinutes) min")
-        }
-
-        return segments
     }
 
     var body: some View {
@@ -201,7 +168,7 @@ private struct LiveWorkoutListRow: View {
                     )
 
                     HStack(spacing: 6) {
-                        ForEach(Array(summarySegments.enumerated()), id: \.offset) { index, segment in
+                        ForEach(Array(workout.historySummarySegments.enumerated()), id: \.offset) { index, segment in
                             if index > 0 {
                                 Text("•")
                                     .foregroundStyle(.tertiary)

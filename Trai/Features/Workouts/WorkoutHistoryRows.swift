@@ -18,6 +18,45 @@ extension LiveWorkout {
             !$0.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
+
+    var historySummarySegments: [String] {
+        let entries = entries ?? []
+        let strengthEntryCount = entries.filter(\.isStrength).count
+        let activityEntryCount = entries.count - strengthEntryCount
+        let completedActivityCount = entries.filter {
+            !$0.isStrength && $0.completedAt != nil
+        }.count
+        let totalSets = entries.reduce(0) { $0 + $1.sets.count }
+        let durationMinutes = Int(duration / 60)
+
+        var segments: [String] = []
+
+        if strengthEntryCount > 0 {
+            segments.append("\(strengthEntryCount) \(strengthEntryCount == 1 ? "exercise" : "exercises")")
+        }
+
+        if activityEntryCount > 0 {
+            segments.append("\(activityEntryCount) \(activityEntryCount == 1 ? "activity" : "activities")")
+        }
+
+        if totalSets > 0 {
+            segments.append("\(totalSets) \(totalSets == 1 ? "set" : "sets")")
+        }
+
+        if strengthEntryCount == 0, completedActivityCount > 0 {
+            segments.append("\(completedActivityCount) done")
+        }
+
+        if durationMinutes > 0 {
+            segments.append("\(durationMinutes) min")
+        }
+
+        if let calories = healthKitCalories {
+            segments.append("\(Int(calories)) kcal")
+        }
+
+        return segments
+    }
 }
 
 struct WorkoutHistoryInsightBadges: View {
@@ -98,26 +137,6 @@ struct LiveWorkoutHistoryRow: View {
 
     @State private var showDeleteConfirmation = false
 
-    private var entryCount: Int {
-        workout.entries?.count ?? 0
-    }
-
-    private var strengthEntryCount: Int {
-        workout.entries?.filter(\.isStrength).count ?? 0
-    }
-
-    private var totalSets: Int {
-        workout.entries?.reduce(0) { $0 + ($1.sets.count) } ?? 0
-    }
-
-    private var completedActivityCount: Int {
-        workout.entries?.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count ?? 0
-    }
-
-    private var durationMinutes: Int {
-        Int(workout.duration / 60)
-    }
-
     private var matchedGoalCount: Int {
         activeGoals.filter { $0.matches(workout: workout) }.count
     }
@@ -126,36 +145,6 @@ struct LiveWorkoutHistoryRow: View {
         let summary = workout.displayFocusSummary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !summary.isEmpty, summary.caseInsensitiveCompare(workout.name) != .orderedSame else { return nil }
         return summary
-    }
-
-    private var summarySegments: [String] {
-        var segments: [String] = []
-
-        if workout.type.prefersStructuredEntries || strengthEntryCount > 0 {
-            if entryCount > 0 {
-                segments.append("\(entryCount) \(entryCount == 1 ? "exercise" : "exercises")")
-            }
-            if totalSets > 0 {
-                segments.append("\(totalSets) \(totalSets == 1 ? "set" : "sets")")
-            }
-        } else {
-            if entryCount > 0 {
-                segments.append("\(entryCount) \(entryCount == 1 ? "activity" : "activities")")
-            }
-            if completedActivityCount > 0 {
-                segments.append("\(completedActivityCount) done")
-            }
-        }
-
-        if durationMinutes > 0 {
-            segments.append("\(durationMinutes) min")
-        }
-
-        if let calories = workout.healthKitCalories {
-            segments.append("\(Int(calories)) kcal")
-        }
-
-        return segments
     }
 
     var body: some View {
@@ -196,7 +185,7 @@ struct LiveWorkoutHistoryRow: View {
                     )
 
                     HStack(spacing: 6) {
-                        ForEach(Array(summarySegments.enumerated()), id: \.offset) { index, segment in
+                        ForEach(Array(workout.historySummarySegments.enumerated()), id: \.offset) { index, segment in
                             if index > 0 {
                                 Text("•")
                                     .foregroundStyle(.tertiary)
