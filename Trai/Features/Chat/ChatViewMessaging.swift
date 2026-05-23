@@ -609,14 +609,10 @@ extension ChatView {
         let sessionSignals: [WorkoutNoteSignal] = recentWorkouts
             .filter { $0.loggedAt >= cutoff && $0.hasSignalNote }
             .map { workout in
-                let subtitle = [workout.displayTypeName, workout.formattedDuration, workout.formattedDistance]
-                    .compactMap { $0 }
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " • ")
                 return WorkoutNoteSignal(
                     date: workout.loggedAt,
                     title: workout.displayName,
-                    subtitle: subtitle,
+                    subtitle: workout.historyDetailSegments.joined(separator: " • "),
                     note: workout.trimmedNotes
                 )
             }

@@ -108,10 +108,7 @@ struct WorkoutGoalRecommendationContextBuilder {
             .sorted { $0.loggedAt > $1.loggedAt }
             .prefix(4)
             .map { session in
-                let detail = [session.activityDisplayName, session.formattedDuration, session.formattedDistance]
-                    .compactMap { $0 }
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " • ")
+                let detail = session.historyDetailSegments.joined(separator: " • ")
                 return "\(session.displayName) (\(detail))"
             }
 

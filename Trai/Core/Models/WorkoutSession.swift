@@ -263,6 +263,63 @@ extension WorkoutSession {
         metricPhrase(value: reps, pluralLabel: repMetricLabel)
     }
 
+    var historyDetailSegments: [String] {
+        var segments: [String] = []
+
+        if isStrengthTraining {
+            if sets > 0 && reps > 0 {
+                segments.append("\(sets)×\(reps)")
+            } else {
+                if sets > 0 {
+                    segments.append("\(sets) \(sets == 1 ? "set" : "sets")")
+                }
+                if reps > 0 {
+                    segments.append("\(reps) reps")
+                }
+            }
+        } else {
+            let displayKey = displayName.goalNormalizedKey
+            let typeKey = displayTypeName.goalNormalizedKey
+            let importedTags = importedActivityTags.filter { tag in
+                let key = tag.goalNormalizedKey
+                return !key.isEmpty && key != displayKey && key != typeKey
+            }
+            let primaryContext = importedTags.first ?? {
+                let activity = activityDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                let key = activity.goalNormalizedKey
+                return !activity.isEmpty && key != displayKey ? activity : nil
+            }()
+
+            if let primaryContext {
+                segments.append(primaryContext)
+            }
+
+            if let extraTag = importedTags.dropFirst().first,
+               extraTag.goalNormalizedKey != primaryContext?.goalNormalizedKey {
+                segments.append(extraTag)
+            }
+
+            if let duration = formattedDuration {
+                segments.append(duration)
+            }
+            if let distance = formattedDistance {
+                segments.append(distance)
+            }
+            if let setMetricPhrase {
+                segments.append(setMetricPhrase)
+            }
+            if let repMetricPhrase {
+                segments.append(repMetricPhrase)
+            }
+        }
+
+        if let caloriesBurned {
+            segments.append("\(caloriesBurned) kcal")
+        }
+
+        return segments
+    }
+
     private func metricPhrase(value: Int, pluralLabel: String) -> String? {
         guard value > 0 else { return nil }
         return "\(value) \(metricName(for: value, pluralLabel: pluralLabel))"

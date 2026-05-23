@@ -221,36 +221,6 @@ struct WorkoutHistoryRow: View {
 
     @State private var showDeleteConfirmation = false
 
-    private var detailSegments: [String] {
-        var segments: [String] = []
-
-        if workout.isStrengthTraining {
-            segments.append("\(workout.sets)×\(workout.reps)")
-        } else {
-            segments.append(workout.displayTypeName)
-
-            if let duration = workout.formattedDuration {
-                segments.append(duration)
-            }
-
-            if let distance = workout.formattedDistance {
-                segments.append(distance)
-            }
-            if let setMetricPhrase = workout.setMetricPhrase {
-                segments.append(setMetricPhrase)
-            }
-            if let repMetricPhrase = workout.repMetricPhrase {
-                segments.append(repMetricPhrase)
-            }
-        }
-
-        if let calories = workout.caloriesBurned {
-            segments.append("\(calories) kcal")
-        }
-
-        return segments
-    }
-
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
@@ -273,7 +243,7 @@ struct WorkoutHistoryRow: View {
                     )
 
                     HStack(spacing: 6) {
-                        ForEach(Array(detailSegments.enumerated()), id: \.offset) { index, segment in
+                        ForEach(Array(workout.historyDetailSegments.enumerated()), id: \.offset) { index, segment in
                             if index > 0 {
                                 Text("•")
                                     .foregroundStyle(.tertiary)

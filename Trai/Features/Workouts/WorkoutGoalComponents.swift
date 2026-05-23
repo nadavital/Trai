@@ -556,10 +556,7 @@ enum WorkoutGoalProgressResolver {
 
     private static func signal(from session: WorkoutSession) -> RecentWorkoutSignal? {
         guard session.hasSignalNote else { return nil }
-        let subtitle = [session.displayTypeName, session.formattedDuration, session.formattedDistance]
-            .compactMap { $0 }
-            .filter { !$0.isEmpty }
-            .joined(separator: " • ")
+        let subtitle = session.historyDetailSegments.joined(separator: " • ")
 
         return RecentWorkoutSignal(
             title: session.displayName,
@@ -1500,7 +1497,7 @@ struct WorkoutGoalDetailSheet: View {
                 ActivityItem(
                     date: s.loggedAt,
                     name: s.displayName,
-                    detail: [s.displayTypeName, s.formattedDuration, s.formattedDistance].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " • "),
+                    detail: s.historyDetailSegments.joined(separator: " • "),
                     workout: nil,
                     session: s
                 )
