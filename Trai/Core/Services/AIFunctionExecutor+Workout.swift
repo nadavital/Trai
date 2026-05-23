@@ -31,12 +31,12 @@ extension AIFunctionExecutor {
         let workoutTypeString = args["workout_type"] as? String
         let workoutType = LiveWorkout.WorkoutType.normalized(from: workoutTypeString) ?? .strength
         let durationMinutes = args["duration_minutes"] as? Int ?? 45
-        let activityFocuses = stringArray(from: args["activity_focuses"])
+        let requestedActivityFocuses = stringArray(from: args["activity_focuses"])
 
-        if !activityFocuses.isEmpty || !workoutType.supportsMuscleTargets {
+        if !requestedActivityFocuses.isEmpty || !workoutType.supportsMuscleTargets {
             return .suggestedWorkoutStart(buildActivityWorkoutStartSuggestion(
                 workoutType: workoutType,
-                activityFocuses: activityFocuses,
+                activityFocuses: requestedActivityFocuses,
                 durationMinutes: durationMinutes
             ))
         }
@@ -45,7 +45,7 @@ extension AIFunctionExecutor {
         let targetMuscleStrings = args["target_muscle_groups"] as? [String] ?? []
         let targetMuscles: [LiveWorkout.MuscleGroup]
 
-        if targetMuscleStrings.isEmpty, activityFocuses.isEmpty {
+        if targetMuscleStrings.isEmpty, requestedActivityFocuses.isEmpty {
             // Use recovery-based recommendations
             targetMuscles = recoveryService.getRecommendedMuscleGroups(modelContext: modelContext)
         } else {
@@ -410,7 +410,7 @@ extension AIFunctionExecutor {
 
         // Parse target muscle groups
         let muscleStrings = args["target_muscle_groups"] as? [String] ?? []
-        let activityFocuses = stringArray(from: args["activity_focuses"])
+        let requestedActivityFocuses = stringArray(from: args["activity_focuses"])
 
         // Parse suggested exercises
         var exercises: [SuggestedWorkoutEntry.SuggestedExercise] = []
@@ -460,6 +460,11 @@ extension AIFunctionExecutor {
             }
         }
 
+        let activityFocuses = Self.suggestionActivityFocuses(
+            requested: requestedActivityFocuses,
+            exercises: exercises
+        )
+
         // Build rationale from recovery status
         let muscleNames = muscleStrings.map { $0.capitalized }.joined(separator: ", ")
         let rationale: String
@@ -508,6 +513,19 @@ extension AIFunctionExecutor {
                 notes: notes
             )
         }
+    }
+
+    private static func suggestionActivityFocuses(
+        requested: [String],
+        exercises: [SuggestedWorkoutEntry.SuggestedExercise]
+    ) -> [String] {
+        let derived = exercises
+            .filter(\.isActivityStartItem)
+            .flatMap { exercise in
+                ([exercise.activityTypeName] + (exercise.targetTags ?? []) + [exercise.name])
+                    .compactMap { $0 }
+            }
+        return (requested + derived).dedupedByGoalKey()
     }
 
     private func numericInt(from value: Any?) -> Int? {

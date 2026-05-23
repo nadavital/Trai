@@ -454,6 +454,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                             "name": "Run Intervals",
                             "category": "running",
                             "activity_name": "Running",
+                            "target_tags": ["Cardio", "Intervals"],
                             "tracking_fields": ["duration", "calories", "distance"],
                             "duration_minutes": 28,
                             "distance_meters": 4_000
@@ -469,6 +470,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         }
 
         XCTAssertEqual(exercise.category, "cardio")
+        XCTAssertEqual(suggestion.activityFocuses ?? [], ["Running", "Cardio", "Intervals", "Run Intervals"])
         XCTAssertEqual(exercise.trackingFields ?? [], ["duration", "distance"])
         XCTAssertFalse(exercise.trackingFields?.contains("calories") ?? false)
         XCTAssertEqual(exercise.startSummarySegments, ["Running", "28 min", "4.0 km"])

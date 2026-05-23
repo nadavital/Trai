@@ -478,7 +478,7 @@ extension ChatView {
             ? LiveWorkout.MuscleGroup.fromTargetStrings(workout.targetMuscleGroups)
             : []
         let focusAreas = workoutType.supportsMuscleTargets ? [] : workout.targetMuscleGroups
-        let semanticFocus = workout.activityFocuses?.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? []
+        let semanticFocus = workout.resolvedActivityFocuses
 
         // Create the LiveWorkout
         let liveWorkout = LiveWorkout(
@@ -712,6 +712,19 @@ private extension SuggestedWorkoutEntry.SuggestedExercise {
         return explicitFields.isEmpty
             ? Exercise.defaultTrackingFields(for: category)
             : Exercise.normalizedTrackingFields(explicitFields, for: category)
+    }
+}
+
+private extension SuggestedWorkoutEntry {
+    var resolvedActivityFocuses: [String] {
+        let explicit = activityFocuses ?? []
+        let derived = exercises
+            .filter(\.isActivityStartItem)
+            .flatMap { exercise in
+                ([exercise.activityTypeName] + (exercise.targetTags ?? []) + [exercise.name])
+                    .compactMap { $0 }
+            }
+        return (explicit + derived).dedupedByGoalKey()
     }
 }
 
