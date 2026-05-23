@@ -247,8 +247,9 @@ struct WorkoutGoalRecommendationContextBuilder {
         prefersMetricWeight: Bool
     ) -> [String] {
         let snapshots = ExercisePerformanceService.snapshots(from: history)
+        let strengthExerciseNames = Set(snapshots.keys.map(\.goalNormalizedKey))
 
-        return snapshots.values
+        let strengthSummaries = snapshots.values
             .sorted { lhs, rhs in
                 if lhs.totalSessions != rhs.totalSessions {
                     return lhs.totalSessions > rhs.totalSessions
@@ -278,6 +279,85 @@ struct WorkoutGoalRecommendationContextBuilder {
 
                 return parts.joined(separator: " • ")
             }
+
+        let activitySummaries = activityExerciseSummaries(
+            from: history.filter { record in
+                !record.hasStrengthMetrics &&
+                !strengthExerciseNames.contains(record.exerciseName.goalNormalizedKey)
+            }
+        )
+
+        return Array((strengthSummaries + activitySummaries).prefix(10))
+    }
+
+    private static func activityExerciseSummaries(from history: [ExerciseHistory]) -> [String] {
+        let grouped = Dictionary(grouping: history) { $0.exerciseName }
+
+        return grouped.compactMap { exerciseName, records -> (String, Int, Date)? in
+            let trackable = records.filter { record in
+                record.durationSeconds > 0 ||
+                record.distanceMeters > 0 ||
+                record.totalSets > 0 ||
+                record.totalReps > 0
+            }
+            guard !trackable.isEmpty else { return nil }
+
+            let latest = trackable.max { $0.performedAt < $1.performedAt }
+            let totalDuration = trackable.map(\.durationSeconds).reduce(0, +)
+            let totalDistance = trackable.map(\.distanceMeters).reduce(0, +)
+            let totalSegments = trackable.map(\.totalSets).reduce(0, +)
+            let totalCount = trackable.map(\.totalReps).reduce(0, +)
+            let countLabel = activityHistoryCountLabel(for: latest)
+
+            var parts: [String] = ["\(exerciseName): \(trackable.count) sessions"]
+            if let latest {
+                let activityName = latest.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !activityName.isEmpty, activityName.goalNormalizedKey != exerciseName.goalNormalizedKey {
+                    parts.append(activityName)
+                }
+                parts.append("last \(latest.formattedDate)")
+            }
+            if totalDuration > 0 {
+                parts.append("\(totalDuration / 60) min total")
+            }
+            if totalDistance > 0 {
+                parts.append(formatActivityDistance(totalDistance))
+            }
+            if totalCount > 0 {
+                parts.append("\(totalCount) \(pluralized(countLabel, count: totalCount)) total")
+            } else if totalSegments > 0 {
+                parts.append("\(totalSegments) \(pluralized("segment", count: totalSegments)) total")
+            }
+
+            return (parts.joined(separator: " • "), trackable.count, latest?.performedAt ?? .distantPast)
+        }
+        .sorted { lhs, rhs in
+            if lhs.1 != rhs.1 {
+                return lhs.1 > rhs.1
+            }
+            return lhs.2 > rhs.2
+        }
+        .map(\.0)
+    }
+
+    private static func activityHistoryCountLabel(for record: ExerciseHistory?) -> String {
+        switch record?.activityKind {
+        case .sportPractice, .skill:
+            return "attempt"
+        case .conditioning:
+            return "round"
+        case .mobility, .recovery:
+            return "rep"
+        default:
+            return "count"
+        }
+    }
+
+    private static func formatActivityDistance(_ meters: Double) -> String {
+        if meters >= 1000 {
+            return String(format: "%.1f km total", meters / 1000)
+        }
+        return "\(Int(meters.rounded())) m total"
     }
 }
 

@@ -422,6 +422,47 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertTrue(summaries[0].contains("7 attempts"))
     }
 
+    func testWorkoutGoalExerciseSummariesIncludeActivityHistoryMetrics() throws {
+        let firstEntry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 0,
+            exerciseType: "sportPractice"
+        )
+        firstEntry.activityTypeName = "Bouldering"
+        firstEntry.targetTags = ["Climbing"]
+        firstEntry.activitySegments = [
+            .init(durationSeconds: 600, reps: 4),
+            .init(durationSeconds: 600, reps: 3)
+        ]
+
+        let secondEntry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 0,
+            exerciseType: "sportPractice"
+        )
+        secondEntry.activityTypeName = "Bouldering"
+        secondEntry.targetTags = ["Climbing"]
+        secondEntry.activitySegments = [
+            .init(durationSeconds: 900, reps: 5)
+        ]
+
+        let history = [
+            ExerciseHistory(from: firstEntry, performedAt: Date().addingTimeInterval(-86_400)),
+            ExerciseHistory(from: secondEntry, performedAt: Date())
+        ]
+
+        let summaries = WorkoutGoalRecommendationContextBuilder.exerciseSummaries(
+            history: history,
+            prefersMetricWeight: true
+        )
+
+        let summary = try XCTUnwrap(summaries.first)
+        XCTAssertTrue(summary.contains("Limit Bouldering: 2 sessions"))
+        XCTAssertTrue(summary.contains("Bouldering"))
+        XCTAssertTrue(summary.contains("35 min total"))
+        XCTAssertTrue(summary.contains("12 attempts total"))
+    }
+
     func testWorkoutTemplateDisplayBlocksSortByDeclaredOrder() {
         let template = WorkoutPlan.WorkoutTemplate(
             name: "Hybrid Day",
