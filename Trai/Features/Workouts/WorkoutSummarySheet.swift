@@ -208,7 +208,7 @@ struct WorkoutSummarySheet: View {
                                         selectedExercise = IdentifiableExerciseName(id: entry.exerciseName)
                                     }
                                 } else {
-                                    ActivitySummaryRow(entry: entry)
+                                    ActivitySummaryRow(entry: entry, usesMetric: usesMetric)
                                 }
                             }
                         }
@@ -495,7 +495,7 @@ struct WorkoutSummaryContent: View {
                             if entry.isStrength {
                                 ExerciseSummaryRow(entry: entry, usesMetric: usesMetric)
                             } else {
-                                ActivitySummaryRow(entry: entry)
+                                ActivitySummaryRow(entry: entry, usesMetric: usesMetric)
                             }
                         }
                     }
@@ -739,6 +739,7 @@ struct ExerciseSummaryRow: View {
 
 struct ActivitySummaryRow: View {
     let entry: LiveWorkoutEntry
+    let usesMetric: Bool
 
     private var subtitleSegments: [String] {
         var segments: [String] = []
@@ -760,11 +761,72 @@ struct ActivitySummaryRow: View {
             segments.append(distance)
         }
 
+        segments.append(contentsOf: activityMetricSegments)
+
         if entry.isLoggedActivity {
             segments.append("Logged")
         }
 
         return segments
+    }
+
+    private var activityMetricSegments: [String] {
+        var segments: [String] = []
+        let loggedSegments = entry.activitySegments.filter(\.hasLoggedData)
+        if loggedSegments.count > 1 {
+            segments.append("\(loggedSegments.count) \(metricName(for: loggedSegments.count, pluralLabel: segmentMetricLabel))")
+        }
+
+        let countTotal = loggedSegments
+            .compactMap(\.reps)
+            .filter { $0 > 0 }
+            .reduce(0, +)
+        if countTotal > 0 {
+            segments.append("\(countTotal) \(metricName(for: countTotal, pluralLabel: countMetricLabel))")
+        }
+
+        let maxWeightKg = loggedSegments
+            .compactMap(\.weightKg)
+            .filter { $0 > 0 }
+            .max()
+        if let maxWeightKg {
+            let unit = WeightUnit(usesMetric: usesMetric)
+            segments.append("\(WeightUtility.format(maxWeightKg, displayUnit: unit)) max")
+        }
+
+        return segments
+    }
+
+    private var segmentMetricLabel: String {
+        let category = Exercise.Category.normalized(from: entry.exerciseType)?.userFacingEquivalent ?? .custom
+        switch category {
+        case .conditioning:
+            return "rounds"
+        default:
+            return "segments"
+        }
+    }
+
+    private var countMetricLabel: String {
+        let category = Exercise.Category.normalized(from: entry.exerciseType)?.userFacingEquivalent ?? .custom
+        switch category {
+        case .sportPractice:
+            return "attempts"
+        case .conditioning:
+            return "rounds"
+        case .mobility, .recovery:
+            return "reps"
+        default:
+            return "count"
+        }
+    }
+
+    private func metricName(for value: Int, pluralLabel: String) -> String {
+        guard value == 1 else { return pluralLabel }
+        if pluralLabel.hasSuffix("s") {
+            return String(pluralLabel.dropLast())
+        }
+        return pluralLabel
     }
 
     var body: some View {
