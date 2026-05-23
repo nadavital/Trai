@@ -95,7 +95,10 @@ struct WorkoutGoalRecommendationContextBuilder {
             .sorted { ($0.completedAt ?? $0.startedAt) > ($1.completedAt ?? $1.startedAt) }
             .prefix(4)
             .map { workout in
-                let detail = [workout.displayFocusSummary, workout.type.displayName, workout.formattedDuration]
+                let activityDetails = recentActivityDetails(for: workout)
+                let detailParts = [workout.displayFocusSummary, workout.type.displayName, workout.formattedDuration]
+                    + Array(activityDetails.prefix(3))
+                let detail = detailParts
                     .filter { !$0.isEmpty }
                     .joined(separator: " • ")
                 return "\(workout.name) (\(detail))"
@@ -113,6 +116,71 @@ struct WorkoutGoalRecommendationContextBuilder {
             }
 
         return Array((live + imported).prefix(6))
+    }
+
+    private static func recentActivityDetails(for workout: LiveWorkout) -> [String] {
+        (workout.entries ?? [])
+            .filter { !$0.isStrength && $0.hasExercisePreferenceSignal }
+            .sorted { $0.orderIndex < $1.orderIndex }
+            .map { entry in
+                let details = goalContextActivitySummarySegments(for: entry)
+                    .prefix(4)
+                return ([entry.exerciseName] + Array(details)).joined(separator: " ")
+            }
+    }
+
+    private static func goalContextActivitySummarySegments(for entry: LiveWorkoutEntry) -> [String] {
+        var segments: [String] = []
+        let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
+            segments.append(activityName)
+        }
+        let durationSeconds = entry.trackedDurationSeconds
+        if durationSeconds > 0 {
+            segments.append("\(durationSeconds / 60) min")
+        }
+        if let distance = entry.formattedDistance {
+            segments.append(distance)
+        }
+        let loggedSegments = entry.activitySegments.filter(\.hasLoggedData)
+        if loggedSegments.count > 1 {
+            segments.append("\(loggedSegments.count) \(pluralized(goalContextSegmentLabel(for: entry), count: loggedSegments.count))")
+        }
+        let countTotal = loggedSegments
+            .compactMap(\.reps)
+            .filter { $0 > 0 }
+            .reduce(0, +)
+        if countTotal > 0 {
+            segments.append("\(countTotal) \(pluralized(goalContextCountLabel(for: entry), count: countTotal))")
+        }
+        return segments
+    }
+
+    private static func goalContextSegmentLabel(for entry: LiveWorkoutEntry) -> String {
+        switch Exercise.Category.normalized(from: entry.exerciseType)?.userFacingEquivalent {
+        case .conditioning:
+            return "round"
+        default:
+            return "segment"
+        }
+    }
+
+    private static func goalContextCountLabel(for entry: LiveWorkoutEntry) -> String {
+        switch Exercise.Category.normalized(from: entry.exerciseType)?.userFacingEquivalent {
+        case .sportPractice:
+            return "attempt"
+        case .conditioning:
+            return "round"
+        case .mobility, .recovery:
+            return "rep"
+        default:
+            return "count"
+        }
+    }
+
+    private static func pluralized(_ label: String, count: Int) -> String {
+        guard count != 1 else { return label }
+        return label.hasSuffix("s") ? label : "\(label)s"
     }
 
     static func recentTrainingSummary(

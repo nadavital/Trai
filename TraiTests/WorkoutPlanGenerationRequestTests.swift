@@ -392,6 +392,36 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(goal.trackingSummary, "12 attempts / week")
     }
 
+    func testWorkoutGoalContextIncludesMixedActivityMetrics() {
+        let workout = LiveWorkout(name: "Strength + Climb", workoutType: .mixed)
+        workout.focusAreas = ["Strength", "Climbing"]
+        workout.completedAt = Date()
+
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 0,
+            exerciseType: "sportPractice"
+        )
+        entry.activityTypeName = "Bouldering"
+        entry.targetTags = ["Climbing"]
+        entry.activitySegments = [
+            .init(durationSeconds: 600, reps: 4),
+            .init(durationSeconds: 600, reps: 3)
+        ]
+        workout.entries = [entry]
+
+        let summaries = WorkoutGoalRecommendationContextBuilder.recentSessionSummaries(
+            workouts: [workout],
+            sessions: []
+        )
+
+        XCTAssertEqual(summaries.count, 1)
+        XCTAssertTrue(summaries[0].contains("Limit Bouldering"))
+        XCTAssertTrue(summaries[0].contains("Bouldering"))
+        XCTAssertTrue(summaries[0].contains("20 min"))
+        XCTAssertTrue(summaries[0].contains("7 attempts"))
+    }
+
     func testWorkoutTemplateDisplayBlocksSortByDeclaredOrder() {
         let template = WorkoutPlan.WorkoutTemplate(
             name: "Hybrid Day",
