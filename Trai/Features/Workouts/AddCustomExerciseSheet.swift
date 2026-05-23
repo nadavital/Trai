@@ -334,23 +334,12 @@ struct AddCustomExerciseSheet: View {
 
     private var trackingFieldPickerContent: some View {
         FlowLayout(spacing: 8) {
-            ForEach(Exercise.TrackingField.userConfigurableCases) { field in
-                TargetButton(
-                    title: trackingFieldTitle(field),
-                    icon: field.iconName,
-                    isSelected: selectedTrackingFields.contains(field),
-                    isDisabled: isTrackingFieldDisabled(field)
+            ForEach(TrackingPreset.all) { preset in
+                TrackingPresetButton(
+                    preset: preset,
+                    isSelected: isTrackingPresetSelected(preset)
                 ) {
-                    withAnimation(.snappy(duration: 0.2)) {
-                        if selectedTrackingFields.contains(field) {
-                            selectedTrackingFields.remove(field)
-                        } else if !isTrackingFieldDisabled(field) {
-                            selectedTrackingFields.insert(field)
-                        }
-                        didCustomizeTrackingFields = true
-                        updateCategoryFromTrackingFields()
-                        HapticManager.selectionChanged()
-                    }
+                    applyTrackingPreset(preset)
                 }
             }
         }
@@ -485,7 +474,9 @@ struct AddCustomExerciseSheet: View {
                 if let fields = analysis.trackingFields?
                     .compactMap(Exercise.TrackingField.init(rawValue:)),
                    !fields.isEmpty {
-                    selectedTrackingFields = Set(Exercise.normalizedTrackingFields(fields, for: selectedCategory))
+                    let preset = TrackingPreset.bestFit(category: selectedCategory, requestedFields: fields)
+                    selectedCategory = preset.category
+                    selectedTrackingFields = Set(preset.fields)
                 }
 
                 if let muscleGroupStr = analysis.muscleGroup,
@@ -524,14 +515,8 @@ struct AddCustomExerciseSheet: View {
     }
 
     private var orderedSelectedTrackingFields: [Exercise.TrackingField] {
-        let selected = Exercise.TrackingField.userConfigurableCases.filter { selectedTrackingFields.contains($0) }
+        let selected = Exercise.trackingFieldOptions(for: resolvedExerciseCategory).filter { selectedTrackingFields.contains($0) }
         return Exercise.normalizedTrackingFields(selected, for: resolvedExerciseCategory)
-    }
-
-    private func isTrackingFieldDisabled(_ field: Exercise.TrackingField) -> Bool {
-        guard field.isPrimaryMetric, !selectedTrackingFields.contains(field) else { return false }
-        let selectedPrimaryCount = selectedTrackingFields.filter(\.isPrimaryMetric).count
-        return selectedPrimaryCount >= Exercise.TrackingField.maximumPrimaryMetrics
     }
 
     private var resolvedActivityTypeName: String {
@@ -594,9 +579,6 @@ struct AddCustomExerciseSheet: View {
     }
 
     private var resolvedExerciseCategory: Exercise.Category {
-        if didCustomizeTrackingFields {
-            return categoryInferredFromTrackingFields()
-        }
         return selectedCategory.userFacingEquivalent
     }
 
@@ -656,52 +638,6 @@ struct AddCustomExerciseSheet: View {
         selectActivityGroup(group)
     }
 
-    private func updateCategoryFromTrackingFields() {
-        let category = categoryInferredFromTrackingFields()
-        guard category != selectedCategory else { return }
-        selectedCategory = category
-        if shouldReplaceDefaultActivityName {
-            applyDefaultActivityTypeName()
-        }
-    }
-
-    private func categoryInferredFromTrackingFields() -> Exercise.Category {
-        let fields = selectedTrackingFields
-
-        if fields.contains(.sets) || fields.contains(.weight) {
-            if fields.contains(.duration) || fields.contains(.distance) {
-                return .custom
-            }
-            return .strength
-        }
-
-        if fields.contains(.distance) {
-            return .cardio
-        }
-
-        if fields.contains(.reps), fields.contains(.duration) {
-            if selectedCategory.userFacingEquivalent == .sportPractice {
-                return .sportPractice
-            }
-            return .conditioning
-        }
-
-        if fields == Set([.duration, .notes]) {
-            switch selectedCategory.userFacingEquivalent {
-            case .recovery, .mobility:
-                return selectedCategory.userFacingEquivalent
-            default:
-                return .mobility
-            }
-        }
-
-        if fields == Set([.notes]) {
-            return .recovery
-        }
-
-        return selectedCategory.userFacingEquivalent
-    }
-
     private func inferTrackingTemplateIfNeeded() {
         guard !didCustomizeTrackingFields else { return }
         let inferredCategory = [activityTypeName, exerciseName]
@@ -725,6 +661,23 @@ struct AddCustomExerciseSheet: View {
             customTargetText = ""
         }
         HapticManager.selectionChanged()
+    }
+
+    private func applyTrackingPreset(_ preset: TrackingPreset) {
+        withAnimation(.snappy(duration: 0.2)) {
+            selectedCategory = preset.category
+            selectedTrackingFields = Set(preset.fields)
+            didCustomizeTrackingFields = true
+            if shouldReplaceDefaultActivityName {
+                applyDefaultActivityTypeName()
+            }
+        }
+        HapticManager.selectionChanged()
+    }
+
+    private func isTrackingPresetSelected(_ preset: TrackingPreset) -> Bool {
+        resolvedExerciseCategory == preset.category
+            && Set(orderedSelectedTrackingFields) == Set(preset.fields)
     }
 
     private func trackingFieldTitle(_ field: Exercise.TrackingField) -> String {
@@ -788,6 +741,162 @@ struct AddCustomExerciseSheet: View {
             result.append(trimmed)
         }
         return result
+    }
+}
+
+// MARK: - Tracking Preset
+
+private struct TrackingPreset: Identifiable {
+    let id: String
+    let title: String
+    let icon: String
+    let category: Exercise.Category
+    let fields: [Exercise.TrackingField]
+
+    var subtitle: String {
+        fields
+            .map { field in
+                switch (category.userFacingEquivalent, field) {
+                case (.conditioning, .reps):
+                    return "Rounds"
+                case (.sportPractice, .reps), (.skill, .reps):
+                    return "Attempts"
+                default:
+                    return field.displayName
+                }
+            }
+            .joined(separator: ", ")
+    }
+
+    static let all: [TrackingPreset] = [
+        TrackingPreset(
+            id: "weighted_sets",
+            title: "Weighted Sets",
+            icon: "dumbbell.fill",
+            category: .strength,
+            fields: [.sets, .reps, .weight]
+        ),
+        TrackingPreset(
+            id: "timed_distance",
+            title: "Timed Distance",
+            icon: "figure.run",
+            category: .cardio,
+            fields: [.duration, .distance]
+        ),
+        TrackingPreset(
+            id: "rounds",
+            title: "Rounds",
+            icon: "bolt.heart.fill",
+            category: .conditioning,
+            fields: [.reps, .duration, .notes]
+        ),
+        TrackingPreset(
+            id: "attempts",
+            title: "Attempts",
+            icon: "sportscourt.fill",
+            category: .sportPractice,
+            fields: [.reps, .duration, .notes]
+        ),
+        TrackingPreset(
+            id: "duration_notes",
+            title: "Duration + Notes",
+            icon: "figure.mind.and.body",
+            category: .mobility,
+            fields: [.duration, .notes]
+        ),
+        TrackingPreset(
+            id: "notes_only",
+            title: "Notes Only",
+            icon: "note.text",
+            category: .custom,
+            fields: [.notes]
+        )
+    ]
+
+    static func bestFit(
+        category: Exercise.Category,
+        requestedFields: [Exercise.TrackingField]
+    ) -> TrackingPreset {
+        let category = category.userFacingEquivalent
+        let requested = Set(requestedFields)
+
+        if let exact = all.first(where: {
+            $0.category.userFacingEquivalent == category && Set($0.fields) == requested
+        }) {
+            return exact
+        }
+
+        if requested.contains(.sets) || requested.contains(.weight) {
+            return all[0]
+        }
+
+        if requested.contains(.distance) {
+            return all[1]
+        }
+
+        if requested.contains(.reps), requested.contains(.duration) {
+            return category == .sportPractice ? all[3] : all[2]
+        }
+
+        if requested == Set([.notes]) {
+            return all[5]
+        }
+
+        if requested.contains(.duration) {
+            return all[4]
+        }
+
+        switch category {
+        case .strength:
+            return all[0]
+        case .cardio:
+            return all[1]
+        case .conditioning:
+            return all[2]
+        case .sportPractice:
+            return all[3]
+        case .mobility, .recovery:
+            return all[4]
+        case .custom:
+            return all[5]
+        case .skill, .flexibility:
+            return all[3]
+        }
+    }
+}
+
+private struct TrackingPresetButton: View {
+    let preset: TrackingPreset
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: preset.icon)
+                    .font(.traiLabel(12).weight(.semibold))
+                    .frame(width: 18)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(preset.title)
+                        .font(.traiLabel(12).weight(.semibold))
+                        .lineLimit(1)
+                    Text(preset.subtitle)
+                        .font(.traiLabel(10))
+                        .foregroundStyle(isSelected ? Color.accentColor.opacity(0.75) : Color.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 48)
+            .frame(maxWidth: 190, alignment: .leading)
+            .background(
+                isSelected ? Color.accentColor.opacity(0.18) : Color(.tertiarySystemFill),
+                in: RoundedRectangle(cornerRadius: 14)
+            )
+            .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+        }
+        .buttonStyle(.plain)
     }
 }
 
