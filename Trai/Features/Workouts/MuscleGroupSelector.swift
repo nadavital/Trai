@@ -38,24 +38,8 @@ struct MuscleGroupSelector: View {
 
     private let activityTargets: [Exercise.Category] = [.cardio, .conditioning, .mobility, .sportPractice, .recovery]
 
-    private var activityTypeTargetCategoryKeys: Set<String> {
-        Set(
-            activityTypeTargets.flatMap { target in
-                target.categories.flatMap { category in
-                    category.suggestionCategories.map(\.rawValue) + [category.displayName]
-                } + [target.title]
-            }
-            .map { Exercise.normalizedActivityKey($0) }
-            .filter { !$0.isEmpty }
-        )
-    }
-
     private var displayedActivityTargets: [Exercise.Category] {
-        activityTargets.filter { category in
-            let keys = category.suggestionCategories.flatMap { [$0.rawValue, $0.displayName] }
-                .map { Exercise.normalizedActivityKey($0) }
-            return keys.allSatisfy { !activityTypeTargetCategoryKeys.contains($0) }
-        }
+        activityTargets
     }
 
     private var displayedActivityCategories: [Exercise.Category] {
@@ -144,7 +128,7 @@ struct MuscleGroupSelector: View {
                         }
                     }
 
-                    FlowLayout(spacing: 8) {
+                    horizontalTargetRow {
                         ForEach(displayedActivityTargets) { category in
                             ActivityTargetChip(
                                 category: category,
