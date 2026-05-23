@@ -1735,14 +1735,19 @@ final class LiveWorkoutViewModel {
         saveImmediately()
     }
 
-    func applyPlanTarget(name: String, muscles: [LiveWorkout.MuscleGroup], categories: [Exercise.Category]) {
+    func applyPlanTarget(
+        name: String,
+        muscles: [LiveWorkout.MuscleGroup],
+        categories: [Exercise.Category],
+        activityTypes: [String] = []
+    ) {
         workout.name = name
         workout.muscleGroups = muscles
         let categoryFocus = categories
             .flatMap { Array($0.suggestionCategories) }
             .sorted { $0.displayName < $1.displayName }
             .map(\.rawValue)
-        workout.focusAreas = categoryFocus
+        workout.focusAreas = Self.dedupedFocusAreas(categoryFocus + activityTypes)
         rebuildSuggestionPool(reason: .targetMusclesChanged)
         saveImmediately()
     }

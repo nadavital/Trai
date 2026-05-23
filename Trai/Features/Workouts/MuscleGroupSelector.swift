@@ -16,6 +16,7 @@ struct MuscleGroupSelector: View {
         let iconName: String
         let muscles: [LiveWorkout.MuscleGroup]
         let categories: [Exercise.Category]
+        let activityTypes: [String]
     }
 
     struct ActivityTypeTarget: Identifiable, Equatable {
@@ -191,16 +192,18 @@ struct MuscleGroupSelector: View {
     private func selectPlanTarget(_ target: PlanTarget) {
         selectedMuscles = Set(target.muscles)
         selectedActivityCategories = Set(target.categories.flatMap { Array($0.suggestionCategories) })
-        selectedActivityTypes = []
+        selectedActivityTypes = Set(target.activityTypes)
         onSelectPlanTarget?(target)
         HapticManager.selectionChanged()
     }
 
     private func isPlanTargetSelected(_ target: PlanTarget) -> Bool {
-        guard !target.muscles.isEmpty || !target.categories.isEmpty else { return false }
+        guard !target.muscles.isEmpty || !target.categories.isEmpty || !target.activityTypes.isEmpty else { return false }
         let targetMuscles = Set(target.muscles)
         let targetCategories = Set(target.categories.flatMap { Array($0.suggestionCategories) })
-        return selectedMuscles == targetMuscles && selectedActivityCategories == targetCategories && selectedActivityTypes.isEmpty
+        return selectedMuscles == targetMuscles
+            && selectedActivityCategories == targetCategories
+            && selectedActivityTypes == Set(target.activityTypes)
     }
 
     private func toggleActivityTypeTarget(_ target: ActivityTypeTarget) {

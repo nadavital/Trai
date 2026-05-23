@@ -43,7 +43,8 @@ struct LiveWorkoutView: View {
                     muscles: template.sessionType.supportsMuscleTargets
                         ? LiveWorkout.MuscleGroup.fromTargetStrings(template.resolvedTargetMuscleGroups)
                         : [],
-                    categories: activityCategories(for: template)
+                    categories: activityCategories(for: template),
+                    activityTypes: activityTypes(for: template)
                 )
             }
     }
@@ -448,7 +449,8 @@ struct LiveWorkoutView: View {
                             viewModel.applyPlanTarget(
                                 name: target.title,
                                 muscles: target.muscles,
-                                categories: target.categories
+                                categories: target.categories,
+                                activityTypes: target.activityTypes
                             )
                         }
                     )
@@ -690,6 +692,18 @@ struct LiveWorkoutView: View {
         }
 
         return categories
+    }
+
+    private func activityTypes(for template: WorkoutPlan.WorkoutTemplate) -> [String] {
+        var seen: Set<String> = []
+        return template.displayBlocks.compactMap { block in
+            guard block.kind != .strength else { return nil }
+            let name = block.displayActivityName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return nil }
+            let key = name.goalNormalizedKey
+            guard !key.isEmpty, seen.insert(key).inserted else { return nil }
+            return name
+        }
     }
 
     private func applyUITestStressMutationBurst() {
