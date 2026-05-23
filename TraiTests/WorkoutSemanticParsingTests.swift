@@ -685,6 +685,19 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertTrue(updateGoalKinds.contains(""))
     }
 
+    func testPlanBlockSchemasRequireUserFacingActivityIdentity() throws {
+        for schema in [AIPromptBuilder.workoutPlanSchema, AIPromptBuilder.workoutPlanRefinementSchema] {
+            let blockSchema = try planBlockSchema(in: schema)
+            let required = try XCTUnwrap(blockSchema["required"] as? [String])
+            let blockProperties = try XCTUnwrap(blockSchema["properties"] as? [String: Any])
+            let activityTypeName = try XCTUnwrap(blockProperties["activityTypeName"] as? [String: Any])
+
+            XCTAssertTrue(required.contains("activityTypeName"))
+            XCTAssertEqual(activityTypeName["type"] as? String, "string")
+            XCTAssertNil(activityTypeName["nullable"])
+        }
+    }
+
     func testRecentWorkoutsExposeLiveWorkoutActivityFocusesAndSegments() async throws {
         let context = try makeWorkoutHistoryContext()
         let workout = LiveWorkout(
@@ -832,6 +845,12 @@ final class WorkoutSemanticParsingTests: XCTestCase {
     }
 
     private func blockEnum(in schema: [String: Any], field: String) throws -> [String] {
+        let blockProperties = try XCTUnwrap(try planBlockSchema(in: schema)["properties"] as? [String: Any])
+        let fieldSchema = try XCTUnwrap(blockProperties[field] as? [String: Any])
+        return try XCTUnwrap(fieldSchema["enum"] as? [String])
+    }
+
+    private func planBlockSchema(in schema: [String: Any]) throws -> [String: Any] {
         let rootProperties = try XCTUnwrap(schema["properties"] as? [String: Any])
         let planSchema = (rootProperties["templates"] == nil)
             ? try XCTUnwrap(rootProperties["proposedPlan"] as? [String: Any])
@@ -842,9 +861,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         let templateProperties = try XCTUnwrap(templateItems["properties"] as? [String: Any])
         let blocks = try XCTUnwrap(templateProperties["blocks"] as? [String: Any])
         let blockItems = try XCTUnwrap(blocks["items"] as? [String: Any])
-        let blockProperties = try XCTUnwrap(blockItems["properties"] as? [String: Any])
-        let fieldSchema = try XCTUnwrap(blockProperties[field] as? [String: Any])
-        return try XCTUnwrap(fieldSchema["enum"] as? [String])
+        return blockItems
     }
 
     private func propertyEnum(in schema: [String: Any], property: String) throws -> [String] {

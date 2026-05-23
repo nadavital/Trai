@@ -221,6 +221,10 @@ extension AIService {
             log("Workout plan missing explicit block structure for one or more templates.", type: .error)
             throw AIServiceError.parsingError
         }
+        guard plan.hasUserFacingActivityIdentityForEveryBlock else {
+            log("Workout plan included one or more blocks without activityTypeName.", type: .error)
+            throw AIServiceError.parsingError
+        }
 
         if let requestedDays = request.availableDays {
             guard plan.templates.count == requestedDays else {
@@ -281,6 +285,7 @@ extension AIService {
         \(request.requestsCardioAsAccessory ? "The user asked for cardio as supportive work, so do not return standalone cardio or HIIT templates. Add the cardio work inside one strength or mixed template with role \(request.supportiveCardioRole.rawValue)." : "")
         \(request.limitsAccessoryCardioToOneSession ? "The user limited cardio support to one placement, so return exactly one cardio block with role \(request.supportiveCardioRole.rawValue) in the whole plan." : "")
         Return planIntent, modalityProgression, and ordered blocks for every template. Do not flatten activity work into fake strength exercises.
+        Every block must include a non-empty activityTypeName that names the user-facing activity, such as Strength, Running, Cycling, Bouldering, Mobility Flow, Boxing, or Recovery.
         Return only the corrected JSON object matching the schema.
         """
     }
@@ -523,7 +528,8 @@ extension AIService {
         guard !plan.templates.isEmpty,
               plan.planIntent != nil,
               plan.modalityProgression != nil,
-              plan.templates.allSatisfy({ !$0.blocks.isEmpty }) else {
+              plan.templates.allSatisfy({ !$0.blocks.isEmpty }),
+              plan.hasUserFacingActivityIdentityForEveryBlock else {
             log("Ignoring workout plan refinement that dropped explicit plan structure.", type: .error)
             return nil
         }
@@ -533,6 +539,16 @@ extension AIService {
         }
 
         return plan
+    }
+}
+
+private extension WorkoutPlan {
+    var hasUserFacingActivityIdentityForEveryBlock: Bool {
+        templates.allSatisfy { template in
+            template.displayBlocks.allSatisfy { block in
+                block.activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            }
+        }
     }
 }
 

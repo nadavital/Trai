@@ -114,7 +114,7 @@ extension AIPromptBuilder {
         2. Custom, activity-first, hybrid, skill-based, and nontraditional weekly structures are all valid.
         3. Respect the user's selected weekly schedule. If Available Days Per Week is a number, return exactly that many workout templates and set daysPerWeek to that same number. Only choose a different session count when Available Days Per Week is Flexible.
         4. Design workout templates with exercises OR activities that match the user's actual preferences, equipment, and constraints.
-        5. Build every template from ordered blocks. Block kind and role are stable behavior primitives. activityTypeName is the user-facing activity identity, so use specific names like Climbing, Cycling, Mobility Flow, Boxing, or Strength instead of relying on broad kinds as labels.
+        5. Build every template from ordered blocks. Block kind and role are stable behavior primitives. activityTypeName is the user-facing activity identity and must be set on every block. Use specific names like Climbing, Cycling, Mobility Flow, Boxing, or Strength instead of relying on broad kinds as labels.
         6. Include 4-8 exercises inside strength blocks when it is an exercise-based session. For activity-based sessions, use blocks with duration, intensity, target, and detail instead of forcing fake sets/reps.
         7. Specify sets, reps, intervals, pace guidance, duration, intensity, or effort targets appropriate for each block.
         8. Include a modalityProgression that matches the plan. Do not force a lifting progression for cardio, mobility, climbing, sport, or hybrid plans.
@@ -135,7 +135,7 @@ extension AIPromptBuilder {
            - sessionType: one of strength, cardio, hiit, climbing, yoga, pilates, flexibility, mobility, mixed, recovery, custom
            - focusAreas: short labels describing the session focus (e.g. ["Push", "Chest"], ["Yoga Flow", "Recovery"], ["Climbing", "Technique"])
            - notes: one short explanation of why this day belongs in your week
-           - blocks: ordered training blocks that describe the actual session, including activityTypeName and activityTags whenever the block represents a specific activity family or personalized target
+           - blocks: ordered training blocks that describe the actual session. Every block must include a non-empty activityTypeName and activityTags whenever the block represents a specific activity family or personalized target
            - exercises belong inside the relevant blocks only; do not duplicate block exercises at the template level
         23. Keep the JSON compact. Use short one-sentence notes/detail fields and avoid repeating the same coaching text in multiple places.
 
@@ -226,8 +226,7 @@ extension AIPromptBuilder {
                 "detail": ["type": "string"],
                 "activityTypeName": [
                     "type": "string",
-                    "nullable": true,
-                    "description": "Specific user-facing activity identity for this block, such as Climbing, Cycling, Running, Mobility Flow, Boxing, or Strength. Do not use only the broad kind label when a more meaningful activity name exists."
+                    "description": "Required user-facing activity identity for this block, such as Climbing, Cycling, Running, Mobility Flow, Boxing, or Strength. Do not use only the broad kind label when a more meaningful activity name exists."
                 ],
                 "activityTags": [
                     "type": "array",
@@ -244,7 +243,7 @@ extension AIPromptBuilder {
                 "order": ["type": "integer"],
                 "notes": ["type": "string", "nullable": true]
             ],
-            "required": ["id", "kind", "role", "title", "detail", "activityTags", "exercises", "order"]
+            "required": ["id", "kind", "role", "title", "detail", "activityTypeName", "activityTags", "exercises", "order"]
         ]
 
         return [
@@ -583,8 +582,7 @@ extension AIPromptBuilder {
                 "detail": ["type": "string"],
                 "activityTypeName": [
                     "type": "string",
-                    "nullable": true,
-                    "description": "Specific user-facing activity identity for this block, such as Climbing, Cycling, Running, Mobility Flow, Boxing, or Strength."
+                    "description": "Required user-facing activity identity for this block, such as Climbing, Cycling, Running, Mobility Flow, Boxing, or Strength. Do not use only the broad kind label when a more meaningful activity name exists."
                 ],
                 "activityTags": [
                     "type": "array",
@@ -601,7 +599,7 @@ extension AIPromptBuilder {
                 "order": ["type": "integer"],
                 "notes": ["type": "string", "nullable": true]
             ],
-            "required": ["id", "kind", "role", "title", "detail", "activityTags", "exercises", "order"]
+            "required": ["id", "kind", "role", "title", "detail", "activityTypeName", "activityTags", "exercises", "order"]
         ]
 
         let templateSchema: [String: Any] = [
