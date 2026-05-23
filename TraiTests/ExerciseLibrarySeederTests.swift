@@ -161,6 +161,8 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertNil(Exercise.Category.normalized(from: "Cable Row"))
         XCTAssertEqual(Exercise.defaultActivityTypeName(for: "Padel drills", category: .sportPractice), "Padel")
         XCTAssertEqual(Exercise.defaultActivityTypeName(for: "Seated Cable Row", category: .strength), "Strength")
+        XCTAssertEqual(Exercise.defaultActivityTypeName(for: "Elliptical", category: .cardio), "Elliptical")
+        XCTAssertEqual(Exercise.defaultActivityTypeName(for: "Hip Mobility Flow", category: .mobility), "Hip Mobility Flow")
 
         let hiddenPrimitive = Exercise(name: "Limit Bouldering", category: .skill)
         XCTAssertEqual(hiddenPrimitive.exerciseCategory, .skill)
@@ -221,8 +223,13 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertEqual(running.trackingFields, [.duration, .distance])
         XCTAssertTrue(running.targetTags.isEmpty)
 
+        let elliptical = try XCTUnwrap(exercises.first { $0.name == "Elliptical" })
+        XCTAssertEqual(elliptical.exerciseCategory, .cardio)
+        XCTAssertEqual(elliptical.activityTypeName, "Elliptical")
+
         let mobility = try XCTUnwrap(exercises.first { $0.name == "Hip Mobility Flow" })
         XCTAssertEqual(mobility.exerciseCategory, .mobility)
+        XCTAssertEqual(mobility.activityTypeName, "Hip Mobility Flow")
         XCTAssertEqual(mobility.trackingFields, [.duration, .notes])
         XCTAssertTrue(mobility.targetTags.isEmpty)
 

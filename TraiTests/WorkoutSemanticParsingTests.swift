@@ -379,6 +379,39 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertFalse(exercise.isStrengthStartItem)
     }
 
+    func testStartLiveWorkoutPreservesNonStrengthNameWhenActivityNameIsMissing() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "start_live_workout",
+                arguments: [
+                    "name": "Dance Practice",
+                    "workout_type": "mixed",
+                    "suggested_exercises": [
+                        [
+                            "name": "Dance Flow",
+                            "category": "sportPractice",
+                            "tracking_fields": ["duration", "reps", "notes"],
+                            "duration_minutes": 30
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutStart(let suggestion) = result,
+              let exercise = suggestion.exercises.first else {
+            return XCTFail("Expected start workout suggestion")
+        }
+
+        XCTAssertEqual(exercise.category, "sportPractice")
+        XCTAssertNil(exercise.activityTypeName)
+        XCTAssertEqual(exercise.startSummarySegments, ["30 min"])
+        XCTAssertEqual(
+            Exercise.defaultActivityTypeName(for: exercise.name, category: .sportPractice),
+            "Dance Flow"
+        )
+    }
+
     func testStartLiveWorkoutStoresNormalizedActivityCategoryAndTrackingFields() async throws {
         let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
             .init(
@@ -586,6 +619,14 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(
             Exercise.defaultActivityTypeName(for: "  Footwork Flow  ", category: .custom),
             "Footwork Flow"
+        )
+        XCTAssertEqual(
+            Exercise.defaultActivityTypeName(for: "Elliptical", category: .cardio),
+            "Elliptical"
+        )
+        XCTAssertEqual(
+            Exercise.defaultActivityTypeName(for: "Hip Mobility Flow", category: .mobility),
+            "Hip Mobility Flow"
         )
     }
 

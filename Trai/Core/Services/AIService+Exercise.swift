@@ -65,17 +65,14 @@ extension ExercisePhotoAnalysis.SuggestedExercise {
     func resolvedActivityTypeName(category: Exercise.Category, equipmentName: String? = nil) -> String {
         let explicit = activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard explicit.isEmpty else { return explicit }
-        let nameDefault = Exercise.defaultActivityTypeName(for: name, category: category)
-        if nameDefault != category.displayName {
-            return nameDefault
-        }
         if let equipmentName {
             let equipmentDefault = Exercise.defaultActivityTypeName(for: equipmentName, category: category)
-            if equipmentDefault != category.displayName {
+            if equipmentDefault != category.displayName,
+               equipmentDefault.goalNormalizedKey != equipmentName.goalNormalizedKey {
                 return equipmentDefault
             }
         }
-        return nameDefault
+        return Exercise.defaultActivityTypeName(for: name, category: category)
     }
 
     func resolvedTrackingFields(category: Exercise.Category) -> [Exercise.TrackingField] {
