@@ -333,15 +333,19 @@ struct AddCustomExerciseSheet: View {
     }
 
     private var trackingFieldPickerContent: some View {
-        FlowLayout(spacing: 8) {
-            ForEach(TrackingPreset.all) { preset in
-                TrackingPresetButton(
-                    preset: preset,
-                    isSelected: isTrackingPresetSelected(preset)
-                ) {
-                    applyTrackingPreset(preset)
+        VStack(alignment: .leading, spacing: 12) {
+            FlowLayout(spacing: 8) {
+                ForEach(TrackingPreset.all) { preset in
+                    TrackingPresetButton(
+                        preset: preset,
+                        isSelected: isTrackingPresetSelected(preset)
+                    ) {
+                        applyTrackingPreset(preset)
+                    }
                 }
             }
+
+            selectedTrackingPresetSummary
         }
     }
 
@@ -376,6 +380,37 @@ struct AddCustomExerciseSheet: View {
         ) {
             activityGroupPickerContent
         }
+    }
+
+    private var selectedTrackingPresetSummary: some View {
+        let preset = selectedTrackingPreset
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: preset.icon)
+                .font(.traiLabel(13).weight(.semibold))
+                .foregroundStyle(.accent)
+                .frame(width: 28, height: 28)
+                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(preset.title)
+                    .font(.traiLabel(13).weight(.semibold))
+
+                FlowLayout(spacing: 6) {
+                    ForEach(preset.fieldLabels, id: \.self) { label in
+                        Text(label)
+                            .font(.traiLabel(11).weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .frame(height: 24)
+                            .background(Color(.tertiarySystemFill), in: Capsule())
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func collapsibleManualSection<Content: View>(
@@ -582,6 +617,13 @@ struct AddCustomExerciseSheet: View {
         return selectedCategory.userFacingEquivalent
     }
 
+    private var selectedTrackingPreset: TrackingPreset {
+        TrackingPreset.bestFit(
+            category: resolvedExerciseCategory,
+            requestedFields: orderedSelectedTrackingFields
+        )
+    }
+
     private func resetDefaultsForSelectedCategory() {
         let defaults = Exercise.defaultTargetTags(for: selectedCategory)
         selectedTargets = Set(defaults)
@@ -753,7 +795,7 @@ private struct TrackingPreset: Identifiable {
     let category: Exercise.Category
     let fields: [Exercise.TrackingField]
 
-    var subtitle: String {
+    var fieldLabels: [String] {
         fields
             .map { field in
                 switch (category.userFacingEquivalent, field) {
@@ -765,7 +807,6 @@ private struct TrackingPreset: Identifiable {
                     return field.displayName
                 }
             }
-            .joined(separator: ", ")
     }
 
     static let all: [TrackingPreset] = [
@@ -881,14 +922,10 @@ private struct TrackingPresetButton: View {
                     Text(preset.title)
                         .font(.traiLabel(12).weight(.semibold))
                         .lineLimit(1)
-                    Text(preset.subtitle)
-                        .font(.traiLabel(10))
-                        .foregroundStyle(isSelected ? Color.accentColor.opacity(0.75) : Color.secondary)
-                        .lineLimit(1)
                 }
             }
             .padding(.horizontal, 12)
-            .frame(height: 48)
+            .frame(height: 38)
             .frame(maxWidth: 190, alignment: .leading)
             .background(
                 isSelected ? Color.accentColor.opacity(0.18) : Color(.tertiarySystemFill),

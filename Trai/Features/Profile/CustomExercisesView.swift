@@ -55,7 +55,7 @@ struct CustomExercisesView: View {
                     Button("Add Item", systemImage: "plus") {
                         showingAddCustomExercise = true
                     }
-                    .buttonStyle(.traiSecondary(color: .orange, fullWidth: false))
+                    .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: false))
                 }
                 .frame(maxWidth: .infinity)
                 .listRowBackground(Color.clear)
