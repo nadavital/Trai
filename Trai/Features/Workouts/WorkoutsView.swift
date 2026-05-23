@@ -634,7 +634,6 @@ struct WorkoutsView: View {
         var bestScore = -Double.greatestFiniteMagnitude
 
         for template in plan.templates {
-            guard template.sessionType.supportsMuscleTargets else { continue }
             let scoredTemplate = recoveryService.scoreTemplate(template, recoveryInfo: latestRecoveryInfo)
             scores[template.id] = scoredTemplate
             if scoredTemplate.score > bestScore {
