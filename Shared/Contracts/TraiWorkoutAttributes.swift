@@ -17,6 +17,7 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         let elapsedSeconds: Int
         let currentExercise: String?
         let currentEquipment: String?
+        let currentDetail: String?
         let completedSets: Int
         let totalSets: Int
         let heartRate: Int?
@@ -37,6 +38,7 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             elapsedSeconds: Int,
             currentExercise: String? = nil,
             currentEquipment: String? = nil,
+            currentDetail: String? = nil,
             completedSets: Int,
             totalSets: Int,
             heartRate: Int? = nil,
@@ -56,6 +58,7 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             self.elapsedSeconds = elapsedSeconds
             self.currentExercise = currentExercise
             self.currentEquipment = currentEquipment
+            self.currentDetail = currentDetail
             self.completedSets = completedSets
             self.totalSets = totalSets
             self.heartRate = heartRate
@@ -148,6 +151,10 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             }
             guard let weight = displayWeight, weight > 0 else { return nil }
             return "\(Int(weight.rounded()))\(unit) \u{00D7} \(reps)"
+        }
+
+        var currentWorkDisplay: String? {
+            currentSetDisplay ?? currentDetail
         }
     }
 }

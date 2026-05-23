@@ -2171,6 +2171,14 @@ final class LiveWorkoutViewModel {
         )
     }
 
+    private func liveActivityCurrentDetail(for entry: LiveWorkoutEntry?) -> String? {
+        guard let entry, !entry.isStrength else { return nil }
+        let segments = entry.traiActivitySummarySegments(usesMetric: usesMetricWeightPreference)
+            .filter { $0.goalNormalizedKey != entry.activityTypeName.goalNormalizedKey }
+        guard !segments.isEmpty else { return nil }
+        return segments.prefix(3).joined(separator: " • ")
+    }
+
     private func updateLiveActivity() {
         // Track progression from logged data (or cardio completion), not the legacy set.completed flag.
         let currentEntry = liveActivityCurrentEntry()
@@ -2178,6 +2186,7 @@ final class LiveWorkoutViewModel {
 
         let currentExercise = currentEntry?.exerciseName
         let currentEquipment = currentEntry?.equipmentName
+        let currentDetail = liveActivityCurrentDetail(for: currentEntry)
 
         // Prefer latest logged working set; if none, fall back to the latest logged set.
         // Use both kg and lbs values to avoid rounding errors (200 lbs → 199 bug)
@@ -2201,6 +2210,7 @@ final class LiveWorkoutViewModel {
             elapsedSeconds: Int(elapsedTime),
             currentExercise: currentExercise,
             currentEquipment: currentEquipment,
+            currentDetail: currentDetail,
             completedSets: completedSets,
             totalSets: totalSets,
             heartRate: currentHeartRate.map { Int($0) },

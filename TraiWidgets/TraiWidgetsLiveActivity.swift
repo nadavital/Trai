@@ -292,16 +292,15 @@ private struct LockScreenWorkoutView: View {
                                     .minimumScaleFactor(0.8)
                             }
 
-                            // Show current weight × reps if available
-                            if let setDisplay = context.state.currentSetDisplay {
+                            if let workDisplay = context.state.currentWorkDisplay {
                                 Text("•")
-                                .font(.caption2)
-                                .foregroundStyle(LiveActivityTheme.textTertiary)
-                                Text(setDisplay)
-                                .font(.caption)
-                                .foregroundStyle(LiveActivityTheme.accent)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
+                                    .font(.caption2)
+                                    .foregroundStyle(LiveActivityTheme.textTertiary)
+                                Text(workDisplay)
+                                    .font(.caption)
+                                    .foregroundStyle(LiveActivityTheme.accent)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
                             }
                         }
                     }
@@ -349,8 +348,8 @@ private struct LockScreenWorkoutView: View {
                         .foregroundStyle(LiveActivityTheme.textSecondary)
                         .lineLimit(1)
 
-                    // Volume if available
-                    if let volume = context.state.volumeDisplay {
+                    // Volume if available for the current strength exercise.
+                    if context.state.canUseSetShortcut, let volume = context.state.volumeDisplay {
                         Text(volume)
                             .font(.caption2)
                             .foregroundStyle(LiveActivityTheme.accent)
@@ -461,7 +460,7 @@ private struct ExpandedTrailingView: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
             // Volume display (no timer per user feedback)
-            if let volume = context.state.volumeDisplay {
+            if context.state.canUseSetShortcut, let volume = context.state.volumeDisplay {
                 Text(volume)
                     .font(.system(.title3, design: .rounded, weight: .bold))
                     .foregroundStyle(LiveActivityTheme.accent)
@@ -505,8 +504,8 @@ private struct ExpandedBottomView: View {
                                 .lineLimit(1)
                         }
 
-                        if let setDisplay = context.state.currentSetDisplay {
-                            Text(setDisplay)
+                        if let workDisplay = context.state.currentWorkDisplay {
+                            Text(workDisplay)
                                 .font(.caption2)
                                 .foregroundStyle(LiveActivityTheme.accent)
                         }
@@ -516,7 +515,7 @@ private struct ExpandedBottomView: View {
                 Spacer()
 
                 // Volume display
-                if let volume = context.state.volumeDisplay {
+                if context.state.canUseSetShortcut, let volume = context.state.volumeDisplay {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text("Volume")
                             .font(.caption2)
@@ -615,6 +614,7 @@ extension TraiWorkoutAttributes.ContentState {
             elapsedSeconds: 1240,
             currentExercise: "Climbing Technique Practice",
             currentEquipment: nil,
+            currentDetail: "18:00 • 6 attempts",
             completedSets: 0,
             totalSets: 0,
             heartRate: 118,

@@ -6,6 +6,7 @@ final class LiveWorkoutUpdatePolicyTests: XCTestCase {
     func testLiveActivityStateUsesDisplayProgressForMixedWorkouts() {
         let state = TraiWorkoutAttributes.ContentState(
             elapsedSeconds: 120,
+            currentDetail: "20:00 • 2.4 km",
             completedSets: 4,
             totalSets: 12,
             heartRate: nil,
@@ -22,6 +23,7 @@ final class LiveWorkoutUpdatePolicyTests: XCTestCase {
         XCTAssertEqual(state.progressDisplay, "2/3 done")
         XCTAssertEqual(state.setsDisplay, "2/3 done")
         XCTAssertEqual(state.progress, 2.0 / 3.0, accuracy: 0.001)
+        XCTAssertEqual(state.currentWorkDisplay, "20:00 • 2.4 km")
         XCTAssertFalse(state.canUseSetShortcut)
     }
 
@@ -51,6 +53,7 @@ final class LiveWorkoutUpdatePolicyTests: XCTestCase {
         XCTAssertEqual(state.progressCompletedValue, 2)
         XCTAssertEqual(state.progressTotalValue, 5)
         XCTAssertEqual(state.progressDisplay, "2/5 sets")
+        XCTAssertNil(state.currentDetail)
         XCTAssertTrue(state.canUseSetShortcut)
     }
 
