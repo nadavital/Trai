@@ -224,6 +224,7 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         session.durationMinutes = 45
 
         XCTAssertFalse(session.isStrengthTraining)
+        XCTAssertFalse(session.isCardio)
         XCTAssertEqual(session.displayTypeName, "Climbing")
         XCTAssertEqual(session.inferredWorkoutMode, .climbing)
         XCTAssertNil(session.totalVolume)

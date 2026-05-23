@@ -208,7 +208,13 @@ extension WorkoutSession {
 
     /// Check if this is a cardio session
     var isCardio: Bool {
-        exercise?.category == "cardio" || durationMinutes != nil || healthKitWorkoutType != nil
+        if let exercise {
+            return exercise.exerciseCategory.userFacingEquivalent == .cardio
+        }
+        if let workoutType = WorkoutMode.normalized(from: healthKitWorkoutType) {
+            return workoutType == .cardio
+        }
+        return distanceMeters != nil || durationMinutes != nil || healthKitWorkoutType != nil
     }
 
     var displayTypeName: String {
