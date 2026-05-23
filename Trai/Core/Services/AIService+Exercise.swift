@@ -117,7 +117,7 @@ extension AIService {
             - Running usually tracks duration and distance.
             - Mobility usually tracks duration and notes.
             - Conditioning may track duration, reps, and notes.
-            - Skill or sport practice may track duration, reps/counts/attempts, distance when relevant, and notes.
+            - Skill or sport practice may track duration, reps or attempts, distance when relevant, and notes.
 
             Return targetTags as concise user-facing outcomes or focuses, not internal category names. Do not use calories.
             When the exercise name is a specific sport or activity, preserve that specificity in activityTypeName instead of flattening it to Sport, Skill, Conditioning, or Custom.
@@ -252,7 +252,7 @@ extension AIService {
             - Categories are stable tracking templates and must be one of: strength, cardio, conditioning, mobility, skill, sportPractice, recovery, flexibility, custom. They are not the user-facing labels.
             - activityTypeName is the specific user-facing identity and can be specific, such as Climbing, Bouldering, Cycling, Running, Mobility Flow, Boxing, Basketball, Pickleball, or Strength.
             - Tracking fields must be chosen from: sets, reps, weight, duration, distance, notes. Do not use calories.
-            - Strength exercises usually track sets, weight, and reps. Cardio activities usually track duration and distance. Skill, sport, mobility, recovery, and custom activities usually track duration, reps/count, distance when relevant, and notes.
+            - Strength exercises usually track sets, weight, and reps. Cardio activities usually track duration and distance. Skill, sport, mobility, recovery, and custom activities usually track duration, reps or attempts, distance when relevant, and notes.
             - Keep targetTags as user-facing outcomes or focuses, not broad category labels. Preserve a specific visible sport/activity in activityTypeName instead of flattening it to Sport, Skill, Conditioning, or Custom.
             - If the image is too unclear to confidently identify an exercise, activity, or equipment, return:
               equipmentName: "Unclear exercise photo"

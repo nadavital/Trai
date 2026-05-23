@@ -702,7 +702,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
             case "mobility", "recovery":
                 return "reps"
             default:
-                return "counts"
+                return "reps"
             }
         }
 
@@ -977,7 +977,7 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
             case "mobility", "recovery":
                 return "reps"
             default:
-                return "counts"
+                return "reps"
             }
         }
 

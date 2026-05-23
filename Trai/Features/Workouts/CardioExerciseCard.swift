@@ -55,7 +55,7 @@ struct CardioExerciseCard: View {
         case .sportPractice, .skill:
             return "attempts"
         default:
-            return "counts"
+            return "reps"
         }
     }
 

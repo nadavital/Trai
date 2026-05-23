@@ -554,13 +554,13 @@ struct AddCustomExerciseSheet: View {
         guard field == .reps else { return field.displayName }
         switch selectedCategory {
         case .cardio, .mobility, .flexibility, .recovery:
-            return "Counts"
+            return "Reps"
         case .conditioning:
             return "Rounds"
         case .skill, .sportPractice:
             return "Attempts"
         case .custom:
-            return "Counts"
+            return "Reps"
         default:
             return field.displayName
         }

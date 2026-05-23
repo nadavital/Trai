@@ -1112,6 +1112,37 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertFalse(summary.contains("6 counts"))
     }
 
+    func testCustomActivityGoalContextUsesRepsInsteadOfGenericCounts() {
+        let workout = LiveWorkout(
+            name: "Custom Practice",
+            workoutType: .mixed,
+            focusAreas: ["Footwork"]
+        )
+        workout.completedAt = Date()
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Footwork Drill",
+            orderIndex: 0,
+            exerciseType: "activity"
+        )
+        entry.activityKind = .custom
+        entry.activityTypeName = "Footwork"
+        entry.trackingFields = [.duration, .reps, .notes]
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(reps: 3),
+            LiveWorkoutEntry.ActivitySegment(reps: 4)
+        ]
+        workout.entries = [entry]
+
+        let summaries = WorkoutGoalRecommendationContextBuilder.recentSessionSummaries(
+            workouts: [workout],
+            sessions: []
+        )
+
+        let summary = summaries.joined(separator: " ")
+        XCTAssertTrue(summary.contains("7 reps"))
+        XCTAssertFalse(summary.contains("7 counts"))
+    }
+
     private func makeWorkout(initialReps: Int) -> (LiveWorkout, LiveWorkoutEntry) {
         let workout = LiveWorkout(name: "Push Day", workoutType: .strength)
         let entry = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)

@@ -403,7 +403,7 @@ extension LiveWorkout {
         case .mobility, .recovery:
             return "reps"
         default:
-            return "counts"
+            return "reps"
         }
     }
 

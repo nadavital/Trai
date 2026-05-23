@@ -227,7 +227,7 @@ extension WorkoutSession {
         case .mobility, .recovery:
             return "Reps"
         case .cardio, .custom, .none:
-            return "Counts"
+            return "Reps"
         case .strength:
             return "Reps"
         case .skill:

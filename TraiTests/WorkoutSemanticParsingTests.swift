@@ -452,7 +452,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(loggedExercise.setCount, 3)
     }
 
-    func testCustomActivitySummaryPluralizesGenericCounts() {
+    func testCustomActivitySummaryUsesRepsInsteadOfGenericCounts() {
         let exercise = SuggestedWorkoutEntry.SuggestedExercise(
             name: "Custom Drill",
             category: "custom",
@@ -468,7 +468,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             segments: []
         )
 
-        XCTAssertEqual(exercise.startSummarySegments, ["3 counts"])
+        XCTAssertEqual(exercise.startSummarySegments, ["3 reps"])
     }
 
     func testTargetMuscleParsingHandlesDisplayNames() {

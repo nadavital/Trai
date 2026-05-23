@@ -174,7 +174,7 @@ struct WorkoutGoalRecommendationContextBuilder {
         case .mobility, .recovery:
             return "rep"
         default:
-            return "count"
+            return "rep"
         }
     }
 
@@ -349,7 +349,7 @@ struct WorkoutGoalRecommendationContextBuilder {
         case .mobility, .recovery:
             return "rep"
         default:
-            return "count"
+            return "rep"
         }
     }
 
