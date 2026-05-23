@@ -455,9 +455,9 @@ struct ExerciseListView: View {
                     if exercises.isEmpty {
                         Section {
                             ContentUnavailableView(
-                                "No Exercises Yet",
+                                "No Items Yet",
                                 systemImage: "dumbbell.fill",
-                                description: Text("Trai is preparing your exercise library.")
+                                description: Text("Trai is preparing your exercise and activity library.")
                             )
                         }
                     } else {
@@ -469,7 +469,7 @@ struct ExerciseListView: View {
                                 HStack {
                                     Image(systemName: "plus.circle.fill")
                                         .foregroundStyle(.accent)
-                                    Text("Create Custom Exercise")
+                                    Text("Create Exercise or Activity")
                                     Spacer()
                                     Image(systemName: "chevron.right")
                                         .font(.caption)
@@ -490,7 +490,7 @@ struct ExerciseListView: View {
                                 HStack {
                                     Image(systemName: "camera.fill")
                                         .foregroundStyle(.accent)
-                                    Text("Identify Exercise from Photo")
+                                    Text("Identify from Photo")
                                     Spacer()
                                     Image(systemName: "chevron.right")
                                         .font(.caption)
@@ -743,7 +743,7 @@ struct ExerciseListView: View {
             HapticManager.error()
             pendingEquipmentResultPresentation = false
             equipmentResultPresentationTask?.cancel()
-            photoAnalysisError = "Couldn't identify the exercise. Make sure the movement, equipment, or label is clearly visible and try again."
+            photoAnalysisError = "Couldn't identify the item. Make sure the movement, equipment, or label is clearly visible and try again."
         }
     }
 

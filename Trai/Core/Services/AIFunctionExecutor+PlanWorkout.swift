@@ -999,13 +999,18 @@ extension AIFunctionExecutor {
         requested: [String],
         exercises: [SuggestedWorkoutLog.LoggedExercise]
     ) -> [String] {
+        let explicit = requested.dedupedByGoalKey()
+        if !explicit.isEmpty {
+            return explicit
+        }
+
         let derived = exercises
             .filter(\.isActivityLog)
             .flatMap { exercise in
-                ([exercise.activityTypeName] + (exercise.targetTags ?? []) + [exercise.name])
+                ([exercise.activityTypeName] + (exercise.targetTags ?? []))
                     .compactMap { $0 }
             }
-        return (requested + derived).dedupedByGoalKey()
+        return derived.dedupedByGoalKey()
     }
 
     private func parseLoggedActivitySegments(_ value: Any?) -> [SuggestedWorkoutLog.LoggedExercise.ActivitySegment] {

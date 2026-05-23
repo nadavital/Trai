@@ -23,7 +23,7 @@ struct WorkoutPlanEditSheet: View {
     @State private var editorDayName = ""
     @State private var editorSessionType: WorkoutMode = .strength
     @State private var editorFocusAreasText = ""
-    @State private var editorSelectedMuscles: Set<LiveWorkout.MuscleGroup> = [.fullBody]
+    @State private var editorSelectedMuscles: Set<LiveWorkout.MuscleGroup> = []
     @State private var editedPlan: WorkoutPlan
     @State private var hasPendingChanges = false
 
@@ -265,7 +265,7 @@ struct WorkoutPlanEditSheet: View {
         editorDayName = ""
         editorSessionType = orderedTemplates.last?.sessionType ?? .strength
         editorFocusAreasText = ""
-        editorSelectedMuscles = [.fullBody]
+        editorSelectedMuscles = []
         showingDayEditor = true
     }
 
@@ -275,7 +275,7 @@ struct WorkoutPlanEditSheet: View {
         editorSessionType = template.sessionType
         editorFocusAreasText = template.focusAreas.joined(separator: ", ")
         let selected = Set(template.resolvedTargetMuscleGroups.compactMap(normalizeMuscleGroup))
-        editorSelectedMuscles = selected.isEmpty ? [.fullBody] : selected
+        editorSelectedMuscles = selected
         showingDayEditor = true
     }
 
@@ -420,9 +420,8 @@ struct WorkoutPlanEditSheet: View {
     }
 
     private func orderedTargetGroups(from muscles: Set<LiveWorkout.MuscleGroup>) -> [String] {
-        let selected = muscles.isEmpty ? Set([LiveWorkout.MuscleGroup.fullBody]) : muscles
         return LiveWorkout.MuscleGroup.allCases
-            .filter { selected.contains($0) }
+            .filter { muscles.contains($0) }
             .map(\.rawValue)
     }
 
@@ -463,9 +462,7 @@ struct WorkoutPlanEditSheet: View {
             return customGroup
         }
 
-        if normalized.isEmpty {
-            return [LiveWorkout.MuscleGroup.fullBody.rawValue]
-        }
+        guard !normalized.isEmpty else { return [] }
 
         if normalized.count > 1 {
             return normalized.filter { $0 != LiveWorkout.MuscleGroup.fullBody.rawValue }
@@ -517,8 +514,7 @@ struct WorkoutPlanEditSheet: View {
         selectedMuscles: Set<LiveWorkout.MuscleGroup>
     ) -> [String] {
         guard sessionType.supportsMuscleTargets else { return [] }
-        let selected = selectedMuscles.isEmpty ? Set([LiveWorkout.MuscleGroup.fullBody]) : selectedMuscles
-        return sanitizeTargetGroups(orderedTargetGroups(from: selected))
+        return sanitizeTargetGroups(orderedTargetGroups(from: selectedMuscles))
     }
 
     private func defaultDayName(
@@ -917,11 +913,7 @@ struct WorkoutDayEditorSheet: View {
         }
         .traiSheetBranding()
         .onChange(of: sessionType) { _, newValue in
-            if newValue.supportsMuscleTargets {
-                if selectedMuscles.isEmpty {
-                    selectedMuscles = [.fullBody]
-                }
-            } else {
+            if !newValue.supportsMuscleTargets {
                 selectedMuscles = []
             }
         }
@@ -946,15 +938,15 @@ struct WorkoutDayEditorSheet: View {
         if selectedMuscles.contains(muscle) {
             selectedMuscles.remove(muscle)
         } else {
-            selectedMuscles.insert(muscle)
+            if muscle == .fullBody {
+                selectedMuscles = [.fullBody]
+            } else {
+                selectedMuscles.insert(muscle)
+            }
         }
 
         if muscle != .fullBody {
             selectedMuscles.remove(.fullBody)
-        }
-
-        if selectedMuscles.isEmpty {
-            selectedMuscles.insert(.fullBody)
         }
     }
 

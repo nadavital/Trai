@@ -230,7 +230,8 @@ extension WorkoutSession {
 
         var seen = Set<String>()
         let displayKey = displayName.goalNormalizedKey
-        let candidates = importedActivityTags + [activityDisplayName] + semanticActivityTags
+        let activityDisplays = [rawHealthKitActivityDisplayName, activityDisplayName].compactMap { $0 }
+        let candidates = importedActivityTags + activityDisplays + semanticActivityTags
         let segments = candidates.compactMap { rawValue -> String? in
             let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
             let key = trimmed.goalNormalizedKey
@@ -244,6 +245,19 @@ extension WorkoutSession {
         }
 
         return segments.isEmpty ? [displayTypeName] : segments
+    }
+
+    private var rawHealthKitActivityDisplayName: String? {
+        guard let healthKitWorkoutType else { return nil }
+        let cleaned = healthKitWorkoutType
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return nil }
+        return cleaned
+            .split(separator: " ")
+            .map { $0.capitalized }
+            .joined(separator: " ")
     }
 
     var setMetricLabel: String {

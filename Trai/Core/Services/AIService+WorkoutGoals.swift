@@ -243,7 +243,7 @@ struct WorkoutGoalRecommendationContextBuilder {
         history: [ExerciseHistory],
         prefersMetricWeight: Bool
     ) -> [String] {
-        let snapshots = ExercisePerformanceService.snapshots(from: history)
+        let snapshots = ExercisePerformanceService.snapshots(from: history.filter(\.hasStrengthMetrics))
         let strengthExerciseNames = Set(snapshots.keys.map(\.goalNormalizedKey))
 
         let strengthSummaries = snapshots.values

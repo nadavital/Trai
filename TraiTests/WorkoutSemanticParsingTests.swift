@@ -580,7 +580,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         }
 
         XCTAssertEqual(exercise.category, "cardio")
-        XCTAssertEqual(suggestion.activityFocuses ?? [], ["Running", "Cardio", "Intervals", "Run Intervals"])
+        XCTAssertEqual(suggestion.activityFocuses ?? [], ["Running", "Cardio", "Intervals"])
         XCTAssertEqual(exercise.trackingFields ?? [], ["duration", "distance"])
         XCTAssertFalse(exercise.trackingFields?.contains("calories") ?? false)
         XCTAssertEqual(exercise.startSummarySegments, ["Running", "28 min", "4.0 km"])
@@ -1020,7 +1020,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             return XCTFail("Expected suggested workout log")
         }
 
-        XCTAssertEqual(workoutLog.activityTags ?? [], ["Padel", "Footwork", "Reaction", "Padel Drills"])
+        XCTAssertEqual(workoutLog.activityTags ?? [], ["Padel", "Footwork", "Reaction"])
         XCTAssertEqual(exercise.category, "sportPractice")
         XCTAssertEqual(exercise.trackingFields ?? [], ["duration", "reps", "notes"])
         XCTAssertFalse(exercise.trackingFields?.contains("calories") ?? false)
