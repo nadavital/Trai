@@ -32,6 +32,17 @@ extension AIFunctionExecutor {
         let workoutType = LiveWorkout.WorkoutType.normalized(from: workoutTypeString) ?? .strength
         let durationMinutes = args["duration_minutes"] as? Int ?? 45
         let requestedActivityFocuses = stringArray(from: args["activity_focuses"])
+        let targetMuscleStrings = args["target_muscle_groups"] as? [String] ?? []
+        let hasExplicitWorkoutType = workoutTypeString?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty == false
+
+        if !hasExplicitWorkoutType,
+           requestedActivityFocuses.isEmpty,
+           targetMuscleStrings.isEmpty,
+           let planSuggestion = recommendedPlanWorkoutSuggestion(recoveryService: recoveryService) {
+            return .suggestedWorkoutStart(planSuggestion)
+        }
 
         if !requestedActivityFocuses.isEmpty || !workoutType.supportsMuscleTargets {
             return .suggestedWorkoutStart(buildActivityWorkoutStartSuggestion(
@@ -42,7 +53,6 @@ extension AIFunctionExecutor {
         }
 
         // Get target muscles - either from args or from recovery recommendations
-        let targetMuscleStrings = args["target_muscle_groups"] as? [String] ?? []
         let targetMuscles: [LiveWorkout.MuscleGroup]
 
         if targetMuscleStrings.isEmpty, requestedActivityFocuses.isEmpty {
@@ -61,6 +71,55 @@ extension AIFunctionExecutor {
         )
 
         return .suggestedWorkoutStart(workoutStartSuggestion(from: suggestion))
+    }
+
+    private func recommendedPlanWorkoutSuggestion(
+        recoveryService: MuscleRecoveryService
+    ) -> SuggestedWorkoutEntry? {
+        guard let plan = userProfile?.workoutPlan,
+              !plan.templates.isEmpty else {
+            return nil
+        }
+
+        let scoredTemplate = recoveryService.getBestTemplateForToday(
+            plan: plan,
+            modelContext: modelContext
+        )
+        let template = scoredTemplate?.template ?? plan.templates.first
+        guard let template else { return nil }
+
+        return workoutStartSuggestion(
+            from: template,
+            recoveryReason: scoredTemplate?.reason
+        )
+    }
+
+    private func workoutStartSuggestion(
+        from template: WorkoutPlan.WorkoutTemplate,
+        recoveryReason: String?
+    ) -> SuggestedWorkoutEntry {
+        let targetMuscles = template.sessionType.supportsMuscleTargets
+            ? template.resolvedTargetMuscleGroups
+            : []
+        let activityFocuses = template.sessionType.supportsMuscleTargets
+            ? nil
+            : activityFocuses(from: template)
+        let exercises = suggestedStartExercises(from: template)
+        let reason = recoveryReason?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let rationale = reason.map { "Recommended from your plan: \($0)." }
+            ?? "Recommended from your workout plan."
+
+        return SuggestedWorkoutEntry(
+            name: template.name,
+            workoutType: template.sessionType.rawValue,
+            targetMuscleGroups: targetMuscles,
+            activityFocuses: activityFocuses,
+            exercises: exercises,
+            durationMinutes: template.estimatedDurationMinutes,
+            rationale: rationale
+        )
     }
 
     private func workoutStartSuggestion(from suggestion: WorkoutSuggestion) -> SuggestedWorkoutEntry {
@@ -83,6 +142,101 @@ extension AIFunctionExecutor {
             durationMinutes: suggestion.durationMinutes,
             rationale: suggestion.rationale
         )
+    }
+
+    private func suggestedStartExercises(
+        from template: WorkoutPlan.WorkoutTemplate
+    ) -> [SuggestedWorkoutEntry.SuggestedExercise] {
+        if let exercise = template.structuredExercises.sorted(by: { $0.order < $1.order }).first,
+           template.sessionType.supportsMuscleTargets {
+            return [
+                SuggestedWorkoutEntry.SuggestedExercise(
+                    name: exercise.exerciseName,
+                    category: Exercise.Category.strength.rawValue,
+                    activityTypeName: Exercise.defaultActivityTypeName(for: exercise.exerciseName, category: .strength),
+                    targetTags: [exercise.muscleGroup].filter { !$0.isEmpty },
+                    trackingFields: Exercise.defaultTrackingFields(for: .strength).map(\.rawValue),
+                    sets: exercise.defaultSets,
+                    reps: exercise.defaultReps,
+                    weightKg: nil
+                )
+            ]
+        }
+
+        guard let block = template.displayBlocks.sorted(by: { $0.order < $1.order }).first else {
+            return []
+        }
+
+        let category = exerciseCategory(for: block.kind)
+        let activityName = block.displayActivityName
+        let tags = activityFocuses(from: template, including: block)
+        return [
+            SuggestedWorkoutEntry.SuggestedExercise(
+                name: activityName,
+                category: category.rawValue,
+                activityTypeName: activityName,
+                targetTags: tags,
+                trackingFields: Exercise.defaultTrackingFields(for: category).map(\.rawValue),
+                sets: 0,
+                reps: 0,
+                durationMinutes: block.durationMinutes ?? template.estimatedDurationMinutes,
+                notes: block.notes
+            )
+        ]
+    }
+
+    private func activityFocuses(
+        from template: WorkoutPlan.WorkoutTemplate,
+        including block: WorkoutPlan.TrainingBlock? = nil
+    ) -> [String] {
+        var seen: Set<String> = []
+        var values: [String] = []
+
+        func append(_ rawValue: String?) {
+            guard let rawValue else { return }
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.goalNormalizedKey
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { return }
+            values.append(trimmed)
+        }
+
+        template.focusAreas.forEach(append)
+        if let block {
+            append(block.activityTypeName)
+            append(block.displayActivityName)
+            append(block.target)
+            block.activityTags.forEach(append)
+        } else {
+            for block in template.displayBlocks {
+                append(block.activityTypeName)
+                append(block.displayActivityName)
+                append(block.target)
+                block.activityTags.forEach(append)
+            }
+        }
+
+        return values
+    }
+
+    private func exerciseCategory(
+        for blockKind: WorkoutPlan.TrainingBlock.BlockKind
+    ) -> Exercise.Category {
+        switch blockKind {
+        case .strength:
+            return .strength
+        case .cardio:
+            return .cardio
+        case .conditioning:
+            return .conditioning
+        case .skill, .sportPractice:
+            return .sportPractice
+        case .mobility:
+            return .mobility
+        case .recovery:
+            return .recovery
+        case .custom:
+            return .custom
+        }
     }
 
     private func buildActivityWorkoutStartSuggestion(

@@ -12,6 +12,11 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         container = try ModelContainer(
             for: WorkoutGoal.self,
             Exercise.self,
+            UserProfile.self,
+            LiveWorkout.self,
+            LiveWorkoutEntry.self,
+            WorkoutSession.self,
+            ExerciseHistory.self,
             configurations: ModelConfiguration(
                 isStoredInMemoryOnly: true,
                 cloudKitDatabase: .none
@@ -339,6 +344,56 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(exercise.activityTypeName, "Dance")
         XCTAssertEqual(exercise.targetTags, ["Dance"])
         XCTAssertEqual(exercise.startSummarySegments, ["35 min"])
+    }
+
+    func testSuggestWorkoutUsesSavedPlanWhenNoExplicitPreference() async throws {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Bouldering Day",
+            sessionType: .climbing,
+            focusAreas: ["Bouldering"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .skill,
+                    title: "Bouldering",
+                    detail: "Technique practice",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing", "Technique"],
+                    durationMinutes: 35,
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 35,
+            order: 0
+        )
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Climbing-specific plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: profile).execute(
+            .init(name: "suggest_workout", arguments: [:])
+        )
+
+        guard case .suggestedWorkoutStart(let suggestion) = result,
+              let exercise = suggestion.exercises.first else {
+            return XCTFail("Expected start workout suggestion")
+        }
+
+        XCTAssertEqual(suggestion.name, "Bouldering Day")
+        XCTAssertEqual(suggestion.workoutType, "climbing")
+        XCTAssertEqual(suggestion.targetMuscleGroups, [])
+        XCTAssertEqual(suggestion.activityFocuses, ["Bouldering", "Climbing", "Technique"])
+        XCTAssertEqual(exercise.name, "Bouldering")
+        XCTAssertEqual(exercise.category, "sportPractice")
+        XCTAssertEqual(exercise.durationMinutes, 35)
+        XCTAssertTrue(suggestion.rationale.contains("from your plan"))
     }
 
     func testStartLiveWorkoutInfersActivityCategoryFromActivityName() async throws {

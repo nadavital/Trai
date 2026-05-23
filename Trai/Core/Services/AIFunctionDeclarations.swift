@@ -787,7 +787,7 @@ enum AIFunctionDeclarations {
     static var suggestWorkout: [String: Any] {
         [
             "name": "suggest_workout",
-            "description": "Generate a workout suggestion based on the user's muscle recovery status and preferences. Use when the user asks for a workout recommendation, what they should train today, or wants help planning their workout.",
+            "description": "Generate a startable workout suggestion from the user's saved plan when they ask what to train today, or from explicit activity, muscle, duration, and equipment preferences when provided.",
             "parameters": [
                 "type": "object",
                 "properties": [
