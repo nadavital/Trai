@@ -733,7 +733,7 @@ extension LiveWorkoutEntry {
         case .mobility, .recovery:
             return "reps"
         default:
-            return "count"
+            return "counts"
         }
     }
 

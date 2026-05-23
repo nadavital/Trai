@@ -248,6 +248,25 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         )
     }
 
+    func testCustomActivitySummaryPluralizesGenericCounts() {
+        let exercise = SuggestedWorkoutEntry.SuggestedExercise(
+            name: "Custom Drill",
+            category: "custom",
+            activityTypeName: "Custom Drill",
+            targetTags: [],
+            trackingFields: ["reps"],
+            sets: 0,
+            reps: 3,
+            weightKg: nil,
+            durationMinutes: nil,
+            distanceMeters: nil,
+            notes: nil,
+            segments: []
+        )
+
+        XCTAssertEqual(exercise.startSummarySegments, ["3 counts"])
+    }
+
     func testTargetMuscleParsingHandlesDisplayNames() {
         XCTAssertEqual(LiveWorkout.MuscleGroup.fromTargetStrings(["Full Body"]), [.fullBody])
         XCTAssertEqual(
@@ -493,7 +512,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         }
 
         XCTAssertEqual(payload["focus_areas"] as? [String], ["Bouldering", "Climbing", "Grip endurance"])
-        XCTAssertEqual(payload["summary_segments"] as? [String], ["1 activity", "1 logged", "60 min"])
+        XCTAssertEqual(payload["summary_segments"] as? [String], ["1 activity", "8 attempts", "60 min"])
         XCTAssertEqual(payload["exercise_count"] as? Int, 0)
         XCTAssertEqual(payload["activity_count"] as? Int, 1)
         XCTAssertEqual(activity["activity_type"] as? String, "Bouldering")

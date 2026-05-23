@@ -254,6 +254,30 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         )
     }
 
+    func testWorkoutHistorySummaryIncludesLoggedActivityCounts() {
+        let workout = LiveWorkout(name: "Climbing Session", workoutType: .climbing)
+        workout.startedAt = Date(timeIntervalSince1970: 1_000)
+        workout.completedAt = Date(timeIntervalSince1970: 3_400)
+
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 0,
+            exerciseType: "sportPractice"
+        )
+        entry.activityTypeName = "Bouldering"
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 600, reps: 4),
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 600, reps: 3)
+        ]
+        entry.workout = workout
+        workout.entries = [entry]
+
+        XCTAssertEqual(
+            workout.historySummarySegments,
+            ["1 activity", "7 attempts", "40 min"]
+        )
+    }
+
     func testWorkoutTrendAggregationCountsLoggedItemsOnly() {
         let workout = LiveWorkout(name: "Strength + Planned Climb", workoutType: .mixed)
         workout.startedAt = Date()
@@ -325,7 +349,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         let metadata = HealthKitService.liveWorkoutMetadata(for: workout)
 
         XCTAssertEqual(metadata[HKMetadataKeyWorkoutBrandName] as? String, "Trai")
-        XCTAssertEqual(metadata["summary_segments"] as? String, "1 exercise | 1 activity | 1 set | 60 min")
+        XCTAssertEqual(metadata["summary_segments"] as? String, "1 exercise | 1 activity | 8 attempts | 1 set | 60 min")
         XCTAssertEqual(metadata["exercise_count"] as? Int, 1)
         XCTAssertEqual(metadata["activity_count"] as? Int, 1)
         XCTAssertEqual(metadata["logged_activity_count"] as? Int, 1)

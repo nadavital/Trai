@@ -311,6 +311,7 @@ extension LiveWorkout {
         let activityEntryCount: Int
         let loggedActivityCount: Int
         let totalSets: Int
+        let activityMetricSegments: [String]
         let durationMinutes: Int
 
         var entryCount: Int {
@@ -326,6 +327,7 @@ extension LiveWorkout {
         let totalSets = entries.reduce(0) { total, entry in
             total + (entry.completedSets?.count ?? 0)
         }
+        let activityMetricSegments = Self.activityMetricSegments(for: entries.filter(\.isLoggedActivity))
         let durationMinutes = Int(duration / 60)
 
         return EntrySummaryStats(
@@ -333,8 +335,83 @@ extension LiveWorkout {
             activityEntryCount: activityEntryCount,
             loggedActivityCount: loggedActivityCount,
             totalSets: totalSets,
+            activityMetricSegments: activityMetricSegments,
             durationMinutes: durationMinutes
         )
+    }
+
+    private static func activityMetricSegments(for entries: [LiveWorkoutEntry]) -> [String] {
+        var totals: [String: Int] = [:]
+        for entry in entries {
+            let loggedSegments = entry.activitySegments.filter(\.hasLoggedData)
+            let countTotal = loggedSegments
+                .compactMap(\.reps)
+                .filter { $0 > 0 }
+                .reduce(0, +)
+            if countTotal > 0 {
+                totals[activityCountMetricLabel(for: entry), default: 0] += countTotal
+            } else if loggedSegments.count > 1 {
+                totals[activitySegmentMetricLabel(for: entry), default: 0] += loggedSegments.count
+            }
+        }
+
+        return totals
+            .sorted { lhs, rhs in
+                let lhsRank = activityMetricSortRank(lhs.key)
+                let rhsRank = activityMetricSortRank(rhs.key)
+                if lhsRank != rhsRank {
+                    return lhsRank < rhsRank
+                }
+                if lhs.value != rhs.value {
+                    return lhs.value > rhs.value
+                }
+                return lhs.key < rhs.key
+            }
+            .map { label, value in
+                "\(value) \(metricName(for: value, pluralLabel: label))"
+            }
+    }
+
+    private static func activitySegmentMetricLabel(for entry: LiveWorkoutEntry) -> String {
+        let category = Exercise.Category.normalized(from: entry.exerciseType)?.userFacingEquivalent ?? .custom
+        switch category {
+        case .conditioning:
+            return "rounds"
+        default:
+            return "segments"
+        }
+    }
+
+    private static func activityCountMetricLabel(for entry: LiveWorkoutEntry) -> String {
+        let category = Exercise.Category.normalized(from: entry.exerciseType)?.userFacingEquivalent ?? .custom
+        switch category {
+        case .sportPractice:
+            return "attempts"
+        case .conditioning:
+            return "rounds"
+        case .mobility, .recovery:
+            return "reps"
+        default:
+            return "counts"
+        }
+    }
+
+    private static func activityMetricSortRank(_ label: String) -> Int {
+        switch label {
+        case "attempts": return 0
+        case "rounds": return 1
+        case "reps": return 2
+        case "segments": return 3
+        default: return 4
+        }
+    }
+
+    private static func metricName(for value: Int, pluralLabel: String) -> String {
+        guard value == 1 else { return pluralLabel }
+        if pluralLabel.hasSuffix("s") {
+            return String(pluralLabel.dropLast())
+        }
+        return pluralLabel
     }
 
     var historySummarySegments: [String] {
@@ -349,11 +426,15 @@ extension LiveWorkout {
             segments.append("\(stats.activityEntryCount) \(stats.activityEntryCount == 1 ? "activity" : "activities")")
         }
 
+        segments.append(contentsOf: stats.activityMetricSegments.prefix(2))
+
         if stats.totalSets > 0 {
             segments.append("\(stats.totalSets) \(stats.totalSets == 1 ? "set" : "sets")")
         }
 
-        if stats.strengthEntryCount == 0, stats.loggedActivityCount > 0 {
+        if stats.strengthEntryCount == 0,
+           stats.loggedActivityCount > 0,
+           stats.activityMetricSegments.isEmpty {
             segments.append("\(stats.loggedActivityCount) logged")
         }
 

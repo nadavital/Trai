@@ -663,10 +663,11 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
             if segmentCount > 1 {
                 details.append("\(segmentCount) \(metricName(for: segmentCount, pluralLabel: segmentMetricLabel))")
             }
-            let countTotal = segments?
+            let segmentCountTotal = segments?
                 .compactMap(\.reps)
                 .filter { $0 > 0 }
                 .reduce(0, +) ?? 0
+            let countTotal = segmentCountTotal > 0 ? segmentCountTotal : max(reps, 0)
             if countTotal > 0 {
                 details.append("\(countTotal) \(metricName(for: countTotal, pluralLabel: countMetricLabel))")
             }
@@ -695,7 +696,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
             case "mobility", "recovery":
                 return "reps"
             default:
-                return "count"
+                return "counts"
             }
         }
 

@@ -1958,6 +1958,7 @@ final class LiveWorkoutViewModel {
     private func createExerciseHistoryEntries() {
         for history in ExerciseHistory.records(from: workout, performedAt: workout.completedAt ?? Date()) {
             modelContext?.insert(history)
+            guard history.hasStrengthMetrics else { continue }
 
             // Check for PRs against canonical per-metric records.
             let previousSnapshot = getPerformanceSnapshot(for: history.exerciseName)
