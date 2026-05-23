@@ -265,7 +265,13 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(history.bestSetReps, 8)
         XCTAssertEqual(history.repPatternArray, [8])
         XCTAssertFalse(history.hasStrengthMetrics)
-        XCTAssertNil(ExercisePerformanceService.snapshot(exerciseName: history.exerciseName, history: records))
+        XCTAssertTrue(history.hasActivityMetrics)
+
+        let snapshot = ExercisePerformanceService.snapshot(exerciseName: history.exerciseName, history: records)
+        XCTAssertEqual(snapshot?.lastSession?.exerciseName, "Limit Bouldering")
+        XCTAssertEqual(snapshot?.activityDurationPR?.durationSeconds, 1_200)
+        XCTAssertEqual(snapshot?.activityCountPR?.totalReps, 8)
+        XCTAssertNil(snapshot?.weightPR)
     }
 
     func testExerciseHistoryRecordsToInsertIncludesLoggedGeneralActivities() {

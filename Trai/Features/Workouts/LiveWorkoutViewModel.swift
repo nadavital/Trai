@@ -2024,6 +2024,7 @@ final class LiveWorkoutViewModel {
 
         for history in historiesToInsert where !history.hasStrengthMetrics {
             modelContext.insert(history)
+            clearPerformanceCache(for: history.exerciseName)
         }
     }
 

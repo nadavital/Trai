@@ -227,6 +227,15 @@ extension ExerciseHistory {
         return bestSetWeightKg > 0 || bestSetReps > 0 || totalVolume > 0 || totalSets > 0 || totalReps > 0
     }
 
+    var hasActivityMetrics: Bool {
+        !hasStrengthMetrics && (
+            durationSeconds > 0 ||
+            distanceMeters > 0 ||
+            totalSets > 0 ||
+            totalReps > 0
+        )
+    }
+
     static func records(
         from workout: LiveWorkout,
         performedAt: Date? = nil
@@ -409,7 +418,18 @@ struct ExercisePerformanceSnapshot {
     let repsPR: ExerciseHistory?
     let volumePR: ExerciseHistory?
     let estimatedOneRepMax: Double?
+    let activityDurationPR: ExerciseHistory?
+    let activityDistancePR: ExerciseHistory?
+    let activityCountPR: ExerciseHistory?
     let totalSessions: Int
+
+    var hasStrengthRecords: Bool {
+        weightPR != nil || repsPR != nil || volumePR != nil || estimatedOneRepMax != nil
+    }
+
+    var hasActivityRecords: Bool {
+        activityDurationPR != nil || activityDistancePR != nil || activityCountPR != nil
+    }
 }
 
 enum ExercisePerformanceService {
@@ -465,11 +485,13 @@ enum ExercisePerformanceService {
         volumePRMode: UserProfile.VolumePRMode = .perSet
     ) -> ExercisePerformanceSnapshot? {
         let strengthHistory = history.filter(\.hasStrengthMetrics)
-        guard !strengthHistory.isEmpty else { return nil }
+        let activityHistory = history.filter(\.hasActivityMetrics)
+        let trackableHistory = strengthHistory + activityHistory
+        guard !trackableHistory.isEmpty else { return nil }
 
         return ExercisePerformanceSnapshot(
             exerciseName: exerciseName,
-            lastSession: mostRecentRecord(in: strengthHistory),
+            lastSession: mostRecentRecord(in: trackableHistory),
             weightPR: bestWeightRecord(in: strengthHistory),
             repsPR: bestRepsRecord(in: strengthHistory),
             volumePR: bestVolumeRecord(in: strengthHistory, mode: volumePRMode),
@@ -483,7 +505,10 @@ enum ExercisePerformanceService {
                 }
                 .filter { $0 > 0 }
                 .max(),
-            totalSessions: strengthHistory.count
+            activityDurationPR: bestActivityDurationRecord(in: activityHistory),
+            activityDistancePR: bestActivityDistanceRecord(in: activityHistory),
+            activityCountPR: bestActivityCountRecord(in: activityHistory),
+            totalSessions: trackableHistory.count
         )
     }
 
@@ -514,6 +539,24 @@ enum ExercisePerformanceService {
             .max { lhs, rhs in
                 isVolumeRecordWorse(lhs, rhs, mode: mode)
             }
+    }
+
+    static func bestActivityDurationRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
+        history
+            .filter { $0.durationSeconds > 0 }
+            .max(by: isActivityDurationRecordWorse(_:_:))
+    }
+
+    static func bestActivityDistanceRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
+        history
+            .filter { $0.distanceMeters > 0 }
+            .max(by: isActivityDistanceRecordWorse(_:_:))
+    }
+
+    static func bestActivityCountRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
+        history
+            .filter { $0.totalReps > 0 || $0.totalSets > 0 }
+            .max(by: isActivityCountRecordWorse(_:_:))
     }
 
     private static func mostRecentRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
@@ -579,6 +622,56 @@ enum ExercisePerformanceService {
     }
 
     nonisolated private static func isRecentRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+        if lhs.performedAt != rhs.performedAt {
+            return lhs.performedAt < rhs.performedAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    nonisolated private static func isActivityDurationRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+        if lhs.durationSeconds != rhs.durationSeconds {
+            return lhs.durationSeconds < rhs.durationSeconds
+        }
+        if lhs.distanceMeters != rhs.distanceMeters {
+            return lhs.distanceMeters < rhs.distanceMeters
+        }
+        if lhs.totalReps != rhs.totalReps {
+            return lhs.totalReps < rhs.totalReps
+        }
+        if lhs.performedAt != rhs.performedAt {
+            return lhs.performedAt < rhs.performedAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    nonisolated private static func isActivityDistanceRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+        if lhs.distanceMeters != rhs.distanceMeters {
+            return lhs.distanceMeters < rhs.distanceMeters
+        }
+        if lhs.durationSeconds != rhs.durationSeconds {
+            return lhs.durationSeconds < rhs.durationSeconds
+        }
+        if lhs.totalReps != rhs.totalReps {
+            return lhs.totalReps < rhs.totalReps
+        }
+        if lhs.performedAt != rhs.performedAt {
+            return lhs.performedAt < rhs.performedAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    nonisolated private static func isActivityCountRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+        let lhsCount = max(lhs.totalReps, lhs.totalSets)
+        let rhsCount = max(rhs.totalReps, rhs.totalSets)
+        if lhsCount != rhsCount {
+            return lhsCount < rhsCount
+        }
+        if lhs.durationSeconds != rhs.durationSeconds {
+            return lhs.durationSeconds < rhs.durationSeconds
+        }
+        if lhs.distanceMeters != rhs.distanceMeters {
+            return lhs.distanceMeters < rhs.distanceMeters
+        }
         if lhs.performedAt != rhs.performedAt {
             return lhs.performedAt < rhs.performedAt
         }
