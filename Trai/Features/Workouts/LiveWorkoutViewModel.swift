@@ -2159,7 +2159,7 @@ final class LiveWorkoutViewModel {
             return LiveActivityProgressSummary(
                 completed: loggedItems,
                 total: totalItems,
-                label: "done",
+                label: totalItems == 1 ? "item" : "items",
                 supportsSetShortcut: supportsSetShortcut
             )
         }

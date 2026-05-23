@@ -13,15 +13,15 @@ final class LiveWorkoutUpdatePolicyTests: XCTestCase {
             isPaused: false,
             progressCompleted: 2,
             progressTotal: 3,
-            progressLabel: "done",
+            progressLabel: "items",
             supportsSetShortcut: false
         )
 
         XCTAssertEqual(state.progressCompletedValue, 2)
         XCTAssertEqual(state.progressTotalValue, 3)
         XCTAssertEqual(state.progressCountDisplay, "2/3")
-        XCTAssertEqual(state.progressDisplay, "2/3 done")
-        XCTAssertEqual(state.setsDisplay, "2/3 done")
+        XCTAssertEqual(state.progressDisplay, "2/3 items")
+        XCTAssertEqual(state.setsDisplay, "2/3 items")
         XCTAssertEqual(state.progress, 2.0 / 3.0, accuracy: 0.001)
         XCTAssertEqual(state.currentWorkDisplay, "20:00 • 2.4 km")
         XCTAssertFalse(state.canUseSetShortcut)

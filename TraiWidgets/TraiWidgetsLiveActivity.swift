@@ -624,7 +624,7 @@ extension TraiWorkoutAttributes.ContentState {
             nextExercise: "Mobility Flow",
             progressCompleted: 1,
             progressTotal: 3,
-            progressLabel: "done",
+            progressLabel: "items",
             supportsSetShortcut: false
         )
     }

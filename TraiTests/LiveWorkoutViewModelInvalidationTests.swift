@@ -408,7 +408,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
             LiveWorkoutViewModel.LiveActivityProgressSummary(
                 completed: 2,
                 total: 2,
-                label: "done",
+                label: "items",
                 supportsSetShortcut: false
             )
         )
