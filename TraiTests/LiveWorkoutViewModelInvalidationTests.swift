@@ -905,6 +905,34 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(goal.scopeSummary, "Bouldering")
     }
 
+    func testGoalScopeSummaryHidesPlacementWhenActivityIdentityIsPresent() {
+        let taggedGoal = WorkoutGoal(
+            title: "Complete support work",
+            goalKind: .frequency,
+            linkedActivityTags: ["Cardio support"],
+            linkedActivityRole: .accessory,
+            targetValue: 1,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You log one cardio support entry this week."
+        )
+
+        let roleOnlyGoal = WorkoutGoal(
+            title: "Complete support work",
+            goalKind: .frequency,
+            linkedActivityRole: .accessory,
+            targetValue: 1,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You log one support entry this week."
+        )
+
+        XCTAssertEqual(taggedGoal.scopeSummary, "Cardio support")
+        XCTAssertEqual(roleOnlyGoal.scopeSummary, "Support")
+    }
+
     func testMixedWorkoutSuggestionsIncludeRelevantNonStrengthExercises() throws {
         container = try ModelContainer(
             for: LiveWorkout.self,
