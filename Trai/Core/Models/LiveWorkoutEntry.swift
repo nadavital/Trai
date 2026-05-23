@@ -706,10 +706,6 @@ extension LiveWorkoutEntry {
             segments.append("\(WeightUtility.format(maxWeightKg, displayUnit: unit)) max")
         }
 
-        if isLoggedActivity {
-            segments.append("Logged")
-        }
-
         return segments
     }
 

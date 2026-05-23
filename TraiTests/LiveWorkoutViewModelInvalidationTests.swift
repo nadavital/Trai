@@ -123,7 +123,6 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertTrue(prompt.contains("18:00"))
         XCTAssertTrue(prompt.contains("2 segments"))
         XCTAssertTrue(prompt.contains("7 attempts"))
-        XCTAssertTrue(prompt.contains("Logged"))
         XCTAssertFalse(prompt.contains("7 reps"))
     }
 

@@ -432,12 +432,6 @@ extension LiveWorkout {
             segments.append("\(stats.totalSets) \(stats.totalSets == 1 ? "set" : "sets")")
         }
 
-        if stats.strengthEntryCount == 0,
-           stats.loggedActivityCount > 0,
-           stats.activityMetricSegments.isEmpty {
-            segments.append("\(stats.loggedActivityCount) logged")
-        }
-
         if stats.durationMinutes > 0 {
             segments.append("\(stats.durationMinutes) min")
         }

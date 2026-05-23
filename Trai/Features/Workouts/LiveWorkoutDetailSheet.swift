@@ -64,15 +64,15 @@ struct LiveWorkoutDetailSheet: View {
         sortedEntries.reduce(0) { $0 + ($1.completedSets?.count ?? 0) }
     }
 
-    private var loggedActivities: Int {
-        entryStats.loggedActivityCount
-    }
-
     private var maxWeightKg: Double? {
         sortedEntries.flatMap(\.sets).compactMap(\.weightKg).filter { $0 > 0 }.max()
     }
 
     private var durationMinutes: Int { entryStats.durationMinutes }
+
+    private var activityMetricStats: [WorkoutActivityMetricDisplayStat] {
+        entryStats.activityMetricSegments.prefix(2).compactMap(WorkoutActivityMetricDisplayStat.init(segment:))
+    }
 
     private var volumePRMode: UserProfile.VolumePRMode {
         profiles.first?.volumePRModeValue ?? .perSet
@@ -361,21 +361,21 @@ struct LiveWorkoutDetailSheet: View {
                     )
                 }
 
+                ForEach(activityMetricStats) { metric in
+                    StatPill(
+                        icon: metric.icon,
+                        value: metric.value,
+                        label: metric.label.lowercased(),
+                        color: .orange
+                    )
+                }
+
                 if totalSets > 0 {
                     StatPill(
                         icon: "square.stack.3d.up.fill",
                         value: "\(totalSets)",
                         label: totalSets == 1 ? "set" : "sets",
                         color: .green
-                    )
-                }
-
-                if loggedActivities > 0 {
-                    StatPill(
-                        icon: "checkmark.circle.fill",
-                        value: "\(loggedActivities)",
-                        label: "logged",
-                        color: .orange
                     )
                 }
 

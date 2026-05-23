@@ -153,47 +153,10 @@ struct WorkoutSummarySheet: View {
                         .clipShape(.rect(cornerRadius: 16))
                     }
 
-                    // Stats
-                    VStack(spacing: 16) {
-                        SummaryStatRow(
-                            label: "Duration",
-                            value: workout.formattedDuration,
-                            icon: "clock.fill"
-                        )
-
-                        if entryStats.strengthEntryCount > 0 {
-                            SummaryStatRow(
-                                label: "Exercises",
-                                value: "\(entryStats.strengthEntryCount)",
-                                icon: "dumbbell.fill"
-                            )
-                        }
-
-                        if entryStats.activityEntryCount > 0 {
-                            SummaryStatRow(
-                                label: "Activities",
-                                value: "\(entryStats.activityEntryCount)",
-                                icon: "list.bullet.rectangle"
-                            )
-                        }
-
-                        if entryStats.totalSets > 0 {
-                            SummaryStatRow(
-                                label: "Total Sets",
-                                value: "\(entryStats.totalSets)",
-                                icon: "square.stack.3d.up.fill"
-                            )
-                        }
-
-                        if entryStats.loggedActivityCount > 0 {
-                            SummaryStatRow(
-                                label: "Logged",
-                                value: "\(entryStats.loggedActivityCount)",
-                                icon: "checkmark.circle.fill"
-                            )
-                        }
-                    }
-                    .traiCard()
+                    WorkoutSummaryStatsCard(
+                        formattedDuration: workout.formattedDuration,
+                        entryStats: entryStats
+                    )
 
                     // Exercises completed with full detail
                     if !loggedEntries.isEmpty {
@@ -442,47 +405,10 @@ struct WorkoutSummaryContent: View {
                     .clipShape(.rect(cornerRadius: 16))
                 }
 
-                // Stats
-                VStack(spacing: 16) {
-                    SummaryStatRow(
-                        label: "Duration",
-                        value: workout.formattedDuration,
-                        icon: "clock.fill"
-                    )
-
-                    if entryStats.strengthEntryCount > 0 {
-                        SummaryStatRow(
-                            label: "Exercises",
-                            value: "\(entryStats.strengthEntryCount)",
-                            icon: "dumbbell.fill"
-                        )
-                    }
-
-                    if entryStats.activityEntryCount > 0 {
-                        SummaryStatRow(
-                            label: "Activities",
-                            value: "\(entryStats.activityEntryCount)",
-                            icon: "list.bullet.rectangle"
-                        )
-                    }
-
-                    if entryStats.totalSets > 0 {
-                        SummaryStatRow(
-                            label: "Total Sets",
-                            value: "\(entryStats.totalSets)",
-                            icon: "square.stack.3d.up.fill"
-                        )
-                    }
-
-                    if entryStats.loggedActivityCount > 0 {
-                        SummaryStatRow(
-                            label: "Logged",
-                            value: "\(entryStats.loggedActivityCount)",
-                            icon: "checkmark.circle.fill"
-                        )
-                    }
-                }
-                .traiCard()
+                WorkoutSummaryStatsCard(
+                    formattedDuration: workout.formattedDuration,
+                    entryStats: entryStats
+                )
 
                 // Exercises completed with full detail
                 if !loggedEntries.isEmpty {
@@ -639,6 +565,90 @@ struct PRRow: View {
 }
 
 // MARK: - Summary Stat Row
+
+private struct WorkoutSummaryStatsCard: View {
+    let formattedDuration: String
+    let entryStats: LiveWorkout.EntrySummaryStats
+
+    private var activityMetricStats: [WorkoutActivityMetricDisplayStat] {
+        entryStats.activityMetricSegments.prefix(2).compactMap(WorkoutActivityMetricDisplayStat.init(segment:))
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            SummaryStatRow(
+                label: "Duration",
+                value: formattedDuration,
+                icon: "clock.fill"
+            )
+
+            if entryStats.strengthEntryCount > 0 {
+                SummaryStatRow(
+                    label: "Exercises",
+                    value: "\(entryStats.strengthEntryCount)",
+                    icon: "dumbbell.fill"
+                )
+            }
+
+            if entryStats.activityEntryCount > 0 {
+                SummaryStatRow(
+                    label: "Activities",
+                    value: "\(entryStats.activityEntryCount)",
+                    icon: "list.bullet.rectangle"
+                )
+            }
+
+            ForEach(activityMetricStats) { metric in
+                SummaryStatRow(
+                    label: metric.label,
+                    value: metric.value,
+                    icon: metric.icon
+                )
+            }
+
+            if entryStats.totalSets > 0 {
+                SummaryStatRow(
+                    label: "Total Sets",
+                    value: "\(entryStats.totalSets)",
+                    icon: "square.stack.3d.up.fill"
+                )
+            }
+        }
+        .traiCard()
+    }
+}
+
+struct WorkoutActivityMetricDisplayStat: Identifiable {
+    let value: String
+    let label: String
+    let icon: String
+
+    var id: String { "\(value)-\(label)" }
+
+    nonisolated init?(segment: String) {
+        let parts = segment.split(separator: " ", maxSplits: 1)
+        guard let value = parts.first, !value.isEmpty else { return nil }
+
+        self.value = String(value)
+        self.label = parts.dropFirst().first.map { String($0).capitalized } ?? "Activity"
+        self.icon = Self.icon(for: self.label)
+    }
+
+    nonisolated private static func icon(for label: String) -> String {
+        switch label.lowercased() {
+        case "attempt", "attempts":
+            return "scope"
+        case "round", "rounds":
+            return "repeat"
+        case "rep", "reps", "count", "counts":
+            return "number"
+        case "segment", "segments":
+            return "square.stack.3d.up"
+        default:
+            return "chart.bar.fill"
+        }
+    }
+}
 
 struct SummaryStatRow: View {
     let label: String
