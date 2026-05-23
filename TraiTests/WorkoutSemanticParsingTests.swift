@@ -379,6 +379,31 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         )
     }
 
+    func testStartWorkoutActivitySummaryUsesActivityNameForMetricLabels() {
+        let exercise = SuggestedWorkoutEntry.SuggestedExercise(
+            name: "Limit Bouldering",
+            category: nil,
+            activityTypeName: "Bouldering",
+            targetTags: ["Climbing", "Grip power"],
+            trackingFields: ["duration", "reps", "notes"],
+            sets: 0,
+            reps: 0,
+            weightKg: nil,
+            durationMinutes: 40,
+            distanceMeters: nil,
+            notes: nil,
+            segments: [
+                .init(durationMinutes: 20, reps: 4),
+                .init(durationMinutes: 20, reps: 3)
+            ]
+        )
+
+        XCTAssertEqual(
+            exercise.startSummarySegments,
+            ["Bouldering", "40 min", "2 segments", "7 attempts"]
+        )
+    }
+
     func testSuggestedWorkoutStartUsesSharedCategoryNormalization() {
         let run = SuggestedWorkoutEntry.SuggestedExercise(
             name: "Outdoor Run",
@@ -420,6 +445,28 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertFalse(padel.isStrengthLog)
         XCTAssertTrue(padel.isActivityLog)
         XCTAssertEqual(padel.setCount, 0)
+        XCTAssertEqual(padel.activitySummarySegments, ["Padel", "45 min", "2 segments", "14 attempts"])
+    }
+
+    func testSuggestedWorkoutLogUsesActivityNameForMetricLabels() {
+        let padel = SuggestedWorkoutLog.LoggedExercise(
+            name: "Padel Drills",
+            category: nil,
+            activityTypeName: "Padel",
+            targetTags: ["Footwork"],
+            trackingFields: ["duration", "reps", "notes"],
+            durationMinutes: 45,
+            distanceMeters: nil,
+            notes: nil,
+            segments: [
+                .init(durationMinutes: 20, reps: 8, notes: "Cross-court volleys"),
+                .init(durationMinutes: 20, reps: 6, notes: "Wall returns")
+            ],
+            sets: []
+        )
+
+        XCTAssertFalse(padel.isStrengthLog)
+        XCTAssertTrue(padel.isActivityLog)
         XCTAssertEqual(padel.activitySummarySegments, ["Padel", "45 min", "2 segments", "14 attempts"])
     }
 

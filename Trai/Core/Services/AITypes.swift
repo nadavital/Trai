@@ -611,7 +611,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
         }
 
         private var normalizedCategoryKey: String? {
-            Self.normalizedCategoryKey(category)
+            Self.normalizedCategoryKey(category) ?? Self.normalizedCategoryKey(activityTypeName)
         }
 
         var displayCategory: Exercise.Category? {
@@ -893,7 +893,7 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
         }
 
         private var normalizedCategoryKey: String? {
-            Self.normalizedCategoryKey(category)
+            Self.normalizedCategoryKey(category) ?? Self.normalizedCategoryKey(activityTypeName)
         }
 
         var displayCategory: Exercise.Category? {
