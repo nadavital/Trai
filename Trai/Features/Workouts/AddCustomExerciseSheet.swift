@@ -20,6 +20,7 @@ struct AddCustomExerciseSheet: View {
 
     @State private var exerciseName: String = ""
     @State private var activityTypeName: String = ""
+    @State private var lastAutoActivityTypeName: String = ""
     @State private var selectedCategory: Exercise.Category = .strength
     @State private var selectedTargets: Set<String> = []
     @State private var selectedTrackingFields: Set<Exercise.TrackingField> = Set(Exercise.defaultTrackingFields(for: .strength))
@@ -136,7 +137,7 @@ struct AddCustomExerciseSheet: View {
                     }
                     inferTrackingTemplateIfNeeded()
                     if shouldReplaceDefaultActivityName {
-                        activityTypeName = Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory)
+                        applyDefaultActivityTypeName()
                     }
                 }
 
@@ -430,8 +431,9 @@ struct AddCustomExerciseSheet: View {
                 if let analyzedActivityType = analysis.activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !analyzedActivityType.isEmpty {
                     activityTypeName = analyzedActivityType
+                    lastAutoActivityTypeName = ""
                 } else {
-                    activityTypeName = Exercise.defaultActivityTypeName(for: name, category: selectedCategory)
+                    applyDefaultActivityTypeName()
                 }
 
                 if let targetTags = analysis.targetTags, !targetTags.isEmpty {
@@ -509,17 +511,25 @@ struct AddCustomExerciseSheet: View {
         selectedTargets = Set(defaults)
         selectedTrackingFields = Set(Exercise.defaultTrackingFields(for: selectedCategory))
         if shouldReplaceDefaultActivityName {
-            activityTypeName = Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory)
+            applyDefaultActivityTypeName()
         }
     }
 
     private var shouldReplaceDefaultActivityName: Bool {
         let trimmed = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lastAuto = lastAutoActivityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty
+            || (!lastAuto.isEmpty && trimmed.goalNormalizedKey == lastAuto.goalNormalizedKey)
             || trimmed == Exercise.defaultActivityTypeName(for: exerciseName, category: .strength)
             || Exercise.Category.userFacingCases.contains { category in
                 trimmed == category.displayName || trimmed == category.trackingTemplateName
             }
+    }
+
+    private func applyDefaultActivityTypeName() {
+        let value = Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory)
+        activityTypeName = value
+        lastAutoActivityTypeName = value
     }
 
     private func inferTrackingTemplateIfNeeded() {
