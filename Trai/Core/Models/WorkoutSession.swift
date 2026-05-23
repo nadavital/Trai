@@ -219,6 +219,27 @@ extension WorkoutSession {
         return activityDisplayName
     }
 
+    var activityContextSegments: [String] {
+        guard !isStrengthTraining else { return [displayTypeName] }
+
+        var seen = Set<String>()
+        let displayKey = displayName.goalNormalizedKey
+        let candidates = importedActivityTags + [activityDisplayName] + semanticActivityTags
+        let segments = candidates.compactMap { rawValue -> String? in
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.goalNormalizedKey
+            guard !trimmed.isEmpty,
+                  !key.isEmpty,
+                  key != displayKey,
+                  seen.insert(key).inserted else {
+                return nil
+            }
+            return trimmed
+        }
+
+        return segments.isEmpty ? [displayTypeName] : segments
+    }
+
     var setMetricLabel: String {
         guard !isStrengthTraining else { return "Sets" }
 
@@ -278,26 +299,7 @@ extension WorkoutSession {
                 }
             }
         } else {
-            let displayKey = displayName.goalNormalizedKey
-            let typeKey = displayTypeName.goalNormalizedKey
-            let importedTags = importedActivityTags.filter { tag in
-                let key = tag.goalNormalizedKey
-                return !key.isEmpty && key != displayKey && key != typeKey
-            }
-            let primaryContext = importedTags.first ?? {
-                let activity = activityDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
-                let key = activity.goalNormalizedKey
-                return !activity.isEmpty && key != displayKey ? activity : nil
-            }()
-
-            if let primaryContext {
-                segments.append(primaryContext)
-            }
-
-            if let extraTag = importedTags.dropFirst().first,
-               extraTag.goalNormalizedKey != primaryContext?.goalNormalizedKey {
-                segments.append(extraTag)
-            }
+            segments.append(contentsOf: activityContextSegments.prefix(2))
 
             if let duration = formattedDuration {
                 segments.append(duration)

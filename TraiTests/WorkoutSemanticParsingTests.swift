@@ -104,6 +104,8 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         )
 
         XCTAssertTrue(session.semanticActivityTags.contains("Hips"))
+        XCTAssertEqual(session.activityContextSegments.prefix(2).map { $0 }, ["Hips", "Cooldown"])
+        XCTAssertEqual(session.historyDetailSegments.prefix(3).map { $0 }, ["Hips", "Cooldown", "30m"])
         XCTAssertTrue(session.goalMatchingTokens.contains("hips"))
         XCTAssertTrue(goal.matches(session: session))
     }

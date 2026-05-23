@@ -72,7 +72,7 @@ struct WorkoutDetailSheet: View {
     }
 
     private var workoutCategoryTitle: String {
-        workout.displayTypeName
+        workout.activityContextSegments.prefix(2).joined(separator: " • ")
     }
 
     private var statsItems: [WorkoutStatItem] {
@@ -146,7 +146,7 @@ struct WorkoutDetailSheet: View {
 
     private var detailItems: [DetailItem] {
         var items: [DetailItem] = [
-            DetailItem(label: "Type", value: workout.displayTypeName)
+            DetailItem(label: "Activity", value: workout.activityContextSegments.joined(separator: ", "))
         ]
 
         if workout.isStrengthTraining, let volume = workout.totalVolume {
