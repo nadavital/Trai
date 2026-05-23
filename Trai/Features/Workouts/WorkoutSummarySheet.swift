@@ -754,7 +754,7 @@ struct ActivitySummaryRow: View {
     private var subtitleSegments: [String] {
         var segments: [String] = []
 
-        if let role = entry.activityRole {
+        if let role = visibleActivityRole {
             segments.append(role.displayName)
         }
 
@@ -776,6 +776,16 @@ struct ActivitySummaryRow: View {
         segments.append(contentsOf: summarySegments.filter { !existingKeys.contains($0.goalNormalizedKey) })
 
         return segments
+    }
+
+    private var visibleActivityRole: WorkoutPlan.TrainingBlock.Role? {
+        guard let role = entry.activityRole else { return nil }
+        switch role {
+        case .main, .accessory, .custom:
+            return nil
+        case .warmup, .finisher, .cooldown:
+            return role
+        }
     }
 
     var body: some View {

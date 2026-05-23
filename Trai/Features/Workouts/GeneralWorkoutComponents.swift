@@ -153,9 +153,6 @@ struct GeneralActivityCard: View {
         if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
             appendUnique(title: activityName, icon: entry.activityIconName)
         }
-        if let role = entry.activityRole {
-            appendUnique(title: role.displayName, icon: role.iconName)
-        }
         if let intensity = entry.plannedIntensity?.trimmingCharacters(in: .whitespacesAndNewlines), !intensity.isEmpty {
             appendUnique(title: intensity, icon: "gauge.with.dots.needle.33percent")
         }

@@ -147,9 +147,11 @@ struct CardioExerciseCard: View {
                         Text(entry.exerciseName)
                             .font(.headline)
 
-                        Text(entry.activityTypeName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if shouldShowActivitySubtitle {
+                            Text(entry.activityTypeName)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     Spacer()
@@ -176,6 +178,12 @@ struct CardioExerciseCard: View {
                 }
             }
         }
+    }
+
+    private var shouldShowActivitySubtitle: Bool {
+        let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !activityName.isEmpty else { return false }
+        return activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey
     }
 
     private var durationRow: some View {
