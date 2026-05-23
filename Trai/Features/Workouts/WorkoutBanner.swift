@@ -25,11 +25,7 @@ struct WorkoutBanner: View {
         let completedSets = entries.reduce(0) { total, entry in
             total + (entry.completedSets?.count ?? 0)
         }
-        let completedActivities = entries.filter {
-            ($0.isCardio || $0.isGeneralActivity)
-                && !$0.isPlannedActivityGuidance
-                && (entryHasLoggedActivityData($0))
-        }.count
+        let completedActivities = entries.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count
         let strengthEntryCount = entries.filter(\.isStrength).count
         return BannerStats(
             entryCount: entries.count,
@@ -37,10 +33,6 @@ struct WorkoutBanner: View {
             completedActivities: completedActivities,
             strengthEntryCount: strengthEntryCount
         )
-    }
-
-    private func entryHasLoggedActivityData(_ entry: LiveWorkoutEntry) -> Bool {
-        entry.completedAt != nil || entry.hasExercisePreferenceSignal
     }
 
     private var usesFlexibleSessionPresentation: Bool {
