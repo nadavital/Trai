@@ -291,11 +291,10 @@ extension WorkoutGoal {
     }
 
     func matches(workout: LiveWorkout) -> Bool {
-        if let linkedWorkoutType, linkedWorkoutType != workout.type {
-            return false
-        }
-
         guard hasActivityScope else {
+            if let linkedWorkoutType {
+                return linkedWorkoutType == workout.type
+            }
             return true
         }
 
@@ -312,7 +311,15 @@ extension WorkoutGoal {
             return !tags.isDisjoint(with: workoutTokens)
         }()
 
-        return (workout.entries ?? []).contains { matches(entry: $0) } || nameMatches || tagMatches
+        if (workout.entries ?? []).contains(where: { matches(entry: $0) }) || nameMatches || tagMatches {
+            return true
+        }
+
+        if let linkedWorkoutType {
+            return linkedWorkoutType == workout.type
+        }
+
+        return false
     }
 
     func matches(entry: LiveWorkoutEntry) -> Bool {

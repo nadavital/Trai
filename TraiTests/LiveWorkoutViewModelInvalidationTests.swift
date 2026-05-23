@@ -416,6 +416,48 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(insight?.progressFraction, 1)
     }
 
+    func testActivityScopedGoalCanProgressInsideMixedWorkoutWithDifferentBroadType() {
+        let workout = LiveWorkout(name: "Strength + Climbing", workoutType: .mixed)
+        workout.completedAt = Date()
+
+        let strengthEntry = LiveWorkoutEntry(exerciseName: "Back Squat", orderIndex: 0)
+        strengthEntry.addSet(LiveWorkoutEntry.SetData(reps: 6, weight: .zero, completed: true))
+
+        let climbingEntry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 1,
+            exerciseType: "skill"
+        )
+        climbingEntry.activityTypeName = "Bouldering"
+        climbingEntry.targetTags = ["Climbing", "Grip power"]
+        climbingEntry.durationSeconds = 1_200
+
+        workout.entries = [strengthEntry, climbingEntry]
+
+        let goal = WorkoutGoal(
+            title: "Keep climbing in the plan",
+            goalKind: .frequency,
+            linkedWorkoutType: .climbing,
+            linkedActivityTags: ["Climbing"],
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You log one climbing block this week."
+        )
+
+        let insight = WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: [workout],
+            exerciseHistory: [],
+            useLbs: false
+        ).first
+
+        XCTAssertTrue(goal.matches(workout: workout))
+        XCTAssertEqual(insight?.currentValueText, "1")
+        XCTAssertEqual(insight?.progressFraction, 1)
+    }
+
     func testActivityScopedFrequencyGoalCountsLoggedActivityDataWithoutEntryCompletion() {
         let workout = LiveWorkout(name: "Climbing Session", workoutType: .climbing)
         workout.startedAt = Date().addingTimeInterval(-1_800)
