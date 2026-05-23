@@ -88,7 +88,7 @@ final class ExerciseLibrarySeederTests: XCTestCase {
     func testTrackingFieldNormalizationPreservesSelectedMetrics() {
         XCTAssertEqual(
             Exercise.normalizedTrackingFields([.duration, .distance, .reps, .weight, .notes], for: .conditioning),
-            [.duration, .distance, .reps, .weight, .notes]
+            [.duration, .distance, .reps, .notes]
         )
         XCTAssertEqual(
             Exercise.normalizedTrackingFields([.duration, .reps, .weight], for: .cardio),
@@ -97,6 +97,13 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertEqual(
             Exercise.normalizedTrackingFields([.sets, .weight, .reps, .duration, .notes], for: .strength),
             [.sets, .weight, .reps, .notes]
+        )
+    }
+
+    func testTrackingFieldNormalizationCapsPrimaryMetrics() {
+        XCTAssertEqual(
+            Exercise.normalizedTrackingFields([.sets, .reps, .weight, .duration, .distance, .notes], for: .custom),
+            [.sets, .reps, .weight, .notes]
         )
     }
 

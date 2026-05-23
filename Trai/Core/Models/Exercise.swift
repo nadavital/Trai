@@ -272,6 +272,8 @@ extension Exercise {
             [.sets, .reps, .weight, .duration, .distance, .notes]
         }
 
+        static let maximumPrimaryMetrics = 3
+
         var isPrimaryMetric: Bool {
             switch self {
             case .sets, .reps, .weight, .duration, .distance:
@@ -351,9 +353,9 @@ extension Exercise {
         }
 
         let source = unique.isEmpty ? fallback : unique
-        let metrics = source.filter(\.isPrimaryMetric)
+        let metrics = source.filter(\.isPrimaryMetric).prefix(TrackingField.maximumPrimaryMetrics)
         let includesNotes = source.contains(.notes)
-        let normalized = metrics + (includesNotes ? [.notes] : [])
+        let normalized = Array(metrics) + (includesNotes ? [.notes] : [])
         return normalized.isEmpty ? fallback : normalized
     }
 
