@@ -15,10 +15,6 @@ struct UpNextSuggestionCard: View {
     let usesMetricWeight: Bool
     let onAdd: () -> Void
 
-    private var weightUnit: String {
-        usesMetricWeight ? "kg" : "lbs"
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -37,15 +33,14 @@ struct UpNextSuggestionCard: View {
                         .font(.headline)
 
                     HStack(spacing: 8) {
-                        Text(suggestion.muscleGroup.capitalized)
+                        Text(suggestion.contextLabel)
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        if let last = lastPerformance, last.bestSetWeightKg > 0 {
-                            let displayWeight = WeightUtility.displayInt(last.bestSetWeightKg, displayUnit: WeightUnit(usesMetric: usesMetricWeight))
+                        if let lastSummary = lastPerformance?.suggestionSummary(usesMetricWeight: usesMetricWeight) {
                             Text("•")
                                 .foregroundStyle(.tertiary)
-                            Text("Last: \(displayWeight) \(weightUnit) × \(last.bestSetReps)")
+                            Text("Last: \(lastSummary)")
                                 .font(.caption)
                                 .foregroundStyle(.blue)
                         }
@@ -91,6 +86,21 @@ struct ExerciseSuggestionChip: View {
             .clipShape(.capsule)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private extension LiveWorkoutViewModel.ExerciseSuggestion {
+    var contextLabel: String {
+        if category == .strength {
+            return muscleGroup.capitalized
+        }
+
+        let activityName = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty {
+            return activityName
+        }
+
+        return category.displayName
     }
 }
 

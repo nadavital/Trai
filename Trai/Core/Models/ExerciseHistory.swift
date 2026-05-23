@@ -236,6 +236,64 @@ extension ExerciseHistory {
         )
     }
 
+    func suggestionSummary(usesMetricWeight: Bool) -> String? {
+        if hasActivityMetrics {
+            var parts: [String] = []
+            if durationSeconds > 0 {
+                parts.append(Self.formatDuration(seconds: durationSeconds))
+            }
+            if distanceMeters > 0 {
+                parts.append(Self.formatDistance(meters: distanceMeters))
+            }
+            if totalReps > 0 {
+                parts.append("\(totalReps) \(activityCountLabel(for: totalReps))")
+            } else if totalSets > 0 {
+                parts.append("\(totalSets) \(activitySegmentLabel(for: totalSets))")
+            }
+            return parts.isEmpty ? nil : parts.prefix(2).joined(separator: " • ")
+        }
+
+        guard bestSetWeightKg > 0, bestSetReps > 0 else { return nil }
+        let unit = WeightUnit(usesMetric: usesMetricWeight)
+        let displayWeight = WeightUtility.displayInt(bestSetWeightKg, displayUnit: unit)
+        return "\(displayWeight) \(unit.symbol) \u{00D7} \(bestSetReps)"
+    }
+
+    private func activityCountLabel(for value: Int) -> String {
+        let label: String
+        switch activityKind {
+        case .sportPractice, .skill:
+            label = "attempt"
+        case .conditioning:
+            label = "round"
+        default:
+            label = "rep"
+        }
+        return value == 1 ? label : "\(label)s"
+    }
+
+    private func activitySegmentLabel(for value: Int) -> String {
+        let label = activityKind == .conditioning ? "round" : "segment"
+        return value == 1 ? label : "\(label)s"
+    }
+
+    private static func formatDuration(seconds: Int) -> String {
+        let minutes = seconds / 60
+        if minutes >= 60 {
+            let hours = minutes / 60
+            let remainder = minutes % 60
+            return remainder > 0 ? "\(hours)h \(remainder)m" : "\(hours)h"
+        }
+        return "\(minutes)m"
+    }
+
+    private static func formatDistance(meters: Double) -> String {
+        if meters >= 1000 {
+            return String(format: "%.1f km", meters / 1000)
+        }
+        return "\(Int(meters.rounded())) m"
+    }
+
     static func records(
         from workout: LiveWorkout,
         performedAt: Date? = nil

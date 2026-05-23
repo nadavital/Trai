@@ -272,6 +272,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(snapshot?.activityDurationPR?.durationSeconds, 1_200)
         XCTAssertEqual(snapshot?.activityCountPR?.totalReps, 8)
         XCTAssertNil(snapshot?.weightPR)
+        XCTAssertEqual(history.suggestionSummary(usesMetricWeight: true), "20m • 8 attempts")
 
         let pr = snapshot.map { ExercisePR.from(snapshot: $0) }
         XCTAssertEqual(pr?.maxActivityCount, 8)
