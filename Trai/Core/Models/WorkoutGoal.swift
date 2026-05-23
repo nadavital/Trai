@@ -328,19 +328,19 @@ extension WorkoutGoal {
     }
 
     func matches(entry: LiveWorkoutEntry) -> Bool {
+        let entryTokens = Set(
+            ([entry.exerciseName, entry.activityTypeName] + entry.targetTags)
+                .map(\.goalNormalizedKey)
+                .filter { !$0.isEmpty }
+        )
+
         if let activityName = trimmedActivityName?.goalNormalizedKey,
-           entry.exerciseName.goalNormalizedKey != activityName,
-           entry.activityTypeName.goalNormalizedKey != activityName {
+           !entryTokens.contains(activityName) {
             return false
         }
 
         let activityTags = normalizedLinkedActivityTags
         if !activityTags.isEmpty {
-            let entryTokens = Set(
-                ([entry.exerciseName, entry.activityTypeName] + entry.targetTags)
-                    .map(\.goalNormalizedKey)
-                    .filter { !$0.isEmpty }
-            )
             guard !activityTags.isDisjoint(with: entryTokens) else { return false }
         }
 

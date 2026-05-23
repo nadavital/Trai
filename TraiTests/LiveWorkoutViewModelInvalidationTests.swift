@@ -511,6 +511,46 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(insight?.progressFraction, 1)
     }
 
+    func testActivityNameGoalCanMatchBroaderEntryTargetTag() {
+        let workout = LiveWorkout(name: "Practice", workoutType: .mixed)
+        workout.startedAt = Date().addingTimeInterval(-1_800)
+        workout.completedAt = Date()
+
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 0,
+            exerciseType: "sportPractice"
+        )
+        entry.activityTypeName = "Bouldering"
+        entry.targetTags = ["Climbing", "Grip power"]
+        entry.activitySegments = [
+            .init(durationSeconds: 900, reps: 5)
+        ]
+        workout.entries = [entry]
+
+        let goal = WorkoutGoal(
+            title: "Build weekly climbing attempts",
+            goalKind: .count,
+            linkedActivityName: "Climbing",
+            targetValue: 5,
+            targetUnit: "attempts",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You log five climbing attempts in one week."
+        )
+
+        let insight = WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: [workout],
+            exerciseHistory: [],
+            useLbs: false
+        ).first
+
+        XCTAssertTrue(goal.matches(entry: entry))
+        XCTAssertEqual(insight?.currentValueText, "5 attempts")
+        XCTAssertEqual(insight?.progressFraction, 1)
+    }
+
     func testPeriodDurationGoalSumsMatchingActivityWork() {
         let firstWorkout = LiveWorkout(name: "Strength + Bike", workoutType: .mixed)
         firstWorkout.startedAt = Date().addingTimeInterval(-3_600)
