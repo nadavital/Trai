@@ -319,6 +319,38 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(exercise.startSummarySegments, ["Bouldering", "30 min", "2 segments", "7 attempts"])
     }
 
+    func testStartLiveWorkoutStoresNormalizedActivityCategoryAndTrackingFields() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "start_live_workout",
+                arguments: [
+                    "name": "Run Intervals",
+                    "workout_type": "running",
+                    "suggested_exercises": [
+                        [
+                            "name": "Run Intervals",
+                            "category": "running",
+                            "activity_name": "Running",
+                            "tracking_fields": ["duration", "calories", "distance"],
+                            "duration_minutes": 28,
+                            "distance_meters": 4_000
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutStart(let suggestion) = result,
+              let exercise = suggestion.exercises.first else {
+            return XCTFail("Expected start workout suggestion")
+        }
+
+        XCTAssertEqual(exercise.category, "cardio")
+        XCTAssertEqual(exercise.trackingFields ?? [], ["duration", "distance"])
+        XCTAssertFalse(exercise.trackingFields?.contains("calories") ?? false)
+        XCTAssertEqual(exercise.startSummarySegments, ["Running", "28 min", "4.0 km"])
+    }
+
     func testStartWorkoutActivitySummaryUsesActivityMetrics() {
         let exercise = SuggestedWorkoutEntry.SuggestedExercise(
             name: "Limit Bouldering",
@@ -588,6 +620,42 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         }
 
         XCTAssertEqual(workoutLog.workoutType, WorkoutMode.cardio.rawValue)
+    }
+
+    func testLogWorkoutStoresNormalizedActivityCategoryAndTrackingFields() async {
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
+        let result = await executor.execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "type": "mixed",
+                    "name": "Padel practice",
+                    "exercises": [
+                        [
+                            "name": "Padel Drills",
+                            "category": "padel drills",
+                            "activity_name": "Padel",
+                            "tracking_fields": ["duration", "calories", "reps", "notes"],
+                            "duration_minutes": 40,
+                            "segments": [
+                                ["duration_minutes": 20, "reps": 8],
+                                ["duration_minutes": 20, "reps": 6]
+                            ]
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutLog(let workoutLog) = result,
+              let exercise = workoutLog.exercises.first else {
+            return XCTFail("Expected suggested workout log")
+        }
+
+        XCTAssertEqual(exercise.category, "sportPractice")
+        XCTAssertEqual(exercise.trackingFields ?? [], ["duration", "reps", "notes"])
+        XCTAssertFalse(exercise.trackingFields?.contains("calories") ?? false)
+        XCTAssertEqual(exercise.activitySummarySegments, ["Padel", "40 min", "2 segments", "14 attempts"])
     }
 
     func testLogWorkoutAcceptsNonStrengthActivityWithoutSets() async {

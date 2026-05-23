@@ -964,6 +964,21 @@ extension AIFunctionExecutor {
                     }
                 }
 
+                let hasActivityMetrics = exerciseDurationMinutes != nil
+                    || distanceMeters != nil
+                    || exerciseNotes != nil
+                    || !trackingFields.isEmpty
+                    || !segments.isEmpty
+                let resolvedCategory = Exercise.Category.normalized(from: category)?.userFacingEquivalent
+                    ?? exerciseActivityName.flatMap { Exercise.Category.normalized(from: $0)?.userFacingEquivalent }
+                    ?? (!sets.isEmpty && !hasActivityMetrics ? .strength : nil)
+                let normalizedTrackingFields = resolvedCategory.map { category in
+                    Exercise.normalizedTrackingFields(
+                        trackingFields.compactMap(Exercise.TrackingField.init(rawValue:)),
+                        for: category
+                    ).map(\.rawValue)
+                }
+
                 if !sets.isEmpty
                     || exerciseDurationMinutes != nil
                     || distanceMeters != nil
@@ -972,10 +987,10 @@ extension AIFunctionExecutor {
                     || !segments.isEmpty {
                     exercises.append(SuggestedWorkoutLog.LoggedExercise(
                         name: name,
-                        category: category,
+                        category: resolvedCategory?.rawValue ?? category,
                         activityTypeName: exerciseActivityName,
                         targetTags: targetTags,
-                        trackingFields: trackingFields,
+                        trackingFields: normalizedTrackingFields ?? trackingFields,
                         durationMinutes: exerciseDurationMinutes,
                         distanceMeters: distanceMeters,
                         notes: exerciseNotes,

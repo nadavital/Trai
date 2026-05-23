@@ -992,16 +992,29 @@ struct ExerciseListView: View {
 
         // Check if exercise already exists
         if let existing = exercises.first(where: { $0.name.lowercased() == trimmed.lowercased() }) {
+            let canSafelyRefreshCategory = existing.isCustom
+                || existing.sessions?.isEmpty != false
+                || existing.exerciseCategory == .custom
+            if canSafelyRefreshCategory {
+                existing.exerciseCategory = resolvedCategory
+            }
             // Backfill missing muscle group for existing strength entries when we now have context.
-            if existing.exerciseCategory == .strength,
-               existing.targetMuscleGroup == nil,
-               let normalizedMuscleGroup {
-                existing.targetMuscleGroup = normalizedMuscleGroup
+            if existing.exerciseCategory == .strength {
+                if existing.targetMuscleGroup == nil,
+                   let normalizedMuscleGroup {
+                    existing.targetMuscleGroup = normalizedMuscleGroup
+                }
+            } else {
+                existing.muscleGroup = nil
             }
             if let secondary = normalizedSecondaryMuscles, !secondary.isEmpty {
                 existing.secondaryMuscles = secondary.joined(separator: ",")
             } else if existing.exerciseCategory != .strength {
                 existing.secondaryMuscles = nil
+            }
+            if let equipmentName,
+               !equipmentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                existing.equipmentName = equipmentName
             }
             if !targetTags.isEmpty {
                 existing.targetTags = targetTags

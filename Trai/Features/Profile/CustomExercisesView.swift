@@ -147,14 +147,28 @@ struct CustomExercisesView: View {
         let resolvedCategory = category.userFacingEquivalent
 
         if let existing = existingExercise(named: trimmed) {
-            if existing.exerciseCategory == .strength,
-               existing.targetMuscleGroup == nil,
-               resolvedCategory == .strength,
-               let muscleGroup {
-                existing.targetMuscleGroup = muscleGroup
+            let canSafelyRefreshCategory = existing.isCustom
+                || existing.sessions?.isEmpty != false
+                || existing.exerciseCategory == .custom
+            if canSafelyRefreshCategory {
+                existing.exerciseCategory = resolvedCategory
             }
-            if let secondaryMuscles, !secondaryMuscles.isEmpty, (existing.secondaryMuscles?.isEmpty ?? true) {
+            existing.isCustom = true
+            if existing.exerciseCategory == .strength {
+                if existing.targetMuscleGroup == nil,
+                   let muscleGroup {
+                    existing.targetMuscleGroup = muscleGroup
+                }
+            } else {
+                existing.muscleGroup = nil
+            }
+            if let secondaryMuscles,
+               !secondaryMuscles.isEmpty,
+               existing.exerciseCategory == .strength,
+               (existing.secondaryMuscles?.isEmpty ?? true) {
                 existing.secondaryMuscles = secondaryMuscles.joined(separator: ",")
+            } else if existing.exerciseCategory != .strength {
+                existing.secondaryMuscles = nil
             }
             if !targetTags.isEmpty {
                 existing.targetTags = targetTags

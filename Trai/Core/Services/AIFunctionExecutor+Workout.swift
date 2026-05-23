@@ -425,9 +425,13 @@ extension AIFunctionExecutor {
                     .nilIfEmpty
                 let targetTags = stringArray(from: exerciseData["target_tags"])
                 let trackingFields = stringArray(from: exerciseData["tracking_fields"])
-                let resolvedCategory = Exercise.Category.normalized(from: category)
+                let resolvedCategory = Exercise.Category.normalized(from: category)?.userFacingEquivalent
                     ?? activityTypeName.flatMap { Exercise.Category.normalized(from: $0)?.userFacingEquivalent }
                     ?? (workoutType.supportsMuscleTargets ? .strength : .cardio)
+                let normalizedTrackingFields = Exercise.normalizedTrackingFields(
+                    trackingFields.compactMap(Exercise.TrackingField.init(rawValue:)),
+                    for: resolvedCategory
+                )
                 let sets = numericInt(from: exerciseData["sets"]) ?? (resolvedCategory == .strength ? 3 : 0)
                 let reps = numericInt(from: exerciseData["reps"]) ?? (resolvedCategory == .strength ? 10 : 0)
                 let weight = exerciseData["weight_kg"] as? Double
@@ -440,10 +444,10 @@ extension AIFunctionExecutor {
 
                 exercises.append(SuggestedWorkoutEntry.SuggestedExercise(
                     name: exerciseName,
-                    category: category ?? resolvedCategory.rawValue,
+                    category: resolvedCategory.rawValue,
                     activityTypeName: activityTypeName,
                     targetTags: targetTags,
-                    trackingFields: trackingFields,
+                    trackingFields: normalizedTrackingFields.map(\.rawValue),
                     sets: sets,
                     reps: reps,
                     weightKg: weight,
