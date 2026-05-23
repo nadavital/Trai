@@ -116,7 +116,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(log.summary, "1 exercise • 1 activity • 2 sets • 55 min")
         XCTAssertEqual(
             log.exercises[1].activitySummarySegments,
-            ["30 min", "4 attempts", "Hard attempts"]
+            ["Bouldering", "30 min", "4 attempts", "Hard attempts"]
         )
     }
 
@@ -327,7 +327,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertFalse(padel.isStrengthLog)
         XCTAssertTrue(padel.isActivityLog)
         XCTAssertEqual(padel.setCount, 0)
-        XCTAssertEqual(padel.activitySummarySegments, ["45 min", "2 segments", "14 attempts"])
+        XCTAssertEqual(padel.activitySummarySegments, ["Padel", "45 min", "2 segments", "14 attempts"])
     }
 
     func testSuggestedWorkoutCategoryNormalizationDoesNotMisclassifyCableRow() {

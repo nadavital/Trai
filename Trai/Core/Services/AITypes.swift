@@ -922,6 +922,10 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
 
         var activitySummarySegments: [String] {
             var parts: [String] = []
+            let activityName = activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !activityName.isEmpty, Self.normalizedTextKey(activityName) != Self.normalizedTextKey(name) {
+                parts.append(activityName)
+            }
 
             if let durationMinutes, durationMinutes > 0 {
                 parts.append("\(durationMinutes) min")
@@ -983,6 +987,15 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
                 return String(pluralLabel.dropLast())
             }
             return pluralLabel
+        }
+
+        private static func normalizedTextKey(_ value: String) -> String {
+            value
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: " ", with: "")
         }
     }
 

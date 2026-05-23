@@ -261,7 +261,7 @@ private struct WorkoutLogExerciseRow: View {
     private var activityDetails: some View {
         let details = exercise.activitySummarySegments
         if details.isEmpty {
-            Text(exercise.activityTypeName ?? exercise.category ?? "Activity")
+            Text(exercise.fallbackActivityLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         } else {
@@ -315,6 +315,19 @@ private struct WorkoutLogExerciseRow: View {
             parts.append(notes)
         }
         return parts.joined(separator: " • ")
+    }
+}
+
+private extension SuggestedWorkoutLog.LoggedExercise {
+    var fallbackActivityLabel: String {
+        if let activityTypeName = activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !activityTypeName.isEmpty {
+            return activityTypeName
+        }
+        if let category = Exercise.Category.normalized(from: category)?.userFacingEquivalent {
+            return category.displayName
+        }
+        return "Activity"
     }
 }
 
