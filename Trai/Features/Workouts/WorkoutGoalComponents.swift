@@ -237,7 +237,7 @@ enum WorkoutGoalProgressResolver {
         in sessions: [WorkoutSession]
     ) -> [WorkoutSession] {
         sessions
-            .filter { goal.matches(session: $0) }
+            .filter { isSessionProgressCandidate($0, for: goal) }
             .sorted { $0.loggedAt > $1.loggedAt }
     }
 
@@ -249,7 +249,7 @@ enum WorkoutGoalProgressResolver {
         useLbs: Bool
     ) -> WorkoutGoalInsight {
         let matchingWorkouts = matchingCompletedWorkouts(for: goal, in: workouts)
-        let matchingSessions = sessions.filter { goal.matches(session: $0) }
+        let matchingSessions = matchingCompletedSessions(for: goal, in: sessions)
 
         let matchingEntries = matchingWorkouts.flatMap { workout in
             (workout.entries ?? []).filter { goal.matches(entry: $0) }
@@ -609,6 +609,18 @@ enum WorkoutGoalProgressResolver {
         }
     }
 
+    private static func isSessionProgressCandidate(
+        _ session: WorkoutSession,
+        for goal: WorkoutGoal
+    ) -> Bool {
+        guard goal.matches(session: session) else { return false }
+        guard !goal.hasActivityScope else { return true }
+
+        return session.sourceIsHealthKit
+            || session.healthKitWorkoutID != nil
+            || session.healthKitWorkoutType != nil
+    }
+
     private static func workoutLevelMatchesActivityScope(
         for goal: WorkoutGoal,
         in workout: LiveWorkout
@@ -753,7 +765,7 @@ enum WorkoutGoalProgressResolver {
         let periodStart = periodStartDate(for: goal, now: now) ?? Calendar.current.startOfDay(for: now)
 
         let workoutCount: Int
-        if goal.hasActivityScope {
+        if goal.hasActivityScope && frequencyGoalCountsActivityEntries(goal) {
             workoutCount = workouts.reduce(0) { count, workout in
                 let entryCount = (workout.entries ?? []).filter { entry in
                     guard goal.matches(entry: entry),
@@ -793,6 +805,16 @@ enum WorkoutGoalProgressResolver {
             progressFraction: progressFraction,
             periodRangeText: periodRangeText
         )
+    }
+
+    private static func frequencyGoalCountsActivityEntries(_ goal: WorkoutGoal) -> Bool {
+        guard goal.hasActivityScope else { return false }
+
+        let normalizedUnit = goal.targetUnit
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        return !(normalizedUnit.contains("session") || normalizedUnit.contains("workout"))
     }
 
     private static func periodStartDate(for goal: WorkoutGoal, now: Date) -> Date? {

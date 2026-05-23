@@ -839,6 +839,62 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(insight?.progressFraction, 1)
     }
 
+    func testActivityScopedSessionFrequencyCountsWorkoutOnceNotMatchingEntries() {
+        let workout = LiveWorkout(
+            name: "Full-Body Strength A",
+            workoutType: .mixed,
+            focusAreas: ["Full Body", "Strength", "Climbing"]
+        )
+        workout.completedAt = Date()
+
+        let warmup = LiveWorkoutEntry(
+            exerciseName: "Dynamic Warm-Up",
+            orderIndex: 0,
+            exerciseType: "activity"
+        )
+        warmup.targetTags = ["Strength"]
+        warmup.durationSeconds = 480
+        warmup.workout = workout
+
+        let strength = LiveWorkoutEntry(exerciseName: "Balance Drill", orderIndex: 1)
+        strength.targetTags = ["Strength"]
+        strength.addSet(LiveWorkoutEntry.SetData(reps: 10, weight: .zero, completed: true))
+        strength.workout = workout
+
+        let climbing = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 2,
+            exerciseType: "skill"
+        )
+        climbing.targetTags = ["Climbing"]
+        climbing.durationSeconds = 600
+        climbing.workout = workout
+
+        workout.entries = [warmup, strength, climbing]
+
+        let goal = WorkoutGoal(
+            title: "Complete all 3 weekly sessions",
+            goalKind: .frequency,
+            linkedWorkoutType: .mixed,
+            linkedActivityTags: ["Strength", "Climbing"],
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete all three planned sessions each week."
+        )
+
+        let insight = WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: [workout],
+            exerciseHistory: [],
+            useLbs: false
+        ).first
+
+        XCTAssertEqual(insight?.currentValueText, "1")
+        XCTAssertEqual(insight?.progressFraction ?? 0, 1.0 / 3.0, accuracy: 0.001)
+    }
+
     func testActivityNameGoalCanMatchBroaderEntryTargetTag() {
         let workout = LiveWorkout(name: "Practice", workoutType: .mixed)
         workout.startedAt = Date().addingTimeInterval(-1_800)
