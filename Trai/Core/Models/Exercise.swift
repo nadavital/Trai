@@ -614,7 +614,10 @@ extension Exercise {
         // Skill / sport practice
         ("Bouldering", "sportPractice", nil, "Climbing Wall"),
         ("Top Rope Climbing", "sportPractice", nil, "Climbing Wall"),
-        ("Sport Technique", "sportPractice", nil, "Sport-Specific"),
+        ("Padel Drills", "sportPractice", nil, "Padel Court"),
+        ("Tennis Drills", "sportPractice", nil, "Tennis Court"),
+        ("Basketball Shooting", "sportPractice", nil, "Basketball Court"),
+        ("Boxing Rounds", "sportPractice", nil, "Gloves / Bag"),
 
         // Mobility / recovery
         ("Hip Mobility Flow", "mobility", nil, "Mat / Bodyweight"),

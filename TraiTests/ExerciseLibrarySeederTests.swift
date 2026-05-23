@@ -214,8 +214,11 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertTrue(names.contains("Running"))
         XCTAssertTrue(names.contains("Hip Mobility Flow"))
         XCTAssertTrue(names.contains("Bouldering"))
+        XCTAssertTrue(names.contains("Padel Drills"))
+        XCTAssertTrue(names.contains("Basketball Shooting"))
         XCTAssertTrue(names.contains("Seated Cable Row"))
         XCTAssertFalse(names.contains("Rowing Machine"))
+        XCTAssertFalse(names.contains("Sport Technique"))
         XCTAssertEqual(exercises.filter { $0.name == "Running" }.count, 1)
 
         let running = try XCTUnwrap(exercises.first { $0.name == "Running" })
@@ -236,6 +239,10 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         let bouldering = try XCTUnwrap(exercises.first { $0.name == "Bouldering" })
         XCTAssertEqual(bouldering.exerciseCategory, .sportPractice)
         XCTAssertEqual(bouldering.activityTypeName, "Climbing")
+
+        let basketball = try XCTUnwrap(exercises.first { $0.name == "Basketball Shooting" })
+        XCTAssertEqual(basketball.exerciseCategory, .sportPractice)
+        XCTAssertEqual(basketball.activityTypeName, "Basketball")
     }
 
     func testEnsureDefaultsRefreshesOldBroadDefaultActivityNames() throws {
@@ -328,5 +335,26 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         let renamed = try XCTUnwrap(exercises.first { $0.name == "Seated Cable Row" })
         XCTAssertEqual(renamed.exerciseCategory, .strength)
         XCTAssertEqual(renamed.targetMuscleGroup, .back)
+    }
+
+    func testEnsureDefaultsRemovesOldGenericSportTechniqueSeed() throws {
+        let container = try ModelContainer(
+            for: Exercise.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+
+        let generic = Exercise(name: "Sport Technique", category: .sportPractice)
+        generic.isCustom = false
+        generic.activityTypeName = "Sport"
+        context.insert(generic)
+        try context.save()
+
+        _ = ExerciseLibrarySeeder.ensureDefaults(in: context)
+
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+        XCTAssertNil(exercises.first { $0.name == "Sport Technique" })
+        XCTAssertNotNil(exercises.first { $0.name == "Padel Drills" })
+        XCTAssertNotNil(exercises.first { $0.name == "Basketball Shooting" })
     }
 }

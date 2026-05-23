@@ -32,6 +32,14 @@ enum ExerciseLibrarySeeder {
             didMutate = true
         }
 
+        if let legacySportRow = existingByName["sport technique"],
+           !legacySportRow.isCustom,
+           legacySportRow.exerciseCategory.userFacingEquivalent == .sportPractice {
+            modelContext.delete(legacySportRow)
+            existingByName["sport technique"] = nil
+            didMutate = true
+        }
+
         for (name, category, muscleGroup, equipment) in Exercise.defaultExercises {
             let key = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             guard !key.isEmpty else { continue }
