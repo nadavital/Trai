@@ -158,7 +158,7 @@ struct WorkoutTemplateService {
                 }
             } else if prefillStrengthExercises && block.shouldCreateLiveWorkoutEntry {
                 let entry = LiveWorkoutEntry(
-                    exerciseName: block.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? block.displayActivityName : block.title,
+                    exerciseName: block.liveWorkoutDisplayName,
                     orderIndex: nextOrderIndex,
                     exerciseType: block.liveWorkoutExerciseType(in: template)
                 )
@@ -488,5 +488,31 @@ private extension WorkoutPlan.TrainingBlock {
             return template.sessionType == .cardio || template.sessionType == .hiit ? "cardio" : "activity"
         }
         return kind.liveWorkoutExerciseType
+    }
+
+    var liveWorkoutDisplayName: String {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let activityName = displayActivityName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !activityName.isEmpty else {
+            return trimmedTitle.isEmpty ? kind.displayName : trimmedTitle
+        }
+
+        let genericTitleKeys = (
+            WorkoutPlan.TrainingBlock.BlockKind.allCases.flatMap { [$0.displayName, $0.rawValue] }
+            + WorkoutPlan.TrainingBlock.Role.allCases.flatMap { [$0.displayName, $0.rawValue] }
+            + [
+                "Activity",
+                "Block",
+                "Session",
+                "Sport"
+            ]
+        ).map(\.goalNormalizedKey)
+
+        if trimmedTitle.isEmpty || genericTitleKeys.contains(trimmedTitle.goalNormalizedKey) {
+            return activityName
+        }
+
+        return trimmedTitle
     }
 }

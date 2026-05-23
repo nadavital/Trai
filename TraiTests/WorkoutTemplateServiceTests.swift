@@ -332,6 +332,50 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(entry.plannedTarget, "Power and precision")
     }
 
+    func testCreateWorkoutFromTemplateUsesActivityNameForGenericActivityBlockTitle() throws {
+        let context = try makeInMemoryContext()
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Practice Day",
+            sessionType: .custom,
+            focusAreas: [],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .sportPractice,
+                    role: .main,
+                    title: "Skill",
+                    detail: "Hard attempts",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing"],
+                    durationMinutes: 30,
+                    order: 0
+                ),
+                WorkoutPlan.TrainingBlock(
+                    kind: .mobility,
+                    role: .cooldown,
+                    title: "Shoulder Prep",
+                    detail: "Controlled range",
+                    activityTypeName: "Shoulder Mobility",
+                    durationMinutes: 10,
+                    order: 1
+                )
+            ],
+            estimatedDurationMinutes: 40,
+            order: 0
+        )
+
+        let workout = service.createWorkoutFromTemplate(
+            template,
+            progressionStrategy: .defaultStrategy,
+            modelContext: context
+        )
+
+        let entries = try XCTUnwrap(workout.entries)
+        XCTAssertEqual(entries.map(\.exerciseName), ["Bouldering", "Shoulder Prep"])
+        XCTAssertEqual(entries.map(\.activityTypeName), ["Bouldering", "Shoulder Mobility"])
+    }
+
     func testCreateWorkoutFromTemplateDoesNotDuplicateTopLevelExercisesAcrossEmptyStrengthBlocks() throws {
         let context = try makeInMemoryContext()
         let lift = WorkoutPlan.ExerciseTemplate(
