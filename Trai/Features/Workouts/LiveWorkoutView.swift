@@ -358,17 +358,12 @@ struct LiveWorkoutView: View {
                         ContentUnavailableView(
                             "No Activities Yet",
                             systemImage: viewModel.workout.type.iconName,
-                            description: Text("Add freeform activities, jot down notes, and use Trai chat for in-session guidance.")
+                            description: Text("Add exercises or activities to track in this session.")
                         )
                         .padding(.top, 8)
                     } else {
-                        ForEach(Array(viewModel.entries.enumerated()), id: \.element.id) { index, entry in
-                            GeneralActivityCard(
-                                entry: entry,
-                                onUpdateNotes: { viewModel.updateEntryNotes(for: entry, notes: $0) },
-                                onUpdateDuration: { viewModel.updateEntryDuration(for: entry, seconds: $0) },
-                                onDelete: { viewModel.removeExercise(at: index) }
-                            )
+                        ForEach(viewModel.entries, id: \.id) { entry in
+                            workoutEntryCard(entry)
                         }
                     }
 
@@ -384,10 +379,10 @@ struct LiveWorkoutView: View {
             )
 
             WorkoutBottomBar(
-                onAddExercise: { showingGeneralActivitySheet = true },
+                onAddExercise: { showingExerciseList = true },
                 onAskTrai: { showingChat = true },
-                addLabel: "Add Activity",
-                addSystemImage: "square.and.pencil"
+                addLabel: "Add Exercise",
+                addSystemImage: "plus.circle.fill"
             )
         }
     }
@@ -457,119 +452,7 @@ struct LiveWorkoutView: View {
 
                     // Planned and ad hoc workout items share the same logging surface.
                     ForEach(entries, id: \.id) { entry in
-                        if entry.isGeneralActivity {
-                            CardioExerciseCard(
-                                entry: entry,
-                                usesMetricWeight: usesMetricExerciseWeight,
-                                onUpdateDuration: { seconds in
-                                    viewModel.updateEntryDuration(for: entry, seconds: seconds)
-                                },
-                                onUpdateDistance: { meters in
-                                    viewModel.updateCardioDistance(for: entry, meters: meters)
-                                },
-                                onUpdateSetCount: { count in
-                                    viewModel.updateEntrySetCount(for: entry, count: count)
-                                },
-                                onUpdateReps: { reps in
-                                    viewModel.updateEntryReps(for: entry, reps: reps)
-                                },
-                                onUpdateWeightKg: { weightKg in
-                                    viewModel.updateEntryWeight(for: entry, weightKg: weightKg)
-                                },
-                                onUpdateNotes: { notes in
-                                    viewModel.updateEntryNotes(for: entry, notes: notes)
-                                },
-                                onAddSegment: { viewModel.addActivitySegment(to: entry) },
-                                onUpdateSegmentDuration: { index, seconds in
-                                    viewModel.updateActivitySegment(for: entry, at: index, durationSeconds: seconds)
-                                },
-                                onUpdateSegmentDistance: { index, meters in
-                                    viewModel.updateActivitySegment(for: entry, at: index, distanceMeters: meters)
-                                },
-                                onUpdateSegmentReps: { index, reps in
-                                    viewModel.updateActivitySegment(for: entry, at: index, reps: reps)
-                                },
-                                onUpdateSegmentWeightKg: { index, weightKg in
-                                    viewModel.updateActivitySegment(for: entry, at: index, weightKg: weightKg)
-                                },
-                                onUpdateSegmentNotes: { index, notes in
-                                    viewModel.updateActivitySegment(for: entry, at: index, notes: notes)
-                                },
-                                onRemoveSegment: { index in
-                                    viewModel.removeActivitySegment(from: entry, at: index)
-                                },
-                                onDeleteExercise: { removeEntry(entry) }
-                            )
-                        } else if entry.isCardio {
-                            CardioExerciseCard(
-                                entry: entry,
-                                usesMetricWeight: usesMetricExerciseWeight,
-                                onUpdateDuration: { seconds in
-                                    viewModel.updateCardioDuration(for: entry, seconds: seconds)
-                                },
-                                onUpdateDistance: { meters in
-                                    viewModel.updateCardioDistance(for: entry, meters: meters)
-                                },
-                                onUpdateSetCount: { count in
-                                    viewModel.updateEntrySetCount(for: entry, count: count)
-                                },
-                                onUpdateReps: { reps in
-                                    viewModel.updateEntryReps(for: entry, reps: reps)
-                                },
-                                onUpdateWeightKg: { weightKg in
-                                    viewModel.updateEntryWeight(for: entry, weightKg: weightKg)
-                                },
-                                onUpdateNotes: { notes in
-                                    viewModel.updateEntryNotes(for: entry, notes: notes)
-                                },
-                                onAddSegment: { viewModel.addActivitySegment(to: entry) },
-                                onUpdateSegmentDuration: { index, seconds in
-                                    viewModel.updateActivitySegment(for: entry, at: index, durationSeconds: seconds)
-                                },
-                                onUpdateSegmentDistance: { index, meters in
-                                    viewModel.updateActivitySegment(for: entry, at: index, distanceMeters: meters)
-                                },
-                                onUpdateSegmentReps: { index, reps in
-                                    viewModel.updateActivitySegment(for: entry, at: index, reps: reps)
-                                },
-                                onUpdateSegmentWeightKg: { index, weightKg in
-                                    viewModel.updateActivitySegment(for: entry, at: index, weightKg: weightKg)
-                                },
-                                onUpdateSegmentNotes: { index, notes in
-                                    viewModel.updateActivitySegment(for: entry, at: index, notes: notes)
-                                },
-                                onRemoveSegment: { index in
-                                    viewModel.removeActivitySegment(from: entry, at: index)
-                                },
-                                onDeleteExercise: { removeEntry(entry) }
-                            )
-                        } else {
-                            ExerciseCard(
-                                entry: entry,
-                                lastPerformance: viewModel.lastPerformances[entry.exerciseName],
-                                personalRecord: viewModel.personalRecords[entry.exerciseName],
-                                usesMetricWeight: usesMetricExerciseWeight,
-                                onAddSet: { viewModel.addSet(to: entry) },
-                                onRemoveSet: { setIndex in viewModel.removeSet(at: setIndex, from: entry) },
-                                onUpdateSet: { setIndex, reps, weightKg, weightLbs, notes, preferredWeightUnit in
-                                    viewModel.updateSet(
-                                        at: setIndex,
-                                        in: entry,
-                                        reps: reps,
-                                        weightKg: weightKg,
-                                        weightLbs: weightLbs,
-                                        notes: notes,
-                                        preferredWeightUnit: preferredWeightUnit
-                                    )
-                                },
-                                onToggleWarmup: { setIndex in viewModel.toggleWarmup(at: setIndex, in: entry) },
-                                onDeleteExercise: { removeEntry(entry) },
-                                onChangeExercise: {
-                                    entryToReplace = entry
-                                    showingExerciseReplacement = true
-                                }
-                            )
-                        }
+                        workoutEntryCard(entry)
                     }
 
                     // Up Next suggestion (smart rotation)
@@ -628,6 +511,80 @@ struct LiveWorkoutView: View {
                 onAskTrai: { showingChat = true },
                 addLabel: viewModel.usesFocusedCardioWorkspace ? "Add Interval" : "Add Exercise",
                 addSystemImage: "plus.circle.fill"
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func workoutEntryCard(_ entry: LiveWorkoutEntry) -> some View {
+        if entry.isStrength {
+            ExerciseCard(
+                entry: entry,
+                lastPerformance: viewModel.lastPerformances[entry.exerciseName],
+                personalRecord: viewModel.personalRecords[entry.exerciseName],
+                usesMetricWeight: usesMetricExerciseWeight,
+                onAddSet: { viewModel.addSet(to: entry) },
+                onRemoveSet: { setIndex in viewModel.removeSet(at: setIndex, from: entry) },
+                onUpdateSet: { setIndex, reps, weightKg, weightLbs, notes, preferredWeightUnit in
+                    viewModel.updateSet(
+                        at: setIndex,
+                        in: entry,
+                        reps: reps,
+                        weightKg: weightKg,
+                        weightLbs: weightLbs,
+                        notes: notes,
+                        preferredWeightUnit: preferredWeightUnit
+                    )
+                },
+                onToggleWarmup: { setIndex in viewModel.toggleWarmup(at: setIndex, in: entry) },
+                onDeleteExercise: { removeEntry(entry) },
+                onChangeExercise: {
+                    entryToReplace = entry
+                    showingExerciseReplacement = true
+                }
+            )
+        } else {
+            CardioExerciseCard(
+                entry: entry,
+                usesMetricWeight: usesMetricExerciseWeight,
+                onUpdateDuration: { seconds in
+                    viewModel.updateCardioDuration(for: entry, seconds: seconds)
+                },
+                onUpdateDistance: { meters in
+                    viewModel.updateCardioDistance(for: entry, meters: meters)
+                },
+                onUpdateSetCount: { count in
+                    viewModel.updateEntrySetCount(for: entry, count: count)
+                },
+                onUpdateReps: { reps in
+                    viewModel.updateEntryReps(for: entry, reps: reps)
+                },
+                onUpdateWeightKg: { weightKg in
+                    viewModel.updateEntryWeight(for: entry, weightKg: weightKg)
+                },
+                onUpdateNotes: { notes in
+                    viewModel.updateEntryNotes(for: entry, notes: notes)
+                },
+                onAddSegment: { viewModel.addActivitySegment(to: entry) },
+                onUpdateSegmentDuration: { index, seconds in
+                    viewModel.updateActivitySegment(for: entry, at: index, durationSeconds: seconds)
+                },
+                onUpdateSegmentDistance: { index, meters in
+                    viewModel.updateActivitySegment(for: entry, at: index, distanceMeters: meters)
+                },
+                onUpdateSegmentReps: { index, reps in
+                    viewModel.updateActivitySegment(for: entry, at: index, reps: reps)
+                },
+                onUpdateSegmentWeightKg: { index, weightKg in
+                    viewModel.updateActivitySegment(for: entry, at: index, weightKg: weightKg)
+                },
+                onUpdateSegmentNotes: { index, notes in
+                    viewModel.updateActivitySegment(for: entry, at: index, notes: notes)
+                },
+                onRemoveSegment: { index in
+                    viewModel.removeActivitySegment(from: entry, at: index)
+                },
+                onDeleteExercise: { removeEntry(entry) }
             )
         }
     }
