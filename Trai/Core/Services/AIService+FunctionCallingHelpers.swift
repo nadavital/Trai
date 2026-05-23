@@ -13,6 +13,16 @@ extension AIService {
 
     // MARK: - System Prompt Builder
 
+    nonisolated static let activeWorkoutPriorityInstructions = """
+    The user is mid-workout and opened chat between workout items, sets, or activity blocks. This is your TOP priority:
+    - They're likely asking about their CURRENT workout (activity, exercise, form, alternatives, pacing, or logging)
+    - Keep responses SHORT (2-3 sentences max) - they're holding their phone during training
+    - Be direct and actionable - no lengthy explanations
+    - If they ask about form, give ONE key cue
+    - If something hurts, suggest ONE alternative exercise, activity variation, or recovery adjustment
+    - Offer quick encouragement but don't be preachy
+    """
+
     func buildFunctionCallingSystemPrompt(context: ChatFunctionContext) -> String {
         var prompt = """
         You are Trai, a knowledgeable fitness coach. Be helpful, concise, and direct.
@@ -275,13 +285,7 @@ extension AIService {
         ⚠️ ACTIVE WORKOUT IN PROGRESS - PRIORITY CONTEXT:
         \(workout.description)
 
-        The user is mid-workout and opened chat between sets. This is your TOP priority:
-        - They're likely asking about their CURRENT workout (exercises, form, alternatives)
-        - Keep responses SHORT (2-3 sentences max) - they're holding their phone between sets
-        - Be direct and actionable - no lengthy explanations
-        - If they ask about form, give ONE key cue
-        - If something hurts, suggest ONE alternative exercise
-        - Offer quick encouragement but don't be preachy
+        \(Self.activeWorkoutPriorityInstructions)
 
         """
     }

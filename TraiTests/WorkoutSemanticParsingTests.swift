@@ -114,6 +114,15 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertFalse(description.contains("Sets completed"))
     }
 
+    func testActiveWorkoutFunctionPromptUsesActivityNeutralTrainingLanguage() {
+        let prompt = AIService.activeWorkoutPriorityInstructions
+
+        XCTAssertTrue(prompt.contains("workout items, sets, or activity blocks"))
+        XCTAssertTrue(prompt.contains("activity, exercise, form, alternatives, pacing, or logging"))
+        XCTAssertTrue(prompt.contains("activity variation, or recovery adjustment"))
+        XCTAssertFalse(prompt.contains("opened chat between sets"))
+    }
+
     func testActiveWorkoutContextKeepsStrengthSetLanguageForStrengthSessions() {
         let context = AIService.WorkoutContext(
             workoutName: "Push Day",

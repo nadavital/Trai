@@ -2177,7 +2177,11 @@ final class LiveWorkoutViewModel {
 
     private func liveActivityCurrentDetail(for entry: LiveWorkoutEntry?) -> String? {
         guard let entry, !entry.isStrength else { return nil }
-        let segments = entry.traiActivitySummarySegments(usesMetric: usesMetricWeightPreference)
+        let loggedSegments = entry.traiActivitySummarySegments(usesMetric: usesMetricWeightPreference)
+        let baseSegments = loggedSegments.isEmpty
+            ? entry.plannedActivitySummarySegments
+            : loggedSegments
+        let segments = baseSegments
             .filter { $0.goalNormalizedKey != entry.activityTypeName.goalNormalizedKey }
         guard !segments.isEmpty else { return nil }
         return segments.prefix(3).joined(separator: " • ")

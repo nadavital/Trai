@@ -194,6 +194,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(entries.last?.isPlannedActivityGuidance, true)
         XCTAssertEqual(entries.last?.plannedIntensity, "Easy")
         XCTAssertEqual(entries.last?.plannedTarget, "Conversational pace")
+        XCTAssertEqual(entries.last?.plannedActivitySummarySegments, ["10 min", "Easy", "Conversational pace"])
         XCTAssertEqual(entries.last?.notes, "")
     }
 

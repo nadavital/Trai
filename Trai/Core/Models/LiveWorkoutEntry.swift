@@ -701,6 +701,44 @@ extension LiveWorkoutEntry {
         return segments
     }
 
+    var plannedActivitySummarySegments: [String] {
+        guard !isStrength else { return [] }
+
+        var segments: [String] = []
+        let activityName = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != exerciseName.goalNormalizedKey {
+            segments.append(activityName)
+        }
+        if let plannedDurationSeconds, plannedDurationSeconds > 0 {
+            segments.append(Self.formatPlannedDuration(seconds: plannedDurationSeconds))
+        }
+        appendPlannedDetail(plannedIntensity, to: &segments)
+        appendPlannedDetail(plannedTarget, to: &segments)
+        return segments
+    }
+
+    private static func formatPlannedDuration(seconds: Int) -> String {
+        let minutes = seconds / 60
+        guard minutes > 0 else { return "<1 min" }
+        if minutes >= 60 {
+            let hours = minutes / 60
+            let remainingMinutes = minutes % 60
+            return remainingMinutes > 0 ? "\(hours)h \(remainingMinutes)m" : "\(hours)h"
+        }
+        return "\(minutes) min"
+    }
+
+    private func appendPlannedDetail(_ rawValue: String?, to segments: inout [String]) {
+        let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return }
+        let normalized = trimmed.goalNormalizedKey
+        guard !normalized.isEmpty,
+              !segments.contains(where: { $0.goalNormalizedKey == normalized }) else {
+            return
+        }
+        segments.append(trimmed)
+    }
+
     private var segmentMetricLabel: String {
         let category = resolvedActivityCategory
         switch category {

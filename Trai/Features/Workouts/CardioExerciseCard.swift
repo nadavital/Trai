@@ -121,7 +121,7 @@ struct CardioExerciseCard: View {
             isPresented: $showDeleteConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Remove Exercise", role: .destructive) {
+            Button("Remove Activity", role: .destructive) {
                 onDeleteExercise?()
             }
             Button("Cancel", role: .cancel) {}
@@ -151,6 +151,13 @@ struct CardioExerciseCard: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+
+                        if !plannedHeaderSegments.isEmpty {
+                            Text(plannedHeaderSegments.joined(separator: " • "))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
                     }
 
                     Spacer()
@@ -167,7 +174,7 @@ struct CardioExerciseCard: View {
                     Button(role: .destructive) {
                         showDeleteConfirmation = true
                     } label: {
-                        Label("Remove Exercise", systemImage: "trash")
+                        Label("Remove Activity", systemImage: "trash")
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -183,6 +190,13 @@ struct CardioExerciseCard: View {
         let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !activityName.isEmpty else { return false }
         return activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey
+    }
+
+    private var plannedHeaderSegments: [String] {
+        guard entry.isPlannedActivityGuidance else { return [] }
+        return entry.plannedActivitySummarySegments.filter {
+            $0.goalNormalizedKey != entry.activityTypeName.goalNormalizedKey
+        }
     }
 
     private var durationRow: some View {
