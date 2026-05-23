@@ -763,7 +763,10 @@ struct LiveWorkoutView: View {
         if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
             parts.append(activityName)
         }
-        let summary = entry.traiActivitySummarySegments(usesMetric: usesMetricExerciseWeight)
+        let loggedSummary = entry.traiActivitySummarySegments(usesMetric: usesMetricExerciseWeight)
+        let summary = loggedSummary.isEmpty && entry.isPlannedActivityGuidance
+            ? entry.plannedActivitySummarySegments
+            : loggedSummary
         parts.append(contentsOf: summary.filter { segment in
             segment.goalNormalizedKey != activityName.goalNormalizedKey
         }.prefix(4))

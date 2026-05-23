@@ -18,6 +18,7 @@ struct WorkoutBanner: View {
         let completedSets: Int
         let completedActivities: Int
         let strengthEntryCount: Int
+        let activityEntryCount: Int
     }
 
     private var stats: BannerStats {
@@ -25,13 +26,15 @@ struct WorkoutBanner: View {
         let completedSets = entries.reduce(0) { total, entry in
             total + (entry.completedSets?.count ?? 0)
         }
+        let activityEntryCount = entries.filter { $0.isCardio || $0.isGeneralActivity }.count
         let completedActivities = entries.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count
         let strengthEntryCount = entries.filter(\.isStrength).count
         return BannerStats(
             entryCount: entries.count,
             completedSets: completedSets,
             completedActivities: completedActivities,
-            strengthEntryCount: strengthEntryCount
+            strengthEntryCount: strengthEntryCount,
+            activityEntryCount: activityEntryCount
         )
     }
 
@@ -45,6 +48,10 @@ struct WorkoutBanner: View {
 
         if usesFlexibleSessionPresentation || stats.strengthEntryCount == 0 {
             return "\(stats.entryCount) \(stats.entryCount == 1 ? "activity" : "activities")"
+        }
+
+        if stats.activityEntryCount > 0 {
+            return "\(stats.entryCount) \(stats.entryCount == 1 ? "item" : "items")"
         }
 
         return "\(stats.entryCount) \(stats.entryCount == 1 ? "exercise" : "exercises")"
