@@ -2075,6 +2075,7 @@ final class LiveWorkoutViewModel {
             targetMuscles: targetMuscleGroups,
             startedAt: workout.startedAt
         )
+        updateLiveActivity()
 
         // Start periodic updates for elapsed time
         startLiveActivityUpdates()

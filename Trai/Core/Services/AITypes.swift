@@ -1061,6 +1061,27 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
         exercises.filter(\.isActivityLog).count
     }
 
+    var resolvedDurationMinutes: Int? {
+        if let durationMinutes, durationMinutes > 0 {
+            return durationMinutes
+        }
+
+        let exerciseDurations = exercises.compactMap { exercise -> Int? in
+            if let duration = exercise.durationMinutes, duration > 0 {
+                return duration
+            }
+
+            let segmentTotal = (exercise.segments ?? [])
+                .compactMap(\.durationMinutes)
+                .filter { $0 > 0 }
+                .reduce(0, +)
+            return segmentTotal > 0 ? segmentTotal : nil
+        }
+
+        guard !exerciseDurations.isEmpty else { return nil }
+        return exerciseDurations.reduce(0, +)
+    }
+
     /// Summary for display
     var summary: String {
         var parts: [String] = []
@@ -1073,7 +1094,7 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
         if totalSets > 0 {
             parts.append("\(totalSets) sets")
         }
-        if let duration = durationMinutes, duration > 0 {
+        if let duration = resolvedDurationMinutes, duration > 0 {
             parts.append("\(duration) min")
         }
         return parts.isEmpty ? workoutType.capitalized : parts.joined(separator: " • ")

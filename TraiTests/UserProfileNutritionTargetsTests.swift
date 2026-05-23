@@ -1,4 +1,5 @@
 import XCTest
+import SwiftData
 @testable import Trai
 
 final class UserProfileNutritionTargetsTests: XCTestCase {
@@ -31,5 +32,73 @@ final class UserProfileNutritionTargetsTests: XCTestCase {
         XCTAssertEqual(request.name, "Sam")
         XCTAssertEqual(request.availableDays, 4)
         XCTAssertEqual(request.timePerWorkout, 50)
+    }
+
+    func testWidgetSnapshotDoesNotTreatInProgressLiveWorkoutAsCompletedTrainingDay() throws {
+        let context = try makeWidgetSnapshotContext()
+        let profile = UserProfile()
+        profile.dailyCalorieGoal = 2_200
+        profile.trainingDayCalories = 2_500
+        profile.restDayCalories = 2_000
+        context.insert(profile)
+
+        let workout = LiveWorkout(name: "In Progress", workoutType: .strength)
+        workout.startedAt = Date()
+        context.insert(workout)
+        try context.save()
+
+        let snapshot = WidgetDataSnapshotBuilder().build(modelContext: context)
+
+        XCTAssertFalse(snapshot.todayWorkoutCompleted)
+        XCTAssertEqual(snapshot.calorieGoal, 2_000)
+    }
+
+    func testWidgetSnapshotCountsCompletedLiveWorkoutAsTrainingDay() throws {
+        let context = try makeWidgetSnapshotContext()
+        let profile = UserProfile()
+        profile.dailyCalorieGoal = 2_200
+        profile.trainingDayCalories = 2_500
+        profile.restDayCalories = 2_000
+        context.insert(profile)
+
+        let workout = LiveWorkout(name: "Done", workoutType: .strength)
+        workout.startedAt = Date().addingTimeInterval(-45 * 60)
+        workout.completedAt = Date()
+        context.insert(workout)
+        try context.save()
+
+        let snapshot = WidgetDataSnapshotBuilder().build(modelContext: context)
+
+        XCTAssertTrue(snapshot.todayWorkoutCompleted)
+        XCTAssertEqual(snapshot.calorieGoal, 2_500)
+    }
+
+    private func makeWidgetSnapshotContext() throws -> ModelContext {
+        let schema = Schema([
+            UserProfile.self,
+            FoodEntry.self,
+            Exercise.self,
+            WorkoutSession.self,
+            WeightEntry.self,
+            ChatMessage.self,
+            LiveWorkout.self,
+            LiveWorkoutEntry.self,
+            ExerciseHistory.self,
+            CoachMemory.self,
+            CoachSignal.self,
+            NutritionPlanVersion.self,
+            WorkoutPlanVersion.self,
+            WorkoutGoal.self,
+            CustomReminder.self,
+            ReminderCompletion.self,
+            SuggestionUsage.self,
+            BehaviorEvent.self,
+            FoodMemory.self
+        ])
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        )
+        return ModelContext(container)
     }
 }

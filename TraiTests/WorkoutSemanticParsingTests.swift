@@ -221,6 +221,39 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         )
     }
 
+    func testSuggestedWorkoutLogDerivesDurationFromActivityEntriesWhenTopLevelDurationIsMissing() {
+        let log = SuggestedWorkoutLog(
+            name: "Climb + Mobility",
+            workoutType: "mixed",
+            durationMinutes: nil,
+            exercises: [
+                SuggestedWorkoutLog.LoggedExercise(
+                    name: "Limit Bouldering",
+                    category: "sportPractice",
+                    activityTypeName: "Bouldering",
+                    durationMinutes: 25,
+                    segments: nil,
+                    sets: []
+                ),
+                SuggestedWorkoutLog.LoggedExercise(
+                    name: "Cooldown Mobility",
+                    category: "mobility",
+                    activityTypeName: "Mobility",
+                    durationMinutes: nil,
+                    segments: [
+                        .init(durationMinutes: 8),
+                        .init(durationMinutes: 7)
+                    ],
+                    sets: []
+                )
+            ],
+            notes: nil
+        )
+
+        XCTAssertEqual(log.resolvedDurationMinutes, 40)
+        XCTAssertEqual(log.summary, "2 activities • 40 min")
+    }
+
     func testActivityLogsWithRoundsDoNotBecomeStrengthLogs() {
         let log = SuggestedWorkoutLog(
             name: "Conditioning Rounds",

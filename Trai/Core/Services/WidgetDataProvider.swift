@@ -80,7 +80,7 @@ private actor WidgetDataRefreshActor {
     }
 }
 
-nonisolated private struct WidgetDataSnapshotBuilder {
+nonisolated struct WidgetDataSnapshotBuilder {
     private let readyThreshold: Double = 48
     private let recoveringThreshold: Double = 24
 
@@ -170,14 +170,15 @@ nonisolated private struct WidgetDataSnapshotBuilder {
             return true
         }
 
-        var liveDescriptor = FetchDescriptor<LiveWorkout>(
+        let liveDescriptor = FetchDescriptor<LiveWorkout>(
             predicate: #Predicate { workout in
-                (workout.startedAt >= startDate && workout.startedAt < endDate)
-                    || (workout.completedAt != nil && workout.completedAt! >= startDate && workout.completedAt! < endDate)
+                workout.startedAt < endDate
             }
         )
-        liveDescriptor.fetchLimit = 1
-        return ((try? modelContext.fetch(liveDescriptor)) ?? []).isEmpty == false
+        return ((try? modelContext.fetch(liveDescriptor)) ?? []).contains { workout in
+            guard let completedAt = workout.completedAt else { return false }
+            return completedAt >= startDate && completedAt < endDate
+        }
     }
 
     nonisolated private func lastTrainedDates(modelContext: ModelContext) -> [LiveWorkout.MuscleGroup: Date] {

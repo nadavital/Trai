@@ -174,30 +174,56 @@ extension AIService {
         }
     }
 
-    private func validateGeneratedWorkoutPlan(
+    func validateGeneratedWorkoutPlan(
+        _ plan: WorkoutPlan,
+        request: WorkoutPlanGenerationRequest,
+        logValidationFailures: Bool = true
+    ) throws -> WorkoutPlan {
+        try Self.validateGeneratedWorkoutPlan(
+            plan,
+            request: request,
+            validationLog: logValidationFailures ? { [self] message in
+                log(message, type: .error)
+            } : nil
+        )
+    }
+
+    static func validateGeneratedWorkoutPlanForTesting(
         _ plan: WorkoutPlan,
         request: WorkoutPlanGenerationRequest
     ) throws -> WorkoutPlan {
+        try validateGeneratedWorkoutPlan(plan, request: request, validationLog: nil)
+    }
+
+    private static func validateGeneratedWorkoutPlan(
+        _ plan: WorkoutPlan,
+        request: WorkoutPlanGenerationRequest,
+        validationLog: ((String) -> Void)?
+    ) throws -> WorkoutPlan {
+        func emitValidationLog(_ message: String) {
+            validationLog?(message)
+        }
+
         guard !plan.templates.isEmpty else {
             throw AIServiceError.parsingError
         }
         guard plan.planIntent != nil, plan.modalityProgression != nil else {
-            log("Workout plan missing planIntent or modalityProgression.", type: .error)
+            emitValidationLog("Workout plan missing planIntent or modalityProgression.")
             throw AIServiceError.parsingError
         }
 
         guard plan.templates.allSatisfy({ !$0.blocks.isEmpty }) else {
-            log("Workout plan missing explicit block structure for one or more templates.", type: .error)
+            emitValidationLog("Workout plan missing explicit block structure for one or more templates.")
             throw AIServiceError.parsingError
         }
         guard plan.hasUserFacingActivityIdentityForEveryBlock else {
-            log("Workout plan included one or more blocks without activityTypeName.", type: .error)
+            emitValidationLog("Workout plan included one or more blocks without activityTypeName.")
             throw AIServiceError.parsingError
         }
 
         if let requestedDays = request.availableDays {
             guard plan.templates.count == requestedDays else {
-                log("Workout plan template count mismatch. Requested \(requestedDays), got \(plan.templates.count).", type: .error)
+                emitValidationLog("Workout plan template count mismatch. Requested \(requestedDays), got \(plan.templates.count).")
                 throw AIServiceError.parsingError
             }
 
@@ -210,7 +236,7 @@ extension AIService {
 
         if request.requestsCardioAsAccessory,
            plan.templates.contains(where: { $0.isStandaloneCardioTemplate }) {
-            log("Workout plan used a standalone cardio template even though the personalization brief requested cardio as an accessory.", type: .error)
+            emitValidationLog("Workout plan used a standalone cardio template even though the personalization brief requested cardio as an accessory.")
             throw AIServiceError.parsingError
         }
 
@@ -218,15 +244,15 @@ extension AIService {
             let supportBlockCount = plan.templates.reduce(0) { count, template in
                 count + template.cardioSupportBlockCount
             }
-            guard supportBlockCount <= 1 else {
-                log("Workout plan duplicated accessory cardio even though the user limited it to one placement.", type: .error)
+            guard supportBlockCount == 1 else {
+                emitValidationLog("Workout plan must include exactly one accessory cardio placement when the user limited cardio support to one session. Found \(supportBlockCount).")
                 throw AIServiceError.parsingError
             }
         }
 
         let missingActivityIdentities = request.missingVisibleActivityIdentityDescriptions(in: plan)
         guard missingActivityIdentities.isEmpty else {
-            log("Workout plan dropped explicit activity identities: \(missingActivityIdentities.joined(separator: ", ")).", type: .error)
+            emitValidationLog("Workout plan dropped explicit activity identities: \(missingActivityIdentities.joined(separator: ", ")).")
             throw AIServiceError.parsingError
         }
 
@@ -336,7 +362,7 @@ extension AIService {
         """
     }
 
-    private func copyWorkoutPlan(_ plan: WorkoutPlan, daysPerWeek: Int) -> WorkoutPlan {
+    private static func copyWorkoutPlan(_ plan: WorkoutPlan, daysPerWeek: Int) -> WorkoutPlan {
         WorkoutPlan(
             splitType: plan.splitType,
             daysPerWeek: daysPerWeek,
@@ -515,7 +541,7 @@ extension AIService {
         }
 
         if plan.daysPerWeek != plan.templates.count {
-            return copyWorkoutPlan(plan, daysPerWeek: plan.templates.count)
+            return Self.copyWorkoutPlan(plan, daysPerWeek: plan.templates.count)
         }
 
         return plan

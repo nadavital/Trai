@@ -65,6 +65,7 @@ struct WorkoutsView: View {
 
     @State private var showingPlanSetup = false
     @State private var showingStandardPlanSetup = false
+    @State private var showingWorkoutPlanEdit = false
     @State private var showingMuscleRecoveryDetail = false
     @State private var showingWorkoutDetail: WorkoutSession?
     @State private var showingLiveWorkoutDetail: LiveWorkout?
@@ -302,6 +303,19 @@ struct WorkoutsView: View {
         return parts.joined(separator: "|")
     }
 
+    private var workoutPlanEditAction: (() -> Void)? {
+        guard workoutPlan != nil else { return nil }
+        return presentWorkoutPlanEdit
+    }
+
+    @ViewBuilder
+    private var workoutPlanEditSheet: some View {
+        if let workoutPlan {
+            WorkoutPlanEditSheet(currentPlan: workoutPlan)
+                .traiSheetBranding()
+        }
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -321,7 +335,7 @@ struct WorkoutsView: View {
                         onStartTemplate: startWorkoutFromTemplate,
                         onStartCustomWorkout: { showingCustomWorkoutSetup = true },
                         onCreatePlan: workoutPlan == nil ? { showingStandardPlanSetup = true } : nil,
-                        onEditPlan: workoutPlan != nil ? { showingPlanSetup = true } : nil
+                        onEditPlan: workoutPlanEditAction
                     )
 
                     if workoutPlan != nil, !canAccessAIFeatures {
@@ -426,6 +440,9 @@ struct WorkoutsView: View {
             .sheet(isPresented: $showingPlanSetup) {
                 WorkoutPlanChatFlow(currentPlanToEdit: workoutPlan)
                     .traiSheetBranding()
+            }
+            .sheet(isPresented: $showingWorkoutPlanEdit) {
+                workoutPlanEditSheet
             }
             .sheet(isPresented: $showingStandardPlanSetup) {
                 WorkoutPlanSetupChoiceFlow(
@@ -1014,6 +1031,15 @@ struct WorkoutsView: View {
             return
         }
         showingWorkoutGoalAISetup = true
+        HapticManager.selectionChanged()
+    }
+
+    private func presentWorkoutPlanEdit() {
+        if canAccessAIFeatures {
+            showingPlanSetup = true
+        } else {
+            showingWorkoutPlanEdit = true
+        }
         HapticManager.selectionChanged()
     }
 

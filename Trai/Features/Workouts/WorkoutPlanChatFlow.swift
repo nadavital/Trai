@@ -1009,6 +1009,7 @@ struct WorkoutPlanChatFlow: View {
         guard !messageText.isEmpty, let currentPlan = generatedPlan else { return }
 
         didRefineGeneratedPlan = true
+        let previousReviewMessages = messages.filter(isGeneratedPlanReviewMessage)
 
         // Add user message
         withAnimation(.spring(response: 0.3)) {
@@ -1071,6 +1072,7 @@ struct WorkoutPlanChatFlow: View {
                     messages.append(WorkoutPlanFlowMessage(
                         type: .error("Trai couldn't update your plan. Please try again.")
                     ))
+                    messages.append(contentsOf: previousReviewMessages)
                     isRefiningPlan = false
                     isGenerating = false
                 }

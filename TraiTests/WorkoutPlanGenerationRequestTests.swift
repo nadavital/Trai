@@ -83,6 +83,36 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertFalse(supportBlocks.first?.detail.localizedCaseInsensitiveContains("finish") == true)
     }
 
+    @MainActor
+    func testWorkoutPlanValidationRequiresExactlyOneLimitedAccessoryCardioBlock() {
+        let request = makeRequest(
+            workoutType: .mixed,
+            selectedWorkoutTypes: [.strength, .cardio],
+            preferences: "Strength should lead and I only want a short easy cardio finisher after one lift each week.",
+            availableDays: 1
+        )
+        let strengthOnlyPlan = makePlan(
+            templateName: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Upper-body lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertThrowsError(try AIService.validateGeneratedWorkoutPlanForTesting(strengthOnlyPlan, request: request)) { error in
+            guard case AIServiceError.parsingError = error else {
+                return XCTFail("Expected parsingError, got \(error)")
+            }
+        }
+    }
+
     func testDedicatedCardioSignalOverridesAccessoryCardioDirective() {
         let request = makeRequest(
             workoutType: .mixed,
@@ -505,6 +535,31 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         let validated = WorkoutGoalSuggestion.validatedUnique([unscoped, scoped])
 
         XCTAssertEqual(validated.map(\.title), ["Build climbing consistency"])
+    }
+
+    func testWorkoutGoalSuggestionsKeepUnscopedPlanAdherenceFrequencyGoals() {
+        let planAdherence = WorkoutGoalSuggestion(
+            title: "Complete all 3 planned sessions",
+            rationale: "Matches the generated weekly plan.",
+            goalKindRaw: WorkoutGoal.GoalKind.frequency.rawValue,
+            linkedWorkoutTypeRaw: nil,
+            linkedActivityName: nil,
+            linkedActivityTags: nil,
+            linkedActivityKindRaw: nil,
+            linkedActivityRoleRaw: nil,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnitRaw: WorkoutGoal.PeriodUnit.week.rawValue,
+            periodCount: 1,
+            successCriteria: "You complete all three planned sessions each week.",
+            notes: nil,
+            targetDateISO8601: nil,
+            checkInCadenceDays: nil
+        )
+
+        let validated = WorkoutGoalSuggestion.validatedUnique([planAdherence])
+
+        XCTAssertEqual(validated.map(\.title), ["Complete all 3 planned sessions"])
     }
 
     func testWorkoutGoalSuggestionsKeepStructurallyTrackableWeightGoals() {

@@ -621,7 +621,26 @@ extension WorkoutGoalSuggestion {
         let activityTags = linkedActivityTags?
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty } ?? []
-        return !activityTags.isEmpty
+        if !activityTags.isEmpty {
+            return true
+        }
+
+        return isUnscopedPlanAdherenceFrequencyGoal
+    }
+
+    private var isUnscopedPlanAdherenceFrequencyGoal: Bool {
+        guard goalKind == .frequency,
+              let targetValue,
+              targetValue > 0,
+              let targetUnit,
+              periodUnit != nil,
+              let periodCount,
+              periodCount == 1 else {
+            return false
+        }
+
+        let normalizedUnit = targetUnit.goalNormalizedKey
+        return normalizedUnit.contains("session") || normalizedUnit.contains("workout")
     }
 
     private var periodTrackingGoalKinds: Set<WorkoutGoal.GoalKind> {

@@ -405,7 +405,7 @@ extension ChatView {
         workout.entries = entries
 
         // Set duration by adjusting start time
-        if let duration = workoutLog.durationMinutes {
+        if let duration = workoutLog.resolvedDurationMinutes {
             workout.startedAt = Date().addingTimeInterval(-Double(duration) * 60)
         }
 
