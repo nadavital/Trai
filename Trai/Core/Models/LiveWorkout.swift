@@ -286,16 +286,7 @@ extension LiveWorkout {
                 if let role = entry.activityRole {
                     parts.append(role.displayName.lowercased())
                 }
-                let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
-                    parts.append(activityName)
-                }
-                if let duration = entry.formattedDuration {
-                    parts.append(duration)
-                }
-                if entry.isLoggedActivity {
-                    parts.append("logged")
-                }
+                parts.append(contentsOf: entry.traiActivitySummarySegments())
                 return parts.joined(separator: " • ")
             }
 

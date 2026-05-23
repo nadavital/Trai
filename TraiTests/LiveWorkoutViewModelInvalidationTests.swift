@@ -99,6 +99,34 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertTrue(viewModel.isWorkoutComplete)
     }
 
+    func testLiveWorkoutReviewPromptIncludesActivitySegmentMetrics() {
+        let workout = LiveWorkout(name: "Strength + Climbing", workoutType: .mixed)
+        workout.completedAt = Date()
+
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 0,
+            exerciseType: "skill"
+        )
+        entry.activityTypeName = "Bouldering"
+        entry.targetTags = ["Climbing", "Grip power"]
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 600, reps: 4, notes: "Overhang attempts"),
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 480, reps: 3)
+        ]
+        workout.entries = [entry]
+
+        let prompt = workout.traiReviewPrompt
+
+        XCTAssertTrue(prompt.contains("Limit Bouldering"))
+        XCTAssertTrue(prompt.contains("Bouldering"))
+        XCTAssertTrue(prompt.contains("18:00"))
+        XCTAssertTrue(prompt.contains("2 segments"))
+        XCTAssertTrue(prompt.contains("7 attempts"))
+        XCTAssertTrue(prompt.contains("Logged"))
+        XCTAssertFalse(prompt.contains("7 reps"))
+    }
+
     func testExerciseHistoryRecordsIncludeGeneralActivitiesWithLoggedData() {
         let workout = LiveWorkout(
             name: "Bouldering Session",

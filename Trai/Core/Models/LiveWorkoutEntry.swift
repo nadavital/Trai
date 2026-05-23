@@ -668,4 +668,80 @@ extension LiveWorkoutEntry {
         let seconds = Int((pace - Double(minutes)) * 60)
         return String(format: "%d:%02d /km", minutes, seconds)
     }
+
+    func traiActivitySummarySegments(usesMetric: Bool = true) -> [String] {
+        guard !isStrength else { return [] }
+
+        var segments: [String] = []
+        let activityName = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != exerciseName.goalNormalizedKey {
+            segments.append(activityName)
+        }
+        if let duration = formattedDuration {
+            segments.append(duration)
+        }
+        if let distance = formattedDistance {
+            segments.append(distance)
+        }
+
+        let loggedSegments = activitySegments.filter(\.hasLoggedData)
+        if loggedSegments.count > 1 {
+            segments.append("\(loggedSegments.count) \(metricName(for: loggedSegments.count, pluralLabel: segmentMetricLabel))")
+        }
+
+        let countTotal = loggedSegments
+            .compactMap(\.reps)
+            .filter { $0 > 0 }
+            .reduce(0, +)
+        if countTotal > 0 {
+            segments.append("\(countTotal) \(metricName(for: countTotal, pluralLabel: countMetricLabel))")
+        }
+
+        let maxWeightKg = loggedSegments
+            .compactMap(\.weightKg)
+            .filter { $0 > 0 }
+            .max()
+        if let maxWeightKg {
+            let unit = WeightUnit(usesMetric: usesMetric)
+            segments.append("\(WeightUtility.format(maxWeightKg, displayUnit: unit)) max")
+        }
+
+        if isLoggedActivity {
+            segments.append("Logged")
+        }
+
+        return segments
+    }
+
+    private var segmentMetricLabel: String {
+        let category = Exercise.Category.normalized(from: exerciseType)?.userFacingEquivalent ?? .custom
+        switch category {
+        case .conditioning:
+            return "rounds"
+        default:
+            return "segments"
+        }
+    }
+
+    private var countMetricLabel: String {
+        let category = Exercise.Category.normalized(from: exerciseType)?.userFacingEquivalent ?? .custom
+        switch category {
+        case .sportPractice:
+            return "attempts"
+        case .conditioning:
+            return "rounds"
+        case .mobility, .recovery:
+            return "reps"
+        default:
+            return "count"
+        }
+    }
+
+    private func metricName(for value: Int, pluralLabel: String) -> String {
+        guard value == 1 else { return pluralLabel }
+        if pluralLabel.hasSuffix("s") {
+            return String(pluralLabel.dropLast())
+        }
+        return pluralLabel
+    }
 }
