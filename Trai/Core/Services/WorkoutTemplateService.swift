@@ -156,7 +156,7 @@ struct WorkoutTemplateService {
                     entries.append(entry)
                     nextOrderIndex += 1
                 }
-            } else if prefillStrengthExercises && block.shouldCreateLiveWorkoutEntry {
+            } else if block.shouldCreateLiveWorkoutEntry {
                 let entry = LiveWorkoutEntry(
                     exerciseName: block.liveWorkoutDisplayName,
                     orderIndex: nextOrderIndex,

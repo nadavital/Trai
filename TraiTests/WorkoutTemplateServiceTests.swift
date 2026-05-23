@@ -464,7 +464,11 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         )
 
         let entries = try XCTUnwrap(workout.entries)
-        XCTAssertTrue(entries.isEmpty)
+        XCTAssertEqual(entries.map(\.exerciseName), ["Warm-up", "Shoulder Prep"])
+        XCTAssertEqual(entries.map(\.exerciseType), ["flexibility", "flexibility"])
+        XCTAssertEqual(entries.map(\.isPlannedActivityGuidance), [true, true])
+        XCTAssertTrue(entries.allSatisfy { $0.sets.isEmpty })
+        XCTAssertEqual(entries.map(\.plannedDurationSeconds), [300, 300])
         XCTAssertEqual(workout.focusAreas, ["Push", "Mobility Flow", "Shoulder prep"])
     }
 
