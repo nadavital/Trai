@@ -234,6 +234,21 @@ extension LiveWorkout {
         displayFocusAreas.first ?? type.displayName
     }
 
+    var historyIconName: String {
+        if let mode = WorkoutMode.normalized(from: historyDistributionLabel), mode != .mixed {
+            return mode.iconName
+        }
+
+        if let activityEntry = (entries ?? [])
+            .filter({ !$0.isStrength && !$0.isPlannedActivityGuidance })
+            .sorted(by: { $0.orderIndex < $1.orderIndex })
+            .first {
+            return activityEntry.activityIconName
+        }
+
+        return type.iconName
+    }
+
     var displayFocusAreas: [String] {
         var seen: Set<String> = []
         let explicitAreas: [String] = focusAreas.compactMap { focus in

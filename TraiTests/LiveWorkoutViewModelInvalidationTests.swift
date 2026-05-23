@@ -492,6 +492,23 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         workout.entries = [entry]
 
         XCTAssertEqual(workout.historyDistributionLabel, "Bouldering")
+        XCTAssertEqual(workout.historyIconName, WorkoutMode.climbing.iconName)
+
+        let sportWorkout = LiveWorkout(name: "Open Sport", workoutType: .mixed)
+        let sportEntry = LiveWorkoutEntry(
+            exerciseName: "Padel Points",
+            orderIndex: 0,
+            exerciseType: "sportPractice"
+        )
+        sportEntry.activityTypeName = "Padel"
+        sportEntry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 600, reps: 8)
+        ]
+        sportEntry.workout = sportWorkout
+        sportWorkout.entries = [sportEntry]
+
+        XCTAssertEqual(sportWorkout.historyDistributionLabel, "Padel")
+        XCTAssertEqual(sportWorkout.historyIconName, Exercise.Category.sportPractice.iconName)
     }
 
     func testWorkoutTrendAggregationCountsLoggedItemsOnly() {

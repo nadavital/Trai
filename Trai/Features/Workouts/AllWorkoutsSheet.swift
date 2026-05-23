@@ -143,7 +143,7 @@ private struct LiveWorkoutListRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                Image(systemName: workout.type.iconName)
+                Image(systemName: workout.historyIconName)
                     .font(.body)
                     .foregroundStyle(.accent)
                     .frame(width: 32, height: 32)
