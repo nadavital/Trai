@@ -517,6 +517,13 @@ final class WorkoutTemplateServiceTests: XCTestCase {
 
     func testCreateWorkoutForIntentMatchesTemplateByCaseInsensitiveContains() throws {
         let context = try makeInMemoryContext()
+        let lift = WorkoutPlan.ExerciseTemplate(
+            exerciseName: "Bench Press",
+            muscleGroup: "chest",
+            defaultSets: 3,
+            defaultReps: 8,
+            order: 0
+        )
         let profile = UserProfile()
         profile.workoutPlan = WorkoutPlan(
             splitType: .upperLower,
@@ -524,8 +531,30 @@ final class WorkoutTemplateServiceTests: XCTestCase {
             templates: [
                 WorkoutPlan.WorkoutTemplate(
                     name: "Upper Body Strength",
+                    sessionType: .mixed,
+                    focusAreas: ["Upper", "Mobility"],
                     targetMuscleGroups: ["chest", "back", "shoulders"],
-                    exercises: [],
+                    exercises: [lift],
+                    blocks: [
+                        WorkoutPlan.TrainingBlock(
+                            kind: .strength,
+                            title: "Upper Strength",
+                            detail: "Pressing and pulling",
+                            exercises: [lift],
+                            durationMinutes: 35,
+                            order: 0
+                        ),
+                        WorkoutPlan.TrainingBlock(
+                            kind: .mobility,
+                            role: .warmup,
+                            title: "Shoulder Prep",
+                            detail: "Open the shoulders before lifting.",
+                            activityTypeName: "Mobility Flow",
+                            activityTags: ["Shoulder Prep"],
+                            durationMinutes: 5,
+                            order: 1
+                        )
+                    ],
                     estimatedDurationMinutes: 60,
                     order: 0
                 )
@@ -544,8 +573,12 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         )
 
         XCTAssertEqual(workout.name, "Upper Body Strength")
-        XCTAssertEqual(workout.type, .strength)
+        XCTAssertEqual(workout.type, .mixed)
         XCTAssertEqual(workout.muscleGroups, [.chest, .back, .shoulders])
+        XCTAssertEqual(workout.focusAreas, ["Upper", "Mobility", "Mobility Flow", "Shoulder Prep"])
+        XCTAssertEqual(workout.entries?.map(\.exerciseName), ["Shoulder Prep"])
+        XCTAssertEqual(workout.entries?.first?.activityKind, .mobility)
+        XCTAssertEqual(workout.entries?.first?.isPlannedActivityGuidance, true)
     }
 
     func testCreateWorkoutForIntentFallsBackToCustomNamedWorkout() throws {

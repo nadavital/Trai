@@ -67,7 +67,8 @@ struct WorkoutTemplateService {
             return createWorkoutFromTemplate(
                 template,
                 progressionStrategy: plan.progressionStrategy,
-                modelContext: modelContext
+                modelContext: modelContext,
+                prefillStrengthExercises: false
             )
         }
 
