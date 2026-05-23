@@ -104,12 +104,7 @@ extension WorkoutSession {
     var semanticActivityTags: [String] {
         var seen = Set<String>()
         var values: [String] = []
-        let candidates = [
-            exercise?.activityTypeName,
-            healthKitWorkoutType,
-            exercise?.category,
-            displayTypeName
-        ] + (exercise?.targetTags ?? [])
+        let candidates = semanticActivityTagCandidates + (exercise?.targetTags ?? [])
 
         for rawValue in candidates {
             let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -119,6 +114,23 @@ extension WorkoutSession {
         }
 
         return values
+    }
+
+    private var semanticActivityTagCandidates: [String?] {
+        guard let exercise else {
+            return [healthKitWorkoutType, displayTypeName]
+        }
+
+        let specificActivityName = exercise.exerciseCategory == .strength
+            ? nil
+            : exercise.activityTypeName
+        let categoryDisplayName = exercise.exerciseCategory.userFacingEquivalent.displayName
+        return [
+            specificActivityName,
+            healthKitWorkoutType,
+            displayTypeName,
+            specificActivityName == nil ? categoryDisplayName : nil
+        ]
     }
 
     /// Total volume (sets * reps * weight) for strength exercises

@@ -831,7 +831,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         }
 
         XCTAssertEqual(payload["display_type"] as? String, "Bouldering")
-        XCTAssertEqual(payload["activity_tags"] as? [String], ["Bouldering", "skill", "Climbing", "Grip endurance"])
+        XCTAssertEqual(payload["activity_tags"] as? [String], ["Bouldering", "Climbing", "Grip endurance"])
     }
 
     private func exerciseCategoryEnum(in schema: [String: Any], exercisesKey: String) throws -> [String] {
