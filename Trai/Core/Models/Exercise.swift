@@ -475,6 +475,10 @@ extension Exercise {
         if category == .strength {
             return "Strength"
         }
+        if category == .custom {
+            let trimmedName = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedName.isEmpty ? "Activity" : trimmedName
+        }
         return category.displayName
     }
 }

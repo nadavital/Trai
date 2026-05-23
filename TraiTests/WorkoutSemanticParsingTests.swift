@@ -286,6 +286,31 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(suggestion.exercises.first?.durationMinutes, 40)
     }
 
+    func testSuggestWorkoutPreservesUnknownCustomActivityIdentityWhenLibraryHasNoMatch() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "suggest_workout",
+                arguments: [
+                    "workout_type": "custom",
+                    "activity_focuses": ["Dance"],
+                    "duration_minutes": 35
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutStart(let suggestion) = result,
+              let exercise = suggestion.exercises.first else {
+            return XCTFail("Expected start workout suggestion")
+        }
+
+        XCTAssertEqual(suggestion.activityFocuses, ["Dance"])
+        XCTAssertEqual(exercise.name, "Dance")
+        XCTAssertEqual(exercise.category, "custom")
+        XCTAssertEqual(exercise.activityTypeName, "Dance")
+        XCTAssertEqual(exercise.targetTags, ["Dance"])
+        XCTAssertEqual(exercise.startSummarySegments, ["35 min"])
+    }
+
     func testStartLiveWorkoutInfersActivityCategoryFromActivityName() async throws {
         let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
             .init(
@@ -519,6 +544,17 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         )
 
         XCTAssertEqual(exercise.startSummarySegments, ["3 reps"])
+    }
+
+    func testCustomActivityDefaultNameUsesExerciseNameInsteadOfCustomLabel() {
+        XCTAssertEqual(
+            Exercise.defaultActivityTypeName(for: "Dance", category: .custom),
+            "Dance"
+        )
+        XCTAssertEqual(
+            Exercise.defaultActivityTypeName(for: "  Footwork Flow  ", category: .custom),
+            "Footwork Flow"
+        )
     }
 
     func testTargetMuscleParsingHandlesDisplayNames() {
