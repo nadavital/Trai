@@ -33,6 +33,14 @@ extension AIFunctionExecutor {
         let durationMinutes = args["duration_minutes"] as? Int ?? 45
         let activityFocuses = stringArray(from: args["activity_focuses"])
 
+        if !activityFocuses.isEmpty || !workoutType.supportsMuscleTargets {
+            return .suggestedWorkoutStart(buildActivityWorkoutStartSuggestion(
+                workoutType: workoutType,
+                activityFocuses: activityFocuses,
+                durationMinutes: durationMinutes
+            ))
+        }
+
         // Get target muscles - either from args or from recovery recommendations
         let targetMuscleStrings = args["target_muscle_groups"] as? [String] ?? []
         let targetMuscles: [LiveWorkout.MuscleGroup]
@@ -52,7 +60,161 @@ extension AIFunctionExecutor {
             durationMinutes: durationMinutes
         )
 
-        return .suggestedWorkout(suggestion)
+        return .suggestedWorkoutStart(workoutStartSuggestion(from: suggestion))
+    }
+
+    private func workoutStartSuggestion(from suggestion: WorkoutSuggestion) -> SuggestedWorkoutEntry {
+        SuggestedWorkoutEntry(
+            name: suggestion.name,
+            workoutType: suggestion.workoutType.rawValue,
+            targetMuscleGroups: suggestion.targetMuscleGroups.map(\.rawValue),
+            exercises: suggestion.exercises.map { exercise in
+                SuggestedWorkoutEntry.SuggestedExercise(
+                    name: exercise.name,
+                    category: Exercise.Category.strength.rawValue,
+                    activityTypeName: Exercise.defaultActivityTypeName(for: exercise.name, category: .strength),
+                    targetTags: [],
+                    trackingFields: Exercise.defaultTrackingFields(for: .strength).map(\.rawValue),
+                    sets: exercise.sets,
+                    reps: exercise.reps,
+                    weightKg: exercise.weightKg
+                )
+            },
+            durationMinutes: suggestion.durationMinutes,
+            rationale: suggestion.rationale
+        )
+    }
+
+    private func buildActivityWorkoutStartSuggestion(
+        workoutType: LiveWorkout.WorkoutType,
+        activityFocuses: [String],
+        durationMinutes: Int
+    ) -> SuggestedWorkoutEntry {
+        let focuses = activityFocuses.isEmpty ? [workoutType.displayName] : activityFocuses
+        let exercises = activitySuggestedExercises(
+            for: focuses,
+            workoutType: workoutType,
+            durationMinutes: durationMinutes
+        )
+        let name = focuses.isEmpty
+            ? "\(workoutType.displayName) Session"
+            : "\(focuses.prefix(2).joined(separator: " + ")) Session"
+        let rationale = focuses.isEmpty
+            ? "Built as a trackable \(workoutType.displayName.lowercased()) session."
+            : "Built around \(focuses.prefix(3).joined(separator: ", ")) with tracking fields that match the activity."
+
+        return SuggestedWorkoutEntry(
+            name: name,
+            workoutType: workoutType.rawValue,
+            targetMuscleGroups: [],
+            activityFocuses: focuses,
+            exercises: exercises,
+            durationMinutes: durationMinutes,
+            rationale: rationale
+        )
+    }
+
+    private func activitySuggestedExercises(
+        for focuses: [String],
+        workoutType: LiveWorkout.WorkoutType,
+        durationMinutes: Int
+    ) -> [SuggestedWorkoutEntry.SuggestedExercise] {
+        let exerciseDescriptor = FetchDescriptor<Exercise>()
+        let libraryExercises = (try? modelContext.fetch(exerciseDescriptor)) ?? []
+        let perActivityDuration = max(5, durationMinutes / max(focuses.count, 1))
+
+        var suggestions: [SuggestedWorkoutEntry.SuggestedExercise] = []
+        var seen = Set<String>()
+
+        for focus in focuses {
+            let matches = libraryExercises
+                .filter { exercise in
+                    exercise.exerciseCategory != .strength && exercise.matchesActivityFocus(focus)
+                }
+                .sorted { lhs, rhs in
+                    lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                }
+
+            if matches.isEmpty {
+                let synthetic = syntheticActivitySuggestion(
+                    focus: focus,
+                    workoutType: workoutType,
+                    durationMinutes: perActivityDuration
+                )
+                if seen.insert(synthetic.name.goalNormalizedKey).inserted {
+                    suggestions.append(synthetic)
+                }
+                continue
+            }
+
+            for exercise in matches.prefix(2) {
+                guard seen.insert(exercise.name.goalNormalizedKey).inserted else { continue }
+                let category = exercise.exerciseCategory.userFacingEquivalent
+                suggestions.append(SuggestedWorkoutEntry.SuggestedExercise(
+                    name: exercise.name,
+                    category: category.rawValue,
+                    activityTypeName: exercise.activityTypeName,
+                    targetTags: exercise.targetTags,
+                    trackingFields: exercise.trackingFields.map(\.rawValue),
+                    sets: 0,
+                    reps: 0,
+                    durationMinutes: exercise.trackingFields.contains(.duration) ? perActivityDuration : nil
+                ))
+            }
+        }
+
+        if suggestions.isEmpty {
+            suggestions.append(syntheticActivitySuggestion(
+                focus: workoutType.displayName,
+                workoutType: workoutType,
+                durationMinutes: durationMinutes
+            ))
+        }
+
+        return Array(suggestions.prefix(4))
+    }
+
+    private func syntheticActivitySuggestion(
+        focus: String,
+        workoutType: LiveWorkout.WorkoutType,
+        durationMinutes: Int
+    ) -> SuggestedWorkoutEntry.SuggestedExercise {
+        let category = Exercise.Category.normalized(from: focus)?.userFacingEquivalent
+            ?? defaultExerciseCategory(for: workoutType)
+        let activityName = Exercise.defaultActivityTypeName(for: focus, category: category)
+        let targetTags = [focus, activityName]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .dedupedByGoalKey()
+        let trackingFields = Exercise.defaultTrackingFields(for: category)
+
+        return SuggestedWorkoutEntry.SuggestedExercise(
+            name: focus.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? activityName,
+            category: category.rawValue,
+            activityTypeName: activityName,
+            targetTags: targetTags,
+            trackingFields: trackingFields.map(\.rawValue),
+            sets: 0,
+            reps: 0,
+            durationMinutes: trackingFields.contains(.duration) ? durationMinutes : nil
+        )
+    }
+
+    private func defaultExerciseCategory(for workoutType: LiveWorkout.WorkoutType) -> Exercise.Category {
+        switch workoutType {
+        case .cardio:
+            return .cardio
+        case .hiit:
+            return .conditioning
+        case .climbing:
+            return .sportPractice
+        case .yoga, .pilates, .flexibility, .mobility:
+            return .mobility
+        case .recovery:
+            return .recovery
+        case .strength, .mixed, .custom:
+            return .custom
+        }
     }
 
     private func buildWorkoutSuggestion(
@@ -393,6 +555,20 @@ extension AIFunctionExecutor {
         default:
             return []
         }
+    }
+}
+
+private extension Array where Element == String {
+    func dedupedByGoalKey() -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in self {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.goalNormalizedKey
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
     }
 }
 

@@ -11,6 +11,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         try super.setUpWithError()
         container = try ModelContainer(
             for: WorkoutGoal.self,
+            Exercise.self,
             configurations: ModelConfiguration(
                 isStoredInMemoryOnly: true,
                 cloudKitDatabase: .none
@@ -223,6 +224,63 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(suggestion.exercises.first?.reps, 0)
         XCTAssertEqual(suggestion.exercises.first?.durationMinutes, 30)
         XCTAssertEqual(suggestion.exercises.first?.startSummarySegments, ["Running", "30 min"])
+    }
+
+    func testSuggestWorkoutUsesActivityFocusesInsteadOfStrengthFallback() async throws {
+        let bouldering = Exercise(name: "Limit Bouldering", category: .sportPractice)
+        bouldering.activityTypeName = "Bouldering"
+        bouldering.targetTags = ["Climbing", "Grip power"]
+        bouldering.trackingFields = [.duration, .reps, .notes]
+        context.insert(bouldering)
+
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "suggest_workout",
+                arguments: [
+                    "workout_type": "mixed",
+                    "activity_focuses": ["Bouldering"],
+                    "duration_minutes": 30
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutStart(let suggestion) = result else {
+            return XCTFail("Expected start workout suggestion")
+        }
+
+        XCTAssertEqual(suggestion.activityFocuses, ["Bouldering"])
+        XCTAssertEqual(suggestion.targetMuscleGroups, [])
+        XCTAssertEqual(suggestion.exercisesSummary, "1 activity")
+        XCTAssertEqual(suggestion.exercises.first?.name, "Limit Bouldering")
+        XCTAssertEqual(suggestion.exercises.first?.category, "sportPractice")
+        XCTAssertEqual(suggestion.exercises.first?.activityTypeName, "Bouldering")
+        XCTAssertEqual(suggestion.exercises.first?.sets, 0)
+        XCTAssertEqual(suggestion.exercises.first?.durationMinutes, 30)
+    }
+
+    func testSuggestWorkoutCreatesTrackableCustomActivityWhenLibraryHasNoMatch() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "suggest_workout",
+                arguments: [
+                    "workout_type": "custom",
+                    "activity_focuses": ["Basketball"],
+                    "duration_minutes": 40
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutStart(let suggestion) = result else {
+            return XCTFail("Expected start workout suggestion")
+        }
+
+        XCTAssertEqual(suggestion.exercisesSummary, "1 activity")
+        XCTAssertEqual(suggestion.exercises.first?.name, "Basketball")
+        XCTAssertEqual(suggestion.exercises.first?.category, "sportPractice")
+        XCTAssertEqual(suggestion.exercises.first?.activityTypeName, "Basketball")
+        XCTAssertEqual(suggestion.exercises.first?.trackingFields, ["duration", "reps", "notes"])
+        XCTAssertEqual(suggestion.exercises.first?.sets, 0)
+        XCTAssertEqual(suggestion.exercises.first?.durationMinutes, 40)
     }
 
     func testStartLiveWorkoutInfersActivityCategoryFromActivityName() async throws {
