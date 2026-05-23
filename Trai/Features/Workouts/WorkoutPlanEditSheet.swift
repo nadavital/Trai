@@ -820,11 +820,11 @@ struct WorkoutDayEditorSheet: View {
 
                     if !sessionType.supportsMuscleTargets {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("Focus Areas")
+                            Text("Activity Focus")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
 
-                            Text("Describe the style of session, skill, or energy system you want this day to cover.")
+                            Text("Name the activities or outcomes this day should cover.")
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
 
@@ -845,7 +845,7 @@ struct WorkoutDayEditorSheet: View {
                                     .foregroundStyle(.secondary)
                                     .padding(.top, 2)
 
-                                TextField("e.g., Flow, Bouldering, Steady Cardio, Conditioning", text: $focusAreasText, axis: .vertical)
+                                TextField("e.g., Bouldering, Steady Cardio, Mobility Flow", text: $focusAreasText, axis: .vertical)
                                     .lineLimit(2...4)
                                     .textInputAutocapitalization(.words)
                                     .disableAutocorrection(true)
