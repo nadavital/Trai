@@ -171,8 +171,6 @@ private struct MoreSessionsCard: View {
                         Button("Edit", systemImage: "pencil", action: onEditPlan)
                             .buttonStyle(.traiTertiary(size: .compact, height: 28))
                     }
-                    Button("Custom", systemImage: "plus", action: onStartCustomWorkout)
-                        .buttonStyle(.traiTertiary(size: .compact, height: 28))
                 }
             }
 
@@ -187,6 +185,8 @@ private struct MoreSessionsCard: View {
                             onTap: { onStartTemplate(template) }
                         )
                     }
+
+                    CustomSessionCard(onTap: onStartCustomWorkout)
                 }
                 .padding(.vertical, 2)
             }
@@ -221,7 +221,8 @@ private struct SessionCard: View {
                 Text(name)
                     .font(.traiLabel(13))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
 
                 Spacer(minLength: 0)
 
@@ -233,10 +234,40 @@ private struct SessionCard: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .frame(width: 158)
+            .frame(width: 128, height: 62)
             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(TraiPressStyle())
+    }
+}
+
+private struct CustomSessionCard: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.accent)
+                    .frame(width: 28, height: 28)
+                    .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+
+                Text("Custom")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 54, height: 62)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(
+                        Color.secondary.opacity(0.45),
+                        style: StrokeStyle(lineWidth: 1, dash: [4, 4])
+                    )
+            )
+        }
+        .buttonStyle(TraiPressStyle())
+        .accessibilityLabel("Start custom workout")
     }
 }
 

@@ -308,6 +308,12 @@ struct WorkoutsView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    WorkoutsQuickActionsRow(
+                        onPersonalRecords: { showingPersonalRecords = true },
+                        onCustomExercises: { showingCustomExercises = true },
+                        onRecovery: { showingMuscleRecoveryDetail = true }
+                    )
+
                     StartWorkoutSection(
                         templates: workoutPlan?.templates ?? [],
                         recoveryScores: templateScores,
@@ -327,12 +333,6 @@ struct WorkoutsView: View {
                             }
                         )
                     }
-
-                    WorkoutsQuickActionsRow(
-                        onPersonalRecords: { showingPersonalRecords = true },
-                        onCustomExercises: { showingCustomExercises = true },
-                        onRecovery: { showingMuscleRecoveryDetail = true }
-                    )
 
                     WorkoutGoalsOverviewSection(
                         insights: workoutGoalInsights,

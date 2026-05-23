@@ -1238,19 +1238,8 @@ struct WorkoutGoalsOverviewSection: View {
             }
 
             if let progressFraction = insight.progressFraction {
-                VStack(alignment: .leading, spacing: 6) {
-                    ProgressView(value: progressFraction)
-                        .tint(insight.goal.status == .completed ? .green : TraiColors.flame)
-
-                    HStack {
-                        if let current = insight.currentValueText {
-                            compactMetric(label: "Current", value: current)
-                        }
-                        if let target = insight.targetValueText {
-                            compactMetric(label: "Target", value: target)
-                        }
-                    }
-                }
+                ProgressView(value: progressFraction)
+                    .tint(insight.goal.status == .completed ? .green : TraiColors.flame)
             }
 
             if insight.goal.goalKind == .milestone {
@@ -1394,20 +1383,6 @@ struct WorkoutGoalsOverviewSection: View {
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
     }
 
-    private func compactMetric(label: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(.quaternarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-    }
 }
 
 private struct ActivityItem: Identifiable {

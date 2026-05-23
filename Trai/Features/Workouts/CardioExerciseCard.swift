@@ -35,6 +35,7 @@ struct CardioExerciseCard: View {
     @State private var reps = ""
     @State private var weight = ""
     @State private var notes = ""
+    @State private var showNotesField = false
 
     private var fields: [Exercise.TrackingField] {
         entry.trackingFields
@@ -266,18 +267,43 @@ struct CardioExerciseCard: View {
 
     private var notesRow: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Notes", systemImage: "note.text")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            TextField("Add context", text: $notes, axis: .vertical)
-                .lineLimit(2...4)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-                .onChange(of: notes) { _, value in
-                    onUpdateNotes?(value)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showNotesField.toggle()
                 }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: notes.isEmpty ? "note.text.badge.plus" : "note.text")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(notes.isEmpty ? Color.secondary : Color.accentColor)
+
+                    Text(notes.isEmpty ? "Add notes" : "Notes")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(notes.isEmpty ? .secondary : .primary)
+
+                    Spacer()
+
+                    Image(systemName: showNotesField ? "chevron.up" : "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(notes.isEmpty ? "Add activity notes" : "Edit activity notes")
+
+            if showNotesField || !notes.isEmpty {
+                TextField("Add context", text: $notes, axis: .vertical)
+                    .lineLimit(2...4)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+                    .onChange(of: notes) { _, value in
+                        onUpdateNotes?(value)
+                    }
+            }
         }
     }
 
@@ -366,6 +392,7 @@ struct CardioExerciseCard: View {
             }
         }
         notes = entry.notes
+        showNotesField = !entry.notes.isEmpty
     }
 
     private func ensureInitialSegment() {
@@ -394,6 +421,7 @@ private struct ActivitySegmentRow: View {
     @State private var reps = ""
     @State private var weight = ""
     @State private var notes = ""
+    @State private var showNotesField = false
 
     private var weightUnitLabel: String {
         usesMetricWeight ? "kg" : "lbs"
@@ -424,7 +452,7 @@ private struct ActivitySegmentRow: View {
                         metricRows
                     }
 
-                    if fields.contains(.notes) {
+                    if fields.contains(.notes), showNotesField || !notes.isEmpty {
                         TextField("Notes", text: $notes, axis: .vertical)
                             .lineLimit(1...3)
                             .font(.caption)
@@ -435,6 +463,21 @@ private struct ActivitySegmentRow: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                if fields.contains(.notes) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showNotesField.toggle()
+                        }
+                    } label: {
+                        Image(systemName: notes.isEmpty ? "note.text.badge.plus" : "note.text")
+                            .font(.body)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(notes.isEmpty ? Color.secondary : Color.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(notes.isEmpty ? "Add segment notes" : "Edit segment notes")
+                }
 
                 Button(action: onRemove) {
                     Image(systemName: "xmark.circle.fill")
@@ -559,5 +602,6 @@ private struct ActivitySegmentRow: View {
             weight = WeightUtility.format(kg, displayUnit: unit, showUnit: false)
         }
         notes = segment.notes
+        showNotesField = !segment.notes.isEmpty
     }
 }

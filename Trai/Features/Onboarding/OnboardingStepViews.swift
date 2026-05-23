@@ -127,6 +127,7 @@ struct WelcomeStepView: View {
                 Button(action: onContinue) {
                     Text("Get Started")
                         .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                 }
                 .buttonStyle(.traiPrimary(color: TraiColors.brandAccent, size: .large, fullWidth: true))
             } else if accountSessionService?.isAuthenticated == true {
@@ -165,6 +166,7 @@ struct WelcomeStepView: View {
             Button(action: onContinue) {
                 Text("Continue")
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
             }
             .buttonStyle(.traiPrimary(color: TraiColors.brandAccent, size: .large, fullWidth: true))
         }
