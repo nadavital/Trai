@@ -491,7 +491,7 @@ extension AIService {
             - Current plan sessions: \(plannedSessions.isEmpty ? "None" : plannedSessions.joined(separator: " | "))
             - Recent sessions: \(recentSessions.isEmpty ? "None" : recentSessions.joined(separator: " | "))
             - Recent training summary: \(recentTrainingSummary.isEmpty ? "None" : recentTrainingSummary.joined(separator: " | "))
-            - Exercise summaries: \(exerciseSummaries.isEmpty ? "None" : exerciseSummaries.joined(separator: " | "))
+            - Exercise/activity summaries: \(exerciseSummaries.isEmpty ? "None" : exerciseSummaries.joined(separator: " | "))
             - Relevant memory/context: \(memoryContext.isEmpty ? "None" : memoryContext.joined(separator: " | "))
             - Existing workout goals: \(existingGoals.isEmpty ? "None" : existingGoals.joined(separator: " | "))
             - User request: \(trimmedIntent?.isEmpty == false ? trimmedIntent! : "No extra request. Suggest the best fit from context.")
