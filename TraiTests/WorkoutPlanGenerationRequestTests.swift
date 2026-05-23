@@ -105,6 +105,39 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(template.displayWorkloadSummary, "Bouldering • Mobility Flow")
     }
 
+    func testPlanSubtitleUsesActivityNameBeforeGenericBlockTitle() {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Practice Day",
+            sessionType: .custom,
+            focusAreas: [],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                .init(
+                    kind: .sportPractice,
+                    title: "Skill",
+                    detail: "Hard attempts",
+                    activityTypeName: "Bouldering",
+                    durationMinutes: 30,
+                    order: 0
+                ),
+                .init(
+                    kind: .mobility,
+                    title: "Mobility",
+                    detail: "Shoulder prep",
+                    activityTypeName: "Shoulder Mobility",
+                    durationMinutes: 10,
+                    order: 1
+                )
+            ],
+            estimatedDurationMinutes: 40,
+            order: 0
+        )
+
+        XCTAssertEqual(template.primaryBlockSummary, "Bouldering 30m • Shoulder Mobility 10m")
+        XCTAssertEqual(template.displaySubtitle, "Bouldering 30m • Shoulder Mobility 10m")
+    }
+
     func testStrengthTemplateWorkloadSummaryIncludesSupportActivity() {
         let template = WorkoutPlan.WorkoutTemplate(
             name: "Lower + Easy Spin",

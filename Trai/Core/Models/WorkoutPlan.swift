@@ -528,7 +528,7 @@ struct WorkoutPlan: Codable, Equatable {
         }
 
         nonisolated var shortSummary: String {
-            let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedTitle = displayActivityName.trimmingCharacters(in: .whitespacesAndNewlines)
             if let durationMinutes, durationMinutes > 0 {
                 return "\(trimmedTitle.isEmpty ? kind.displayName : trimmedTitle) \(durationMinutes)m"
             }
