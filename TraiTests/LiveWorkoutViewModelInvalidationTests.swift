@@ -1022,6 +1022,20 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(viewModel.targetActivityTypes, ["Padel"])
     }
 
+    func testSpecificActivityTypeTargetKeepsUserFacingName() {
+        let workout = LiveWorkout(
+            name: "Mixed",
+            workoutType: .mixed
+        )
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        viewModel.updateActivityTypeTargets(["Climbing"])
+
+        XCTAssertEqual(viewModel.workout.focusAreas, ["Climbing"])
+        XCTAssertEqual(viewModel.targetActivityCategories, [.sportPractice])
+        XCTAssertEqual(viewModel.targetActivityTypes, ["Climbing"])
+    }
+
     func testBroadActivityTargetsPreserveSelectedActivityTypes() {
         let workout = LiveWorkout(
             name: "Mixed",

@@ -482,9 +482,6 @@ final class LiveWorkoutViewModel {
         let categoryKeys = Exercise.Category.allCases.flatMap { category in
             [category.rawValue, category.displayName]
         }
-        let workoutModeKeys = WorkoutMode.allCases.flatMap { mode in
-            [mode.rawValue, mode.displayName]
-        }
         let liveMuscleKeys = LiveWorkout.MuscleGroup.allCases.flatMap { muscle in
             [muscle.rawValue, muscle.displayName]
         }
@@ -503,9 +500,9 @@ final class LiveWorkoutViewModel {
             "full body", "fullbody", "total body",
             "main lift", "accessory", "accessories",
             "hypertrophy", "power", "speed", "technique",
-            "easy effort", "general"
+            "easy effort", "general", "mixed", "hybrid"
         ]
-        return Set((categoryKeys + workoutModeKeys + liveMuscleKeys + exerciseMuscleKeys + blockKindKeys + roleKeys + splitKeys)
+        return Set((categoryKeys + liveMuscleKeys + exerciseMuscleKeys + blockKindKeys + roleKeys + splitKeys)
             .map(\.goalNormalizedKey)
             .filter { !$0.isEmpty })
     }
