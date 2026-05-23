@@ -647,7 +647,7 @@ private struct CategoryButton: View {
         HStack(spacing: 6) {
             Image(systemName: category.iconName)
                 .font(.traiLabel(12))
-            Text(category.trackingTemplateName)
+            Text(category.displayName)
                 .font(.traiLabel(12))
                 .lineLimit(1)
                 .truncationMode(.tail)

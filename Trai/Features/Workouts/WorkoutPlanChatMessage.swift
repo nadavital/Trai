@@ -112,7 +112,7 @@ enum WorkoutPlanQuestion: String, CaseIterable {
                 suggestions: [
                     TraiSuggestion("Full Gym", subtitle: "Machines, cables, free weights"),
                     TraiSuggestion("Dumbbells/Bands", subtitle: "Simple home equipment"),
-                    TraiSuggestion("Home Gym", subtitle: "Rack, barbell, bench"),
+                    TraiSuggestion("Barbell Setup", subtitle: "Rack, barbell, bench"),
                     TraiSuggestion("Bodyweight Only", subtitle: "No equipment needed")
                 ],
                 selectionMode: .single,

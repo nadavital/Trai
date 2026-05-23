@@ -483,7 +483,7 @@ struct WorkoutPlanGenerationRequest {
         var displayName: String {
             switch self {
             case .fullGym: "Full Gym"
-            case .homeAdvanced: "Home Gym"
+            case .homeAdvanced: "Barbell Setup"
             case .homeBasic: "Dumbbells/Bands"
             case .bodyweightOnly: "Bodyweight Only"
             }
@@ -492,7 +492,7 @@ struct WorkoutPlanGenerationRequest {
         var description: String {
             switch self {
             case .fullGym: "Access to all machines, barbells, dumbbells, cables"
-            case .homeAdvanced: "Barbell, dumbbells, bench, pull-up bar"
+            case .homeAdvanced: "Rack, barbell, bench, pull-up bar"
             case .homeBasic: "Dumbbells and resistance bands"
             case .bodyweightOnly: "No equipment needed"
             }
