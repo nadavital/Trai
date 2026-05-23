@@ -71,8 +71,8 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
             linkedActivityRole: linkedActivityRoleRaw.flatMap(WorkoutPlan.TrainingBlock.Role.init(rawValue:)),
             targetValue: goalKind.supportsNumericTarget ? targetValue : nil,
             targetUnit: goalKind.supportsNumericTarget ? (targetUnit ?? "") : "",
-            periodUnit: goalKind.usesPeriodTarget ? periodUnit : nil,
-            periodCount: goalKind.usesPeriodTarget ? periodCount : nil,
+            periodUnit: periodTrackingGoalKinds.contains(goalKind) ? periodUnit : nil,
+            periodCount: periodTrackingGoalKinds.contains(goalKind) ? periodCount : nil,
             successCriteria: successCriteria?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             notes: notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? rationale,
             targetDate: targetDate,
@@ -460,5 +460,9 @@ extension WorkoutGoalSuggestion {
             }
             return true
         }
+    }
+
+    private var periodTrackingGoalKinds: Set<WorkoutGoal.GoalKind> {
+        [.frequency, .duration, .distance]
     }
 }

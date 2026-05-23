@@ -272,7 +272,9 @@ extension WorkoutGoal {
             return criteria.isEmpty ? nil : criteria
         case .duration, .distance, .weight:
             guard let targetValue, targetValue > 0 else { return nil }
-            return formattedTargetValue(targetValue, unit: targetUnit)
+            let target = formattedTargetValue(targetValue, unit: targetUnit)
+            guard goalKind != .weight, periodUnit != nil else { return target }
+            return "\(target) / \(periodLabelText)"
         }
     }
 

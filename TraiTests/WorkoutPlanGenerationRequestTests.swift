@@ -343,6 +343,25 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(goal.trackingSummary, "Complete the defined plan milestone with the criteria Trai can verify.")
     }
 
+    func testDurationGoalSuggestionPreservesPeriodForCumulativeTracking() throws {
+        let suggestion = makeGoalSuggestion(
+            title: "Build weekly cardio support",
+            goalKindRaw: WorkoutGoal.GoalKind.duration.rawValue,
+            targetValue: 45,
+            targetUnit: "min",
+            periodUnitRaw: WorkoutGoal.PeriodUnit.week.rawValue,
+            periodCount: 1,
+            successCriteria: "You log 45 minutes of cardio support in one week."
+        )
+
+        let goal = try XCTUnwrap(WorkoutGoalSuggestion.validatedUnique([suggestion]).first?.asWorkoutGoal())
+
+        XCTAssertEqual(goal.goalKind, .duration)
+        XCTAssertEqual(goal.periodUnit, .week)
+        XCTAssertEqual(goal.periodCount, 1)
+        XCTAssertEqual(goal.trackingSummary, "45 min / week")
+    }
+
     func testWorkoutTemplateDisplayBlocksSortByDeclaredOrder() {
         let template = WorkoutPlan.WorkoutTemplate(
             name: "Hybrid Day",

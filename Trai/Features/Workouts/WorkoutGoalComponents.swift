@@ -328,22 +328,30 @@ enum WorkoutGoalProgressResolver {
 
         case .duration:
             let currentSeconds: Double? = {
-                let sessionMax = matchingSessions.compactMap { session -> Double? in
+                let periodStart = periodStartDate(for: goal, now: Date())
+                let sessionValues = matchingSessions
+                    .filter { session in periodStart.map { session.loggedAt >= $0 } ?? true }
+                    .compactMap { session -> Double? in
                     guard let durationMinutes = session.durationMinutes, durationMinutes > 0 else { return nil }
                     return durationMinutes * 60
-                }.max()
+                }
 
                 if goal.hasActivityScope {
-                    let entryMax = matchingEntries.compactMap { entry -> Double? in
+                    let entryValues = matchingEntries
+                        .filter { entry in periodStart.map { progressDate(for: entry) >= $0 } ?? true }
+                        .compactMap { entry -> Double? in
                         let durationSeconds = entry.trackedDurationSeconds
                         guard durationSeconds > 0 else { return nil }
                         return Double(durationSeconds)
-                    }.max()
-                    return max(entryMax ?? 0, sessionMax ?? 0) == 0 ? nil : max(entryMax ?? 0, sessionMax ?? 0)
+                    }
+                    return currentNumericValue(entryValues + sessionValues, cumulative: periodStart != nil)
                 }
 
-                let workoutMax = matchingWorkouts.map(\.duration).filter { $0 > 0 }.max()
-                return max(workoutMax ?? 0, sessionMax ?? 0) == 0 ? nil : max(workoutMax ?? 0, sessionMax ?? 0)
+                let workoutValues = matchingWorkouts
+                    .filter { workout in periodStart.map { (workout.completedAt ?? workout.startedAt) >= $0 } ?? true }
+                    .map(\.duration)
+                    .filter { $0 > 0 }
+                return currentNumericValue(workoutValues + sessionValues, cumulative: periodStart != nil)
             }()
 
             return numericInsight(
@@ -356,16 +364,21 @@ enum WorkoutGoalProgressResolver {
             )
 
         case .distance:
-            let entryMeters = matchingEntries.compactMap { entry -> Double? in
-                let distanceMeters = entry.trackedDistanceMeters
-                guard distanceMeters > 0 else { return nil }
-                return distanceMeters
-            }.max()
-            let sessionMeters = matchingSessions.compactMap { session -> Double? in
-                guard let distanceMeters = session.distanceMeters, distanceMeters > 0 else { return nil }
-                return distanceMeters
-            }.max()
-            let currentMeters = max(entryMeters ?? 0, sessionMeters ?? 0) == 0 ? nil : max(entryMeters ?? 0, sessionMeters ?? 0)
+            let periodStart = periodStartDate(for: goal, now: Date())
+            let entryMeters = matchingEntries
+                .filter { entry in periodStart.map { progressDate(for: entry) >= $0 } ?? true }
+                .compactMap { entry -> Double? in
+                    let distanceMeters = entry.trackedDistanceMeters
+                    guard distanceMeters > 0 else { return nil }
+                    return distanceMeters
+                }
+            let sessionMeters = matchingSessions
+                .filter { session in periodStart.map { session.loggedAt >= $0 } ?? true }
+                .compactMap { session -> Double? in
+                    guard let distanceMeters = session.distanceMeters, distanceMeters > 0 else { return nil }
+                    return distanceMeters
+                }
+            let currentMeters = currentNumericValue(entryMeters + sessionMeters, cumulative: periodStart != nil)
 
             return numericInsight(
                 for: goal,
@@ -473,6 +486,9 @@ enum WorkoutGoalProgressResolver {
             progressFraction = 1.0
         } else if let current = currentDisplayValue, let baseline = effectiveBaseline, targetValue != baseline {
             progressFraction = min(max((current - baseline) / (targetValue - baseline), 0), 1)
+        } else if let current = currentDisplayValue,
+                  goal.goalKind == .duration || goal.goalKind == .distance {
+            progressFraction = min(max(current / targetValue, 0), 1)
         } else {
             progressFraction = nil
         }
@@ -660,22 +676,7 @@ enum WorkoutGoalProgressResolver {
             return FrequencyProgressSnapshot(currentCount: nil, progressFraction: nil, periodRangeText: nil)
         }
 
-        let calendar = Calendar.current
-        let periodCount = max(goal.periodCount ?? 1, 1)
-        let periodUnit = goal.periodUnit ?? .week
-
-        let periodStart: Date
-        switch periodUnit {
-        case .day:
-            let startOfToday = calendar.startOfDay(for: now)
-            periodStart = calendar.date(byAdding: .day, value: -(periodCount - 1), to: startOfToday) ?? startOfToday
-        case .week:
-            let currentWeek = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? calendar.startOfDay(for: now)
-            periodStart = calendar.date(byAdding: .weekOfYear, value: -(periodCount - 1), to: currentWeek) ?? currentWeek
-        case .month:
-            let currentMonth = calendar.dateInterval(of: .month, for: now)?.start ?? calendar.startOfDay(for: now)
-            periodStart = calendar.date(byAdding: .month, value: -(periodCount - 1), to: currentMonth) ?? currentMonth
-        }
+        let periodStart = periodStartDate(for: goal, now: now) ?? Calendar.current.startOfDay(for: now)
 
         let workoutCount: Int
         if goal.hasActivityScope {
@@ -707,6 +708,35 @@ enum WorkoutGoalProgressResolver {
             progressFraction: progressFraction,
             periodRangeText: periodRangeText
         )
+    }
+
+    private static func periodStartDate(for goal: WorkoutGoal, now: Date) -> Date? {
+        guard goal.periodUnit != nil || goal.periodCount != nil else { return nil }
+        let calendar = Calendar.current
+        let periodCount = max(goal.periodCount ?? 1, 1)
+        let periodUnit = goal.periodUnit ?? .week
+
+        switch periodUnit {
+        case .day:
+            let startOfToday = calendar.startOfDay(for: now)
+            return calendar.date(byAdding: .day, value: -(periodCount - 1), to: startOfToday) ?? startOfToday
+        case .week:
+            let currentWeek = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? calendar.startOfDay(for: now)
+            return calendar.date(byAdding: .weekOfYear, value: -(periodCount - 1), to: currentWeek) ?? currentWeek
+        case .month:
+            let currentMonth = calendar.dateInterval(of: .month, for: now)?.start ?? calendar.startOfDay(for: now)
+            return calendar.date(byAdding: .month, value: -(periodCount - 1), to: currentMonth) ?? currentMonth
+        }
+    }
+
+    private static func currentNumericValue(_ values: [Double], cumulative: Bool) -> Double? {
+        let positiveValues = values.filter { $0 > 0 }
+        guard !positiveValues.isEmpty else { return nil }
+        return cumulative ? positiveValues.reduce(0, +) : positiveValues.max()
+    }
+
+    private static func progressDate(for entry: LiveWorkoutEntry) -> Date {
+        entry.completedAt ?? entry.workout?.completedAt ?? entry.workout?.startedAt ?? .distantPast
     }
 }
 

@@ -486,6 +486,56 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(insight?.progressFraction, 1)
     }
 
+    func testPeriodDurationGoalSumsMatchingActivityWork() {
+        let firstWorkout = LiveWorkout(name: "Strength + Bike", workoutType: .mixed)
+        firstWorkout.startedAt = Date().addingTimeInterval(-3_600)
+        firstWorkout.completedAt = Date().addingTimeInterval(-2_400)
+        let firstEntry = LiveWorkoutEntry(
+            exerciseName: "Easy Bike",
+            orderIndex: 0,
+            exerciseType: "cardio"
+        )
+        firstEntry.activityKind = .cardio
+        firstEntry.durationSeconds = 1_200
+        firstEntry.workout = firstWorkout
+        firstWorkout.entries = [firstEntry]
+
+        let secondWorkout = LiveWorkout(name: "Cardio Support", workoutType: .mixed)
+        secondWorkout.startedAt = Date().addingTimeInterval(-1_800)
+        secondWorkout.completedAt = Date().addingTimeInterval(-600)
+        let secondEntry = LiveWorkoutEntry(
+            exerciseName: "Incline Walk",
+            orderIndex: 0,
+            exerciseType: "cardio"
+        )
+        secondEntry.activityKind = .cardio
+        secondEntry.durationSeconds = 1_800
+        secondEntry.workout = secondWorkout
+        secondWorkout.entries = [secondEntry]
+
+        let goal = WorkoutGoal(
+            title: "Build weekly cardio support",
+            goalKind: .duration,
+            linkedActivityKind: .cardio,
+            targetValue: 45,
+            targetUnit: "min",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You log 45 minutes of cardio support in one week."
+        )
+
+        let insight = WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: [firstWorkout, secondWorkout],
+            exerciseHistory: [],
+            useLbs: false
+        ).first
+
+        XCTAssertEqual(goal.trackingSummary, "45 min / week")
+        XCTAssertEqual(insight?.currentValueText, "50 min")
+        XCTAssertEqual(insight?.progressFraction, 1)
+    }
+
     func testActivityScopedFrequencyGoalCountsLoggedActivityDataWithoutEntryCompletion() {
         let workout = LiveWorkout(name: "Climbing Session", workoutType: .climbing)
         workout.startedAt = Date().addingTimeInterval(-1_800)
