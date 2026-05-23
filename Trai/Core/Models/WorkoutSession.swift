@@ -447,50 +447,63 @@ extension WorkoutSession {
     }
 
     var iconName: String {
-        let token = ([displayName, displayTypeName, healthKitWorkoutType, exercise?.category] + semanticActivityTags)
+        let words = activityWords(from: ([displayName, displayTypeName, healthKitWorkoutType, exercise?.category] + semanticActivityTags)
             .compactMap { $0 }
-            .joined(separator: " ")
-            .lowercased()
+            .joined(separator: " "))
 
-        if isStrengthTraining || token.contains("strength") || token.contains("weight") {
+        if isStrengthTraining || ["strength", "weight", "weights"].contains(where: words.contains) {
             return "dumbbell.fill"
         }
-        if token.contains("run") {
+        if ["run", "running", "jog", "jogging"].contains(where: words.contains) {
             return "figure.run"
         }
-        if token.contains("cycle") || token.contains("bike") {
+        if ["cycle", "cycling", "bike", "biking"].contains(where: words.contains) {
             return "figure.outdoor.cycle"
         }
-        if token.contains("swim") {
+        if ["swim", "swimming"].contains(where: words.contains) {
             return "figure.pool.swim"
         }
-        if token.contains("walk") || token.contains("hike") {
+        if ["walk", "walking", "hike", "hiking"].contains(where: words.contains) {
             return "figure.walk"
         }
-        if token.contains("row") {
+        if ["rowing", "rower"].contains(where: words.contains) {
             return "figure.rower"
         }
-        if token.contains("yoga") {
+        if words.contains("yoga") {
             return "figure.yoga"
         }
-        if token.contains("pilates") || token.contains("stretch") || token.contains("flexibility") {
+        if ["pilates", "stretch", "stretching", "flexibility"].contains(where: words.contains) {
             return "figure.flexibility"
         }
-        if token.contains("mobility") {
+        if words.contains("mobility") {
             return "figure.mind.and.body"
         }
-        if token.contains("climb") || token.contains("boulder") {
+        if ["climb", "climbing", "boulder", "bouldering"].contains(where: words.contains) {
             return "figure.climbing"
         }
-        if token.contains("skill") || token.contains("practice") {
+        if ["skill", "practice"].contains(where: words.contains) {
             return "sportscourt.fill"
         }
-        if token.contains("hiit") || token.contains("interval") || token.contains("conditioning") {
+        if ["hiit", "interval", "intervals", "conditioning"].contains(where: words.contains) {
             return "bolt.heart.fill"
         }
-        if token.contains("recovery") || token.contains("cooldown") {
+        if ["recovery", "cooldown"].contains(where: words.contains) {
             return "heart.text.square.fill"
         }
         return isCardio ? "figure.mixed.cardio" : "figure.run"
+    }
+
+    private func activityWords(from rawValue: String) -> Set<String> {
+        let words = rawValue
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let compact = rawValue
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        return Set(words + [compact])
     }
 }

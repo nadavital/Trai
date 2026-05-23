@@ -88,8 +88,12 @@ extension ProfileView {
                 // Review with Trai button
                 Button {
                     if canAccessAIFeatures {
-                        pendingPlanReviewRequest = true
-                        onSelectTab?(.trai)
+                        if accountSessionService?.isAuthenticated == false {
+                            presentedAccountSetupContext = .aiFeatures
+                        } else {
+                            pendingPlanReviewRequest = true
+                            onSelectTab?(.trai)
+                        }
                     } else {
                         proUpsellCoordinator?.present(source: .nutritionPlan)
                     }
@@ -233,8 +237,12 @@ extension ProfileView {
                 HStack(spacing: 12) {
                     Button {
                         if canAccessAIFeatures {
-                            pendingWorkoutPlanReviewRequest = true
-                            onSelectTab?(.trai)
+                            if accountSessionService?.isAuthenticated == false {
+                                presentedAccountSetupContext = .aiFeatures
+                            } else {
+                                pendingWorkoutPlanReviewRequest = true
+                                onSelectTab?(.trai)
+                            }
                         } else {
                             proUpsellCoordinator?.present(source: .workoutPlan)
                         }

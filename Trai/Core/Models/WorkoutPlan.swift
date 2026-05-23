@@ -852,13 +852,10 @@ extension WorkoutPlan {
             ]
             values.append(contentsOf: template.focusAreas)
             values.append(contentsOf: template.displayBlocks.flatMap { block in
-                var blockValues = [
-                    block.displayActivityName,
-                    block.title,
-                    block.detail,
-                    block.kind.displayName,
-                    block.target ?? ""
-                ]
+                var blockValues: [String] = []
+                if let activityTypeName = block.activityTypeName {
+                    blockValues.append(activityTypeName)
+                }
                 blockValues.append(contentsOf: block.activityTags)
                 blockValues.append(contentsOf: block.exercises.map(\.exerciseName))
                 return blockValues
@@ -880,7 +877,7 @@ private extension Array where Element == WorkoutPlan.TrainingBlock {
                 title: block.title,
                 detail: block.detail,
                 exercises: block.exercises,
-                activityTypeName: block.activityTypeName ?? block.title.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? block.kind.displayName,
+                activityTypeName: block.activityTypeName,
                 activityTags: block.activityTags,
                 durationMinutes: block.durationMinutes,
                 intensity: block.intensity,

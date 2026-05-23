@@ -315,7 +315,7 @@ extension AIPromptBuilder {
                         ],
                         "summary": ["type": "string"]
                     ],
-                    "required": ["primaryFocus", "supportingFocuses", "sessionAllocation", "honoredInputs", "avoided", "summary"]
+                    "required": ["primaryFocus", "supportingFocuses", "sessionAllocation", "honoredInputs", "avoided", "supportiveCardioConstraint", "summary"]
                 ],
                 "rationale": ["type": "string"],
                 "guidelines": [
@@ -686,7 +686,7 @@ extension AIPromptBuilder {
                         ],
                         "summary": ["type": "string"]
                     ],
-                    "required": ["primaryFocus", "supportingFocuses", "sessionAllocation", "honoredInputs", "avoided", "summary"]
+                    "required": ["primaryFocus", "supportingFocuses", "sessionAllocation", "honoredInputs", "avoided", "supportiveCardioConstraint", "summary"]
                 ],
                 "rationale": ["type": "string"],
                 "guidelines": [

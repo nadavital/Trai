@@ -18,7 +18,7 @@ struct ProfileView: View {
 
     @Environment(\.appTabSelection) private var appTabSelection
     @Environment(\.modelContext) var modelContext
-    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(AccountSessionService.self) var accountSessionService: AccountSessionService?
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(ProUpsellCoordinator.self) var proUpsellCoordinator: ProUpsellCoordinator?
     @State var showPlanSheet = false
@@ -42,7 +42,7 @@ struct ProfileView: View {
     @State private var isProfileTabVisible = false
     @State private var latencyProbeEntries: [String] = []
     @State private var tabActivationPolicy = TabActivationPolicy(minimumDwellMilliseconds: 0)
-    @State private var presentedAccountSetupContext: AccountSetupContext?
+    @State var presentedAccountSetupContext: AccountSetupContext?
     @State private var workoutPlanSaveError: WorkoutPlanSaveError?
 
     // For navigating to Trai tab with plan review

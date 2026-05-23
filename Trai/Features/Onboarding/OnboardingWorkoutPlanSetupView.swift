@@ -1169,13 +1169,6 @@ struct OnboardingWorkoutPlanSetupView: View {
                 .traiSheetBranding()
             }
         }
-        .onChange(of: mode) { oldMode, newMode in
-            guard oldMode == .proAI, newMode == .manual, currentStep == .preferences else { return }
-            navigationDirection = .forward
-            withAnimation(.easeInOut(duration: 0.22)) {
-                currentStep = .structure
-            }
-        }
         .onChange(of: showingGeneratedPlanChat) { _, isShowing in
             if !isShowing {
                 generatedPlanChatPrompt = nil
@@ -1814,8 +1807,7 @@ struct OnboardingWorkoutPlanSetupView: View {
 
     private var shouldAskStrengthSplitInMixedPlan: Bool {
         guard draft.focuses.contains(.strength) else { return false }
-        return isStrengthLeadingForPersonalization ||
-            draft.goalPresets.contains(.buildMuscle) ||
+        return draft.goalPresets.contains(.buildMuscle) ||
             draft.goalPresets.contains(.getStronger)
     }
 
@@ -1825,77 +1817,6 @@ struct OnboardingWorkoutPlanSetupView: View {
 
     private var primaryFocusForPersonalization: OnboardingWorkoutFocus? {
         selectedFocusesForPersonalization.first
-    }
-
-    private var proPersonalizationContextText: String {
-        [
-            draft.trimmedProCoachingNotes,
-            draft.goalNotes,
-            draft.rhythmNotes,
-            draft.setupNotes,
-            draft.preferenceNotes,
-            draft.notes
-        ]
-        .joined(separator: " ")
-        .lowercased()
-    }
-
-    private var isCardioSupportOnlyForPersonalization: Bool {
-        let text = proPersonalizationContextText
-        let supportSignals = [
-            "support",
-            "supportive",
-            "supporting",
-            "add-on",
-            "addon",
-            "warmup",
-            "warm-up",
-            "cooldown",
-            "cool-down",
-            "finisher",
-            "after one lift",
-            "after a lift",
-            "after strength",
-            "after lifting",
-            "at the end",
-            "not standalone",
-            "not a dedicated",
-            "not a full cardio day",
-            "not a cardio day"
-        ]
-        return mentionsCardioLikePersonalization(text) &&
-            supportSignals.contains { text.contains($0) }
-    }
-
-    private func mentionsCardioLikePersonalization(_ text: String) -> Bool {
-        [
-            "cardio",
-            "conditioning",
-            "endurance",
-            "aerobic",
-            "run",
-            "running",
-            "bike",
-            "cycling",
-            "row",
-            "rowing",
-            "swim",
-            "swimming",
-            "walk",
-            "walking",
-            "hike",
-            "hiking",
-            "intervals"
-        ].contains { text.contains($0) }
-    }
-
-    private var isStrengthLeadingForPersonalization: Bool {
-        let text = proPersonalizationContextText
-        return text.contains("strength leads") ||
-            text.contains("strength the main") ||
-            text.contains("strength the priority") ||
-            text.contains("strength-focused") ||
-            (draft.focuses.contains(.strength) && isCardioSupportOnlyForPersonalization)
     }
 
     private var proReadyToBuildMessage: String {
@@ -2152,8 +2073,6 @@ struct OnboardingWorkoutPlanSetupView: View {
 
     private var trainingOutcomeSuggestions: [(title: String, text: String)] {
         var suggestions: [(title: String, text: String)] = []
-        let cardioIsSupportOnly = isCardioSupportOnlyForPersonalization
-        let strengthLeads = isStrengthLeadingForPersonalization
 
         if draft.focuses.contains(.strength) || draft.goalPresets.contains(.buildMuscle) || draft.goalPresets.contains(.getStronger) {
             suggestions.append(contentsOf: [
@@ -2164,13 +2083,7 @@ struct OnboardingWorkoutPlanSetupView: View {
                 (title: "Bench milestone", text: "I want to build toward a stronger bench press.")
             ])
         }
-        if cardioIsSupportOnly {
-            suggestions.append(contentsOf: [
-                (title: "Short support", text: "Keep cardio to one short easy support block each week."),
-                (title: "Recover better", text: "Use cardio only if it helps recovery and conditioning without taking over."),
-                (title: "Support only", text: "Keep cardio supportive instead of making it a standalone session.")
-            ])
-        } else if draft.focuses.contains(.cardio) || draft.goalPresets.contains(.improveEndurance) {
+        if draft.focuses.contains(.cardio) || draft.goalPresets.contains(.improveEndurance) {
             suggestions.append(contentsOf: [
                 (title: "Run farther", text: "I want to build distance without burning out."),
                 (title: "Faster pace", text: "I want to improve pace and speed."),
@@ -2196,13 +2109,8 @@ struct OnboardingWorkoutPlanSetupView: View {
                 (title: "Athletic engine", text: "I want a better athletic engine.")
             ])
         }
-        if strengthLeads {
-            suggestions.append((title: "Strength first", text: "Make the plan clearly strength-first and keep the other work supportive."))
-        }
         suggestions.append((title: "Consistency", text: "I want a plan I can follow consistently."))
-        if !cardioIsSupportOnly {
-            suggestions.append((title: "Body comp", text: "I want training that supports my body composition goals."))
-        }
+        suggestions.append((title: "Body comp", text: "I want training that supports my body composition goals."))
         var seenTitles = Set<String>()
         let uniqueSuggestions = suggestions.filter { suggestion in
             seenTitles.insert(suggestion.title).inserted

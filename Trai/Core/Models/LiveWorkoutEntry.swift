@@ -129,6 +129,7 @@ final class LiveWorkoutEntry {
             || trackedDurationSeconds > 0
             || trackedDistanceMeters > 0
             || activitySegments.contains { $0.hasLoggedData }
+            || sets.contains { !$0.isWarmup && $0.hasLoggedData }
             || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -419,6 +420,13 @@ extension LiveWorkoutEntry {
         /// Volume for this set (weight × reps) - uses kg for calculations
         var volume: Double {
             Double(reps) * weightKg
+        }
+
+        var hasLoggedData: Bool {
+            reps > 0
+                || weightKg > 0
+                || weightLbs > 0
+                || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
 
         /// Get clean weight in user's preferred unit

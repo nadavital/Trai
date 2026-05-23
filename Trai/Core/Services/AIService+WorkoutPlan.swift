@@ -607,7 +607,7 @@ extension AIService {
 private extension WorkoutPlan {
     var hasUserFacingActivityIdentityForEveryBlock: Bool {
         templates.allSatisfy { template in
-            template.displayBlocks.allSatisfy { block in
+            template.blocks.allSatisfy { block in
                 block.activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             }
         }

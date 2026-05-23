@@ -204,30 +204,40 @@ extension Exercise {
             case "custom", "activity", "other":
                 return .custom
             default:
-                if token.contains("run")
-                    || token.contains("cycle")
-                    || token.contains("bike")
-                    || token.contains("rowing")
-                    || token.contains("rower")
-                    || token.contains("swim")
-                    || token.contains("walk")
-                    || token.contains("stairclimber")
-                    || token.contains("elliptical")
-                    || token.contains("jumprope") {
+                let words = normalizedActivityWords(from: rawValue)
+                if activityWords(words, containAnyOf: [
+                    "run", "running", "jog", "jogging", "cycle", "cycling", "bike", "biking",
+                    "rowing", "rower", "swim", "swimming", "walk", "walking",
+                    "stair", "stairclimber", "elliptical", "jumprope"
+                ]) {
                     return .cardio
                 }
-                if token.contains("climb")
-                    || token.contains("boulder")
-                    || token.contains("boxing")
-                    || token.contains("basketball")
-                    || token.contains("tennis")
-                    || token.contains("soccer")
-                    || token.contains("padel")
-                    || token.contains("pickleball") {
+                if activityWords(words, containAnyOf: [
+                    "climb", "climbing", "boulder", "bouldering", "boxing", "basketball",
+                    "tennis", "soccer", "padel", "pickleball"
+                ]) {
                     return .sportPractice
                 }
                 return nil
             }
+        }
+
+        fileprivate nonisolated static func normalizedActivityWords(from rawValue: String) -> Set<String> {
+            let words = rawValue
+                .lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            let compact = rawValue
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: " ", with: "")
+            return Set(words + [compact])
+        }
+
+        fileprivate nonisolated static func activityWords(_ words: Set<String>, containAnyOf aliases: [String]) -> Bool {
+            aliases.contains { words.contains($0) }
         }
     }
 
@@ -411,28 +421,31 @@ extension Exercise {
             .lowercased()
 
         guard !text.isEmpty else { return [] }
+        let words = Category.normalizedActivityWords(from: text)
 
-        if text.contains("climb") || text.contains("boulder") {
+        if Category.activityWords(words, containAnyOf: ["climb", "climbing", "boulder", "bouldering"]) {
             return ["Technique", "Grip", "Power", "Endurance", "Mobility"]
         }
 
-        if text.contains("padel") || text.contains("tennis") || text.contains("pickleball") {
+        if Category.activityWords(words, containAnyOf: ["padel", "tennis", "pickleball"]) {
             return ["Footwork", "Reaction", "Agility", "Power", "Consistency"]
         }
 
-        if text.contains("basketball") || text.contains("soccer") || text.contains("football") {
+        if Category.activityWords(words, containAnyOf: ["basketball", "soccer", "football"]) {
             return ["Skill", "Footwork", "Agility", "Conditioning", "Consistency"]
         }
 
-        if text.contains("boxing") || text.contains("martial") {
+        if Category.activityWords(words, containAnyOf: ["boxing", "martial"]) {
             return ["Technique", "Footwork", "Power", "Conditioning", "Reaction"]
         }
 
-        if text.contains("run") || text.contains("cycle") || text.contains("bike") || text.contains("row") || text.contains("swim") {
+        if Category.activityWords(words, containAnyOf: [
+            "run", "running", "cycle", "cycling", "bike", "biking", "rowing", "rower", "swim", "swimming"
+        ]) {
             return ["Endurance", "Intervals", "Speed", "Distance", "Easy Effort"]
         }
 
-        if text.contains("yoga") || text.contains("pilates") || text.contains("mobility") || text.contains("stretch") {
+        if Category.activityWords(words, containAnyOf: ["yoga", "pilates", "mobility", "stretch", "stretching"]) {
             return ["Hips", "Shoulders", "Back", "Control", "Recovery"]
         }
 
@@ -500,48 +513,48 @@ extension Exercise {
     }
 
     static func defaultActivityTypeName(for exerciseName: String, category: Category) -> String {
-        let normalizedName = exerciseName.lowercased()
-        if normalizedName.contains("boulder") || normalizedName.contains("climb") {
-            return "Climbing"
-        }
-        if normalizedName.contains("run") {
-            return "Running"
-        }
-        if normalizedName.contains("cycle") || normalizedName.contains("bike") {
-            return "Cycling"
-        }
-        if normalizedName.contains("rowing") || normalizedName.contains("rower") {
-            return "Rowing"
-        }
-        if normalizedName.contains("swim") {
-            return "Swimming"
-        }
-        if normalizedName.contains("yoga") {
-            return "Yoga"
-        }
-        if normalizedName.contains("walk") {
-            return "Walking"
-        }
-        if normalizedName.contains("padel") {
-            return "Padel"
-        }
-        if normalizedName.contains("pickleball") {
-            return "Pickleball"
-        }
-        if normalizedName.contains("tennis") {
-            return "Tennis"
-        }
-        if normalizedName.contains("boxing") {
-            return "Boxing"
-        }
-        if normalizedName.contains("basketball") {
-            return "Basketball"
-        }
-        if normalizedName.contains("soccer") || normalizedName.contains("football") {
-            return "Soccer"
-        }
         if category == .strength {
             return "Strength"
+        }
+        let words = Category.normalizedActivityWords(from: exerciseName)
+        if Category.activityWords(words, containAnyOf: ["boulder", "bouldering", "climb", "climbing"]) {
+            return "Climbing"
+        }
+        if Category.activityWords(words, containAnyOf: ["run", "running", "jog", "jogging"]) {
+            return "Running"
+        }
+        if Category.activityWords(words, containAnyOf: ["cycle", "cycling", "bike", "biking"]) {
+            return "Cycling"
+        }
+        if Category.activityWords(words, containAnyOf: ["rowing", "rower"]) {
+            return "Rowing"
+        }
+        if Category.activityWords(words, containAnyOf: ["swim", "swimming"]) {
+            return "Swimming"
+        }
+        if Category.activityWords(words, containAnyOf: ["yoga"]) {
+            return "Yoga"
+        }
+        if Category.activityWords(words, containAnyOf: ["walk", "walking"]) {
+            return "Walking"
+        }
+        if Category.activityWords(words, containAnyOf: ["padel"]) {
+            return "Padel"
+        }
+        if Category.activityWords(words, containAnyOf: ["pickleball"]) {
+            return "Pickleball"
+        }
+        if Category.activityWords(words, containAnyOf: ["tennis"]) {
+            return "Tennis"
+        }
+        if Category.activityWords(words, containAnyOf: ["boxing"]) {
+            return "Boxing"
+        }
+        if Category.activityWords(words, containAnyOf: ["basketball"]) {
+            return "Basketball"
+        }
+        if Category.activityWords(words, containAnyOf: ["soccer", "football"]) {
+            return "Soccer"
         }
         let trimmedName = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmedName.isEmpty ? category.displayName : trimmedName

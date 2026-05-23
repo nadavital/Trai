@@ -920,7 +920,7 @@ extension AIFunctionExecutor {
                 if let setsArray = exerciseData["sets"] as? [[String: Any]] {
                     for setData in setsArray {
                         let reps = setData["reps"] as? Int ?? 10
-                        let weight = setData["weight_kg"] as? Double
+                        let weight = numericDouble(from: setData["weight_kg"])
                         sets.append(SuggestedWorkoutLog.LoggedExercise.SetData(
                             reps: reps,
                             weightKg: weight
@@ -930,7 +930,7 @@ extension AIFunctionExecutor {
                 // Legacy format: sets/reps as integers
                 else if let setCount = exerciseData["sets"] as? Int {
                     let reps = exerciseData["reps"] as? Int ?? 10
-                    let weight = exerciseData["weight_kg"] as? Double
+                    let weight = numericDouble(from: exerciseData["weight_kg"])
                     for _ in 0..<setCount {
                         sets.append(SuggestedWorkoutLog.LoggedExercise.SetData(
                             reps: reps,
@@ -943,6 +943,9 @@ extension AIFunctionExecutor {
                     || distanceMeters != nil
                     || exerciseNotes != nil
                     || !segments.isEmpty
+                let hasLoggedSetMetrics = sets.contains { set in
+                    set.reps > 0 || (set.weightKg ?? 0) > 0
+                }
                 let resolvedCategory = Exercise.Category.normalized(from: category)?.userFacingEquivalent
                     ?? exerciseActivityName.flatMap { Exercise.Category.normalized(from: $0)?.userFacingEquivalent }
                     ?? (!sets.isEmpty && !hasActivityMetrics ? .strength : nil)
@@ -953,7 +956,7 @@ extension AIFunctionExecutor {
                     ).map(\.rawValue)
                 }
 
-                if !sets.isEmpty || hasActivityMetrics || (resolvedCategory != nil && resolvedCategory != .strength) {
+                if hasLoggedSetMetrics || hasActivityMetrics {
                     exercises.append(SuggestedWorkoutLog.LoggedExercise(
                         name: name,
                         category: resolvedCategory?.rawValue ?? category,

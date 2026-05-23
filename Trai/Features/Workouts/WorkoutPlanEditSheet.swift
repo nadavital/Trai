@@ -27,6 +27,7 @@ struct WorkoutPlanEditSheet: View {
     @State private var editorPreservedTargetGroups: [String] = []
     @State private var editedPlan: WorkoutPlan
     @State private var hasPendingChanges = false
+    @State private var saveError: WorkoutPlanEditSaveError?
 
     init(currentPlan: WorkoutPlan) {
         self.currentPlan = currentPlan
@@ -59,7 +60,7 @@ struct WorkoutPlanEditSheet: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", systemImage: "checkmark") {
-                        savePlan(editedPlan)
+                        guard savePlan(editedPlan) else { return }
                         hasPendingChanges = false
                         dismiss()
                     }
@@ -71,6 +72,13 @@ struct WorkoutPlanEditSheet: View {
         .fullScreenCover(isPresented: $showingFullSetup) {
             WorkoutPlanChatFlow()
                 .traiSheetBranding()
+        }
+        .alert(item: $saveError) { error in
+            Alert(
+                title: Text("Workout Plan Not Saved"),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
         .sheet(isPresented: $showingDayEditor) {
             WorkoutDayEditorSheet(
@@ -627,8 +635,8 @@ struct WorkoutPlanEditSheet: View {
         )
     }
 
-    private func savePlan(_ plan: WorkoutPlan) {
-        guard let profile = userProfile else { return }
+    private func savePlan(_ plan: WorkoutPlan) -> Bool {
+        guard let profile = userProfile else { return false }
         let normalizedPlan = normalizedPlanForSave(plan)
         WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
             profile: profile,
@@ -637,8 +645,21 @@ struct WorkoutPlanEditSheet: View {
             replacingWith: normalizedPlan
         )
         profile.workoutPlan = normalizedPlan
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            saveError = WorkoutPlanEditSaveError(message: error.localizedDescription)
+            HapticManager.error()
+            return false
+        }
     }
+}
+
+private struct WorkoutPlanEditSaveError: Identifiable {
+    let id = UUID()
+    let message: String
 }
 
 private struct WorkoutDayRow: View {

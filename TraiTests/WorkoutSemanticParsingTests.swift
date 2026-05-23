@@ -37,6 +37,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(WorkoutMode.normalized(from: "weight-lifting"), .strength)
         XCTAssertEqual(WorkoutMode.normalized(from: "bouldering"), .climbing)
         XCTAssertEqual(WorkoutMode.normalized(from: "stretching"), .flexibility)
+        XCTAssertNil(WorkoutMode.normalized(from: "trunk rotation"))
     }
 
     func testWorkoutSuggestionPromptIncludesGeneralActivityContext() {
@@ -361,6 +362,34 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(suggestion.iconName, Exercise.Category.cardio.iconName)
     }
 
+    func testStartLiveWorkoutParsesIntegerWeightKg() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "start_live_workout",
+                arguments: [
+                    "name": "Bench Session",
+                    "workout_type": "strength",
+                    "suggested_exercises": [
+                        [
+                            "name": "Bench Press",
+                            "category": "strength",
+                            "sets": 3,
+                            "reps": 5,
+                            "weight_kg": 80
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutStart(let suggestion) = result,
+              let exercise = suggestion.exercises.first else {
+            return XCTFail("Expected start workout suggestion")
+        }
+
+        XCTAssertEqual(exercise.weightKg, 80)
+    }
+
     func testSuggestWorkoutUsesActivityFocusesInsteadOfStrengthFallback() async throws {
         let bouldering = Exercise(name: "Limit Bouldering", category: .sportPractice)
         bouldering.activityTypeName = "Bouldering"
@@ -651,6 +680,22 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             exercise.startSummarySegments,
             ["Bouldering", "40 min", "2 segments", "7 attempts"]
         )
+    }
+
+    func testNonStrengthSetMetricsCountAsActivityHistory() {
+        let entry = LiveWorkoutEntry(exerciseName: "Limit Bouldering", orderIndex: 0, exerciseType: "sportPractice")
+        entry.activityTypeName = "Bouldering"
+        entry.activityKind = .sportPractice
+        entry.trackingFields = [.sets, .reps]
+        entry.addSet(.init(reps: 4, weight: .zero, completed: true, isWarmup: false))
+        entry.addSet(.init(reps: 3, weight: .zero, completed: true, isWarmup: false))
+
+        let history = ExerciseHistory(from: entry)
+
+        XCTAssertTrue(entry.hasExercisePreferenceSignal)
+        XCTAssertEqual(history.totalSets, 2)
+        XCTAssertEqual(history.totalReps, 7)
+        XCTAssertEqual(history.repPattern, "4,3")
     }
 
     func testStartWorkoutActivitySummaryUsesActivityNameForMetricLabels() {
@@ -1059,7 +1104,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(functionResult.response["error"] as? String, "Missing completed workout details. Include completed sets for strength work or a non-strength activity item with category, activity_name, and any known duration, distance, segments, or notes.")
     }
 
-    func testLogWorkoutKeepsBareNonStrengthActivityAsCompletedSemanticItem() async {
+    func testLogWorkoutRejectsBareNonStrengthActivityWithoutLoggedMetrics() async {
         let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
         let result = await executor.execute(
             .init(
@@ -1079,15 +1124,40 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             )
         )
 
-        guard case .suggestedWorkoutLog(let workoutLog) = result,
-              let exercise = workoutLog.exercises.first else {
-            return XCTFail("Expected semantic activity log suggestion")
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected log workout error response")
         }
 
-        XCTAssertEqual(exercise.category, Exercise.Category.sportPractice.rawValue)
-        XCTAssertEqual(exercise.activityTypeName, "Bouldering")
-        XCTAssertEqual(exercise.targetTags ?? [], ["Climbing"])
-        XCTAssertTrue(exercise.sets.isEmpty)
+        XCTAssertEqual(functionResult.response["error"] as? String, "Missing completed workout details. Include completed sets for strength work or a non-strength activity item with category, activity_name, and any known duration, distance, segments, or notes.")
+    }
+
+    func testLogWorkoutParsesIntegerWeightKg() async {
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
+        let result = await executor.execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "type": "strength",
+                    "name": "Upper lift",
+                    "exercises": [
+                        [
+                            "name": "Bench Press",
+                            "category": "strength",
+                            "sets": [
+                                ["reps": 5, "weight_kg": 80]
+                            ]
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutLog(let workoutLog) = result,
+              let set = workoutLog.exercises.first?.sets.first else {
+            return XCTFail("Expected workout log suggestion")
+        }
+
+        XCTAssertEqual(set.weightKg, 80)
     }
 
     func testLogWorkoutStoresNormalizedActivityCategoryAndTrackingFields() async {

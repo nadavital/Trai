@@ -388,16 +388,26 @@ extension ChatView {
                 entry.durationSeconds = exercise.durationMinutes.map { max(0, $0) * 60 }
                 entry.distanceMeters = exercise.distanceMeters
                 let segments = exercise.activitySegments
-                if segments.isEmpty, entry.durationSeconds != nil || entry.distanceMeters != nil || !entry.notes.isEmpty {
+                if !exercise.sets.isEmpty {
+                    exercise.sets.forEach { setData in
+                        entry.addActivitySegment(LiveWorkoutEntry.ActivitySegment(
+                            reps: setData.reps > 0 ? setData.reps : nil,
+                            weightKg: (setData.weightKg ?? 0) > 0 ? setData.weightKg : nil
+                        ))
+                    }
+                }
+                if segments.isEmpty, entry.activitySegments.isEmpty, entry.durationSeconds != nil || entry.distanceMeters != nil || !entry.notes.isEmpty {
                     entry.addActivitySegment(LiveWorkoutEntry.ActivitySegment(
                         durationSeconds: entry.durationSeconds,
                         distanceMeters: entry.distanceMeters,
                         notes: entry.notes
                     ))
-                } else {
+                } else if !segments.isEmpty {
                     segments.forEach { entry.addActivitySegment($0) }
                 }
-                entry.completedAt = Date()
+                if entry.hasExercisePreferenceSignal {
+                    entry.completedAt = Date()
+                }
             }
 
             entries.append(entry)

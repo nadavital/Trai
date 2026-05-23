@@ -589,7 +589,7 @@ extension AIFunctionExecutor {
                 )
                 let sets = numericInt(from: exerciseData["sets"]) ?? (resolvedCategory == .strength ? 3 : 0)
                 let reps = numericInt(from: exerciseData["reps"]) ?? (resolvedCategory == .strength ? 10 : 0)
-                let weight = exerciseData["weight_kg"] as? Double
+                let weight = numericDouble(from: exerciseData["weight_kg"])
                 let durationMinutes = numericInt(from: exerciseData["duration_minutes"])
                 let distanceMeters = numericDouble(from: exerciseData["distance_meters"])
                 let notes = (exerciseData["notes"] as? String)?

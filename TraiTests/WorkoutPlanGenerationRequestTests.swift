@@ -450,6 +450,10 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertTrue(required.contains("blocks"))
         XCTAssertTrue(required.contains("notes"))
         XCTAssertTrue(envelopeRequired.contains("changesWeeklySchedule"))
+
+        let planIntent = try XCTUnwrap(planProperties["planIntent"] as? [String: Any])
+        let planIntentRequired = try XCTUnwrap(planIntent["required"] as? [String])
+        XCTAssertTrue(planIntentRequired.contains("supportiveCardioConstraint"))
     }
 
     @MainActor
@@ -1016,6 +1020,45 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         )
 
         XCTAssertFalse(plan.containsVisibleActivityIdentity(matching: ["Running", "Run"]))
+    }
+
+    func testWorkoutPlanVisibleActivityIdentityIgnoresBroadBlockKindLabels() {
+        let plan = makePlan(
+            templateName: "Conditioning Support",
+            sessionType: .mixed,
+            focusAreas: ["Athletic support"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .conditioning,
+                    title: "Conditioning",
+                    detail: "Short support work",
+                    activityTypeName: "Athletic Support",
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertFalse(plan.containsVisibleActivityIdentity(matching: ["HIIT", "Intervals"]))
+    }
+
+    @MainActor
+    func testWorkoutPlanValidationRejectsBlocksWithoutAuthoredActivityIdentity() {
+        let request = makeRequest(workoutType: .mixed, selectedWorkoutTypes: [.strength], availableDays: 1)
+        let plan = makePlan(
+            templateName: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Upper-body lifting",
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertThrowsError(try AIService.validateGeneratedWorkoutPlanForTesting(plan, request: request))
     }
 
     func testRequestReportsMissingExplicitActivityIdentityFromPlanStructure() {

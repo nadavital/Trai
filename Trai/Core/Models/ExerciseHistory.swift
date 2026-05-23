@@ -125,24 +125,33 @@ final class ExerciseHistory {
 
     private func updateActivityMetrics(from entry: LiveWorkoutEntry) {
         let loggedSegments = entry.activitySegments.filter(\.hasLoggedData)
+        let loggedSets = entry.sets.filter { !$0.isWarmup && $0.hasLoggedData }
         let segmentWeights = loggedSegments
             .compactMap(\.weightKg)
+            .filter { $0 > 0 }
+        let setWeights = loggedSets
+            .map(\.weightKg)
             .filter { $0 > 0 }
         let segmentReps = loggedSegments
             .compactMap(\.reps)
             .filter { $0 > 0 }
+        let setReps = loggedSets
+            .map(\.reps)
+            .filter { $0 > 0 }
+        let weights = segmentWeights + setWeights
+        let reps = segmentReps + setReps
 
-        self.bestSetWeightKg = segmentWeights.max() ?? 0
+        self.bestSetWeightKg = weights.max() ?? 0
         self.bestSetWeightLbs = bestSetWeightKg > 0
             ? WeightUtility.round(bestSetWeightKg * WeightUtility.kgToLbs, unit: .lbs)
             : 0
-        self.bestSetReps = segmentReps.max() ?? 0
+        self.bestSetReps = reps.max() ?? 0
         self.totalVolume = 0
-        self.totalSets = loggedSegments.count
-        self.totalReps = segmentReps.reduce(0, +)
+        self.totalSets = loggedSegments.count + loggedSets.count
+        self.totalReps = reps.reduce(0, +)
         self.estimatedOneRepMax = nil
-        self.repPattern = segmentReps.isEmpty ? nil : segmentReps.map(String.init).joined(separator: ",")
-        self.weightPattern = segmentWeights.isEmpty ? nil : segmentWeights.map { weightKg in
+        self.repPattern = reps.isEmpty ? nil : reps.map(String.init).joined(separator: ",")
+        self.weightPattern = weights.isEmpty ? nil : weights.map { weightKg in
             let rounded = WeightUtility.round(weightKg, unit: .kg)
             return String(format: "%.1f", rounded)
         }.joined(separator: ",")

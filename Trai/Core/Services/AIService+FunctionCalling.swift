@@ -496,6 +496,8 @@ extension AIService {
                 textResponse = "Logged \(Int(lbs.rounded())) lbs for \(date)."
             } else if let kg = weightResult.response["weight_kg"] as? Double {
                 textResponse = "Logged \(String(format: "%.1f", kg)) kg for \(date)."
+            } else if let kg = weightResult.response["weight_kg"] as? Int {
+                textResponse = "Logged \(kg) kg for \(date)."
             } else {
                 textResponse = "Logged your weight for \(date)."
             }

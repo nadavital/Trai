@@ -417,7 +417,21 @@ struct CardioExerciseCard: View {
     private func ensureInitialSegment() {
         guard supportsSegments, !didEnsureInitialSegment, entry.activitySegments.isEmpty else { return }
         didEnsureInitialSegment = true
+        guard entry.trackedDurationSeconds > 0
+            || entry.trackedDistanceMeters > 0
+            || !entry.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
         onAddSegment?()
+        if entry.trackedDurationSeconds > 0 {
+            onUpdateSegmentDuration?(0, entry.trackedDurationSeconds)
+        }
+        if entry.trackedDistanceMeters > 0 {
+            onUpdateSegmentDistance?(0, entry.trackedDistanceMeters)
+        }
+        if !entry.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            onUpdateSegmentNotes?(0, entry.notes)
+        }
     }
 }
 

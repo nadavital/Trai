@@ -69,6 +69,7 @@ struct WorkoutPlanChatFlow: View {
     @State private var activeGeneratedPlanGoals: [WorkoutGoal] = []
     @State private var selectedGeneratedGoal: WorkoutGoal?
     @State private var isRefiningPlan = false
+    @State private var saveError: WorkoutPlanChatFlowSaveError?
 
     @FocusState private var isInputFocused: Bool
 
@@ -178,6 +179,13 @@ struct WorkoutPlanChatFlow: View {
             }
         }
         .traiSheetBranding()
+        .alert(item: $saveError) { error in
+            Alert(
+                title: Text("Workout Plan Not Saved"),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
 
     private var mainContent: some View {
@@ -1196,7 +1204,14 @@ struct WorkoutPlanChatFlow: View {
                 profile.workoutTimePerSession = duration
             }
 
-            try? modelContext.save()
+            do {
+                try modelContext.save()
+            } catch {
+                modelContext.rollback()
+                saveError = WorkoutPlanChatFlowSaveError(message: error.localizedDescription)
+                HapticManager.error()
+                return
+            }
             HapticManager.success()
             dismiss()
         }
@@ -1892,6 +1907,11 @@ private struct GeneratedWorkoutGoalDetailSheet: View {
         }
     }
 
+}
+
+private struct WorkoutPlanChatFlowSaveError: Identifiable {
+    let id = UUID()
+    let message: String
 }
 
 // MARK: - Preview
