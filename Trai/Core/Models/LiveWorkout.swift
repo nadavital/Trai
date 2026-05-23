@@ -232,7 +232,7 @@ extension LiveWorkout {
 
     var displayFocusAreas: [String] {
         var seen: Set<String> = []
-        return focusAreas.compactMap { focus in
+        let explicitAreas: [String] = focusAreas.compactMap { focus in
             let trimmed = focus.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return nil }
 
@@ -244,7 +244,52 @@ extension LiveWorkout {
             guard seen.insert(key).inserted else { return nil }
             return displayName
         }
+
+        if !explicitAreas.isEmpty {
+            return explicitAreas
+        }
+
+        return derivedActivityFocusAreas(seen: &seen)
     }
+
+    private func derivedActivityFocusAreas(seen: inout Set<String>) -> [String] {
+        (entries ?? [])
+            .filter { !$0.isStrength && !$0.isPlannedActivityGuidance }
+            .compactMap { entry in
+                let exerciseName = entry.exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
+                let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+                let title = preferredActivityFocusName(
+                    exerciseName: exerciseName,
+                    activityName: activityName
+                )
+                let key = title.goalNormalizedKey
+                guard !title.isEmpty, !key.isEmpty, seen.insert(key).inserted else { return nil }
+                return title
+            }
+    }
+
+    private func preferredActivityFocusName(exerciseName: String, activityName: String) -> String {
+        let activityKey = activityName.goalNormalizedKey
+        let exerciseKey = exerciseName.goalNormalizedKey
+        if !activityName.isEmpty,
+           activityKey != exerciseKey,
+           !Self.broadActivityFocusKeys.contains(activityKey) {
+            return activityName
+        }
+        return exerciseName.isEmpty ? activityName : exerciseName
+    }
+
+    private static let broadActivityFocusKeys: Set<String> = {
+        let categories = Exercise.Category.allCases.flatMap { category in
+            [category.rawValue, category.displayName]
+        }
+        let blockKinds = WorkoutPlan.TrainingBlock.BlockKind.allCases.flatMap { kind in
+            [kind.rawValue, kind.displayName]
+        }
+        return Set((categories + blockKinds + ["activity", "workout", "custom"])
+            .map(\.goalNormalizedKey)
+            .filter { !$0.isEmpty })
+    }()
 
     var trimmedNotes: String {
         notes.trimmingCharacters(in: .whitespacesAndNewlines)

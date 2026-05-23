@@ -1080,6 +1080,22 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(segment["notes"] as? String, "Limit attempts")
     }
 
+    func testLiveWorkoutDerivesFocusFromLoggedActivitiesWhenNoFocusWasSet() {
+        let workout = LiveWorkout(name: "Open Session", workoutType: .custom)
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 0,
+            exerciseType: "sportPractice"
+        )
+        entry.activityTypeName = "Bouldering"
+        entry.completedAt = Date()
+        entry.workout = workout
+        workout.entries = [entry]
+
+        XCTAssertEqual(workout.displayFocusAreas, ["Bouldering"])
+        XCTAssertEqual(workout.displayFocusSummary, "Bouldering")
+    }
+
     func testRecentWorkoutsExcludeUnloggedPlannedItemsAndIncompleteSets() async throws {
         let context = try makeWorkoutHistoryContext()
         let workout = LiveWorkout(name: "Strength + Support", workoutType: .mixed)
