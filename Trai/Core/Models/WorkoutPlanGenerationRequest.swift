@@ -202,6 +202,47 @@ struct WorkoutPlanGenerationRequest {
         return directives
     }
 
+    var requiredVisibleActivityIdentityGroups: [[String]] {
+        var groups: [[String]] = []
+
+        func appendGroup(_ values: [String]) {
+            let cleaned = values
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty && $0.goalNormalizedKey != WorkoutPlanGenerationRequest.CardioType.anyCardio.displayName.goalNormalizedKey }
+            guard !cleaned.isEmpty else { return }
+            let keys = Set(cleaned.map(\.goalNormalizedKey))
+            guard !groups.contains(where: { Set($0.map(\.goalNormalizedKey)) == keys }) else { return }
+            groups.append(cleaned)
+        }
+
+        for type in selectedWorkoutTypes ?? [workoutType] {
+            if let aliases = type.requiredVisibleIdentityAliases {
+                appendGroup(aliases)
+            }
+        }
+
+        cardioTypes?.forEach { type in
+            guard type != .anyCardio else { return }
+            appendGroup(type.visibleIdentityAliases)
+        }
+
+        if let customWorkoutType {
+            appendGroup([customWorkoutType])
+        }
+
+        if let customCardioType {
+            appendGroup([customCardioType])
+        }
+
+        return groups
+    }
+
+    func missingVisibleActivityIdentityDescriptions(in plan: WorkoutPlan) -> [String] {
+        requiredVisibleActivityIdentityGroups.compactMap { aliases in
+            plan.containsVisibleActivityIdentity(matching: aliases) ? nil : aliases.first
+        }
+    }
+
     private var generationContextText: String {
         ([
             preferences ?? "",
@@ -296,6 +337,17 @@ struct WorkoutPlanGenerationRequest {
         var shouldAskAboutCardioType: Bool {
             self == .cardio || self == .mixed
         }
+
+        var requiredVisibleIdentityAliases: [String]? {
+            switch self {
+            case .hiit:
+                return ["HIIT", "Conditioning", "Intervals"]
+            case .flexibility:
+                return ["Flexibility", "Mobility", "Yoga"]
+            case .strength, .cardio, .mixed:
+                return nil
+            }
+        }
     }
 
     // MARK: - Preferred Split
@@ -383,6 +435,31 @@ struct WorkoutPlanGenerationRequest {
             case .elliptical: "figure.elliptical"
             case .jumpRope: "figure.jumprope"
             case .anyCardio: "heart.fill"
+            }
+        }
+
+        var visibleIdentityAliases: [String] {
+            switch self {
+            case .running:
+                return ["Running", "Run"]
+            case .cycling:
+                return ["Cycling", "Bike", "Biking"]
+            case .swimming:
+                return ["Swimming", "Swim"]
+            case .climbing:
+                return ["Climbing", "Bouldering", "Climb"]
+            case .rowing:
+                return ["Rowing", "Rower"]
+            case .walking:
+                return ["Walking", "Walk"]
+            case .stairClimber:
+                return ["Stair Climber", "Stairs"]
+            case .elliptical:
+                return ["Elliptical"]
+            case .jumpRope:
+                return ["Jump Rope", "Skipping"]
+            case .anyCardio:
+                return []
             }
         }
     }

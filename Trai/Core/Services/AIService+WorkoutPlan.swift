@@ -255,6 +255,12 @@ extension AIService {
             }
         }
 
+        let missingActivityIdentities = request.missingVisibleActivityIdentityDescriptions(in: plan)
+        guard missingActivityIdentities.isEmpty else {
+            log("Workout plan dropped explicit activity identities: \(missingActivityIdentities.joined(separator: ", ")).", type: .error)
+            throw AIServiceError.parsingError
+        }
+
         return plan
     }
 
@@ -270,6 +276,10 @@ extension AIService {
         } else {
             requiredTemplateText = "For a flexible schedule, make daysPerWeek match the number of templates you return."
         }
+        let missingActivityIdentities = request.missingVisibleActivityIdentityDescriptions(in: invalidPlan)
+        let missingActivityDirective = missingActivityIdentities.isEmpty
+            ? ""
+            : "The previous plan dropped these explicit activity selections: \(missingActivityIdentities.joined(separator: ", ")). Include each one as a real template, block activityTypeName, focusArea, activityTag, or exercise/activity name unless the user's brief explicitly says it should be avoided."
 
         return """
         \(originalPrompt)
@@ -282,6 +292,7 @@ extension AIService {
 
         Correct the plan now. \(requiredTemplateText)
         Keep the user's personalization brief as the highest-priority customization input.
+        \(missingActivityDirective)
         \(request.requestsCardioAsAccessory ? "The user asked for cardio as supportive work, so do not return standalone cardio or HIIT templates. Add the cardio work inside one strength or mixed template with role \(request.supportiveCardioRole.rawValue)." : "")
         \(request.limitsAccessoryCardioToOneSession ? "The user limited cardio support to one placement, so return exactly one cardio block with role \(request.supportiveCardioRole.rawValue) in the whole plan." : "")
         Return planIntent, modalityProgression, and ordered blocks for every template. Do not flatten activity work into fake strength exercises.

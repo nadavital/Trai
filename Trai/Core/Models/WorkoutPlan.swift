@@ -750,6 +750,45 @@ struct WorkoutPlan: Codable, Equatable {
     )
 }
 
+extension WorkoutPlan {
+    func containsVisibleActivityIdentity(matching aliases: [String]) -> Bool {
+        let visibleText = visibleActivityIdentityValues
+            .joined(separator: " ")
+            .goalNormalizedKey
+        guard !visibleText.isEmpty else { return false }
+
+        return aliases
+            .map(\.goalNormalizedKey)
+            .filter { !$0.isEmpty }
+            .contains { visibleText.contains($0) }
+    }
+
+    var visibleActivityIdentityValues: [String] {
+        templates.flatMap { template in
+            var values: [String] = [
+                template.name,
+                template.sessionType.displayName
+            ]
+            values.append(contentsOf: template.focusAreas)
+            values.append(contentsOf: template.displayBlocks.flatMap { block in
+                var blockValues = [
+                    block.displayActivityName,
+                    block.title,
+                    block.detail,
+                    block.kind.displayName,
+                    block.target ?? ""
+                ]
+                blockValues.append(contentsOf: block.activityTags)
+                blockValues.append(contentsOf: block.exercises.map(\.exerciseName))
+                return blockValues
+            })
+            return values
+        }
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+    }
+}
+
 private extension Array where Element == WorkoutPlan.TrainingBlock {
     nonisolated var normalizedForDisplay: [WorkoutPlan.TrainingBlock] {
         sorted { $0.order < $1.order }.enumerated().map { index, block in

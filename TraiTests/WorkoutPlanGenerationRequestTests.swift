@@ -660,6 +660,65 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(template.displayBlocks.map(\.order), [0, 1, 2])
     }
 
+    func testRequiredActivityIdentitiesIncludeExplicitCardioAndCustomSelections() {
+        let request = makeRequest(
+            selectedWorkoutTypes: [.strength, .cardio],
+            conversationContext: ["Personalization brief (highest priority): include climbing performance"],
+            cardioTypes: [.climbing, .anyCardio],
+            availableDays: 3
+        )
+
+        XCTAssertTrue(request.requiredVisibleActivityIdentityGroups.contains { $0.contains("Climbing") })
+        XCTAssertFalse(request.requiredVisibleActivityIdentityGroups.contains { $0.contains("Any / No Preference") })
+    }
+
+    func testWorkoutPlanVisibleActivityIdentityMatchesSpecificActivityAliases() {
+        let plan = makePlan(
+            templateName: "Bouldering + Strength",
+            sessionType: .mixed,
+            focusAreas: ["Bouldering", "Upper Strength"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .sportPractice,
+                    title: "Limit Bouldering",
+                    detail: "Focused attempts",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing", "Power"],
+                    durationMinutes: 35,
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertTrue(plan.containsVisibleActivityIdentity(matching: ["Climbing", "Bouldering", "Climb"]))
+        XCTAssertFalse(plan.containsVisibleActivityIdentity(matching: ["Cycling", "Bike"]))
+    }
+
+    func testRequestReportsMissingExplicitActivityIdentityFromPlanStructure() {
+        let request = makeRequest(
+            selectedWorkoutTypes: [.strength, .cardio],
+            cardioTypes: [.climbing],
+            availableDays: 3
+        )
+        let genericStrengthPlan = makePlan(
+            templateName: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Upper-body lifting",
+                    activityTypeName: "Strength",
+                    activityTags: ["Upper"],
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertEqual(request.missingVisibleActivityIdentityDescriptions(in: genericStrengthPlan), ["Climbing"])
+    }
+
     private func makeGoalSuggestion(
         title: String,
         goalKindRaw: String = WorkoutGoal.GoalKind.frequency.rawValue,
@@ -686,6 +745,45 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             notes: nil,
             targetDateISO8601: nil,
             checkInCadenceDays: nil
+        )
+    }
+
+    private func makePlan(
+        templateName: String,
+        sessionType: WorkoutMode,
+        focusAreas: [String],
+        blocks: [WorkoutPlan.TrainingBlock]
+    ) -> WorkoutPlan {
+        WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    name: templateName,
+                    sessionType: sessionType,
+                    focusAreas: focusAreas,
+                    targetMuscleGroups: [],
+                    exercises: [],
+                    blocks: blocks,
+                    estimatedDurationMinutes: 45,
+                    order: 0,
+                    notes: "Test template"
+                )
+            ],
+            planIntent: WorkoutPlan.PlanIntent(
+                primaryFocus: "Test",
+                sessionAllocation: "One test session",
+                summary: "I built this around the requested activity."
+            ),
+            rationale: "Test rationale",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy,
+            modalityProgression: WorkoutPlan.ModalityProgression(
+                focus: .mixed,
+                weeklyProgression: "Repeat and refine.",
+                targets: []
+            ),
+            warnings: nil
         )
     }
 
