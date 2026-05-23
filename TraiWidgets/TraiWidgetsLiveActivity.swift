@@ -122,7 +122,7 @@ private struct LockScreenWorkoutView: View {
             return firstWord
         }
 
-        return "Current set"
+        return "Current"
     }
 
     private var mediumFamilyBody: some View {
@@ -157,7 +157,7 @@ private struct LockScreenWorkoutView: View {
                                 .font(.caption2)
                                 .foregroundStyle(LiveActivityTheme.textSecondary)
                                 .lineLimit(1)
-                            Text("Current set")
+                            Text("Current")
                                 .font(.caption2)
                                 .foregroundStyle(LiveActivityTheme.textSecondary)
                                 .lineLimit(1)
@@ -608,6 +608,25 @@ extension TraiWorkoutAttributes.ContentState {
             nextExercise: "Lateral Raises"
         )
     }
+
+    static var mixedActivity: TraiWorkoutAttributes.ContentState {
+        TraiWorkoutAttributes.ContentState(
+            elapsedSeconds: 1240,
+            currentExercise: "Climbing Technique Practice",
+            currentEquipment: nil,
+            completedSets: 0,
+            totalSets: 0,
+            heartRate: 118,
+            isPaused: false,
+            totalVolumeKg: nil,
+            totalVolumeLbs: nil,
+            nextExercise: "Mobility Flow",
+            progressCompleted: 1,
+            progressTotal: 3,
+            progressLabel: "items",
+            supportsSetShortcut: false
+        )
+    }
 }
 
 #if DEBUG
@@ -622,6 +641,10 @@ struct TraiWidgetsLiveActivity_Previews: PreviewProvider {
                 TraiWorkoutAttributes.preview
                     .previewContext(TraiWorkoutAttributes.ContentState.paused, viewKind: .content)
                     .previewDisplayName("Paused")
+
+                TraiWorkoutAttributes.preview
+                    .previewContext(TraiWorkoutAttributes.ContentState.mixedActivity, viewKind: .content)
+                    .previewDisplayName("Mixed Activity")
             }
         }
     }
