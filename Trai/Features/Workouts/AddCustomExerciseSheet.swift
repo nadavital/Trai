@@ -30,7 +30,7 @@ struct AddCustomExerciseSheet: View {
     @State private var savedActivityGroups: [String] = []
     @State private var isAddingActivityGroup = false
     @State private var newActivityGroupText = ""
-    @State private var didChooseTrackingTemplate = false
+    @State private var didCustomizeTrackingFields = false
 
     // AI Analysis state
     @State private var aiService = AIService()
@@ -59,13 +59,13 @@ struct AddCustomExerciseSheet: View {
                     exerciseSetupCard
                         .traiCard(cornerRadius: 16)
 
-                    categoryDisclosure
+                    trackingDisclosure
                         .traiCard(cornerRadius: 16)
 
                     targetDisclosure
                         .traiCard(cornerRadius: 16)
 
-                    trackingDisclosure
+                    detailsDisclosure
                         .traiCard(cornerRadius: 16)
                 }
                 .padding(.horizontal, 16)
@@ -88,7 +88,7 @@ struct AddCustomExerciseSheet: View {
                             resolvedActivityTypeName,
                             resolvedActivityAliases,
                             primaryMuscleGroup,
-                            selectedCategory,
+                            resolvedExerciseCategory,
                             secondaryMuscleGroups,
                             Array(selectedTargets).sorted(),
                             orderedSelectedTrackingFields
@@ -288,24 +288,6 @@ struct AddCustomExerciseSheet: View {
 
     // MARK: - Category Selector
 
-    private var categoryPickerContent: some View {
-        FlowLayout(spacing: 8) {
-            ForEach(Exercise.Category.userFacingCases) { category in
-                CategoryButton(
-                    category: category,
-                    isSelected: category.suggestionCategories.contains(selectedCategory)
-                ) {
-                    withAnimation(.snappy(duration: 0.2)) {
-                        selectedCategory = category
-                        didChooseTrackingTemplate = true
-                        resetDefaultsForSelectedCategory()
-                        HapticManager.selectionChanged()
-                    }
-                }
-            }
-        }
-    }
-
     // MARK: - Target Selector
 
     private var targetPickerContent: some View {
@@ -352,7 +334,7 @@ struct AddCustomExerciseSheet: View {
 
     private var trackingFieldPickerContent: some View {
         FlowLayout(spacing: 8) {
-            ForEach(Exercise.trackingFieldOptions(for: selectedCategory)) { field in
+            ForEach(Exercise.TrackingField.userConfigurableCases) { field in
                 TargetButton(
                     title: trackingFieldTitle(field),
                     icon: field.iconName,
@@ -365,26 +347,11 @@ struct AddCustomExerciseSheet: View {
                         } else if !isTrackingFieldDisabled(field) {
                             selectedTrackingFields.insert(field)
                         }
+                        didCustomizeTrackingFields = true
+                        updateCategoryFromTrackingFields()
                         HapticManager.selectionChanged()
                     }
                 }
-            }
-        }
-    }
-
-    private var categoryDisclosure: some View {
-        collapsibleManualSection(
-            isExpanded: $isCategoryExpanded,
-            title: "Item Type",
-            icon: "square.grid.2x2",
-            summary: selectedCategory.userFacingEquivalent.displayName
-        ) {
-            VStack(alignment: .leading, spacing: 14) {
-                categoryPickerContent
-
-                Divider()
-
-                activityGroupPickerContent
             }
         }
     }
@@ -393,7 +360,7 @@ struct AddCustomExerciseSheet: View {
         collapsibleManualSection(
             isExpanded: $isTargetsExpanded,
             title: "Targets",
-            icon: selectedCategory.iconName,
+            icon: resolvedExerciseCategory.iconName,
             summary: selectedTargets.isEmpty ? "None selected" : selectedTargets.sorted().prefix(3).joined(separator: ", ")
         ) {
             targetPickerContent
@@ -408,6 +375,17 @@ struct AddCustomExerciseSheet: View {
             summary: orderedSelectedTrackingFields.map(trackingFieldTitle).joined(separator: ", ")
         ) {
             trackingFieldPickerContent
+        }
+    }
+
+    private var detailsDisclosure: some View {
+        collapsibleManualSection(
+            isExpanded: $isCategoryExpanded,
+            title: "Details",
+            icon: resolvedExerciseCategory.iconName,
+            summary: resolvedActivityTypeName
+        ) {
+            activityGroupPickerContent
         }
     }
 
@@ -525,7 +503,7 @@ struct AddCustomExerciseSheet: View {
     }
 
     private var secondaryMuscleGroups: [String]? {
-        guard selectedCategory == .strength else { return nil }
+        guard resolvedExerciseCategory == .strength else { return nil }
         let secondary = selectedMuscleTargets.dropFirst().map(\.rawValue)
         if !secondary.isEmpty {
             return Array(secondary)
@@ -546,8 +524,8 @@ struct AddCustomExerciseSheet: View {
     }
 
     private var orderedSelectedTrackingFields: [Exercise.TrackingField] {
-        let selected = Exercise.trackingFieldOptions(for: selectedCategory).filter { selectedTrackingFields.contains($0) }
-        return Exercise.normalizedTrackingFields(selected, for: selectedCategory)
+        let selected = Exercise.TrackingField.userConfigurableCases.filter { selectedTrackingFields.contains($0) }
+        return Exercise.normalizedTrackingFields(selected, for: resolvedExerciseCategory)
     }
 
     private func isTrackingFieldDisabled(_ field: Exercise.TrackingField) -> Bool {
@@ -559,7 +537,7 @@ struct AddCustomExerciseSheet: View {
     private var resolvedActivityTypeName: String {
         let explicit = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard explicit.isEmpty else { return explicit }
-        return Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory)
+        return Exercise.defaultActivityTypeName(for: exerciseName, category: resolvedExerciseCategory)
     }
 
     private var resolvedActivityAliases: [String] {
@@ -570,7 +548,7 @@ struct AddCustomExerciseSheet: View {
 
     private var visibleTargetOptions: [String] {
         let defaults = Exercise.targetOptions(
-            for: selectedCategory,
+            for: resolvedExerciseCategory,
             activityTypeName: resolvedActivityTypeName,
             exerciseName: exerciseName
         )
@@ -587,9 +565,9 @@ struct AddCustomExerciseSheet: View {
     }
 
     private var defaultActivityGroupOptions: [String] {
-        let category = selectedCategory.userFacingEquivalent
+        let category = resolvedExerciseCategory.userFacingEquivalent
         var options = [
-            Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory),
+            Exercise.defaultActivityTypeName(for: exerciseName, category: resolvedExerciseCategory),
             category.displayName
         ]
 
@@ -613,6 +591,13 @@ struct AddCustomExerciseSheet: View {
         }
 
         return options
+    }
+
+    private var resolvedExerciseCategory: Exercise.Category {
+        if didCustomizeTrackingFields {
+            return categoryInferredFromTrackingFields()
+        }
+        return selectedCategory.userFacingEquivalent
     }
 
     private func resetDefaultsForSelectedCategory() {
@@ -671,8 +656,54 @@ struct AddCustomExerciseSheet: View {
         selectActivityGroup(group)
     }
 
+    private func updateCategoryFromTrackingFields() {
+        let category = categoryInferredFromTrackingFields()
+        guard category != selectedCategory else { return }
+        selectedCategory = category
+        if shouldReplaceDefaultActivityName {
+            applyDefaultActivityTypeName()
+        }
+    }
+
+    private func categoryInferredFromTrackingFields() -> Exercise.Category {
+        let fields = selectedTrackingFields
+
+        if fields.contains(.sets) || fields.contains(.weight) {
+            if fields.contains(.duration) || fields.contains(.distance) {
+                return .custom
+            }
+            return .strength
+        }
+
+        if fields.contains(.distance) {
+            return .cardio
+        }
+
+        if fields.contains(.reps), fields.contains(.duration) {
+            if selectedCategory.userFacingEquivalent == .sportPractice {
+                return .sportPractice
+            }
+            return .conditioning
+        }
+
+        if fields == Set([.duration, .notes]) {
+            switch selectedCategory.userFacingEquivalent {
+            case .recovery, .mobility:
+                return selectedCategory.userFacingEquivalent
+            default:
+                return .mobility
+            }
+        }
+
+        if fields == Set([.notes]) {
+            return .recovery
+        }
+
+        return selectedCategory.userFacingEquivalent
+    }
+
     private func inferTrackingTemplateIfNeeded() {
-        guard !didChooseTrackingTemplate else { return }
+        guard !didCustomizeTrackingFields else { return }
         let inferredCategory = [activityTypeName, exerciseName]
             .compactMap(Exercise.Category.normalized(from:))
             .first?
@@ -697,11 +728,11 @@ struct AddCustomExerciseSheet: View {
     }
 
     private func trackingFieldTitle(_ field: Exercise.TrackingField) -> String {
-        if field == .sets, selectedCategory != .strength {
+        if field == .sets, resolvedExerciseCategory != .strength {
             return "Segments"
         }
         guard field == .reps else { return field.displayName }
-        switch selectedCategory {
+        switch resolvedExerciseCategory {
         case .cardio, .mobility, .flexibility, .recovery:
             return "Reps"
         case .conditioning:
@@ -757,40 +788,6 @@ struct AddCustomExerciseSheet: View {
             result.append(trimmed)
         }
         return result
-    }
-}
-
-// MARK: - Category Button
-
-private struct CategoryButton: View {
-    let category: Exercise.Category
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            label
-                .padding(.horizontal, 12)
-                .frame(height: 38)
-                .frame(maxWidth: 180)
-                .background(
-                    isSelected ? Color.accentColor.opacity(0.18) : Color(.tertiarySystemFill),
-                    in: Capsule()
-                )
-                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var label: some View {
-        HStack(spacing: 6) {
-            Image(systemName: category.iconName)
-                .font(.traiLabel(12))
-            Text(category.displayName)
-                .font(.traiLabel(12))
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
     }
 }
 
