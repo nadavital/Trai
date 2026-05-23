@@ -94,12 +94,12 @@ final class LiveWorkoutEntry {
 
     /// Whether this is a cardio exercise
     var isCardio: Bool {
-        exerciseType == "cardio"
+        resolvedExerciseCategory == .cardio
     }
 
     /// Whether this is a strength exercise
     var isStrength: Bool {
-        exerciseType == "strength"
+        resolvedExerciseCategory == .strength
     }
 
     /// Whether this is a non-strength, non-cardio activity item.
@@ -215,27 +215,7 @@ final class LiveWorkoutEntry {
         if let kind = activityKind {
             return kind.iconName
         }
-
-        switch exerciseType {
-        case "strength":
-            return "dumbbell.fill"
-        case "cardio":
-            return "figure.run"
-        case "conditioning":
-            return "bolt.heart.fill"
-        case "mobility":
-            return "figure.mind.and.body"
-        case "skill":
-            return "figure.climbing"
-        case "sportPractice":
-            return "sportscourt.fill"
-        case "recovery":
-            return "heart.text.square.fill"
-        case "flexibility":
-            return "figure.cooldown"
-        default:
-            return "list.bullet.rectangle"
-        }
+        return resolvedExerciseCategory.iconName
     }
 
     init(exercise: Exercise, orderIndex: Int) {
@@ -266,11 +246,15 @@ final class LiveWorkoutEntry {
 }
 
 extension LiveWorkoutEntry {
+    var resolvedExerciseCategory: Exercise.Category {
+        (Exercise.Category.normalized(from: exerciseType) ?? .custom).userFacingEquivalent
+    }
+
     var resolvedActivityCategory: Exercise.Category {
         if let category = activityKind?.exerciseCategoryFallback.userFacingEquivalent {
             return category
         }
-        return (Exercise.Category.normalized(from: exerciseType) ?? .custom).userFacingEquivalent
+        return resolvedExerciseCategory
     }
 }
 

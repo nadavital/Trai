@@ -204,7 +204,15 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertEqual(userFacingCategory.exerciseCategory, .sportPractice)
 
         let liveEntry = LiveWorkoutEntry(exerciseName: "Padel", orderIndex: 0, exerciseType: "sport")
+        XCTAssertFalse(liveEntry.isCardio)
+        XCTAssertFalse(liveEntry.isStrength)
+        XCTAssertTrue(liveEntry.isGeneralActivity)
+        XCTAssertEqual(liveEntry.activityIconName, Exercise.Category.sportPractice.iconName)
         XCTAssertEqual(liveEntry.trackingFields, [.duration, .reps, .notes])
+
+        let runningEntry = LiveWorkoutEntry(exerciseName: "Outdoor Run", orderIndex: 1, exerciseType: "running")
+        XCTAssertTrue(runningEntry.isCardio)
+        XCTAssertEqual(runningEntry.activityIconName, Exercise.Category.cardio.iconName)
     }
 
     func testRepCountActivitySessionDoesNotBecomeStrength() {
