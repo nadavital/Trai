@@ -357,6 +357,36 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(metadata["activity_duration_minutes"] as? Int, 20)
     }
 
+    func testHealthKitActivityTypeDoesNotTreatStrengthRowsAsRowing() {
+        let workout = LiveWorkout(name: "Custom Pull", workoutType: .custom)
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Seated Cable Row",
+            orderIndex: 0,
+            exerciseType: "strength"
+        )
+        entry.addSet(LiveWorkoutEntry.SetData(reps: 10, weight: .zero, completed: true))
+        workout.entries = [entry]
+
+        XCTAssertEqual(HealthKitService.healthKitActivityType(for: workout), .other)
+    }
+
+    func testHealthKitActivityTypeUsesActivityIdentityForFlexibleMixedWorkouts() {
+        let workout = LiveWorkout(name: "Easy Cardio", workoutType: .mixed)
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Outdoor Run",
+            orderIndex: 0,
+            exerciseType: "cardio"
+        )
+        entry.activityTypeName = "Running"
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 1_800, distanceMeters: 4_000)
+        ]
+        entry.completedAt = Date()
+        workout.entries = [entry]
+
+        XCTAssertEqual(HealthKitService.healthKitActivityType(for: workout), .running)
+    }
+
     func testRepsOnlyActivitySegmentCountsAsLoggedData() {
         let workout = LiveWorkout(name: "Conditioning", workoutType: .hiit)
         let entry = LiveWorkoutEntry(

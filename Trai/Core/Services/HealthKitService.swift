@@ -294,25 +294,21 @@ final class HealthKitService {
     func saveLiveWorkout(_ workout: LiveWorkout) async throws {
         guard let completedAt = workout.completedAt else { return }
 
-        let activityType = healthKitActivityType(for: workout)
-
-        // Calculate estimated calories (rough estimate based on duration and intensity)
-        let durationMinutes = workout.duration / 60
-        let estimatedCalories = durationMinutes * 5.0 // ~5 cal/min for strength training
-
         let metadata = Self.liveWorkoutMetadata(for: workout)
 
         _ = try await saveWorkout(
-            type: activityType,
+            type: Self.healthKitActivityType(for: workout),
             startDate: workout.startedAt,
             endDate: completedAt,
             duration: workout.duration,
-            totalEnergyBurned: estimatedCalories,
+            totalEnergyBurned: workout.healthKitCalories,
             metadata: metadata
         )
     }
 
-    private func healthKitActivityType(for workout: LiveWorkout) -> HKWorkoutActivityType {
+    static func healthKitActivityType(for workout: LiveWorkout) -> HKWorkoutActivityType {
+        let inferredActivityType = inferredHealthKitActivityType(for: workout)
+
         switch workout.type {
         case .strength:
             return .traditionalStrengthTraining
@@ -329,11 +325,17 @@ final class HealthKitService {
         case .mobility, .recovery:
             return .cooldown
         case .mixed:
-            return .functionalStrengthTraining
+            return workout.entrySummaryStats.strengthEntryCount > 0
+                ? .functionalStrengthTraining
+                : inferredActivityType ?? .other
         case .cardio, .custom:
             break
         }
 
+        return inferredActivityType ?? (workout.type == .cardio ? .mixedCardio : .other)
+    }
+
+    private static func inferredHealthKitActivityType(for workout: LiveWorkout) -> HKWorkoutActivityType? {
         let semanticTokens = ([workout.name] + workout.focusAreas + (workout.entries ?? []).flatMap { entry in
             [entry.exerciseName, entry.activityTypeName] + entry.targetTags
         })
@@ -355,7 +357,7 @@ final class HealthKitService {
         if semanticTokens.contains("walk") || semanticTokens.contains("hike") {
             return .walking
         }
-        if semanticTokens.contains("row") {
+        if semanticTokens.contains("rowing") || semanticTokens.contains("rower") {
             return .rowing
         }
         if semanticTokens.contains("yoga") {
@@ -364,15 +366,7 @@ final class HealthKitService {
         if semanticTokens.contains("pilates") {
             return .pilates
         }
-
-        switch workout.type {
-        case .cardio:
-            return .mixedCardio
-        case .custom:
-            return .other
-        case .strength, .hiit, .climbing, .yoga, .pilates, .flexibility, .mobility, .mixed, .recovery:
-            return .other
-        }
+        return nil
     }
 
     // MARK: - Nutrition
