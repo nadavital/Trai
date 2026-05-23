@@ -243,16 +243,6 @@ private struct ExerciseManagementRow: View {
             }
 
             Spacer()
-
-            // Custom badge
-            Text("Custom")
-                .font(.caption2)
-                .fontWeight(.medium)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.purple.opacity(0.15))
-                .foregroundStyle(.purple)
-                .clipShape(.capsule)
         }
         .padding(.vertical, 4)
     }

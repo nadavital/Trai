@@ -741,25 +741,63 @@ struct ExerciseListView: View {
         let activityTypes = activityTypesForFilterChips
 
         return VStack(spacing: 0) {
-            // Row 1: Category filters
+            if !activityTypes.isEmpty && selectedMuscleGroup == nil {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        FilterChip(
+                            label: "All",
+                            isSelected: selectedCategory == nil && selectedMuscleGroup == nil && selectedActivityTypeFilter == nil
+                        ) {
+                            selectedCategory = nil
+                            selectedMuscleGroup = nil
+                            selectedActivityTypeFilter = nil
+                        }
+
+                        ForEach(activityTypes, id: \.self) { activityType in
+                            FilterChip(
+                                label: activityType,
+                                isSelected: selectedActivityTypeFilter == activityType,
+                                isHighlighted: targetActivityTypes.contains { Exercise.normalizedActivityKey($0) == Exercise.normalizedActivityKey(activityType) }
+                            ) {
+                                if selectedActivityTypeFilter == activityType {
+                                    selectedActivityTypeFilter = nil
+                                } else {
+                                    selectedActivityTypeFilter = activityType
+                                    selectedCategory = nil
+                                    selectedMuscleGroup = nil
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                }
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        FilterChip(
+                            label: "All",
+                            isSelected: selectedCategory == nil && selectedMuscleGroup == nil && selectedActivityTypeFilter == nil
+                        ) {
+                            selectedCategory = nil
+                            selectedMuscleGroup = nil
+                            selectedActivityTypeFilter = nil
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                }
+            }
+
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    FilterChip(
-                        label: "All",
-                        isSelected: selectedCategory == nil && selectedMuscleGroup == nil && selectedActivityTypeFilter == nil
-                    ) {
-                        selectedCategory = nil
-                        selectedMuscleGroup = nil
-                        selectedActivityTypeFilter = nil
-                    }
-
                     ForEach(Exercise.Category.userFacingCases) { category in
                         FilterChip(
                             label: category.displayName,
                             icon: category.iconName,
-                            isSelected: selectedCategory == category
+                            isSelected: isCategoryFilterSelected(category)
                         ) {
-                            if selectedCategory == category {
+                            if isCategoryFilterSelected(category) {
                                 selectedCategory = nil
                             } else {
                                 selectedCategory = category
@@ -770,10 +808,10 @@ struct ExerciseListView: View {
                     }
                 }
                 .padding(.horizontal)
-                .padding(.vertical, 8)
+                .padding(.bottom, 8)
             }
 
-            if !activityTypes.isEmpty && selectedMuscleGroup == nil {
+            if !activityTypes.isEmpty && selectedMuscleGroup != nil {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(activityTypes, id: \.self) { activityType in
@@ -824,6 +862,11 @@ struct ExerciseListView: View {
             }
         }
         .background(Color(.secondarySystemBackground))
+    }
+
+    private func isCategoryFilterSelected(_ category: Exercise.Category) -> Bool {
+        guard let selectedCategory else { return false }
+        return !selectedCategory.suggestionCategories.isDisjoint(with: category.suggestionCategories)
     }
 
     // MARK: - Exercise Row
