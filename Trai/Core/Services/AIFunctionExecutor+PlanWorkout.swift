@@ -1003,18 +1003,36 @@ extension AIFunctionExecutor {
             }
         }
 
+        let semanticActivityTags = Self.loggedWorkoutActivityTags(
+            requested: activityTags,
+            exercises: exercises
+        )
+
         // Return suggestion for user approval (don't save yet)
         let suggestion = SuggestedWorkoutLog(
             name: workoutName,
             workoutType: workoutType,
             activityName: activityName,
-            activityTags: activityTags,
+            activityTags: semanticActivityTags.isEmpty ? nil : semanticActivityTags,
             durationMinutes: durationMinutes,
             exercises: exercises,
             notes: notes
         )
 
         return .suggestedWorkoutLog(suggestion)
+    }
+
+    private static func loggedWorkoutActivityTags(
+        requested: [String],
+        exercises: [SuggestedWorkoutLog.LoggedExercise]
+    ) -> [String] {
+        let derived = exercises
+            .filter(\.isActivityLog)
+            .flatMap { exercise in
+                ([exercise.activityTypeName] + (exercise.targetTags ?? []) + [exercise.name])
+                    .compactMap { $0 }
+            }
+        return (requested + derived).dedupedByGoalKey()
     }
 
     private func parseLoggedActivitySegments(_ value: Any?) -> [SuggestedWorkoutLog.LoggedExercise.ActivitySegment] {
@@ -1387,5 +1405,19 @@ extension AIFunctionExecutor {
 private extension String {
     var nilIfEmpty: String? {
         isEmpty ? nil : self
+    }
+}
+
+private extension Array where Element == String {
+    func dedupedByGoalKey() -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in self {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.goalNormalizedKey
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
     }
 }

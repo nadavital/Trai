@@ -826,6 +826,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                             "name": "Padel Drills",
                             "category": "padel drills",
                             "activity_name": "Padel",
+                            "target_tags": ["Footwork", "Reaction"],
                             "tracking_fields": ["duration", "calories", "reps", "notes"],
                             "duration_minutes": 40,
                             "segments": [
@@ -843,6 +844,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             return XCTFail("Expected suggested workout log")
         }
 
+        XCTAssertEqual(workoutLog.activityTags ?? [], ["Padel", "Footwork", "Reaction", "Padel Drills"])
         XCTAssertEqual(exercise.category, "sportPractice")
         XCTAssertEqual(exercise.trackingFields ?? [], ["duration", "reps", "notes"])
         XCTAssertFalse(exercise.trackingFields?.contains("calories") ?? false)
