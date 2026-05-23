@@ -41,6 +41,15 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.focusAreas, ["Bouldering", "Grip endurance"])
     }
 
+    func testTrainingBlockPrimitiveFallbacksUseUserFacingLabels() {
+        XCTAssertEqual(WorkoutPlan.TrainingBlock.BlockKind.skill.displayName, "Sport")
+        XCTAssertEqual(WorkoutPlan.TrainingBlock.BlockKind.sportPractice.displayName, "Sport")
+        XCTAssertEqual(WorkoutPlan.TrainingBlock.BlockKind.custom.displayName, "Activity")
+        XCTAssertEqual(WorkoutPlan.TrainingBlock.Role.accessory.displayName, "Support")
+        XCTAssertEqual(WorkoutPlan.TrainingBlock.Role.finisher.displayName, "Finish")
+        XCTAssertEqual(WorkoutPlan.TrainingBlock.Role.cooldown.displayName, "Cool down")
+    }
+
     func testCreateStartWorkoutFromTemplateMapsMuscleGroups() {
         let template = WorkoutPlan.WorkoutTemplate(
             name: "Upper Push",

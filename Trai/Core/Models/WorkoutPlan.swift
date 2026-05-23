@@ -370,11 +370,11 @@ struct WorkoutPlan: Codable, Equatable {
                 case .strength: "Strength"
                 case .cardio: "Cardio"
                 case .conditioning: "Conditioning"
-                case .skill: "Skill"
+                case .skill: "Sport"
                 case .mobility: "Mobility"
                 case .recovery: "Recovery"
-                case .sportPractice: "Practice"
-                case .custom: "Block"
+                case .sportPractice: "Sport"
+                case .custom: "Activity"
                 }
             }
 
@@ -426,11 +426,11 @@ struct WorkoutPlan: Codable, Equatable {
             nonisolated var displayName: String {
                 switch self {
                 case .main: "Main"
-                case .warmup: "Warmup"
-                case .accessory: "Accessory"
-                case .finisher: "Finisher"
-                case .cooldown: "Cooldown"
-                case .custom: "Custom"
+                case .warmup: "Warm-up"
+                case .accessory: "Support"
+                case .finisher: "Finish"
+                case .cooldown: "Cool down"
+                case .custom: "Custom placement"
                 }
             }
 
