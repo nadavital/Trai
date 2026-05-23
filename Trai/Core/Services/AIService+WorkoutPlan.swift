@@ -153,29 +153,13 @@ extension AIService {
                     reasoningLevel: .low
                 )
                 validatedPlan = try validateGeneratedWorkoutPlan(repairedEnvelope.plan, request: request)
-                let repairedGoals = WorkoutGoalSuggestion.validatedUnique(
-                    repairedEnvelope.goalSuggestions,
-                    allowsWeightGoals: workoutPlanGoalContextHasWeightBaseline(
-                        request: request,
-                        memoryContext: memoryContext,
-                        existingGoals: existingGoals,
-                        userIntent: userIntent
-                    )
-                )
+                let repairedGoals = WorkoutGoalSuggestion.validatedUnique(repairedEnvelope.goalSuggestions)
                 completeAIRequest(requestTicket)
                 log("✅ Successfully parsed workout plan + goals - Split: \(validatedPlan.splitType.displayName), Templates: \(validatedPlan.templates.count), Goals: \(repairedGoals.count)", type: .info)
                 return WorkoutPlanGenerationResult(plan: validatedPlan, goalSuggestions: repairedGoals)
             }
 
-            let goals = WorkoutGoalSuggestion.validatedUnique(
-                envelope.goalSuggestions,
-                allowsWeightGoals: workoutPlanGoalContextHasWeightBaseline(
-                    request: request,
-                    memoryContext: memoryContext,
-                    existingGoals: existingGoals,
-                    userIntent: userIntent
-                )
-            )
+            let goals = WorkoutGoalSuggestion.validatedUnique(envelope.goalSuggestions)
             completeAIRequest(requestTicket)
             log("✅ Successfully parsed workout plan + goals - Split: \(validatedPlan.splitType.displayName), Templates: \(validatedPlan.templates.count), Goals: \(goals.count)", type: .info)
             return WorkoutPlanGenerationResult(plan: validatedPlan, goalSuggestions: goals)
@@ -188,21 +172,6 @@ extension AIService {
             log("Failed to generate workout plan + goals: \(error.localizedDescription)", type: .error)
             throw error
         }
-    }
-
-    private func workoutPlanGoalContextHasWeightBaseline(
-        request: WorkoutPlanGenerationRequest,
-        memoryContext: [String],
-        existingGoals: [String],
-        userIntent: String?
-    ) -> Bool {
-        WorkoutGoalSuggestion.hasWeightBaselineContext(
-            memoryContext
-            + existingGoals
-            + (request.conversationContext ?? [])
-            + (request.specificGoals ?? [])
-            + [request.preferences, userIntent].compactMap { $0 }
-        )
     }
 
     private func validateGeneratedWorkoutPlan(

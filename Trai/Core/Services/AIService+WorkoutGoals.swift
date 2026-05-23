@@ -535,74 +535,19 @@ extension AIService {
             }
 
             let decoded = try JSONDecoder().decode(WorkoutGoalSuggestionResponse.self, from: data)
-            let allowsWeightGoals = WorkoutGoalSuggestion.hasWeightBaselineContext(
-                recentSessions
-                + recentTrainingSummary
-                + exerciseSummaries
-                + memoryContext
-                + existingGoals
-                + [trimmedIntent].compactMap { $0 }
-            )
-            return WorkoutGoalSuggestion.validatedUnique(decoded.suggestions, allowsWeightGoals: allowsWeightGoals)
+            return WorkoutGoalSuggestion.validatedUnique(decoded.suggestions)
         }
     }
 }
 
 extension WorkoutGoalSuggestion {
-    static func validatedUnique(_ suggestions: [WorkoutGoalSuggestion], allowsWeightGoals: Bool = true) -> [WorkoutGoalSuggestion] {
+    static func validatedUnique(_ suggestions: [WorkoutGoalSuggestion]) -> [WorkoutGoalSuggestion] {
         var seenKeys: Set<String> = []
         return suggestions.compactMap { suggestion in
             guard suggestion.isTrackableAndSpecific else { return nil }
-            guard allowsWeightGoals || suggestion.goalKind != .weight else { return nil }
             let key = suggestion.normalizedDeduplicationKey
             guard seenKeys.insert(key).inserted else { return nil }
             return suggestion
-        }
-    }
-
-    static func hasWeightBaselineContext(_ context: [String]) -> Bool {
-        context.contains { rawLine in
-            let line = rawLine.lowercased()
-            guard line.range(
-                of: #"\b\d+(\.\d+)?\s?(kg|kgs|kilograms?|lb|lbs|pounds?)\b"#,
-                options: .regularExpression
-            ) != nil else {
-                return false
-            }
-
-            guard !line.contains("nutrition")
-                && !line.contains("calorie")
-                && !line.contains("protein")
-                && !line.contains("carb")
-                && !line.contains("fat")
-                && !line.contains("body weight")
-                && !line.contains("bodyweight")
-                && !line.contains("current weight")
-                && !line.contains("target weight")
-                && !line.contains("weight loss")
-                && !line.contains("lose weight") else {
-                return false
-            }
-
-            return [
-                "bench",
-                "squat",
-                "deadlift",
-                "press",
-                "row",
-                "curl",
-                "lift",
-                "set",
-                "sets",
-                "rep",
-                "reps",
-                "1rm",
-                "one rep max",
-                "best",
-                "top set",
-                "working weight",
-                "training max"
-            ].contains { line.contains($0) }
         }
     }
 
