@@ -203,9 +203,26 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         )
 
         let directives = request.generationDirectives.joined(separator: " ")
-        XCTAssertTrue(directives.contains("Climbing was explicitly selected"))
-        XCTAssertTrue(directives.contains("real session or meaningful skill/sport block"))
-        XCTAssertTrue(directives.contains("Do not reduce the climbing selection to generic grip exercises alone"))
+        XCTAssertTrue(directives.contains("Preserve explicit activity identities: Climbing"))
+        XCTAssertTrue(directives.contains("real template, meaningful block"))
+        XCTAssertTrue(directives.contains("Do not replace a specific selected activity with only generic support work"))
+        XCTAssertFalse(directives.contains("Climbing was explicitly selected"))
+    }
+
+    func testCustomActivitySelectionUsesGenericIdentityDirective() {
+        let request = makeRequest(
+            workoutType: .mixed,
+            selectedWorkoutTypes: [.strength, .cardio],
+            preferences: "I want strength plus weekly pickleball.",
+            conversationContext: ["Requested training styles: Strength, Pickleball"],
+            customWorkoutType: "Pickleball",
+            availableDays: 3
+        )
+
+        let directives = request.generationDirectives.joined(separator: " ")
+        XCTAssertTrue(directives.contains("Preserve explicit activity identities: Pickleball"))
+        XCTAssertTrue(directives.contains("goal scope"))
+        XCTAssertFalse(directives.contains("custom focus"))
     }
 
     func testWorkoutPlanPromptSelfChecksSelectedModalities() {
@@ -837,6 +854,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         preferences: String? = nil,
         conversationContext: [String]? = nil,
         cardioTypes: [WorkoutPlanGenerationRequest.CardioType]? = nil,
+        customWorkoutType: String? = nil,
         availableDays: Int? = 4
     ) -> WorkoutPlanGenerationRequest {
         WorkoutPlanGenerationRequest(
@@ -853,7 +871,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             timePerWorkout: timePerWorkout,
             preferredSplit: nil,
             cardioTypes: cardioTypes,
-            customWorkoutType: nil,
+            customWorkoutType: customWorkoutType,
             customExperience: nil,
             customEquipment: nil,
             customCardioType: nil,

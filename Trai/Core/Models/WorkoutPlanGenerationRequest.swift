@@ -186,13 +186,11 @@ struct WorkoutPlanGenerationRequest {
             directives.append("Every explicitly selected training style must remain visible in the returned plan as a dedicated template or meaningful block unless the personalization brief explicitly says that style should only be background support or avoided.")
         }
 
-        if let cardioTypes, cardioTypes.contains(.climbing) {
-            directives.append("Climbing was explicitly selected. Include climbing or bouldering as a real session or meaningful skill/sport block with activityTypeName such as Climbing or Bouldering unless the personalization brief explicitly says climbing should only be supportive grip work. Do not reduce the climbing selection to generic grip exercises alone.")
-        }
-
-        if let customWorkoutType,
-           !customWorkoutType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            directives.append("The custom focus must be preserved as user-facing activity identity in template focusAreas, block activityTypeName, block activityTags, or goal linkedActivityTags when relevant.")
+        let explicitActivityIdentities = requiredVisibleActivityIdentityGroups
+            .compactMap(\.first)
+        if !explicitActivityIdentities.isEmpty {
+            directives.append("Preserve explicit activity identities: \(explicitActivityIdentities.joined(separator: ", ")). Each one should appear as a real template, meaningful block, block activityTypeName, block activityTags, focusArea, exercise/activity name, or goal scope unless the personalization brief explicitly says that activity should only be supportive or avoided.")
+            directives.append("Do not replace a specific selected activity with only generic support work. For example, preserve the named activity itself instead of reducing it to generic strength accessories, conditioning, mobility, or grip work.")
         }
 
         if let preferredSplit, preferredSplit != .letTraiDecide {
