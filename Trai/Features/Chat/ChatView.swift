@@ -395,7 +395,7 @@ struct ChatView: View {
         )
     }
 
-    private var hasPendingStartupActions: Bool {
+    var hasPendingStartupActions: Bool {
         pendingPlanReviewRequest
             || pendingWorkoutPlanReviewRequest
             || !pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

@@ -942,7 +942,6 @@ extension AIFunctionExecutor {
                 let hasActivityMetrics = exerciseDurationMinutes != nil
                     || distanceMeters != nil
                     || exerciseNotes != nil
-                    || !trackingFields.isEmpty
                     || !segments.isEmpty
                 let resolvedCategory = Exercise.Category.normalized(from: category)?.userFacingEquivalent
                     ?? exerciseActivityName.flatMap { Exercise.Category.normalized(from: $0)?.userFacingEquivalent }
@@ -954,12 +953,7 @@ extension AIFunctionExecutor {
                     ).map(\.rawValue)
                 }
 
-                if !sets.isEmpty
-                    || exerciseDurationMinutes != nil
-                    || distanceMeters != nil
-                    || exerciseNotes != nil
-                    || !trackingFields.isEmpty
-                    || !segments.isEmpty {
+                if !sets.isEmpty || hasActivityMetrics || (resolvedCategory != nil && resolvedCategory != .strength) {
                     exercises.append(SuggestedWorkoutLog.LoggedExercise(
                         name: name,
                         category: resolvedCategory?.rawValue ?? category,
@@ -983,8 +977,16 @@ extension AIFunctionExecutor {
             activityTags: activityTags,
             durationMinutes: durationMinutes,
             notes: notes
-           ) {
+            ) {
             exercises.append(fallbackExercise)
+        }
+        guard !exercises.isEmpty else {
+            return .dataResponse(FunctionResult(
+                name: "log_workout",
+                response: [
+                    "error": "Missing completed workout details. Include completed sets for strength work or a non-strength activity item with category, activity_name, and any known duration, distance, segments, or notes."
+                ]
+            ))
         }
 
         let semanticActivityTags = Self.loggedWorkoutActivityTags(

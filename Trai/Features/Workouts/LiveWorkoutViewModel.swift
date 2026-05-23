@@ -405,10 +405,6 @@ final class LiveWorkoutViewModel {
                 .replacingOccurrences(of: "_", with: "")
                 .replacingOccurrences(of: " ", with: "")
 
-            if let category = Exercise.Category.normalized(from: focus) {
-                result.formUnion(category.suggestionCategories)
-            }
-
             for category in Exercise.Category.allCases {
                 let normalizedRawValue = category.rawValue
                     .lowercased()
@@ -423,50 +419,6 @@ final class LiveWorkoutViewModel {
                 if normalized == normalizedRawValue || normalized == normalizedDisplayName {
                     result.formUnion(category.suggestionCategories)
                 }
-            }
-
-            if normalized.contains("cardio")
-                || normalized.contains("run")
-                || normalized.contains("cycle")
-                || normalized.contains("bike")
-                || normalized.contains("swim")
-                || normalized.contains("row")
-                || normalized.contains("walk")
-                || normalized.contains("zone2")
-                || normalized.contains("endurance") {
-                result.insert(.cardio)
-            }
-
-            if normalized.contains("conditioning")
-                || normalized.contains("hiit")
-                || normalized.contains("interval")
-                || normalized.contains("circuit") {
-                result.insert(.conditioning)
-            }
-
-            if normalized.contains("climb")
-                || normalized.contains("boulder")
-                || normalized.contains("sport")
-                || normalized.contains("skill")
-                || normalized.contains("technique") {
-                result.formUnion(Exercise.Category.sportPractice.suggestionCategories)
-            }
-
-            if normalized.contains("mobility") {
-                result.insert(.mobility)
-            }
-
-            if normalized.contains("flexibility")
-                || normalized.contains("stretch")
-                || normalized.contains("yoga")
-                || normalized.contains("pilates") {
-                result.insert(.flexibility)
-            }
-
-            if normalized.contains("recovery")
-                || normalized.contains("cooldown")
-                || normalized.contains("restorative") {
-                result.insert(.recovery)
             }
         }
     }
@@ -1965,12 +1917,19 @@ final class LiveWorkoutViewModel {
 
     private func createExerciseHistoryEntries() {
         guard let modelContext else { return }
-        let historyDescriptor = FetchDescriptor<ExerciseHistory>()
+        let performedAt = workout.completedAt ?? Date()
+        let historyWindowStart = workout.startedAt.addingTimeInterval(-60)
+        let historyWindowEnd = performedAt.addingTimeInterval(60)
+        let historyDescriptor = FetchDescriptor<ExerciseHistory>(
+            predicate: #Predicate<ExerciseHistory> { history in
+                history.performedAt >= historyWindowStart && history.performedAt <= historyWindowEnd
+            }
+        )
         let existingHistories = (try? modelContext.fetch(historyDescriptor)) ?? []
         let historiesToInsert = ExerciseHistory.recordsToInsert(
             from: workout,
             existingHistories: existingHistories,
-            performedAt: workout.completedAt ?? Date()
+            performedAt: performedAt
         )
 
         for history in historiesToInsert {
@@ -2119,7 +2078,7 @@ final class LiveWorkoutViewModel {
                 || entry.activitySegments.contains { $0.hasLoggedData }
                 || !entry.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
-        return entry.sets.contains { hasLoggedSetData($0) }
+        return entry.sets.contains { !$0.isWarmup && $0.completed && hasLoggedSetData($0) }
     }
 
     private func isEntryCompleteForLiveActivity(_ entry: LiveWorkoutEntry) -> Bool {
@@ -2203,8 +2162,8 @@ final class LiveWorkoutViewModel {
 
         // Prefer latest logged working set; if none, fall back to the latest logged set.
         // Use both kg and lbs values to avoid rounding errors (200 lbs → 199 bug)
-        let currentSet = currentEntry?.sets.last { !$0.isWarmup && hasLoggedSetData($0) }
-            ?? currentEntry?.sets.last { hasLoggedSetData($0) }
+        let currentSet = currentEntry?.sets.last { !$0.isWarmup && $0.completed && hasLoggedSetData($0) }
+            ?? currentEntry?.sets.last { $0.completed && hasLoggedSetData($0) }
         let currentWeightKg = currentSet?.weightKg
         let currentWeightLbs = currentSet?.weightLbs
         let currentReps = currentSet?.reps

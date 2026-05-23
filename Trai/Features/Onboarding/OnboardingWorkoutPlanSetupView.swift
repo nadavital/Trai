@@ -1149,6 +1149,7 @@ struct OnboardingWorkoutPlanSetupView: View {
                 sessionType: $editorSessionType,
                 focusAreasText: $editorFocusAreasText,
                 selectedMuscles: $editorSelectedMuscles,
+                hasPreservedTargetGroups: false,
                 onCancel: { showingManualDayEditor = false },
                 onConfirm: saveManualDayEditor
             )

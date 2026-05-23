@@ -43,6 +43,7 @@ struct ProfileView: View {
     @State private var latencyProbeEntries: [String] = []
     @State private var tabActivationPolicy = TabActivationPolicy(minimumDwellMilliseconds: 0)
     @State private var presentedAccountSetupContext: AccountSetupContext?
+    @State private var workoutPlanSaveError: WorkoutPlanSaveError?
 
     // For navigating to Trai tab with plan review
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
@@ -257,6 +258,13 @@ struct ProfileView: View {
             .sheet(item: $presentedAccountSetupContext) { context in
                 AccountSetupView(context: context)
                     .traiSheetBranding()
+            }
+            .alert(item: $workoutPlanSaveError) { error in
+                Alert(
+                    title: Text("Workout Plan Not Saved"),
+                    message: Text(error.message),
+                    dismissButton: .default(Text("OK"))
+                )
             }
             .onAppear {
                 handleProfileTabSelectionChange(to: appTabSelection.wrappedValue, trackOpen: true)
@@ -813,7 +821,14 @@ struct ProfileView: View {
             )
         }
 
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            workoutPlanSaveError = WorkoutPlanSaveError(message: error.localizedDescription)
+            HapticManager.error()
+            return
+        }
         standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
         showPlanSetupSheet = false
         HapticManager.success()
@@ -857,6 +872,11 @@ struct ProfileView: View {
             existingTitles.insert(titleKey)
         }
     }
+}
+
+private struct WorkoutPlanSaveError: Identifiable {
+    let id = UUID()
+    let message: String
 }
 
 #Preview {

@@ -734,6 +734,10 @@ enum AIFunctionDeclarations {
                                     "type": "number",
                                     "description": "Distance for non-strength activities, if known."
                                 ],
+                                "notes": [
+                                    "type": "string",
+                                    "description": "Per-item notes to preserve details the user gave for this completed exercise or activity."
+                                ],
                                 "segments": [
                                     "type": "array",
                                     "items": [

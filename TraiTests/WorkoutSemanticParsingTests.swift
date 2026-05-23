@@ -1033,6 +1033,63 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(workoutLog.exercises.first?.durationMinutes, 35)
     }
 
+    func testLogWorkoutRejectsStrengthItemWithoutCompletedSets() async {
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
+        let result = await executor.execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "type": "strength",
+                    "name": "Upper lift",
+                    "exercises": [
+                        [
+                            "name": "Bench Press",
+                            "category": "strength",
+                            "tracking_fields": ["sets", "reps", "weight"]
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected log workout error response")
+        }
+
+        XCTAssertEqual(functionResult.response["error"] as? String, "Missing completed workout details. Include completed sets for strength work or a non-strength activity item with category, activity_name, and any known duration, distance, segments, or notes.")
+    }
+
+    func testLogWorkoutKeepsBareNonStrengthActivityAsCompletedSemanticItem() async {
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
+        let result = await executor.execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "type": "climbing",
+                    "name": "Bouldering",
+                    "exercises": [
+                        [
+                            "name": "Bouldering",
+                            "category": "sportPractice",
+                            "activity_name": "Bouldering",
+                            "target_tags": ["Climbing"]
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutLog(let workoutLog) = result,
+              let exercise = workoutLog.exercises.first else {
+            return XCTFail("Expected semantic activity log suggestion")
+        }
+
+        XCTAssertEqual(exercise.category, Exercise.Category.sportPractice.rawValue)
+        XCTAssertEqual(exercise.activityTypeName, "Bouldering")
+        XCTAssertEqual(exercise.targetTags ?? [], ["Climbing"])
+        XCTAssertTrue(exercise.sets.isEmpty)
+    }
+
     func testLogWorkoutStoresNormalizedActivityCategoryAndTrackingFields() async {
         let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
         let result = await executor.execute(
@@ -1131,6 +1188,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(required, ["name", "category"])
         XCTAssertEqual(exercises["minItems"] as? Int, 1)
         XCTAssertEqual(parameters["required"] as? [String], ["name", "type", "exercises"])
+        XCTAssertNotNil((items["properties"] as? [String: Any])?["notes"])
     }
 
     func testLogWorkoutSchemaUsesCurrentWorkoutModes() throws {

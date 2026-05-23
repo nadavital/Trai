@@ -145,7 +145,7 @@ final class UserProfileWorkoutPlanRequestTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(request.requestsCardioAsAccessory)
+        XCTAssertFalse(request.requestsCardioAsAccessory)
         XCTAssertTrue(request.preferences?.contains("Split direction: keep strength primary.") == true)
         XCTAssertTrue(request.specificGoals?.contains { $0.contains("Workout details") } == true)
         XCTAssertTrue(request.conversationContext?.contains {

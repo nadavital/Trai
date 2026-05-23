@@ -40,6 +40,57 @@ struct WorkoutPlanGenerationRequest {
     let injuries: String?             // "bad knee", "lower back issues"
     let preferences: String?          // "I love deadlifts", "hate burpees"
     let conversationContext: [String]? // Labeled notes from the intake conversation
+    let cardioSupportConstraint: CardioSupportConstraint?
+
+    init(
+        name: String,
+        age: Int,
+        gender: UserProfile.Gender,
+        goal: UserProfile.GoalType,
+        activityLevel: UserProfile.ActivityLevel,
+        workoutType: WorkoutType,
+        selectedWorkoutTypes: [WorkoutType]? = nil,
+        experienceLevel: ExperienceLevel? = nil,
+        equipmentAccess: EquipmentAccess? = nil,
+        availableDays: Int? = nil,
+        timePerWorkout: Int? = nil,
+        preferredSplit: PreferredSplit? = nil,
+        cardioTypes: [CardioType]? = nil,
+        customWorkoutType: String? = nil,
+        customExperience: String? = nil,
+        customEquipment: String? = nil,
+        customCardioType: String? = nil,
+        specificGoals: [String]? = nil,
+        weakPoints: [String]? = nil,
+        injuries: String? = nil,
+        preferences: String? = nil,
+        conversationContext: [String]? = nil,
+        cardioSupportConstraint: CardioSupportConstraint? = nil
+    ) {
+        self.name = name
+        self.age = age
+        self.gender = gender
+        self.goal = goal
+        self.activityLevel = activityLevel
+        self.workoutType = workoutType
+        self.selectedWorkoutTypes = selectedWorkoutTypes
+        self.experienceLevel = experienceLevel
+        self.equipmentAccess = equipmentAccess
+        self.availableDays = availableDays
+        self.timePerWorkout = timePerWorkout
+        self.preferredSplit = preferredSplit
+        self.cardioTypes = cardioTypes
+        self.customWorkoutType = customWorkoutType
+        self.customExperience = customExperience
+        self.customEquipment = customEquipment
+        self.customCardioType = customCardioType
+        self.specificGoals = specificGoals
+        self.weakPoints = weakPoints
+        self.injuries = injuries
+        self.preferences = preferences
+        self.conversationContext = conversationContext
+        self.cardioSupportConstraint = cardioSupportConstraint
+    }
 
     /// Whether cardio should be included in the plan
     var includesCardio: Bool {
@@ -62,93 +113,16 @@ struct WorkoutPlanGenerationRequest {
     }
 
     var requestsCardioAsAccessory: Bool {
-        guard includesCardio else { return false }
-        let text = generationContextText
-
-        let supportivePlacementSignals = [
-            "support",
-            "supportive",
-            "supporting",
-            "add-on",
-            "addon",
-            "warmup",
-            "warm-up",
-            "cooldown",
-            "cool-down",
-            "finisher",
-            "at the end",
-            "at end",
-            "after",
-            "after strength",
-            "after lifting",
-            "after one lift",
-            "after a lift",
-            "after my lift",
-            "after my strength",
-            "not a full",
-            "not standalone",
-            "not a dedicated",
-            "end of one",
-            "end of a strength",
-            "end of my strength",
-            "finish with",
-            "add some"
-        ]
-
-        let dedicatedSignals = [
-            "cardio leads",
-            "cardio the main",
-            "dedicated cardio",
-            "cardio day",
-            "race",
-            "5k",
-            "10k",
-            "half marathon",
-            "marathon"
-        ]
-
-        let negatedDedicatedSignals = [
-            "not a dedicated",
-            "not dedicated",
-            "no dedicated",
-            "without a dedicated",
-            "not as a dedicated",
-            "not standalone",
-            "not a standalone",
-            "no standalone"
-        ]
-
-        let hasDedicatedSignal = dedicatedSignals.contains { text.contains($0) }
-        let negatesDedicatedSignal = negatedDedicatedSignals.contains { text.contains($0) }
-
-        return mentionsCardioLikeTraining(text) &&
-            supportivePlacementSignals.contains { text.contains($0) } &&
-            (!hasDedicatedSignal || negatesDedicatedSignal)
+        includesCardio && cardioSupportConstraint != nil
     }
 
     var limitsAccessoryCardioToOneSession: Bool {
-        false
+        guard let maximumPlacements = cardioSupportConstraint?.maximumPlacements else { return false }
+        return maximumPlacements == 1
     }
 
     var supportiveCardioRole: WorkoutPlan.TrainingBlock.Role {
-        guard requestsCardioAsAccessory else { return .main }
-        let text = generationContextText
-        let endPlacementSignals = [
-            "finisher",
-            "at the end",
-            "at end",
-            "after strength",
-            "after lifting",
-            "after one lift",
-            "after a lift",
-            "after my lift",
-            "after my strength",
-            "end of one",
-            "end of a strength",
-            "end of my strength",
-            "finish with"
-        ]
-        return endPlacementSignals.contains { text.contains($0) } ? .finisher : .accessory
+        cardioSupportConstraint?.role ?? .main
     }
 
     var generationDirectives: [String] {
@@ -230,53 +204,17 @@ struct WorkoutPlanGenerationRequest {
         }
     }
 
-    private var generationContextText: String {
-        ([
-            preferences ?? "",
-            injuries ?? "",
-            customWorkoutType ?? "",
-            customCardioType ?? ""
-        ] + (specificGoals ?? []) + (conversationContext ?? []))
-        .joined(separator: " ")
-        .lowercased()
-    }
-
-    private func mentionsCardioLikeTraining(_ text: String) -> Bool {
-        var terms = [
-            "cardio",
-            "conditioning",
-            "endurance",
-            "aerobic",
-            "run",
-            "running",
-            "bike",
-            "cycling",
-            "row",
-            "rowing",
-            "swim",
-            "swimming",
-            "walk",
-            "walking",
-            "hike",
-            "hiking",
-            "intervals"
-        ]
-
-        if let cardioTypes {
-            terms.append(contentsOf: cardioTypes.map { $0.displayName.lowercased() })
-        }
-
-        if let customCardioType {
-            terms.append(customCardioType.lowercased())
-        }
-
-        return terms.contains { term in
-            let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
-            return !trimmed.isEmpty && text.contains(trimmed)
-        }
-    }
-
     // MARK: - Workout Type
+
+    struct CardioSupportConstraint {
+        let role: WorkoutPlan.TrainingBlock.Role
+        let maximumPlacements: Int?
+
+        init(role: WorkoutPlan.TrainingBlock.Role, maximumPlacements: Int? = nil) {
+            self.role = role
+            self.maximumPlacements = maximumPlacements
+        }
+    }
 
     enum WorkoutType: String, CaseIterable, Identifiable, Codable {
         case strength = "strength"

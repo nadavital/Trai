@@ -130,6 +130,8 @@ extension ChatView {
     }
 
     func sendMessage(_ text: String) {
+        guard !isLoading, currentMessageTask == nil, !hasPendingStartupActions else { return }
+
         let hasText = !text.trimmingCharacters(in: .whitespaces).isEmpty
         let capturedImage = selectedImage
         let hasImage = capturedImage != nil
@@ -202,6 +204,7 @@ extension ChatView {
         updateLastActivity()
         retirePendingPlanSuggestionsInCurrentSession()
         currentActivity = launchLabel ?? "Reviewing with Trai..."
+        isLoading = true
 
         let previousMessages = Array(currentSessionMessages.suffix(10))
         let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)

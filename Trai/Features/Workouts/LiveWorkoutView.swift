@@ -629,23 +629,21 @@ struct LiveWorkoutView: View {
             break
         }
 
-        let tokens = (template.focusAreas + template.targetMuscleGroups + [template.name])
-            .joined(separator: " ")
-            .lowercased()
-        if tokens.contains("cardio") || tokens.contains("run") || tokens.contains("cycle") || tokens.contains("row") {
-            append(.cardio)
-        }
-        if tokens.contains("conditioning") || tokens.contains("hiit") || tokens.contains("interval") {
-            append(.conditioning)
-        }
-        if tokens.contains("mobility") || tokens.contains("flexibility") || tokens.contains("stretch") || tokens.contains("yoga") {
-            append(.mobility)
-        }
-        if tokens.contains("recovery") || tokens.contains("cooldown") {
-            append(.recovery)
-        }
-        if tokens.contains("sport") || tokens.contains("climb") || tokens.contains("practice") || tokens.contains("skill") {
-            append(.sportPractice)
+        for block in template.displayBlocks {
+            switch block.kind {
+            case .cardio:
+                append(.cardio)
+            case .conditioning:
+                append(.conditioning)
+            case .mobility:
+                append(.mobility)
+            case .recovery:
+                append(.recovery)
+            case .skill, .sportPractice:
+                append(.sportPractice)
+            case .strength, .custom:
+                continue
+            }
         }
 
         return categories

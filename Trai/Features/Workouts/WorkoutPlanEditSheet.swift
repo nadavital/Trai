@@ -24,6 +24,7 @@ struct WorkoutPlanEditSheet: View {
     @State private var editorSessionType: WorkoutMode = .strength
     @State private var editorFocusAreasText = ""
     @State private var editorSelectedMuscles: Set<LiveWorkout.MuscleGroup> = []
+    @State private var editorPreservedTargetGroups: [String] = []
     @State private var editedPlan: WorkoutPlan
     @State private var hasPendingChanges = false
 
@@ -79,6 +80,7 @@ struct WorkoutPlanEditSheet: View {
                 sessionType: $editorSessionType,
                 focusAreasText: $editorFocusAreasText,
                 selectedMuscles: $editorSelectedMuscles,
+                hasPreservedTargetGroups: !editorPreservedTargetGroups.isEmpty,
                 onCancel: { showingDayEditor = false },
                 onConfirm: {
                     if let templateID = editingTemplateID {
@@ -266,6 +268,7 @@ struct WorkoutPlanEditSheet: View {
         editorSessionType = orderedTemplates.last?.sessionType ?? .strength
         editorFocusAreasText = ""
         editorSelectedMuscles = editorSessionType.supportsMuscleTargets ? [.fullBody] : []
+        editorPreservedTargetGroups = []
         showingDayEditor = true
     }
 
@@ -276,6 +279,9 @@ struct WorkoutPlanEditSheet: View {
         editorFocusAreasText = template.focusAreas.joined(separator: ", ")
         let selected = Set(template.resolvedTargetMuscleGroups.compactMap(normalizeMuscleGroup))
         editorSelectedMuscles = selected
+        editorPreservedTargetGroups = selected.isEmpty && template.sessionType.supportsMuscleTargets
+            ? template.targetMuscleGroups
+            : []
         showingDayEditor = true
     }
 
@@ -518,6 +524,9 @@ struct WorkoutPlanEditSheet: View {
         selectedMuscles: Set<LiveWorkout.MuscleGroup>
     ) -> [String] {
         guard sessionType.supportsMuscleTargets else { return [] }
+        if selectedMuscles.isEmpty, !editorPreservedTargetGroups.isEmpty {
+            return sanitizeTargetGroups(editorPreservedTargetGroups)
+        }
         let muscles = selectedMuscles.isEmpty ? Set([LiveWorkout.MuscleGroup.fullBody]) : selectedMuscles
         return sanitizeTargetGroups(orderedTargetGroups(from: muscles))
     }
@@ -689,6 +698,7 @@ struct WorkoutDayEditorSheet: View {
     @Binding var sessionType: WorkoutMode
     @Binding var focusAreasText: String
     @Binding var selectedMuscles: Set<LiveWorkout.MuscleGroup>
+    let hasPreservedTargetGroups: Bool
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
@@ -743,7 +753,7 @@ struct WorkoutDayEditorSheet: View {
     }
 
     private var canConfirm: Bool {
-        !sessionType.supportsMuscleTargets || !selectedMuscles.isEmpty
+        !sessionType.supportsMuscleTargets || !selectedMuscles.isEmpty || hasPreservedTargetGroups
     }
 
     var body: some View {

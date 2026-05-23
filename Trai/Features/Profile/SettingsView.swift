@@ -25,6 +25,7 @@ struct SettingsView: View {
     @State private var presentedAccountSetupContext: AccountSetupContext?
     @State private var isShowingDeleteAccountConfirmation = false
     @State private var accountActionError: AccountActionError?
+    @State private var workoutPlanSaveError: SettingsWorkoutPlanSaveError?
     @AppStorage("trai_coach_tone") private var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
 
     var body: some View {
@@ -344,6 +345,13 @@ struct SettingsView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+        .alert(item: $workoutPlanSaveError) { error in
+            Alert(
+                title: Text("Workout Plan Not Saved"),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
         .alert(item: $pendingEnabledMacroReveal) { macro in
             Alert(
                 title: Text("\(macro.displayName) target ready"),
@@ -435,7 +443,14 @@ struct SettingsView: View {
             )
         }
 
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            workoutPlanSaveError = SettingsWorkoutPlanSaveError(message: error.localizedDescription)
+            HapticManager.error()
+            return
+        }
         standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
         showWorkoutPlanSetup = false
         HapticManager.success()
@@ -483,6 +498,11 @@ struct SettingsView: View {
 }
 
 private struct AccountActionError: Identifiable {
+    let id = UUID()
+    let message: String
+}
+
+private struct SettingsWorkoutPlanSaveError: Identifiable {
     let id = UUID()
     let message: String
 }

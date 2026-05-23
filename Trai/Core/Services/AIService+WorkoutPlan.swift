@@ -234,13 +234,15 @@ extension AIService {
             return copyWorkoutPlan(plan, daysPerWeek: plan.templates.count)
         }
 
-        if request.requestsCardioAsAccessory,
+        if (request.requestsCardioAsAccessory || plan.planIntent?.supportiveCardioConstraint != nil),
            plan.templates.contains(where: { $0.isStandaloneCardioTemplate }) {
             emitValidationLog("Workout plan used a standalone cardio template even though the personalization brief requested cardio as an accessory.")
             throw AIServiceError.parsingError
         }
 
-        if request.limitsAccessoryCardioToOneSession {
+        let maximumSupportPlacements = request.cardioSupportConstraint?.maximumPlacements
+            ?? plan.planIntent?.supportiveCardioConstraint?.maximumPlacements
+        if maximumSupportPlacements == 1 {
             let supportBlockCount = plan.templates.reduce(0) { count, template in
                 count + template.cardioSupportBlockCount
             }
@@ -516,10 +518,18 @@ extension AIService {
 
                 let responseType = WorkoutPlanRefinementResponse.ResponseType(rawValue: envelope.responseType) ?? .message
                 let proposedPlan = envelope.proposedPlan.flatMap {
-                    validatedRefinedWorkoutPlan($0, currentPlan: currentPlan)
+                    validatedRefinedWorkoutPlan(
+                        $0,
+                        currentPlan: currentPlan,
+                        allowsTemplateCountChange: envelope.changesWeeklySchedule == true
+                    )
                 }
                 let updatedPlan = envelope.updatedPlan.flatMap {
-                    validatedRefinedWorkoutPlan($0, currentPlan: currentPlan)
+                    validatedRefinedWorkoutPlan(
+                        $0,
+                        currentPlan: currentPlan,
+                        allowsTemplateCountChange: envelope.changesWeeklySchedule == true
+                    )
                 }
                 return WorkoutPlanRefinementResponse(
                     responseType: responseType,
@@ -534,7 +544,11 @@ extension AIService {
         }
     }
 
-    private func validatedRefinedWorkoutPlan(_ plan: WorkoutPlan, currentPlan: WorkoutPlan) -> WorkoutPlan? {
+    private func validatedRefinedWorkoutPlan(
+        _ plan: WorkoutPlan,
+        currentPlan: WorkoutPlan,
+        allowsTemplateCountChange: Bool
+    ) -> WorkoutPlan? {
         guard !plan.templates.isEmpty,
               plan.planIntent != nil,
               plan.modalityProgression != nil,
@@ -544,9 +558,15 @@ extension AIService {
             return nil
         }
 
-        guard plan.templates.count == currentPlan.templates.count else {
+        guard allowsTemplateCountChange || plan.templates.count == currentPlan.templates.count else {
             log("Ignoring workout plan refinement that changed the weekly day count without a structured plan-count change.", type: .error)
             return nil
+        }
+
+        if allowsTemplateCountChange {
+            return plan.daysPerWeek == plan.templates.count
+                ? plan
+                : Self.copyWorkoutPlan(plan, daysPerWeek: plan.templates.count)
         }
 
         if plan.daysPerWeek != currentPlan.daysPerWeek {
@@ -558,15 +578,22 @@ extension AIService {
 
     static func validateRefinedWorkoutPlanForTesting(
         _ plan: WorkoutPlan,
-        currentPlan: WorkoutPlan
+        currentPlan: WorkoutPlan,
+        allowsTemplateCountChange: Bool = false
     ) -> WorkoutPlan? {
         guard !plan.templates.isEmpty,
               plan.planIntent != nil,
               plan.modalityProgression != nil,
               plan.templates.allSatisfy({ !$0.blocks.isEmpty }),
               plan.hasUserFacingActivityIdentityForEveryBlock,
-              plan.templates.count == currentPlan.templates.count else {
+              allowsTemplateCountChange || plan.templates.count == currentPlan.templates.count else {
             return nil
+        }
+
+        if allowsTemplateCountChange {
+            return plan.daysPerWeek == plan.templates.count
+                ? plan
+                : copyWorkoutPlan(plan, daysPerWeek: plan.templates.count)
         }
 
         if plan.daysPerWeek != currentPlan.daysPerWeek {
@@ -592,7 +619,7 @@ private extension WorkoutPlan.WorkoutTemplate {
         displayBlocks.filter { block in
             switch block.kind {
             case .cardio, .conditioning:
-                return block.role == .finisher || block.role == .accessory
+                return block.role != .main
             case .strength, .skill, .mobility, .recovery, .sportPractice, .custom:
                 return false
             }
@@ -611,13 +638,6 @@ private extension WorkoutPlan.WorkoutTemplate {
             return true
         }
 
-        let text = ([name, notes ?? ""] + focusAreas)
-            .joined(separator: " ")
-            .lowercased()
-
-        return text.contains("cardio day") ||
-            text.contains("running day") ||
-            text.contains("cycling day") ||
-            text.contains("endurance day")
+        return false
     }
 }

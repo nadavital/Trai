@@ -27,18 +27,20 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         let request = makeRequest(
             workoutType: .mixed,
             selectedWorkoutTypes: [.strength, .cardio],
-            preferences: "I want to add some cardio at the end of one strength session every week."
+            preferences: "I want to add some cardio at the end of one strength session every week.",
+            cardioSupportConstraint: .init(role: .finisher, maximumPlacements: 1)
         )
 
         XCTAssertTrue(request.requestsCardioAsAccessory)
-        XCTAssertFalse(request.limitsAccessoryCardioToOneSession)
+        XCTAssertTrue(request.limitsAccessoryCardioToOneSession)
     }
 
     func testSupportiveEnduranceDirectiveDoesNotDependOnCardioFinisherPhrase() {
         let request = makeRequest(
             workoutType: .mixed,
             selectedWorkoutTypes: [.strength, .cardio],
-            preferences: "Strength is the priority. Add easy running after one lower-body workout, not as a dedicated endurance day."
+            preferences: "Strength is the priority. Add easy running after one lower-body workout, not as a dedicated endurance day.",
+            cardioSupportConstraint: .init(role: .accessory)
         )
 
         XCTAssertTrue(request.requestsCardioAsAccessory)
@@ -51,6 +53,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             workoutType: .mixed,
             selectedWorkoutTypes: [.strength, .cardio],
             preferences: "Strength should lead and I only want a short easy cardio finisher after one lift each week.",
+            cardioSupportConstraint: .init(role: .finisher, maximumPlacements: 1),
             availableDays: 3
         )
 
@@ -70,6 +73,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             workoutType: .mixed,
             selectedWorkoutTypes: [.strength, .cardio],
             preferences: "Strength is the priority. Include easy cardio support once a week, but not as a dedicated cardio day.",
+            cardioSupportConstraint: .init(role: .accessory, maximumPlacements: 1),
             availableDays: 3
         )
 
@@ -89,6 +93,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             workoutType: .mixed,
             selectedWorkoutTypes: [.strength, .cardio],
             preferences: "Strength should lead and I only want a short easy cardio finisher after one lift each week.",
+            cardioSupportConstraint: nil,
             availableDays: 1
         )
         let strengthOnlyPlan = makePlan(
@@ -114,7 +119,8 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         let request = makeRequest(
             workoutType: .mixed,
             selectedWorkoutTypes: [.strength, .cardio],
-            preferences: "I want cardio after lifting, but I am training for a 10k race."
+            preferences: "I want cardio after lifting, but I am training for a 10k race.",
+            cardioSupportConstraint: nil
         )
 
         XCTAssertFalse(request.requestsCardioAsAccessory)
@@ -437,11 +443,13 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         let templates = try XCTUnwrap(planProperties["templates"] as? [String: Any])
         let templateSchema = try XCTUnwrap(templates["items"] as? [String: Any])
         let required = try XCTUnwrap(templateSchema["required"] as? [String])
+        let envelopeRequired = try XCTUnwrap(schema["required"] as? [String])
 
         XCTAssertTrue(required.contains("sessionType"))
         XCTAssertTrue(required.contains("focusAreas"))
         XCTAssertTrue(required.contains("blocks"))
         XCTAssertTrue(required.contains("notes"))
+        XCTAssertTrue(envelopeRequired.contains("changesWeeklySchedule"))
     }
 
     @MainActor
@@ -488,6 +496,67 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
                 currentPlan: currentPlan
             )?.daysPerWeek,
             currentPlan.daysPerWeek
+        )
+    }
+
+    @MainActor
+    func testWorkoutPlanRefinementValidationAllowsStructuredDayCountChange() {
+        let currentPlan = makePlan(
+            templateName: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Upper-body lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                )
+            ]
+        )
+        let addedTemplate = WorkoutPlan.WorkoutTemplate(
+            name: "Lower Strength",
+            sessionType: .strength,
+            focusAreas: ["Lower"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Lower-body lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 1
+        )
+        let expandedPlan = WorkoutPlan(
+            splitType: currentPlan.splitType,
+            daysPerWeek: 1,
+            templates: currentPlan.templates + [addedTemplate],
+            planIntent: currentPlan.planIntent,
+            rationale: currentPlan.rationale,
+            guidelines: currentPlan.guidelines,
+            progressionStrategy: currentPlan.progressionStrategy,
+            modalityProgression: currentPlan.modalityProgression
+        )
+
+        XCTAssertNil(
+            AIService.validateRefinedWorkoutPlanForTesting(
+                expandedPlan,
+                currentPlan: currentPlan
+            )
+        )
+        XCTAssertEqual(
+            AIService.validateRefinedWorkoutPlanForTesting(
+                expandedPlan,
+                currentPlan: currentPlan,
+                allowsTemplateCountChange: true
+            )?.daysPerWeek,
+            2
         )
     }
 
@@ -929,6 +998,26 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertFalse(plan.containsVisibleActivityIdentity(matching: ["Cycling", "Bike"]))
     }
 
+    func testWorkoutPlanVisibleActivityIdentityRequiresExactSemanticValue() {
+        let plan = makePlan(
+            templateName: "Trunk Rotation",
+            sessionType: .strength,
+            focusAreas: ["Trunk"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Trunk Rotation",
+                    detail: "Core control",
+                    activityTypeName: "Strength",
+                    activityTags: ["Core"],
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertFalse(plan.containsVisibleActivityIdentity(matching: ["Running", "Run"]))
+    }
+
     func testRequestReportsMissingExplicitActivityIdentityFromPlanStructure() {
         let request = makeRequest(
             selectedWorkoutTypes: [.strength, .cardio],
@@ -1030,6 +1119,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         conversationContext: [String]? = nil,
         cardioTypes: [WorkoutPlanGenerationRequest.CardioType]? = nil,
         customWorkoutType: String? = nil,
+        cardioSupportConstraint: WorkoutPlanGenerationRequest.CardioSupportConstraint? = nil,
         availableDays: Int? = 4
     ) -> WorkoutPlanGenerationRequest {
         WorkoutPlanGenerationRequest(
@@ -1054,7 +1144,8 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             weakPoints: nil,
             injuries: nil,
             preferences: preferences,
-            conversationContext: conversationContext
+            conversationContext: conversationContext,
+            cardioSupportConstraint: cardioSupportConstraint
         )
     }
 }

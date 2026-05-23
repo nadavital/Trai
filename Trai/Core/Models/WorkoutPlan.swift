@@ -45,11 +45,22 @@ struct WorkoutPlan: Codable, Equatable {
     // MARK: - Plan Intent
 
     struct PlanIntent: Codable, Equatable {
+        struct SupportiveCardioConstraint: Codable, Equatable {
+            let role: TrainingBlock.Role
+            let maximumPlacements: Int?
+
+            init(role: TrainingBlock.Role, maximumPlacements: Int? = nil) {
+                self.role = role
+                self.maximumPlacements = maximumPlacements
+            }
+        }
+
         let primaryFocus: String
         let supportingFocuses: [String]
         let sessionAllocation: String
         let honoredInputs: [String]
         let avoided: [String]
+        let supportiveCardioConstraint: SupportiveCardioConstraint?
         let summary: String
 
         init(
@@ -58,6 +69,7 @@ struct WorkoutPlan: Codable, Equatable {
             sessionAllocation: String,
             honoredInputs: [String] = [],
             avoided: [String] = [],
+            supportiveCardioConstraint: SupportiveCardioConstraint? = nil,
             summary: String
         ) {
             self.primaryFocus = primaryFocus
@@ -65,6 +77,7 @@ struct WorkoutPlan: Codable, Equatable {
             self.sessionAllocation = sessionAllocation
             self.honoredInputs = honoredInputs
             self.avoided = avoided
+            self.supportiveCardioConstraint = supportiveCardioConstraint
             self.summary = summary
         }
     }
@@ -291,12 +304,21 @@ struct WorkoutPlan: Codable, Equatable {
             notes: String?
         ) -> [TrainingBlock] {
             if !exercises.isEmpty {
+                let kind = TrainingBlock.BlockKind(sessionType: sessionType)
+                let activityName = defaultActivityName(sessionType: sessionType, focusAreas: focusAreas)
+                    ?? kind.displayName
                 return [
                     TrainingBlock(
-                        kind: .strength,
-                        title: sessionType == .hiit ? "Work" : "Strength",
+                        kind: kind,
+                        title: activityName,
                         detail: exercises.prefix(3).map(\.exerciseName).joined(separator: ", "),
                         exercises: exercises,
+                        activityTypeName: activityName,
+                        activityTags: defaultActivityTags(
+                            sessionType: sessionType,
+                            activityName: activityName,
+                            focusAreas: focusAreas
+                        ),
                         durationMinutes: durationMinutes,
                         intensity: nil,
                         target: nil,
@@ -811,15 +833,15 @@ struct WorkoutPlan: Codable, Equatable {
 
 extension WorkoutPlan {
     func containsVisibleActivityIdentity(matching aliases: [String]) -> Bool {
-        let visibleText = visibleActivityIdentityValues
-            .joined(separator: " ")
-            .goalNormalizedKey
-        guard !visibleText.isEmpty else { return false }
+        let visibleKeys = Set(visibleActivityIdentityValues
+            .map(\.goalNormalizedKey)
+            .filter { !$0.isEmpty })
+        guard !visibleKeys.isEmpty else { return false }
 
         return aliases
             .map(\.goalNormalizedKey)
             .filter { !$0.isEmpty }
-            .contains { visibleText.contains($0) }
+            .contains { visibleKeys.contains($0) }
     }
 
     var visibleActivityIdentityValues: [String] {
@@ -858,7 +880,7 @@ private extension Array where Element == WorkoutPlan.TrainingBlock {
                 title: block.title,
                 detail: block.detail,
                 exercises: block.exercises,
-                activityTypeName: block.activityTypeName,
+                activityTypeName: block.activityTypeName ?? block.title.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? block.kind.displayName,
                 activityTags: block.activityTags,
                 durationMinutes: block.durationMinutes,
                 intensity: block.intensity,

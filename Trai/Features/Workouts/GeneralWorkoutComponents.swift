@@ -268,7 +268,6 @@ struct AddGeneralActivitySheet: View {
     @State private var activityNotes = ""
     @State private var durationMinutes = ""
     @State private var selectedCategory: Exercise.Category = .custom
-    @State private var didChooseCategory = false
     @State private var selectedRole: WorkoutPlan.TrainingBlock.Role = .main
 
     private var placementOptions: [(role: WorkoutPlan.TrainingBlock.Role, label: String)] {
@@ -286,30 +285,7 @@ struct AddGeneralActivitySheet: View {
     }
 
     private var selectedKind: WorkoutPlan.TrainingBlock.BlockKind {
-        selectedCategory.liveWorkoutActivityKind ?? inferredKind
-    }
-
-    private var inferredKind: WorkoutPlan.TrainingBlock.BlockKind {
-        let text = "\(activityName) \(activityNotes)"
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-
-        if ["run", "running", "cycle", "cycling", "bike", "row", "rowing", "swim", "walk", "stair", "elliptical"].contains(where: text.contains) {
-            return .cardio
-        }
-        if ["interval", "conditioning", "hiit", "circuit", "sled", "battle rope"].contains(where: text.contains) {
-            return .conditioning
-        }
-        if ["mobility", "stretch", "yoga", "flow"].contains(where: text.contains) {
-            return .mobility
-        }
-        if ["breath", "recovery", "easy"].contains(where: text.contains) {
-            return .recovery
-        }
-        if ["climb", "boulder", "route", "skill", "drill", "practice", "sport"].contains(where: text.contains) {
-            return .sportPractice
-        }
-        return .custom
+        selectedCategory.liveWorkoutActivityKind ?? .custom
     }
 
     var body: some View {
@@ -323,15 +299,11 @@ struct AddGeneralActivitySheet: View {
                         TextField("e.g. V4 bouldering, Flow block, Breathing work", text: $activityName)
                             .padding(12)
                             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-                            .onChange(of: activityName) { _, _ in
-                                applyInferredCategoryIfNeeded()
-                            }
 
                         FlowLayout(spacing: 8) {
                             ForEach(categoryOptions) { category in
                                 Button {
                                     selectedCategory = category
-                                    didChooseCategory = true
                                     HapticManager.selectionChanged()
                                 } label: {
                                     Label(category.displayName, systemImage: category.iconName)
@@ -393,9 +365,6 @@ struct AddGeneralActivitySheet: View {
                             .padding(8)
                             .scrollContentBackground(.hidden)
                             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-                            .onChange(of: activityNotes) { _, _ in
-                                applyInferredCategoryIfNeeded()
-                            }
                     }
                     .padding()
                     .background(Color(.secondarySystemBackground))
@@ -429,10 +398,5 @@ struct AddGeneralActivitySheet: View {
             }
         }
         .traiSheetBranding()
-    }
-
-    private func applyInferredCategoryIfNeeded() {
-        guard !didChooseCategory else { return }
-        selectedCategory = inferredKind.exerciseCategoryFallback.userFacingEquivalent
     }
 }

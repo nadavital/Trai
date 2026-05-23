@@ -322,7 +322,7 @@ struct WorkoutPlanChatFlow: View {
             WorkoutPlanProposalCard(
                 plan: plan,
                 message: message,
-                onAccept: isOnboarding ? nil : { acceptPlan() },
+                onAccept: isOnboarding || isGenerating || isRefiningPlan ? nil : { acceptPlan() },
                 acceptTitle: isEditingExistingPlan ? "Save Changes" : "Use This Plan",
                 onCustomize: isEditingExistingPlan || showRefineMode ? nil : { enterRefineMode() },
                 isCompactReview: isOnboarding
@@ -503,6 +503,7 @@ struct WorkoutPlanChatFlow: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.traiPrimary(color: .accentColor, size: .compact, fullWidth: true, height: 42))
+        .disabled(isGenerating || isRefiningPlan)
         .accessibilityLabel(saveGeneratedPlanTitle)
     }
 
@@ -515,7 +516,7 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private var shouldShowInputBar: Bool {
-        !isGenerating || isRefiningPlan
+        !isGenerating
     }
 
     private func generatedGoalDetailText(_ goal: WorkoutGoal) -> String {
@@ -1006,7 +1007,7 @@ struct WorkoutPlanChatFlow: View {
 
     private func submitRefineRequest(_ text: String) {
         let messageText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !messageText.isEmpty, let currentPlan = generatedPlan else { return }
+        guard !messageText.isEmpty, let currentPlan = generatedPlan, !isGenerating, !isRefiningPlan else { return }
 
         didRefineGeneratedPlan = true
         let previousReviewMessages = messages.filter(isGeneratedPlanReviewMessage)
@@ -1145,6 +1146,7 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private func savePlan() {
+        guard !isGenerating, !isRefiningPlan else { return }
         guard let plan = generatedPlan else { return }
 
         if isOnboarding {
@@ -1542,30 +1544,32 @@ struct WorkoutPlanChatFlow: View {
         var inferredTypes: [WorkoutPlanGenerationRequest.CardioType] = []
 
         for template in plan.templates {
-            let loweredTokens = ([template.name] + template.focusAreas)
-                .joined(separator: " ")
-                .lowercased()
+            let blockIdentityValues = template.displayBlocks.flatMap { block -> [String] in
+                var values = [block.title]
+                if let activityTypeName = block.activityTypeName {
+                    values.append(activityTypeName)
+                }
+                values.append(contentsOf: block.activityTags)
+                return values
+            }
+            let visibleKeys = Set(
+                ([template.name] + template.focusAreas + template.targetMuscleGroups + blockIdentityValues)
+                .map(\.goalNormalizedKey)
+                .filter { !$0.isEmpty }
+            )
 
-            let inferredType: WorkoutPlanGenerationRequest.CardioType?
+            var inferredType: WorkoutPlanGenerationRequest.CardioType?
+            for cardioType in WorkoutPlanGenerationRequest.CardioType.allCases where cardioType != .anyCardio {
+                let aliasKeys = cardioType.visibleIdentityAliases.map(\.goalNormalizedKey)
+                if aliasKeys.contains(where: { visibleKeys.contains($0) }) {
+                    inferredType = cardioType
+                    break
+                }
+            }
 
-            if template.sessionType == .climbing || loweredTokens.contains("climb") || loweredTokens.contains("boulder") {
-                inferredType = .climbing
-            } else if loweredTokens.contains("run") {
-                inferredType = .running
-            } else if loweredTokens.contains("cycl") {
-                inferredType = .cycling
-            } else if loweredTokens.contains("swim") {
-                inferredType = .swimming
-            } else if loweredTokens.contains("row") {
-                inferredType = .rowing
-            } else if loweredTokens.contains("walk") || loweredTokens.contains("hike") {
-                inferredType = .walking
-            } else if loweredTokens.contains("jump rope") || loweredTokens.contains("jumprope") {
-                inferredType = .jumpRope
-            } else if template.sessionType == .cardio {
+            if inferredType == nil,
+               template.sessionType == .cardio || template.displayBlocks.contains(where: { $0.kind == .cardio }) {
                 inferredType = .anyCardio
-            } else {
-                inferredType = nil
             }
 
             if let inferredType, !inferredTypes.contains(inferredType) {

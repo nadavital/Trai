@@ -129,7 +129,7 @@ extension AIPromptBuilder {
         17. Make mixed/support work visible in the template name or focusAreas when it materially changes the day, e.g. "Legs + Conditioning" or focusAreas including "Cardio support".
         18. Do not use "Finisher" as the default label for supportive cardio. Use "finisher" only when the person explicitly asks for work at the end of the workout; otherwise name the block by its actual purpose, such as endurance support, conditioning, intervals, steady cardio, or recovery.
         19. Preserve every selected or stated modality as real plan structure unless the user explicitly says it is only background support or should be avoided. If a specific activity is named, keep that activity visible as a real session, meaningful block, activityTypeName, activityTag, exercise/activity name, or goal scope instead of replacing it with only generic support work.
-        20. Return a planIntent that explicitly summarizes the primary focus, supporting focuses, session allocation, honored user inputs, and anything intentionally avoided. The summary must be a natural first-person Trai message fragment, not a raw answer label.
+        20. Return a planIntent that explicitly summarizes the primary focus, supporting focuses, session allocation, honored user inputs, and anything intentionally avoided. If the user's brief semantically limits cardio or conditioning to supportive work inside another session, set supportiveCardioConstraint with the exact role and maximumPlacements when a limit is specified. The summary must be a natural first-person Trai message fragment, not a raw answer label.
         21. Write rationale, notes, and planIntent text as Trai speaking directly to the person using the app. Use "you" and "your"; do not refer to them as "the user".
         22. For EVERY workout template, set:
            - sessionType: one of strength, cardio, hiit, climbing, yoga, pilates, flexibility, mobility, mixed, recovery, custom
@@ -300,6 +300,18 @@ extension AIPromptBuilder {
                         "avoided": [
                             "type": "array",
                             "items": ["type": "string"]
+                        ],
+                        "supportiveCardioConstraint": [
+                            "type": "object",
+                            "nullable": true,
+                            "properties": [
+                                "role": [
+                                    "type": "string",
+                                    "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom"]
+                                ],
+                                "maximumPlacements": ["type": "integer", "nullable": true]
+                            ],
+                            "required": ["role"]
                         ],
                         "summary": ["type": "string"]
                     ],
@@ -536,6 +548,7 @@ extension AIPromptBuilder {
         - Use "proposePlan" whenever they clearly want a change, even if they did not specify every detail
         - Ask AT MOST one short follow-up only when missing information would materially change the plan
         - If they ask to change exercises or schedule directionally, make a reasonable proposal instead of starting a long clarification chain
+        - Set changesWeeklySchedule to true only when the requested change intentionally adds, removes, or changes the number of weekly workout sessions. Otherwise keep the same number of templates as the current plan.
         - Preserve and update planIntent, modalityProgression, and template blocks whenever a plan changes
         - Use blocks for modality-specific work: cardio, mobility flows, climbing/sport practice, conditioning, and recovery should not be flattened into fake strength exercises. Use role to describe whether a block is main work, a warmup, an accessory, a finisher, or a cooldown.
         - Preserve specific activity identity with activityTypeName and activityTags. Kind remains a stable behavior primitive, not the user-facing name.
@@ -659,6 +672,18 @@ extension AIPromptBuilder {
                             "type": "array",
                             "items": ["type": "string"]
                         ],
+                        "supportiveCardioConstraint": [
+                            "type": "object",
+                            "nullable": true,
+                            "properties": [
+                                "role": [
+                                    "type": "string",
+                                    "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom"]
+                                ],
+                                "maximumPlacements": ["type": "integer", "nullable": true]
+                            ],
+                            "required": ["role"]
+                        ],
                         "summary": ["type": "string"]
                     ],
                     "required": ["primaryFocus", "supportingFocuses", "sessionAllocation", "honoredInputs", "avoided", "summary"]
@@ -722,10 +747,14 @@ extension AIPromptBuilder {
                     "enum": ["message", "proposePlan", "planUpdate"]
                 ],
                 "message": ["type": "string"],
+                "changesWeeklySchedule": [
+                    "type": "boolean",
+                    "description": "True only when the user's requested refinement intentionally changes the weekly session count by adding, removing, or changing workout days."
+                ],
                 "proposedPlan": planSchema,
                 "updatedPlan": planSchema
             ],
-            "required": ["responseType", "message"]
+            "required": ["responseType", "message", "changesWeeklySchedule"]
         ]
     }
 }
