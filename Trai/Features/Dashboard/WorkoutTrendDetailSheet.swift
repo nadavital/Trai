@@ -49,7 +49,7 @@ struct WorkoutTrendDetailSheet: View {
         var distribution: [String: Int] = [:]
 
         for workout in completedWorkouts.prefix(20) {
-            distribution[workout.type.displayName, default: 0] += 1
+            distribution[workout.historyDistributionLabel, default: 0] += 1
         }
 
         return distribution.sorted { $0.value > $1.value }
@@ -73,7 +73,7 @@ struct WorkoutTrendDetailSheet: View {
                     WorkoutTrendChart(
                         data: last7DaysData,
                         metric: .items,
-                        title: "Logged Work"
+                        title: "Logged Items"
                     )
 
                     // Duration trend
@@ -183,7 +183,7 @@ struct WorkoutTrendDetailSheet: View {
 
     private var sessionTypeCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Session Types")
+            Text("Training Focus")
                 .font(.headline)
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 8) {

@@ -230,6 +230,10 @@ extension LiveWorkout {
         return muscles.isEmpty ? type.displayName : muscles.joined(separator: " • ")
     }
 
+    var historyDistributionLabel: String {
+        displayFocusAreas.first ?? type.displayName
+    }
+
     var displayFocusAreas: [String] {
         var seen: Set<String> = []
         let explicitAreas: [String] = focusAreas.compactMap { focus in

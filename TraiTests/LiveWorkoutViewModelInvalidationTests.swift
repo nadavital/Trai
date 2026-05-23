@@ -477,6 +477,23 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         )
     }
 
+    func testWorkoutHistoryDistributionUsesActivityIdentityOverStableMode() {
+        let workout = LiveWorkout(name: "Open Practice", workoutType: .mixed)
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 0,
+            exerciseType: "sportPractice"
+        )
+        entry.activityTypeName = "Bouldering"
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 600, reps: 4)
+        ]
+        entry.workout = workout
+        workout.entries = [entry]
+
+        XCTAssertEqual(workout.historyDistributionLabel, "Bouldering")
+    }
+
     func testWorkoutTrendAggregationCountsLoggedItemsOnly() {
         let workout = LiveWorkout(name: "Strength + Planned Climb", workoutType: .mixed)
         workout.startedAt = Date()
