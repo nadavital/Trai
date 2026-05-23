@@ -80,6 +80,34 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertTrue(prompt.contains("5.10 km"))
     }
 
+    func testHealthKitImportedActivityTagsDriveGoalMatching() {
+        let session = WorkoutSession(
+            healthKitWorkoutID: "mobility-1",
+            workoutType: "cooldown",
+            durationMinutes: 30,
+            caloriesBurned: nil,
+            distanceMeters: nil,
+            loggedAt: Date()
+        )
+        session.exerciseName = "Mobility Flow"
+        session.importedActivityTags = ["Mobility Flow", "Hips"]
+
+        let goal = WorkoutGoal(
+            title: "Open up hips",
+            goalKind: .duration,
+            linkedActivityTags: ["Hips"],
+            targetValue: 30,
+            targetUnit: "min",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete 30 minutes of hip mobility this week."
+        )
+
+        XCTAssertTrue(session.semanticActivityTags.contains("Hips"))
+        XCTAssertTrue(session.goalMatchingTokens.contains("hips"))
+        XCTAssertTrue(goal.matches(session: session))
+    }
+
     func testSuggestedWorkoutLogSummaryPreservesActivityItems() {
         let log = SuggestedWorkoutLog(
             name: "Climb + Conditioning",

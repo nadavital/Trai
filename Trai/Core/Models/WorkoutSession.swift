@@ -32,6 +32,9 @@ final class WorkoutSession {
     /// Type of workout from HealthKit (e.g., "running", "cycling")
     var healthKitWorkoutType: String?
 
+    /// Comma-separated activity identity tags imported from Trai HealthKit metadata.
+    var activityTagsRaw: String = ""
+
     var loggedAt: Date = Date()
     var notes: String?
 
@@ -104,10 +107,10 @@ extension WorkoutSession {
     var semanticActivityTags: [String] {
         var seen = Set<String>()
         var values: [String] = []
-        let candidates = semanticActivityTagCandidates + (exercise?.targetTags ?? [])
+        let candidates = semanticActivityTagCandidates + importedActivityTags + (exercise?.targetTags ?? [])
 
         for rawValue in candidates {
-            let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
             let key = trimmed.goalNormalizedKey
             guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
             values.append(trimmed)
@@ -116,9 +119,24 @@ extension WorkoutSession {
         return values
     }
 
-    private var semanticActivityTagCandidates: [String?] {
+    var importedActivityTags: [String] {
+        get {
+            activityTagsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            activityTagsRaw = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ",")
+        }
+    }
+
+    private var semanticActivityTagCandidates: [String] {
         guard let exercise else {
-            return [healthKitWorkoutType, displayTypeName]
+            return [healthKitWorkoutType, displayTypeName].compactMap { $0 }
         }
 
         let specificActivityName = exercise.exerciseCategory == .strength
@@ -130,7 +148,7 @@ extension WorkoutSession {
             healthKitWorkoutType,
             displayTypeName,
             specificActivityName == nil ? categoryDisplayName : nil
-        ]
+        ].compactMap { $0 }
     }
 
     /// Total volume (sets * reps * weight) for strength exercises
@@ -335,6 +353,12 @@ extension WorkoutSession {
             .filter { !$0.isEmpty }
             .forEach { tokens.insert($0.goalNormalizedKey) }
         exercise?.targetTags.forEach { tag in
+            let key = tag.goalNormalizedKey
+            if !key.isEmpty {
+                tokens.insert(key)
+            }
+        }
+        importedActivityTags.forEach { tag in
             let key = tag.goalNormalizedKey
             if !key.isEmpty {
                 tokens.insert(key)

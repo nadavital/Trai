@@ -216,9 +216,19 @@ final class HealthKitService {
 
                 let sessions = (samples as? [HKWorkout])?.map { workout -> WorkoutSession in
                     let session = WorkoutSession()
+                    let metadata = workout.metadata ?? [:]
+                    let activityNames = Self.metadataStringList(from: metadata, keys: ["activity_names"])
+                    let activityTags = Self.metadataStringList(from: metadata, keys: ["activity_names", "activity_tags", "activity_focus"])
+                    let trimmedWorkoutName = (metadata["workout_name"] as? String)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    let workoutName = trimmedWorkoutName.isEmpty ? nil : trimmedWorkoutName
+
                     session.healthKitWorkoutID = workout.uuid.uuidString
                     session.healthKitWorkoutType = workout.workoutActivityType.name
-                    session.exerciseName = workout.workoutActivityType.name
+                    session.exerciseName = workoutName
+                        ?? activityNames.first
+                        ?? workout.workoutActivityType.name
+                    session.importedActivityTags = activityTags
                     session.durationMinutes = workout.duration / 60
                     session.loggedAt = workout.startDate
                     session.sourceIsHealthKit = true
@@ -740,6 +750,25 @@ final class HealthKitService {
         return false
     }
 
+    nonisolated private static func metadataStringList(from metadata: [String: Any], keys: [String]) -> [String] {
+        keys.flatMap { key -> [String] in
+            switch metadata[key] {
+            case let value as String:
+                return value
+                    .components(separatedBy: CharacterSet(charactersIn: ",|"))
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            case let values as [String]:
+                return values
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            default:
+                return []
+            }
+        }
+        .dedupedHealthKitMetadataValues()
+    }
+
     private func healthKitEndDate(for workout: WorkoutSession) -> Date {
         guard let duration = workout.durationMinutes, duration > 0 else {
             return workout.loggedAt.addingTimeInterval(60 * 60)
@@ -797,12 +826,17 @@ extension HealthKitService {
 }
 
 private extension Array where Element == String {
-    func dedupedHealthKitMetadataValues() -> [String] {
+    nonisolated func dedupedHealthKitMetadataValues() -> [String] {
         var seen = Set<String>()
         var result: [String] = []
         for value in self {
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            let key = trimmed.goalNormalizedKey
+            let key = String(String.UnicodeScalarView(
+                trimmed
+                    .lowercased()
+                    .unicodeScalars
+                    .filter { CharacterSet.alphanumerics.contains($0) }
+            ))
             guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
             result.append(trimmed)
         }
