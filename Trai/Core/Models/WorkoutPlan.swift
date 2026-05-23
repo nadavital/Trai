@@ -670,7 +670,7 @@ struct WorkoutPlan: Codable, Equatable {
                 case .strength: "Strength"
                 case .volume: "Volume"
                 case .endurance: "Endurance"
-                case .skill: "Skill"
+                case .skill: "Technique"
                 case .mobility: "Mobility"
                 case .consistency: "Consistency"
                 case .mixed: "Mixed"

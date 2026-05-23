@@ -279,12 +279,12 @@ struct AddGeneralActivitySheet: View {
 
     private var placementOptions: [(role: WorkoutPlan.TrainingBlock.Role, label: String)] {
         [
-            (.main, "Main"),
-            (.warmup, "Warm-up"),
-            (.accessory, "Add-on"),
-            (.finisher, "Finish"),
-            (.cooldown, "Cool down")
-        ]
+            .main,
+            .warmup,
+            .accessory,
+            .finisher,
+            .cooldown
+        ].map { ($0, $0.displayName) }
     }
 
     private var inferredKind: WorkoutPlan.TrainingBlock.BlockKind {

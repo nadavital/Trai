@@ -50,6 +50,10 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(WorkoutPlan.TrainingBlock.Role.cooldown.displayName, "Cool down")
     }
 
+    func testModalityProgressionPrimitiveFallbacksUseUserFacingLabels() {
+        XCTAssertEqual(WorkoutPlan.ModalityProgression.ProgressionFocus.skill.displayName, "Technique")
+    }
+
     func testCreateStartWorkoutFromTemplateMapsMuscleGroups() {
         let template = WorkoutPlan.WorkoutTemplate(
             name: "Upper Push",
