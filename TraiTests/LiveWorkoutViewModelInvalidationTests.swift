@@ -863,6 +863,36 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertFalse(viewModel.availableSuggestions.contains { $0.exerciseName == "Hip Mobility Flow" })
     }
 
+    func testActivityTypeTargetsPreserveBroadActivityTargets() {
+        let workout = LiveWorkout(
+            name: "Mixed",
+            workoutType: .mixed,
+            focusAreas: ["cardio"]
+        )
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        viewModel.updateActivityTypeTargets(["Padel"])
+
+        XCTAssertEqual(viewModel.workout.focusAreas, ["cardio", "Padel"])
+        XCTAssertEqual(viewModel.targetActivityCategories, [.cardio, .sportPractice])
+        XCTAssertEqual(viewModel.targetActivityTypes, ["Padel"])
+    }
+
+    func testBroadActivityTargetsPreserveSelectedActivityTypes() {
+        let workout = LiveWorkout(
+            name: "Mixed",
+            workoutType: .mixed,
+            focusAreas: ["Padel"]
+        )
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        viewModel.updateActivityTargets([.cardio])
+
+        XCTAssertEqual(viewModel.workout.focusAreas, ["Padel", "cardio"])
+        XCTAssertEqual(viewModel.targetActivityCategories, [.cardio, .sportPractice])
+        XCTAssertEqual(viewModel.targetActivityTypes, ["Padel"])
+    }
+
     func testAddingCardioSuggestionCreatesTrackableCardioEntryWithoutPrefilledStrengthSets() {
         let workout = LiveWorkout(name: "Support", workoutType: .mixed)
         let viewModel = LiveWorkoutViewModel(workout: workout)

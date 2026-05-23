@@ -397,6 +397,10 @@ final class LiveWorkoutViewModel {
                 .replacingOccurrences(of: "_", with: "")
                 .replacingOccurrences(of: " ", with: "")
 
+            if let category = Exercise.Category.normalized(from: focus) {
+                result.formUnion(category.suggestionCategories)
+            }
+
             for category in Exercise.Category.allCases {
                 let normalizedRawValue = category.rawValue
                     .lowercased()
@@ -1748,7 +1752,10 @@ final class LiveWorkoutViewModel {
         let cleanedActivityTypes = activityTypes
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        workout.focusAreas = cleanedActivityTypes
+        let broadFocusAreas = workout.focusAreas
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && Self.nonActivityTypeFocusKeys.contains($0.goalNormalizedKey) }
+        workout.focusAreas = Self.dedupedFocusAreas(broadFocusAreas + cleanedActivityTypes)
         if workout.name == "Custom Workout", let first = cleanedActivityTypes.first {
             workout.name = first
         }
@@ -1766,6 +1773,18 @@ final class LiveWorkoutViewModel {
         workout.focusAreas = categoryFocus
         rebuildSuggestionPool(reason: .targetMusclesChanged)
         saveImmediately()
+    }
+
+    private static func dedupedFocusAreas(_ focusAreas: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for focusArea in focusAreas {
+            let trimmed = focusArea.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.goalNormalizedKey
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
     }
 
     // MARK: - Workout Completion
