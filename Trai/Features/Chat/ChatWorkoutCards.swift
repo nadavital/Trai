@@ -281,7 +281,7 @@ private struct WorkoutLogExerciseRow: View {
 
                 if let segments = exercise.segments, !segments.isEmpty {
                     ForEach(Array(segments.prefix(3).enumerated()), id: \.element.id) { index, segment in
-                        Text(segmentSummary(segment, index: index))
+                        Text(segmentSummary(segment, index: index, exercise: exercise))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
@@ -291,7 +291,11 @@ private struct WorkoutLogExerciseRow: View {
         }
     }
 
-    private func segmentSummary(_ segment: SuggestedWorkoutLog.LoggedExercise.ActivitySegment, index: Int) -> String {
+    private func segmentSummary(
+        _ segment: SuggestedWorkoutLog.LoggedExercise.ActivitySegment,
+        index: Int,
+        exercise: SuggestedWorkoutLog.LoggedExercise
+    ) -> String {
         var parts: [String] = ["Segment \(index + 1)"]
         if let duration = segment.durationMinutes, duration > 0 {
             parts.append("\(duration) min")
@@ -304,7 +308,7 @@ private struct WorkoutLogExerciseRow: View {
             }
         }
         if let reps = segment.reps, reps > 0 {
-            parts.append("\(reps) reps")
+            parts.append("\(reps) \(exercise.metricName(for: reps, pluralLabel: exercise.countMetricLabel))")
         }
         let notes = segment.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !notes.isEmpty {

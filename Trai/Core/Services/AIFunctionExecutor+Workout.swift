@@ -264,6 +264,7 @@ extension AIFunctionExecutor {
                 let targetTags = stringArray(from: exerciseData["target_tags"])
                 let trackingFields = stringArray(from: exerciseData["tracking_fields"])
                 let resolvedCategory = Exercise.Category.normalized(from: category)
+                    ?? activityTypeName.flatMap { Exercise.Category.normalized(from: $0)?.userFacingEquivalent }
                     ?? (workoutType.supportsMuscleTargets ? .strength : .cardio)
                 let sets = numericInt(from: exerciseData["sets"]) ?? (resolvedCategory == .strength ? 3 : 0)
                 let reps = exerciseData["reps"] as? Int ?? 10
@@ -277,7 +278,7 @@ extension AIFunctionExecutor {
 
                 exercises.append(SuggestedWorkoutEntry.SuggestedExercise(
                     name: exerciseName,
-                    category: category,
+                    category: category ?? resolvedCategory.rawValue,
                     activityTypeName: activityTypeName,
                     targetTags: targetTags,
                     trackingFields: trackingFields,

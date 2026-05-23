@@ -116,7 +116,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(log.summary, "1 exercise • 1 activity • 2 sets • 55 min")
         XCTAssertEqual(
             log.exercises[1].activitySummarySegments,
-            ["30 min", "1 segment", "Hard attempts"]
+            ["30 min", "4 attempts", "Hard attempts"]
         )
     }
 
@@ -221,6 +221,42 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(suggestion.activityFocuses, ["Running", "Aerobic base"])
         XCTAssertEqual(suggestion.exercises.first?.sets, 0)
         XCTAssertEqual(suggestion.exercises.first?.durationMinutes, 30)
+    }
+
+    func testStartLiveWorkoutInfersActivityCategoryFromActivityName() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "start_live_workout",
+                arguments: [
+                    "name": "Climbing Power",
+                    "workout_type": "mixed",
+                    "activity_focuses": ["Climbing", "Power"],
+                    "suggested_exercises": [
+                        [
+                            "name": "Limit Bouldering",
+                            "activity_name": "Bouldering",
+                            "target_tags": ["Climbing", "Power"],
+                            "tracking_fields": ["duration", "reps", "notes"],
+                            "duration_minutes": 30,
+                            "segments": [
+                                ["duration_minutes": 15, "reps": 4],
+                                ["duration_minutes": 15, "reps": 3]
+                            ]
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutStart(let suggestion) = result,
+              let exercise = suggestion.exercises.first else {
+            return XCTFail("Expected start workout suggestion")
+        }
+
+        XCTAssertEqual(suggestion.exercisesSummary, "1 activity")
+        XCTAssertEqual(exercise.category, "sportPractice")
+        XCTAssertEqual(exercise.sets, 0)
+        XCTAssertEqual(exercise.startSummarySegments, ["Bouldering", "30 min", "2 segments", "7 attempts"])
     }
 
     func testStartWorkoutActivitySummaryUsesActivityMetrics() {

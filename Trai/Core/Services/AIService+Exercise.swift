@@ -55,8 +55,8 @@ extension AIService {
             Exercise name: "\(name)"
 
             Determine:
-            1. Category: Choose the broad behavior fallback from strength, cardio, conditioning, mobility, skill, sportPractice, recovery, flexibility, or custom.
-            2. activityTypeName: Choose the user-facing activity type, such as Climbing, Cycling, Running, Mobility Flow, Boxing, Basketball, or Strength.
+            1. Category: Choose the stable tracking template from strength, cardio, conditioning, mobility, skill, sportPractice, recovery, flexibility, or custom. This is not the user-facing label.
+            2. activityTypeName: Choose the specific user-facing activity identity, such as Climbing, Bouldering, Cycling, Running, Mobility Flow, Boxing, Basketball, Pickleball, or Strength.
             3. activityAliases: Common names Trai should treat as the same activity type, when useful.
             4. Primary muscle group for strength exercises only: chest, back, shoulders, biceps, triceps, legs, core, or fullBody.
             5. Secondary muscles worked, when relevant.
@@ -71,9 +71,10 @@ extension AIService {
             - Running usually tracks duration and distance.
             - Mobility usually tracks duration and notes.
             - Conditioning may track duration, reps, and notes.
-            - Skill practice may track duration, reps, and notes.
+            - Skill or sport practice may track duration, reps/counts/attempts, distance when relevant, and notes.
 
-            Return targetTags as concise user-facing labels, not internal jargon. Do not use calories.
+            Return targetTags as concise user-facing outcomes or focuses, not internal category names. Do not use calories.
+            When the exercise name is a specific sport or activity, preserve that specificity in activityTypeName instead of flattening it to Sport, Skill, Conditioning, or Custom.
             If you don't recognize the exercise, make your best educated guess based on the name.
             """
 
@@ -202,10 +203,11 @@ extension AIService {
             - Be specific when similar exercises or machines exist, but only when the image supports that level of certainty.
             - If brand/model text is clearly visible on the machine, include that in equipmentName. If the image is an activity setup rather than equipment, use a concise visible activity name such as "Climbing Wall" or "Mobility Band Setup".
             - For each suggested exercise, include category, activityTypeName, activityAliases, muscleGroup when it is strength, targetTags, and trackingFields so the app can save it correctly.
-            - Categories are broad fallback behaviors and must be one of: strength, cardio, conditioning, mobility, skill, sportPractice, recovery, flexibility, custom.
-            - activityTypeName is the user-facing identity and can be specific, such as Climbing, Cycling, Running, Mobility Flow, Boxing, Basketball, or Strength.
+            - Categories are stable tracking templates and must be one of: strength, cardio, conditioning, mobility, skill, sportPractice, recovery, flexibility, custom. They are not the user-facing labels.
+            - activityTypeName is the specific user-facing identity and can be specific, such as Climbing, Bouldering, Cycling, Running, Mobility Flow, Boxing, Basketball, Pickleball, or Strength.
             - Tracking fields must be chosen from: sets, reps, weight, duration, distance, notes. Do not use calories.
             - Strength exercises usually track sets, weight, and reps. Cardio activities usually track duration and distance. Skill, sport, mobility, recovery, and custom activities usually track duration, reps/count, distance when relevant, and notes.
+            - Keep targetTags as user-facing outcomes or focuses, not broad category labels. Preserve a specific visible sport/activity in activityTypeName instead of flattening it to Sport, Skill, Conditioning, or Custom.
             - If the image is too unclear to confidently identify an exercise, activity, or equipment, return:
               equipmentName: "Unclear exercise photo"
               suggestedExercises: []

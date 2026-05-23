@@ -983,8 +983,16 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
                 }
             }
 
-            if let segments, !segments.isEmpty {
-                parts.append("\(segments.count) \(segments.count == 1 ? "segment" : "segments")")
+            if let segments, segments.count > 1 {
+                parts.append("\(segments.count) \(metricName(for: segments.count, pluralLabel: segmentMetricLabel))")
+            }
+
+            let countTotal = segments?
+                .compactMap(\.reps)
+                .filter { $0 > 0 }
+                .reduce(0, +) ?? 0
+            if countTotal > 0 {
+                parts.append("\(countTotal) \(metricName(for: countTotal, pluralLabel: countMetricLabel))")
             }
 
             let trimmedNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -993,6 +1001,36 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
             }
 
             return parts
+        }
+
+        var segmentMetricLabel: String {
+            switch normalizedCategoryKey {
+            case "conditioning":
+                return "rounds"
+            default:
+                return "segments"
+            }
+        }
+
+        var countMetricLabel: String {
+            switch normalizedCategoryKey {
+            case "sportPractice":
+                return "attempts"
+            case "conditioning":
+                return "rounds"
+            case "mobility", "recovery":
+                return "reps"
+            default:
+                return "counts"
+            }
+        }
+
+        func metricName(for value: Int, pluralLabel: String) -> String {
+            guard value == 1 else { return pluralLabel }
+            if pluralLabel.hasSuffix("s") {
+                return String(pluralLabel.dropLast())
+            }
+            return pluralLabel
         }
     }
 
