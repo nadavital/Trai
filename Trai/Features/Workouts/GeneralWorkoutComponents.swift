@@ -153,14 +153,6 @@ struct GeneralActivityCard: View {
         if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
             appendUnique(title: activityName, icon: entry.activityIconName)
         }
-        if let intensity = entry.plannedIntensity?.trimmingCharacters(in: .whitespacesAndNewlines), !intensity.isEmpty {
-            appendUnique(title: intensity, icon: "gauge.with.dots.needle.33percent")
-        }
-        if let target = entry.plannedTarget?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !target.isEmpty,
-           !isPlannedGuidance {
-            appendUnique(title: target, icon: "target")
-        }
         return chips
     }
 
