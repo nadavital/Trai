@@ -275,6 +275,8 @@ struct AddGeneralActivitySheet: View {
     @State private var activityName = ""
     @State private var activityNotes = ""
     @State private var durationMinutes = ""
+    @State private var selectedCategory: Exercise.Category = .custom
+    @State private var didChooseCategory = false
     @State private var selectedRole: WorkoutPlan.TrainingBlock.Role = .main
 
     private var placementOptions: [(role: WorkoutPlan.TrainingBlock.Role, label: String)] {
@@ -285,6 +287,14 @@ struct AddGeneralActivitySheet: View {
             .finisher,
             .cooldown
         ].map { ($0, $0.displayName) }
+    }
+
+    private var categoryOptions: [Exercise.Category] {
+        Exercise.Category.userFacingCases.filter { $0 != .strength }
+    }
+
+    private var selectedKind: WorkoutPlan.TrainingBlock.BlockKind {
+        selectedCategory.liveWorkoutActivityKind ?? inferredKind
     }
 
     private var inferredKind: WorkoutPlan.TrainingBlock.BlockKind {
@@ -321,6 +331,30 @@ struct AddGeneralActivitySheet: View {
                         TextField("e.g. V4 bouldering, Flow block, Breathing work", text: $activityName)
                             .padding(12)
                             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+                            .onChange(of: activityName) { _, _ in
+                                applyInferredCategoryIfNeeded()
+                            }
+
+                        FlowLayout(spacing: 8) {
+                            ForEach(categoryOptions) { category in
+                                Button {
+                                    selectedCategory = category
+                                    didChooseCategory = true
+                                    HapticManager.selectionChanged()
+                                } label: {
+                                    Label(category.displayName, systemImage: category.iconName)
+                                        .font(.caption.weight(.semibold))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            selectedCategory == category ? Color.accentColor : Color(.tertiarySystemFill),
+                                            in: Capsule()
+                                        )
+                                        .foregroundStyle(selectedCategory == category ? .white : .primary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
 
                         FlowLayout(spacing: 8) {
                             ForEach(placementOptions, id: \.role) { option in
@@ -367,6 +401,9 @@ struct AddGeneralActivitySheet: View {
                             .padding(8)
                             .scrollContentBackground(.hidden)
                             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+                            .onChange(of: activityNotes) { _, _ in
+                                applyInferredCategoryIfNeeded()
+                            }
                     }
                     .padding()
                     .background(Color(.secondarySystemBackground))
@@ -388,7 +425,7 @@ struct AddGeneralActivitySheet: View {
                             activityName,
                             activityNotes,
                             Int(durationMinutes.trimmingCharacters(in: .whitespacesAndNewlines)).map { $0 * 60 },
-                            inferredKind,
+                            selectedKind,
                             selectedRole
                         )
                         dismiss()
@@ -400,5 +437,10 @@ struct AddGeneralActivitySheet: View {
             }
         }
         .traiSheetBranding()
+    }
+
+    private func applyInferredCategoryIfNeeded() {
+        guard !didChooseCategory else { return }
+        selectedCategory = inferredKind.exerciseCategoryFallback.userFacingEquivalent
     }
 }
