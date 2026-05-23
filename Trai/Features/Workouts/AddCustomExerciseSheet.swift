@@ -121,9 +121,9 @@ struct AddCustomExerciseSheet: View {
 
     private var exerciseSetupCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Exercise", icon: "figure.strengthtraining.traditional")
+            sectionHeader("Exercise or Activity", icon: "figure.run")
 
-            TextField("e.g. Incline DB Press", text: $exerciseName)
+            TextField("e.g. Incline DB Press, Rowing, Bouldering", text: $exerciseName)
                 .textInputAutocapitalization(.words)
                 .font(.traiHeadline(18))
                 .padding(12)
@@ -316,7 +316,7 @@ struct AddCustomExerciseSheet: View {
     private var categoryDisclosure: some View {
         collapsibleManualSection(
             isExpanded: $isCategoryExpanded,
-            title: "Tracking template",
+            title: "How to Log It",
             icon: "square.grid.2x2",
             summary: selectedCategory.userFacingEquivalent.trackingTemplateName
         ) {
