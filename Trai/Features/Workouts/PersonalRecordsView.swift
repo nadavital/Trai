@@ -2,7 +2,7 @@
 //  PersonalRecordsView.swift
 //  Trai
 //
-//  Personal Records (PR) management screen showing personal bests for exercises
+//  Personal Records (PR) management screen showing personal bests for exercises and activities
 //
 
 import SwiftUI
@@ -107,7 +107,7 @@ struct PersonalRecordsView: View {
             }
             .navigationTitle("Personal Records")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search exercises")
+            .searchable(text: $searchText, prompt: "Search records")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done", systemImage: "xmark") {
@@ -183,7 +183,7 @@ struct PersonalRecordsView: View {
                         StatBox(
                             title: "Records",
                             value: "\(visiblePRs.count)",
-                            icon: "dumbbell.fill"
+                            icon: "trophy.fill"
                         )
 
                         StatBox(
@@ -321,7 +321,7 @@ private enum PRSortOption: String, CaseIterable, Identifiable {
         case .recentActivity:
             return "Recent Activity"
         case .weightPR:
-            return "Heaviest Weight"
+            return "Top Record"
         case .volumePR:
             return volumePRMode.sortLabel
         case .alphabetical:
@@ -362,6 +362,7 @@ struct ExercisePR: Identifiable {
     let maxDistanceDate: Date?
     let maxActivityCount: Int
     let maxActivityCountDate: Date?
+    let maxActivityCountLabel: String
 
     let totalSessions: Int
     let lastPerformed: Date
@@ -410,9 +411,33 @@ struct ExercisePR: Identifiable {
             maxDistanceDate: snapshot.activityDistancePR?.performedAt,
             maxActivityCount: snapshot.activityCountPR.map { max($0.totalReps, $0.totalSets) } ?? 0,
             maxActivityCountDate: snapshot.activityCountPR?.performedAt,
+            maxActivityCountLabel: activityCountLabel(for: snapshot.activityCountPR),
             totalSessions: snapshot.totalSessions,
             lastPerformed: snapshot.lastSession?.performedAt ?? Date()
         )
+    }
+
+    private static func activityCountLabel(for record: ExerciseHistory?) -> String {
+        guard let record else { return "reps" }
+        if record.totalReps > 0 {
+            switch record.activityKind {
+            case .sportPractice, .skill:
+                return record.totalReps == 1 ? "attempt" : "attempts"
+            case .conditioning:
+                return record.totalReps == 1 ? "round" : "rounds"
+            case .mobility, .recovery:
+                return record.totalReps == 1 ? "rep" : "reps"
+            case .cardio, .custom, .strength, .none:
+                return record.totalReps == 1 ? "rep" : "reps"
+            }
+        }
+
+        switch record.activityKind {
+        case .conditioning:
+            return record.totalSets == 1 ? "round" : "rounds"
+        default:
+            return record.totalSets == 1 ? "segment" : "segments"
+        }
     }
 }
 
@@ -532,7 +557,7 @@ private struct ExercisePRCard: View {
             return formatDuration(pr.maxDurationSeconds)
         }
         if pr.maxActivityCount > 0 {
-            return "\(pr.maxActivityCount) reps"
+            return "\(pr.maxActivityCount) \(pr.maxActivityCountLabel)"
         }
         return "\(pr.totalSessions) sessions"
     }
@@ -546,7 +571,7 @@ private struct ExercisePRCard: View {
             metrics.append(("map.fill", formatDistance(pr.maxDistanceMeters), .green))
         }
         if pr.maxActivityCount > 0 {
-            metrics.append(("repeat", "\(pr.maxActivityCount)", .orange))
+            metrics.append(("repeat", "\(pr.maxActivityCount) \(pr.maxActivityCountLabel)", .orange))
         }
         return Array(metrics.prefix(2))
     }
@@ -890,7 +915,7 @@ struct ActivityRecordStatsGrid: View {
                 PRStatCell(
                     icon: "repeat",
                     iconColor: .orange,
-                    label: "Count",
+                    label: pr.maxActivityCountLabel.capitalized,
                     value: pr.maxActivityCount > 0 ? "\(pr.maxActivityCount)" : "--",
                     detail: pr.maxActivityCountDate?.formatted(date: .abbreviated, time: .omitted) ?? ""
                 )
