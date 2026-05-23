@@ -62,6 +62,7 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertEqual(exercise.activityAliases ?? [], ["Bouldering", "Climb"])
         XCTAssertEqual(exercise.targetTags ?? [], ["Technique", "Power", "Grip"])
         XCTAssertEqual(exercise.trackingFields ?? [], ["duration", "reps", "notes"])
+        XCTAssertEqual(exercise.resolvedDisplayLabel(equipmentName: analysis.equipmentName), "Climbing")
     }
 
     func testExercisePhotoSuggestionInfersActivityCategoryWhenModelOmitsCategory() {
@@ -80,6 +81,7 @@ final class ExerciseLibrarySeederTests: XCTestCase {
 
         XCTAssertEqual(category, .sportPractice)
         XCTAssertEqual(suggestion.resolvedActivityTypeName(category: category, equipmentName: "Climbing Wall"), "Climbing")
+        XCTAssertEqual(suggestion.resolvedDisplayLabel(equipmentName: "Climbing Wall"), "Climbing")
         XCTAssertEqual(suggestion.resolvedTrackingFields(category: category), [.duration, .reps, .notes])
     }
 

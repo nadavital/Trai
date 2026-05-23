@@ -191,12 +191,6 @@ struct EquipmentAnalysisSheet: View {
     }
 
     private func exerciseLabel(for exercise: ExercisePhotoAnalysis.SuggestedExercise) -> String {
-        if let muscleGroup = exercise.muscleGroup, !muscleGroup.isEmpty {
-            return muscleGroup.capitalized
-        }
-        if let category = exercise.category, !category.isEmpty {
-            return Exercise.Category.normalized(from: category)?.displayName ?? category.capitalized
-        }
-        return "Exercise"
+        exercise.resolvedDisplayLabel(equipmentName: analysis.equipmentName)
     }
 }

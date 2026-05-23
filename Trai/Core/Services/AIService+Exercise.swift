@@ -86,6 +86,21 @@ extension ExercisePhotoAnalysis.SuggestedExercise {
             ? Exercise.defaultTrackingFields(for: category)
             : Exercise.normalizedTrackingFields(fields, for: category)
     }
+
+    func resolvedDisplayLabel(equipmentName: String? = nil) -> String {
+        let category = resolvedCategory(equipmentName: equipmentName)
+        if category == .strength {
+            if let muscleGroup,
+               let group = Exercise.MuscleGroup(rawValue: muscleGroup) {
+                return group.displayName
+            }
+            return category.displayName
+        }
+
+        let activityName = resolvedActivityTypeName(category: category, equipmentName: equipmentName)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return activityName.isEmpty ? category.displayName : activityName
+    }
 }
 
 // MARK: - AIService Exercise Extension
