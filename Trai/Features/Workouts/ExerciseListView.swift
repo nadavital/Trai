@@ -102,7 +102,7 @@ struct ExerciseListView: View {
         let exercisesByMuscleGroup: [Exercise.MuscleGroup: [Exercise]]
         let sortedMuscleGroups: [Exercise.MuscleGroup]
         let noMuscleGroupExercises: [Exercise]
-        let showCustomOption: Bool
+        let customOptionName: String?
     }
 
     private struct UsageSummaryFingerprint: Equatable {
@@ -331,8 +331,17 @@ struct ExerciseListView: View {
             exercisesByMuscleGroup: exercisesByMuscleGroup,
             sortedMuscleGroups: sortedMuscleGroups,
             noMuscleGroupExercises: noMuscleGroupExercises,
-            showCustomOption: !searchText.isEmpty && result.isEmpty
+            customOptionName: customOptionName(for: result)
         )
+    }
+
+    private func customOptionName(for filteredExercises: [Exercise]) -> String? {
+        guard filteredExercises.isEmpty else { return nil }
+        let searched = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !searched.isEmpty {
+            return searched
+        }
+        return quickAddActivityTypeName
     }
 
     private func bestActivityTypePriority(for exercise: Exercise, priorities: [String: Int]) -> Int {
@@ -375,6 +384,10 @@ struct ExerciseListView: View {
             if let inferred = Exercise.Category.normalized(from: activityType) {
                 return inferred.userFacingEquivalent
             }
+            if let targetCategory = targetActivityCategories.first {
+                return targetCategory.userFacingEquivalent
+            }
+            return .custom
         }
 
         return .strength
@@ -393,6 +406,12 @@ struct ExerciseListView: View {
     private var activityTypesForFilterChips: [String] {
         let targetKeys = targetActivityTypePriority
         var bestNameByKey: [String: String] = [:]
+        for activityType in targetActivityTypes {
+            let title = activityType.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = Exercise.normalizedActivityKey(title)
+            guard !title.isEmpty, !key.isEmpty else { continue }
+            bestNameByKey[key] = title
+        }
         for exercise in exercises where exercise.exerciseCategory != .strength {
             let title = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
             let key = Exercise.normalizedActivityKey(title)
@@ -483,11 +502,11 @@ struct ExerciseListView: View {
                         }
 
                         // Option to add searched exercise directly
-                        if listData.showCustomOption {
+                        if let customOptionName = listData.customOptionName {
                             Section {
                                 Button {
                                     addCustomExercise(
-                                        name: searchText,
+                                        name: customOptionName,
                                         activityTypeName: quickAddActivityTypeName,
                                         muscleGroup: quickAddMuscleGroup,
                                         category: quickAddCategory
@@ -496,7 +515,7 @@ struct ExerciseListView: View {
                                     HStack {
                                         Image(systemName: "plus.circle")
                                             .foregroundStyle(.accent)
-                                        Text("Add \"\(searchText)\"")
+                                        Text("Add \"\(customOptionName)\"")
                                         Spacer()
                                     }
                                 }
