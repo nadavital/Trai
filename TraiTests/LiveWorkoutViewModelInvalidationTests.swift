@@ -419,6 +419,34 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         )
     }
 
+    func testLiveActivityProgressFallsBackToPlannedActivityGuidanceWhenNoLoggedEntriesExist() {
+        let workout = LiveWorkout(name: "Mobility Plan", workoutType: .mobility)
+
+        let plannedGuidance = LiveWorkoutEntry(
+            exerciseName: "Hip Mobility",
+            orderIndex: 0,
+            exerciseType: "mobility"
+        )
+        plannedGuidance.activityTypeName = "Mobility Flow"
+        plannedGuidance.sourcePlanBlockID = UUID()
+        plannedGuidance.plannedDurationSeconds = 600
+
+        workout.entries = [plannedGuidance]
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        XCTAssertEqual(
+            viewModel.liveActivityProgressSummary,
+            LiveWorkoutViewModel.LiveActivityProgressSummary(
+                completed: 0,
+                total: 1,
+                label: "item",
+                supportsSetShortcut: false
+            )
+        )
+    }
+
     func testMixedWorkoutHistorySummarySeparatesExercisesAndActivities() {
         let workout = LiveWorkout(name: "Strength + Climb", workoutType: .mixed)
         workout.startedAt = Date(timeIntervalSince1970: 1_000)

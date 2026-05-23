@@ -635,6 +635,7 @@ enum WorkoutGoalProgressResolver {
 
         guard goal.trimmedActivityName == nil,
               activityTags.isEmpty,
+              goal.linkedActivityRole == nil,
               goal.linkedActivityKind != nil else {
             return false
         }
@@ -723,9 +724,10 @@ enum WorkoutGoalProgressResolver {
 
     static func formatTarget(_ value: Double, unit: String) -> String {
         let trimmedUnit = unit.trimmingCharacters(in: .whitespacesAndNewlines)
+        let roundedValue = value.rounded()
         let formattedValue: String
-        if value.truncatingRemainder(dividingBy: 1) == 0 {
-            formattedValue = "\(Int(value.rounded()))"
+        if abs(value - roundedValue) < 0.000_001 {
+            formattedValue = "\(Int(roundedValue))"
         } else {
             formattedValue = String(format: "%.1f", value)
         }
