@@ -503,6 +503,12 @@ nonisolated struct WorkoutPlanSuggestionEntry: Codable, Sendable, Identifiable {
 
 // MARK: - Suggested Workout Entry
 
+nonisolated private enum AIWorkoutCategoryNormalizer {
+    static func key(from rawValue: String?) -> String? {
+        Exercise.Category.normalized(from: rawValue)?.userFacingEquivalent.rawValue
+    }
+}
+
 /// Workout suggested by AI for user confirmation before starting
 nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
     var id: UUID = UUID()
@@ -718,34 +724,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
         }
 
         private static func normalizedCategoryKey(_ rawValue: String?) -> String? {
-            guard let rawValue else { return nil }
-            let compact = rawValue
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-                .replacingOccurrences(of: "-", with: "")
-                .replacingOccurrences(of: "_", with: "")
-                .replacingOccurrences(of: " ", with: "")
-
-            switch compact {
-            case "strength", "lifting", "weights", "weighttraining", "resistancetraining":
-                return "strength"
-            case "cardio", "endurance", "aerobic":
-                return "cardio"
-            case "conditioning", "hiit", "circuit":
-                return "conditioning"
-            case "mobility", "stretching", "stretch", "yoga", "flow":
-                return "mobility"
-            case "sport", "sports", "sportpractice", "practice", "climbing", "bouldering", "boxing", "basketball", "tennis", "soccer", "padel", "skill":
-                return "sportPractice"
-            case "recovery", "recover", "cooldown", "easy":
-                return "recovery"
-            case "flexibility":
-                return "mobility"
-            case "custom", "activity", "other":
-                return "custom"
-            default:
-                return nil
-            }
+            AIWorkoutCategoryNormalizer.key(from: rawValue)
         }
     }
 
@@ -911,34 +890,7 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
         }
 
         private static func normalizedCategoryKey(_ rawValue: String?) -> String? {
-            guard let rawValue else { return nil }
-            let compact = rawValue
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-                .replacingOccurrences(of: "-", with: "")
-                .replacingOccurrences(of: "_", with: "")
-                .replacingOccurrences(of: " ", with: "")
-
-            switch compact {
-            case "strength", "lifting", "weights", "weighttraining", "resistancetraining":
-                return "strength"
-            case "cardio", "endurance", "aerobic":
-                return "cardio"
-            case "conditioning", "hiit", "circuit":
-                return "conditioning"
-            case "mobility", "stretching", "stretch", "yoga", "flow":
-                return "mobility"
-            case "sport", "sports", "sportpractice", "practice", "climbing", "bouldering", "boxing", "basketball", "tennis", "soccer", "padel", "skill":
-                return "sportPractice"
-            case "recovery", "recover", "cooldown", "easy":
-                return "recovery"
-            case "flexibility":
-                return "mobility"
-            case "custom", "activity", "other":
-                return "custom"
-            default:
-                return nil
-            }
+            AIWorkoutCategoryNormalizer.key(from: rawValue)
         }
 
         /// Summary string for display (e.g., "3×10" or "12, 10, 8")

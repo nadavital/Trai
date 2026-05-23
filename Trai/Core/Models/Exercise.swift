@@ -150,7 +150,7 @@ extension Exercise {
             [.strength, .cardio, .conditioning, .mobility, .sportPractice, .recovery, .custom]
         }
 
-        var userFacingEquivalent: Category {
+        nonisolated var userFacingEquivalent: Category {
             switch self {
             case .skill:
                 return .sportPractice
@@ -172,7 +172,7 @@ extension Exercise {
             }
         }
 
-        static func normalized(from rawValue: String?) -> Category? {
+        nonisolated static func normalized(from rawValue: String?) -> Category? {
             guard let rawValue else { return nil }
             let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
             if let exact = Category(rawValue: trimmed) {

@@ -286,6 +286,82 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         )
     }
 
+    func testSuggestedWorkoutStartUsesSharedCategoryNormalization() {
+        let run = SuggestedWorkoutEntry.SuggestedExercise(
+            name: "Outdoor Run",
+            category: "running",
+            activityTypeName: "Running",
+            targetTags: ["Cardio"],
+            trackingFields: ["duration", "distance"],
+            sets: 3,
+            reps: 0,
+            weightKg: nil,
+            durationMinutes: 30,
+            distanceMeters: 5_000,
+            notes: nil,
+            segments: nil
+        )
+
+        XCTAssertFalse(run.isStrengthStartItem)
+        XCTAssertTrue(run.isActivityStartItem)
+        XCTAssertEqual(run.startSummarySegments, ["Running", "30 min", "5.0 km"])
+    }
+
+    func testSuggestedWorkoutLogUsesSharedCategoryNormalization() {
+        let padel = SuggestedWorkoutLog.LoggedExercise(
+            name: "Padel Drills",
+            category: "padel drills",
+            activityTypeName: "Padel",
+            targetTags: ["Sport", "Footwork"],
+            trackingFields: ["duration", "reps", "notes"],
+            durationMinutes: 45,
+            distanceMeters: nil,
+            notes: nil,
+            segments: [
+                .init(durationMinutes: 20, reps: 8, notes: "Cross-court volleys"),
+                .init(durationMinutes: 20, reps: 6, notes: "Wall returns")
+            ],
+            sets: []
+        )
+
+        XCTAssertFalse(padel.isStrengthLog)
+        XCTAssertTrue(padel.isActivityLog)
+        XCTAssertEqual(padel.setCount, 0)
+        XCTAssertEqual(padel.activitySummarySegments, ["45 min", "2 segments", "14 attempts"])
+    }
+
+    func testSuggestedWorkoutCategoryNormalizationDoesNotMisclassifyCableRow() {
+        let startExercise = SuggestedWorkoutEntry.SuggestedExercise(
+            name: "Cable Row",
+            category: "Cable Row",
+            activityTypeName: nil,
+            targetTags: ["Back"],
+            trackingFields: ["sets", "weight"],
+            sets: 3,
+            reps: 10,
+            weightKg: 50,
+            durationMinutes: nil,
+            distanceMeters: nil,
+            notes: nil,
+            segments: nil
+        )
+        let loggedExercise = SuggestedWorkoutLog.LoggedExercise(
+            name: "Cable Row",
+            category: "Cable Row",
+            trackingFields: ["sets", "weight"],
+            sets: [
+                .init(reps: 10, weightKg: 50),
+                .init(reps: 10, weightKg: 50),
+                .init(reps: 10, weightKg: 50)
+            ]
+        )
+
+        XCTAssertTrue(startExercise.isStrengthStartItem)
+        XCTAssertEqual(startExercise.startSummarySegments, ["3x10", "50 kg"])
+        XCTAssertTrue(loggedExercise.isStrengthLog)
+        XCTAssertEqual(loggedExercise.setCount, 3)
+    }
+
     func testCustomActivitySummaryPluralizesGenericCounts() {
         let exercise = SuggestedWorkoutEntry.SuggestedExercise(
             name: "Custom Drill",
