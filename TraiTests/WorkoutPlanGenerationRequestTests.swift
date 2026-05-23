@@ -507,6 +507,54 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(validated.map(\.title), ["Build climbing consistency"])
     }
 
+    func testWorkoutGoalSuggestionsDoNotTreatNutritionWeightAsLoadBaseline() {
+        let suggestion = makeGoalSuggestion(
+            title: "Add weight to bench",
+            goalKindRaw: WorkoutGoal.GoalKind.weight.rawValue,
+            targetValue: 5,
+            targetUnit: "kg",
+            periodUnitRaw: nil,
+            periodCount: nil,
+            successCriteria: "You add 5 kg to your bench top set."
+        )
+
+        let allowsWeightGoals = WorkoutGoalSuggestion.hasWeightBaselineContext([
+            "Nutrition context: current weight 80 kg",
+            "Nutrition milestone: lose 5 kg in the first month",
+            "Daily targets: 2100 calories, 160g protein"
+        ])
+        let validated = WorkoutGoalSuggestion.validatedUnique(
+            [suggestion],
+            allowsWeightGoals: allowsWeightGoals
+        )
+
+        XCTAssertFalse(allowsWeightGoals)
+        XCTAssertTrue(validated.isEmpty)
+    }
+
+    func testWorkoutGoalSuggestionsAllowLoadGoalWithStrengthBaseline() {
+        let suggestion = makeGoalSuggestion(
+            title: "Add weight to squat",
+            goalKindRaw: WorkoutGoal.GoalKind.weight.rawValue,
+            targetValue: 5,
+            targetUnit: "kg",
+            periodUnitRaw: nil,
+            periodCount: nil,
+            successCriteria: "You add 5 kg to your squat working weight."
+        )
+
+        let allowsWeightGoals = WorkoutGoalSuggestion.hasWeightBaselineContext([
+            "Exercise summary: Back Squat best set 80 kg for 5 reps"
+        ])
+        let validated = WorkoutGoalSuggestion.validatedUnique(
+            [suggestion],
+            allowsWeightGoals: allowsWeightGoals
+        )
+
+        XCTAssertTrue(allowsWeightGoals)
+        XCTAssertEqual(validated.map(\.title), ["Add weight to squat"])
+    }
+
     func testWorkoutGoalSuggestionPreservesSuccessCriteria() throws {
         let suggestion = makeGoalSuggestion(
             title: "Complete the plan milestone",
