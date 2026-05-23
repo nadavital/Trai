@@ -870,7 +870,16 @@ struct WorkoutPlanChatFlow: View {
             return plan.rationale
         }
 
-        // Generate a contextual message
+        let planModalities = planIntroModalities(for: plan)
+        if planModalities.count > 1 {
+            return "I built a \(days)-day plan that balances \(formattedPlanIntroList(planModalities)) across the week."
+        }
+        if let modality = planModalities.first, modality.caseInsensitiveCompare("Strength") != .orderedSame {
+            return "I built a \(days)-day plan centered on \(modality.lowercased()) with enough structure to keep it sustainable."
+        }
+
+        // Generate a contextual message when the plan does not expose enough
+        // template detail yet, such as older fallback plans.
         let workoutTypes = collectedAnswers.answers(for: "workoutType")
         if workoutTypes.contains("Mixed") || workoutTypes.count > 1 {
             return "I've put together a \(splitName) split that balances everything you want - \(days) days per week with a good mix of training styles."
@@ -903,6 +912,56 @@ struct WorkoutPlanChatFlow: View {
         }
 
         return "I built a \(dayCount)-day \(structure.lowercased()) plan. You can save it or tell me what to change."
+    }
+
+    private func planIntroModalities(for plan: WorkoutPlan) -> [String] {
+        var result: [String] = []
+        var seen: Set<String> = []
+
+        func append(_ raw: String?) {
+            guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else { return }
+            let key = value.goalNormalizedKey
+            guard !key.isEmpty, seen.insert(key).inserted else { return }
+            result.append(value)
+        }
+
+        for template in plan.templates {
+            switch template.sessionType {
+            case .strength:
+                append("Strength")
+            case .mixed, .custom:
+                break
+            default:
+                append(template.sessionType.displayName)
+            }
+
+            template.displayBlocks.forEach { block in
+                append(block.displayActivityName)
+                block.activityTags.forEach(append)
+            }
+
+            template.focusAreas.forEach(append)
+        }
+
+        return result
+            .filter { !$0.localizedCaseInsensitiveContains("day") }
+            .prefix(4)
+            .map { $0 }
+    }
+
+    private func formattedPlanIntroList(_ values: [String]) -> String {
+        let clipped = Array(values.prefix(3))
+        switch clipped.count {
+        case 0:
+            return "your training"
+        case 1:
+            return clipped[0].lowercased()
+        case 2:
+            return "\(clipped[0].lowercased()) and \(clipped[1].lowercased())"
+        default:
+            return "\(clipped[0].lowercased()), \(clipped[1].lowercased()), and \(clipped[2].lowercased())"
+        }
     }
 
     private func acceptPlan() {
