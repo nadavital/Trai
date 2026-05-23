@@ -1046,7 +1046,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
 
         viewModel.updateActivityTargets([.cardio])
 
-        XCTAssertEqual(viewModel.workout.focusAreas, ["Padel", "cardio"])
+        XCTAssertEqual(viewModel.workout.focusAreas, ["Padel", "Cardio"])
         XCTAssertEqual(viewModel.targetActivityCategories, [.cardio, .sportPractice])
         XCTAssertEqual(viewModel.targetActivityTypes, ["Padel"])
     }
@@ -1062,9 +1062,10 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
             activityTypes: ["Bouldering", "Sled Push"]
         )
 
-        XCTAssertTrue(viewModel.workout.focusAreas.contains("conditioning"))
-        XCTAssertTrue(viewModel.workout.focusAreas.contains("skill"))
-        XCTAssertTrue(viewModel.workout.focusAreas.contains("sportPractice"))
+        XCTAssertTrue(viewModel.workout.focusAreas.contains("Conditioning"))
+        XCTAssertTrue(viewModel.workout.focusAreas.contains("Sport"))
+        XCTAssertFalse(viewModel.workout.focusAreas.contains("skill"))
+        XCTAssertFalse(viewModel.workout.focusAreas.contains("sportPractice"))
         XCTAssertEqual(viewModel.workout.focusAreas.suffix(2), ["Bouldering", "Sled Push"])
         XCTAssertEqual(viewModel.targetActivityCategories, [.conditioning, .sportPractice])
         XCTAssertEqual(viewModel.targetActivityTypes, ["Bouldering", "Sled Push"])

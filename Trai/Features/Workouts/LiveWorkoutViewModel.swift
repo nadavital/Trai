@@ -1712,11 +1712,8 @@ final class LiveWorkoutViewModel {
                 })
             }
         }
-        let categoryFocus = categories
-            .flatMap { Array($0.suggestionCategories) }
-            .sorted { $0.displayName < $1.displayName }
-            .map(\.rawValue)
-        workout.focusAreas = existingFreeformFocus + categoryFocus
+        let categoryFocus = Self.visibleActivityFocusLabels(for: categories)
+        workout.focusAreas = Self.dedupedFocusAreas(existingFreeformFocus + categoryFocus)
         if workout.name == "Custom Workout", !categories.isEmpty, workout.muscleGroups.isEmpty {
             workout.name = categories.prefix(2).map(\.displayName).joined(separator: " + ")
         }
@@ -1747,13 +1744,19 @@ final class LiveWorkoutViewModel {
     ) {
         workout.name = name
         workout.muscleGroups = muscles
-        let categoryFocus = categories
-            .flatMap { Array($0.suggestionCategories) }
-            .sorted { $0.displayName < $1.displayName }
-            .map(\.rawValue)
+        let categoryFocus = Self.visibleActivityFocusLabels(for: categories)
         workout.focusAreas = Self.dedupedFocusAreas(categoryFocus + activityTypes)
         rebuildSuggestionPool(reason: .targetMusclesChanged)
         saveImmediately()
+    }
+
+    private static func visibleActivityFocusLabels(for categories: [Exercise.Category]) -> [String] {
+        var seen = Set<String>()
+        return categories.compactMap { category in
+            let label = category.userFacingEquivalent.displayName
+            guard seen.insert(label.goalNormalizedKey).inserted else { return nil }
+            return label
+        }
     }
 
     private static func dedupedFocusAreas(_ focusAreas: [String]) -> [String] {
