@@ -1912,7 +1912,7 @@ struct OnboardingWorkoutPlanSetupView: View {
                 (title: "Short intervals", text: "Use short, hard interval sessions."),
                 (title: "Low impact", text: "Keep conditioning low impact."),
                 (title: "Strength circuits", text: "Use strength-based circuits."),
-                (title: "Calorie burn", text: "Bias conditioning toward calorie burn.")
+                (title: "Work capacity", text: "Build repeatable effort without chasing calories.")
             ]
         )
     }
@@ -2009,9 +2009,9 @@ struct OnboardingWorkoutPlanSetupView: View {
         }
         if cardioIsSupportOnly {
             suggestions.append(contentsOf: [
-                (title: "Short support", text: "Keep cardio to one short easy support block after a lift each week."),
+                (title: "Short support", text: "Keep cardio to one short easy support block each week."),
                 (title: "Recover better", text: "Use cardio only if it helps recovery and conditioning without taking over."),
-                (title: "No cardio day", text: "Do not create a dedicated cardio day for this plan.")
+                (title: "Support only", text: "Keep cardio supportive instead of making it a standalone session.")
             ])
         } else if draft.focuses.contains(.cardio) || draft.goalPresets.contains(.improveEndurance) {
             suggestions.append(contentsOf: [
@@ -3448,6 +3448,8 @@ private extension WorkoutGoal {
             notes,
             linkedActivityName ?? "",
             linkedActivityTags.joined(separator: " "),
+            linkedActivityKindRaw ?? "",
+            linkedActivityRoleRaw ?? "",
             linkedWorkoutTypeRaw ?? ""
         ]
         .joined(separator: " ")
@@ -3460,8 +3462,18 @@ private extension WorkoutGoal {
             return "plan-adherence|\(linkedWorkoutTypeRaw ?? "any")|\(periodUnitRaw ?? "week")|\(periodCount ?? 1)"
         }
 
-        if combinedText.contains("cardio"),
-           combinedText.contains("push day") || combinedText.contains("finisher") {
+        let supportiveCardioRoles = ["accessory", "finisher", "warmup", "cooldown"]
+        let linkedKind = linkedActivityKindRaw?.lowercased() ?? ""
+        let linkedRole = linkedActivityRoleRaw?.lowercased() ?? ""
+        let isCardioScoped = linkedKind == "cardio"
+            || linkedKind == "conditioning"
+            || combinedText.contains("cardio")
+            || combinedText.contains("conditioning")
+        let isSupportScoped = supportiveCardioRoles.contains(linkedRole)
+            || combinedText.contains("support")
+            || combinedText.contains("add-on")
+            || combinedText.contains("addon")
+        if isCardioScoped, isSupportScoped {
             return "cardio-placement|\(linkedWorkoutTypeRaw ?? "any")|\(periodUnitRaw ?? "week")|\(periodCount ?? 1)"
         }
 

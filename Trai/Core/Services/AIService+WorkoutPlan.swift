@@ -278,8 +278,8 @@ extension AIService {
 
         Correct the plan now. \(requiredTemplateText)
         Keep the user's personalization brief as the highest-priority customization input.
-        \(request.requestsCardioAsAccessory ? "The user asked for cardio as an accessory or finisher, so do not return standalone cardio or HIIT templates. Add the cardio work inside one strength or mixed template instead." : "")
-        \(request.limitsAccessoryCardioToOneSession ? "The user limited cardio support to one placement, so return exactly one cardio block with role finisher or accessory in the whole plan." : "")
+        \(request.requestsCardioAsAccessory ? "The user asked for cardio as supportive work, so do not return standalone cardio or HIIT templates. Add the cardio work inside one strength or mixed template with role \(request.supportiveCardioRole.rawValue)." : "")
+        \(request.limitsAccessoryCardioToOneSession ? "The user limited cardio support to one placement, so return exactly one cardio block with role \(request.supportiveCardioRole.rawValue) in the whole plan." : "")
         Return planIntent, modalityProgression, and ordered blocks for every template. Do not flatten activity work into fake strength exercises.
         Return only the corrected JSON object matching the schema.
         """

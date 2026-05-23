@@ -220,6 +220,8 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
 
         XCTAssertTrue(prompt.contains("Preserve every selected or stated modality as real plan structure"))
         XCTAssertTrue(prompt.contains("Is every explicitly selected modality still visible as a real template or block?"))
+        XCTAssertTrue(prompt.contains("Use role finisher only"))
+        XCTAssertFalse(prompt.contains("role finisher or accessory"))
     }
 
     func testLegacyWorkoutPlanJSONSynthesizesBlocks() throws {
