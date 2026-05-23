@@ -670,7 +670,7 @@ enum AIFunctionDeclarations {
                 "properties": [
                     "name": [
                         "type": "string",
-                        "description": "A descriptive name for the workout (e.g., 'Morning Push Day', 'Leg Day', 'Upper Body Strength', 'Back & Biceps'). Generate a meaningful name based on the exercises."
+                        "description": "A descriptive name for the workout or activity session (e.g., 'Morning Push Day', 'Leg Day', 'Tempo Run', 'Climbing Technique', 'Mobility Flow'). Generate a meaningful name based on what the user did."
                     ],
                     "type": [
                         "type": "string",
@@ -825,7 +825,7 @@ enum AIFunctionDeclarations {
     static var startLiveWorkout: [String: Any] {
         [
             "name": "start_live_workout",
-            "description": "Start a live workout tracking session for the user. Use when the user says they want to start a workout, begin training, or are ready to work out. This creates a new workout that they can track exercises in.",
+            "description": "Start a live workout tracking session for the user. Use when the user says they want to start a workout, begin training, or are ready to work out. This creates a new workout where they can track strength exercises, cardio, sport practice, mobility, recovery, conditioning, or custom activities.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -853,7 +853,7 @@ enum AIFunctionDeclarations {
                         "items": [
                             "type": "object",
                             "properties": [
-                                "name": ["type": "string", "description": "Exercise name"],
+                                "name": ["type": "string", "description": "Exercise or activity item name"],
                                 "category": [
                                     "type": "string",
                                     "description": "Stable tracking behavior primitive for tracking fields. Keep the user-facing identity in activity_name and target_tags.",
@@ -894,7 +894,7 @@ enum AIFunctionDeclarations {
                                 ]
                             ]
                         ],
-                        "description": "Pre-populated exercises for the workout (optional)"
+                        "description": "Pre-populated strength exercises or activity items for the workout (optional)"
                     ]
                 ],
                 "required": ["name", "workout_type"]

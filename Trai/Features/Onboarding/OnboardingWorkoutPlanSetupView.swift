@@ -759,7 +759,7 @@ struct OnboardingWorkoutPlanDraft: Equatable {
             rationale: "A manually configured plan for \(context.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "your" : "\(context.name)'s") weekly training.",
             guidelines: [
                 "Start with conservative effort for the first week.",
-                "Adjust exercises and muscle targets from the plan editor as your routine changes.",
+                "Adjust exercises, activities, and session targets from the plan editor as your routine changes.",
                 "Use Trai Pro when you want Trai to build, explain, and update the plan from your progress."
             ],
             progressionStrategy: .defaultStrategy,

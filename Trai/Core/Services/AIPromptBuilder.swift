@@ -215,7 +215,7 @@ enum AIPromptBuilder {
 
         Provide a specific workout plan with:
         1. Warm-up (5 minutes)
-        2. Main workout (exercises, sets, reps, rest times)
+        2. Main work using the right structure for the activity: sets/reps/rest for lifting, or duration, distance, segments, targets, and notes for cardio, sport, mobility, recovery, conditioning, or custom activities
         3. Cool-down (5 minutes)
 
         Keep the response concise and actionable.

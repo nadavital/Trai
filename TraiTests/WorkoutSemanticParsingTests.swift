@@ -61,7 +61,9 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertTrue(prompt.contains("8 attempts"))
         XCTAssertTrue(prompt.contains("Grip power"))
         XCTAssertTrue(prompt.contains("Avoids slab"))
+        XCTAssertTrue(prompt.contains("duration, distance, segments, targets, and notes"))
         XCTAssertFalse(prompt.contains("2 sets x 8 reps"))
+        XCTAssertFalse(prompt.contains("Main workout (exercises, sets, reps, rest times)"))
     }
 
     func testWorkoutSuggestionPromptIncludesImportedWorkoutDistance() {
