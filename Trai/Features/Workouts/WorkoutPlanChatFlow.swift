@@ -703,7 +703,12 @@ struct WorkoutPlanChatFlow: View {
             return compactIntro
         }
 
-        return "I built this as a \(plan.daysPerWeek)-day \(plan.splitType.displayName.lowercased()) plan. You can save it or tell me what to change."
+        if let summary = plan.planIntent?.summary.trimmingCharacters(in: .whitespacesAndNewlines),
+           !summary.isEmpty {
+            return summary
+        }
+
+        return generatedPlanFallbackIntro(for: plan)
     }
 
     private func generatedIntro(from text: String) -> String {
@@ -852,6 +857,11 @@ struct WorkoutPlanChatFlow: View {
 
     /// Generate a personalized intro message for the plan
     private func generatePlanIntroMessage(for plan: WorkoutPlan) -> String {
+        if let summary = plan.planIntent?.summary.trimmingCharacters(in: .whitespacesAndNewlines),
+           !summary.isEmpty {
+            return summary
+        }
+
         let splitName = plan.splitType.displayName
         let days = plan.daysPerWeek
 
@@ -872,8 +882,27 @@ struct WorkoutPlanChatFlow: View {
             let customFocus = workoutTypes.joined(separator: ", ")
             return "I've mapped out a \(days)-day plan centered on \(customFocus.lowercased()) with enough structure to keep it sustainable week to week."
         } else {
-            return "I've created a \(splitName) program for you - \(days) days per week tailored to your goals and schedule."
+            return generatedPlanFallbackIntro(for: plan, splitName: splitName, days: days)
         }
+    }
+
+    private func generatedPlanFallbackIntro(
+        for plan: WorkoutPlan,
+        splitName: String? = nil,
+        days: Int? = nil
+    ) -> String {
+        let dayCount = days ?? plan.daysPerWeek
+        if let focus = plan.planIntent?.primaryFocus.trimmingCharacters(in: .whitespacesAndNewlines),
+           !focus.isEmpty {
+            return "I built a \(dayCount)-day plan around \(focus.lowercased()). You can save it or tell me what to change."
+        }
+
+        let structure = (splitName ?? plan.splitType.displayName).trimmingCharacters(in: .whitespacesAndNewlines)
+        if plan.splitType == .custom || structure.localizedCaseInsensitiveContains("plan") {
+            return "I built a \(dayCount)-day plan around your setup. You can save it or tell me what to change."
+        }
+
+        return "I built a \(dayCount)-day \(structure.lowercased()) plan. You can save it or tell me what to change."
     }
 
     private func acceptPlan() {
