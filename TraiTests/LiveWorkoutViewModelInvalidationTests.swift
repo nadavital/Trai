@@ -973,7 +973,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         )
 
         XCTAssertEqual(taggedGoal.scopeSummary, "Cardio support")
-        XCTAssertEqual(roleOnlyGoal.scopeSummary, "Support")
+        XCTAssertEqual(roleOnlyGoal.scopeSummary, "Support work")
     }
 
     func testMixedWorkoutSuggestionsIncludeRelevantNonStrengthExercises() throws {

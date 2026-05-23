@@ -755,7 +755,7 @@ struct ActivitySummaryRow: View {
         var segments: [String] = []
 
         if let role = visibleActivityRole {
-            segments.append(role.displayName)
+            segments.append(role.placementDisplayName)
         }
 
         let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)

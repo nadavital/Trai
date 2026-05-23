@@ -36,25 +36,6 @@ struct WorkoutGoalInsight: Identifiable {
     }
 }
 
-private extension WorkoutPlan.TrainingBlock.Role {
-    var goalEditorPlacementName: String {
-        switch self {
-        case .main:
-            "Main work"
-        case .warmup:
-            "Warm-up"
-        case .accessory:
-            "Support work"
-        case .finisher:
-            "End of workout"
-        case .cooldown:
-            "Cool-down"
-        case .custom:
-            "Custom placement"
-        }
-    }
-}
-
 struct RecentWorkoutSignal: Identifiable {
     let id = UUID()
     let title: String
@@ -2235,11 +2216,11 @@ struct AddWorkoutGoalSheet: View {
                 Button {
                     selectedActivityRole = role
                 } label: {
-                    Label(role.goalEditorPlacementName, systemImage: role.iconName)
+                    Label(role.placementDisplayName, systemImage: role.iconName)
                 }
             }
         } label: {
-            Label(selectedActivityRole?.goalEditorPlacementName ?? "Anywhere in workout", systemImage: selectedActivityRole?.iconName ?? "slider.horizontal.3")
+            Label(selectedActivityRole?.placementDisplayName ?? "Anywhere in workout", systemImage: selectedActivityRole?.iconName ?? "slider.horizontal.3")
                 .font(.caption.weight(.semibold))
                 .frame(maxWidth: .infinity)
         }

@@ -434,6 +434,17 @@ struct WorkoutPlan: Codable, Equatable {
                 }
             }
 
+            nonisolated var placementDisplayName: String {
+                switch self {
+                case .main: "Main work"
+                case .warmup: "Warm-up"
+                case .accessory: "Support work"
+                case .finisher: "End of workout"
+                case .cooldown: "Cool-down"
+                case .custom: "Custom placement"
+                }
+            }
+
             nonisolated var iconName: String {
                 switch self {
                 case .main: "target"

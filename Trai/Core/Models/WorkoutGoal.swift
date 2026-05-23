@@ -258,7 +258,7 @@ extension WorkoutGoal {
             parts.append(linkedActivityKind.displayName)
         }
         if !hasSemanticActivityScope, let linkedActivityRole {
-            parts.append(linkedActivityRole.displayName)
+            parts.append(linkedActivityRole.placementDisplayName)
         }
         return parts.isEmpty ? "Any session" : parts.joined(separator: " • ")
     }

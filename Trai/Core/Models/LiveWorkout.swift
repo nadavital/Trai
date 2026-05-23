@@ -284,7 +284,7 @@ extension LiveWorkout {
             .map { entry in
                 var parts: [String] = [entry.exerciseName]
                 if let role = entry.activityRole?.reviewPromptDisplayRole {
-                    parts.append(role.displayName.lowercased())
+                    parts.append(role.placementDisplayName.lowercased())
                 }
                 parts.append(contentsOf: entry.traiActivitySummarySegments())
                 return parts.joined(separator: " • ")
