@@ -539,7 +539,7 @@ private struct CompactLeadingView: View {
                 .font(.caption)
                 .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
 
-            // Show current exercise instead of timer
+            // Show current workout item instead of timer
             if let exercise = context.state.currentExercise {
                 Text(exercise)
                     .font(.caption)
