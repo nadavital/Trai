@@ -22,12 +22,23 @@ struct CustomExercisesView: View {
         if searchText.isEmpty {
             return customExercises
         }
-        return customExercises.filter { $0.name.localizedStandardContains(searchText) }
+        return customExercises.filter { exercise in
+            exercise.name.localizedStandardContains(searchText)
+                || exercise.activityTypeName.localizedStandardContains(searchText)
+                || exercise.activityAliases.contains { $0.localizedStandardContains(searchText) }
+                || exercise.targetTags.contains { $0.localizedStandardContains(searchText) }
+                || exercise.exerciseCategory.displayName.localizedStandardContains(searchText)
+                || exercise.trackingFields.contains { $0.displayName.localizedStandardContains(searchText) }
+                || (exercise.displayEquipment?.localizedStandardContains(searchText) ?? false)
+        }
     }
 
     private var exercisesByTarget: [String: [Exercise]] {
         Dictionary(grouping: filteredExercises) { exercise in
-            exercise.activityTypeName
+            let activityName = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return activityName.isEmpty
+                ? Exercise.defaultActivityTypeName(for: exercise.name, category: exercise.exerciseCategory)
+                : activityName
         }
     }
 
@@ -145,6 +156,11 @@ struct CustomExercisesView: View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let resolvedCategory = category.userFacingEquivalent
+        let resolvedActivityName = activityTypeName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayActivityName = resolvedActivityName.isEmpty
+            ? Exercise.defaultActivityTypeName(for: trimmed, category: resolvedCategory)
+            : resolvedActivityName
 
         if let existing = existingExercise(named: trimmed) {
             let canSafelyRefreshCategory = existing.isCustom
@@ -176,9 +192,7 @@ struct CustomExercisesView: View {
             if !trackingFields.isEmpty {
                 existing.trackingFields = trackingFields
             }
-            if !activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                existing.activityTypeName = activityTypeName
-            }
+            existing.activityTypeName = displayActivityName
             if !activityAliases.isEmpty {
                 existing.activityAliases = activityAliases
             }
@@ -194,7 +208,7 @@ struct CustomExercisesView: View {
             muscleGroup: resolvedCategory == .strength ? muscleGroup : nil
         )
         exercise.isCustom = true
-        exercise.activityTypeName = activityTypeName
+        exercise.activityTypeName = displayActivityName
         exercise.activityAliases = activityAliases
         exercise.targetTags = targetTags.isEmpty ? Exercise.defaultTargetTags(for: resolvedCategory) : targetTags
         exercise.trackingFields = trackingFields.isEmpty ? Exercise.defaultTrackingFields(for: resolvedCategory) : trackingFields
@@ -232,7 +246,7 @@ private struct ExerciseManagementRow: View {
                     .font(.body)
 
                 HStack(spacing: 8) {
-                    Text(exercise.activityTypeName)
+                    Text(displayActivityName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -245,7 +259,7 @@ private struct ExerciseManagementRow: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if let equipment = exercise.equipmentName {
+                    if let equipment = exercise.displayEquipment {
                         Text("•")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
@@ -259,5 +273,12 @@ private struct ExerciseManagementRow: View {
             Spacer()
         }
         .padding(.vertical, 4)
+    }
+
+    private var displayActivityName: String {
+        let activityName = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return activityName.isEmpty
+            ? Exercise.defaultActivityTypeName(for: exercise.name, category: exercise.exerciseCategory)
+            : activityName
     }
 }
