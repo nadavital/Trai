@@ -1082,6 +1082,36 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertFalse(entry?.hasExercisePreferenceSignal ?? true)
     }
 
+    func testGoalRecommendationContextUsesActivityKindForSupportBlockMetrics() {
+        let workout = LiveWorkout(
+            name: "Climb Support",
+            workoutType: .mixed,
+            focusAreas: ["Bouldering"]
+        )
+        workout.completedAt = Date()
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 0,
+            exerciseType: "activity"
+        )
+        entry.activityKind = .sportPractice
+        entry.activityTypeName = "Bouldering"
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(reps: 2),
+            LiveWorkoutEntry.ActivitySegment(reps: 4)
+        ]
+        workout.entries = [entry]
+
+        let summaries = WorkoutGoalRecommendationContextBuilder.recentSessionSummaries(
+            workouts: [workout],
+            sessions: []
+        )
+
+        let summary = summaries.joined(separator: " ")
+        XCTAssertTrue(summary.contains("6 attempts"))
+        XCTAssertFalse(summary.contains("6 counts"))
+    }
+
     private func makeWorkout(initialReps: Int) -> (LiveWorkout, LiveWorkoutEntry) {
         let workout = LiveWorkout(name: "Push Day", workoutType: .strength)
         let entry = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)

@@ -157,7 +157,7 @@ struct WorkoutGoalRecommendationContextBuilder {
     }
 
     private static func goalContextSegmentLabel(for entry: LiveWorkoutEntry) -> String {
-        switch Exercise.Category.normalized(from: entry.exerciseType)?.userFacingEquivalent {
+        switch entry.resolvedActivityCategory {
         case .conditioning:
             return "round"
         default:
@@ -166,7 +166,7 @@ struct WorkoutGoalRecommendationContextBuilder {
     }
 
     private static func goalContextCountLabel(for entry: LiveWorkoutEntry) -> String {
-        switch Exercise.Category.normalized(from: entry.exerciseType)?.userFacingEquivalent {
+        switch entry.resolvedActivityCategory {
         case .sportPractice:
             return "attempt"
         case .conditioning:
