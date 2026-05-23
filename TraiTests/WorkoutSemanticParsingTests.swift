@@ -697,6 +697,72 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(goal["success_criteria"] as? String, "Complete three cardio sessions in one week.")
     }
 
+    func testWorkoutGoalFunctionsPreserveActivityKindAndRoleScope() async throws {
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
+        let createResult = await executor.execute(
+            .init(
+                name: "create_workout_goal",
+                arguments: [
+                    "title": "Complete weekly mobility support",
+                    "goal_kind": "frequency",
+                    "workout_type": "mixed",
+                    "activity_name": "Mobility Flow",
+                    "activity_tags": ["Mobility", "Hips"],
+                    "activity_kind": "mobility",
+                    "activity_role": "cooldown",
+                    "target_value": 1,
+                    "target_unit": "blocks",
+                    "period_unit": "week",
+                    "period_count": 1,
+                    "success_criteria": "You log the planned mobility cooldown once per week."
+                ]
+            )
+        )
+
+        guard case .dataResponse(let createFunctionResult) = createResult,
+              let createdGoal = createFunctionResult.response["goal"] as? [String: Any],
+              let goalId = createdGoal["id"] as? String else {
+            return XCTFail("Expected created workout goal response")
+        }
+
+        XCTAssertEqual(createdGoal["activity_kind"] as? String, "mobility")
+        XCTAssertEqual(createdGoal["activity_role"] as? String, "cooldown")
+
+        let getResult = await executor.execute(
+            .init(
+                name: "get_workout_goals",
+                arguments: ["status": "active"]
+            )
+        )
+
+        guard case .dataResponse(let getFunctionResult) = getResult,
+              let goals = getFunctionResult.response["goals"] as? [[String: Any]],
+              let fetchedGoal = goals.first(where: { $0["id"] as? String == goalId }) else {
+            return XCTFail("Expected fetched workout goal response")
+        }
+
+        XCTAssertEqual(fetchedGoal["activity_kind"] as? String, "mobility")
+        XCTAssertEqual(fetchedGoal["activity_role"] as? String, "cooldown")
+
+        let updateResult = await executor.execute(
+            .init(
+                name: "update_workout_goal",
+                arguments: [
+                    "goal_id": goalId,
+                    "activity_role": "warmup"
+                ]
+            )
+        )
+
+        guard case .dataResponse(let updateFunctionResult) = updateResult,
+              let updatedGoal = updateFunctionResult.response["goal"] as? [String: Any] else {
+            return XCTFail("Expected updated workout goal response")
+        }
+
+        XCTAssertEqual(updatedGoal["activity_kind"] as? String, "mobility")
+        XCTAssertEqual(updatedGoal["activity_role"] as? String, "warmup")
+    }
+
     func testCreateWorkoutGoalRejectsDurationGoalWithoutPeriod() async throws {
         let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
         let result = await executor.execute(

@@ -337,29 +337,7 @@ extension AIFunctionExecutor {
             }
         }
 
-        let serializedGoals = filteredGoals.map { goal in
-            [
-                "id": goal.id.uuidString,
-                "title": goal.trimmedTitle,
-                "goal_kind": goal.goalKind.rawValue,
-                "status": goal.status.rawValue,
-                "workout_type": goal.linkedWorkoutType?.rawValue ?? "",
-                "activity_name": goal.trimmedActivityName ?? "",
-                "activity_tags": goal.linkedActivityTags,
-                "target_value": goal.targetValue as Any,
-                "target_unit": goal.targetUnit,
-                "period_unit": goal.periodUnit?.rawValue ?? "",
-                "period_count": goal.periodCount as Any,
-                "success_criteria": goal.trimmedSuccessCriteria,
-                "notes": goal.trimmedNotes,
-                "target_date": goal.targetDate.map(formatDateForFunction) ?? "",
-                "check_in_cadence_days": goal.checkInCadenceDays as Any,
-                "updated_at": formatDateTimeForFunction(goal.updatedAt),
-                "scope_summary": goal.scopeSummary,
-                "tracking_summary": goal.trackingSummary ?? "",
-                "horizon_summary": goal.horizonSummary ?? ""
-            ]
-        }
+        let serializedGoals = filteredGoals.map(serializedWorkoutGoal)
 
         return .dataResponse(FunctionResult(
             name: "get_workout_goals",
@@ -449,23 +427,7 @@ extension AIFunctionExecutor {
             name: "create_workout_goal",
             response: [
                 "success": true,
-                "goal": [
-                    "id": goal.id.uuidString,
-                    "title": goal.trimmedTitle,
-                    "goal_kind": goal.goalKind.rawValue,
-                    "status": goal.status.rawValue,
-                    "workout_type": goal.linkedWorkoutType?.rawValue ?? "",
-                    "activity_name": goal.trimmedActivityName ?? "",
-                    "activity_tags": goal.linkedActivityTags,
-                    "target_value": goal.targetValue as Any,
-                    "target_unit": goal.targetUnit,
-                    "period_unit": goal.periodUnit?.rawValue ?? "",
-                    "period_count": goal.periodCount as Any,
-                    "success_criteria": goal.trimmedSuccessCriteria,
-                    "notes": goal.trimmedNotes,
-                    "target_date": goal.targetDate.map(formatDateForFunction) ?? "",
-                    "check_in_cadence_days": goal.checkInCadenceDays as Any
-                ]
+                "goal": serializedWorkoutGoal(goal)
             ]
         ))
     }
@@ -629,25 +591,35 @@ extension AIFunctionExecutor {
             name: "update_workout_goal",
             response: [
                 "success": true,
-                "goal": [
-                    "id": goal.id.uuidString,
-                    "title": goal.trimmedTitle,
-                    "goal_kind": goal.goalKind.rawValue,
-                    "status": goal.status.rawValue,
-                    "workout_type": goal.linkedWorkoutType?.rawValue ?? "",
-                    "activity_name": goal.trimmedActivityName ?? "",
-                    "activity_tags": goal.linkedActivityTags,
-                    "target_value": goal.targetValue as Any,
-                    "target_unit": goal.targetUnit,
-                    "period_unit": goal.periodUnit?.rawValue ?? "",
-                    "period_count": goal.periodCount as Any,
-                    "success_criteria": goal.trimmedSuccessCriteria,
-                    "notes": goal.trimmedNotes,
-                    "target_date": goal.targetDate.map(formatDateForFunction) ?? "",
-                    "check_in_cadence_days": goal.checkInCadenceDays as Any
-                ]
+                "goal": serializedWorkoutGoal(goal)
             ]
         ))
+    }
+
+    private func serializedWorkoutGoal(_ goal: WorkoutGoal) -> [String: Any] {
+        [
+            "id": goal.id.uuidString,
+            "title": goal.trimmedTitle,
+            "goal_kind": goal.goalKind.rawValue,
+            "status": goal.status.rawValue,
+            "workout_type": goal.linkedWorkoutType?.rawValue ?? "",
+            "activity_name": goal.trimmedActivityName ?? "",
+            "activity_tags": goal.linkedActivityTags,
+            "activity_kind": goal.linkedActivityKind?.rawValue ?? "",
+            "activity_role": goal.linkedActivityRole?.rawValue ?? "",
+            "target_value": goal.targetValue as Any,
+            "target_unit": goal.targetUnit,
+            "period_unit": goal.periodUnit?.rawValue ?? "",
+            "period_count": goal.periodCount as Any,
+            "success_criteria": goal.trimmedSuccessCriteria,
+            "notes": goal.trimmedNotes,
+            "target_date": goal.targetDate.map(formatDateForFunction) ?? "",
+            "check_in_cadence_days": goal.checkInCadenceDays as Any,
+            "updated_at": formatDateTimeForFunction(goal.updatedAt),
+            "scope_summary": goal.scopeSummary,
+            "tracking_summary": goal.trackingSummary ?? "",
+            "horizon_summary": goal.horizonSummary ?? ""
+        ]
     }
 
     private func parseDate(_ rawDate: String?) -> Date? {
