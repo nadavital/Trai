@@ -115,6 +115,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(log.activityCount, 1)
         XCTAssertEqual(log.totalSets, 2)
         XCTAssertEqual(log.summary, "1 exercise • 1 activity • 2 sets • 55 min")
+        XCTAssertEqual(log.iconName, WorkoutMode.mixed.iconName)
         XCTAssertEqual(
             log.exercises[1].activitySummarySegments,
             ["Bouldering", "30 min", "4 attempts", "Hard attempts"]
@@ -150,6 +151,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(log.activityCount, 1)
         XCTAssertEqual(log.totalSets, 0)
         XCTAssertEqual(log.summary, "1 activity • 20 min")
+        XCTAssertEqual(log.iconName, Exercise.Category.sportPractice.iconName)
     }
 
     func testLogWorkoutExecutorKeepsActivityWithRoundsAsActivitySuggestion() async throws {
@@ -224,6 +226,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(suggestion.exercises.first?.reps, 0)
         XCTAssertEqual(suggestion.exercises.first?.durationMinutes, 30)
         XCTAssertEqual(suggestion.exercises.first?.startSummarySegments, ["Running", "30 min"])
+        XCTAssertEqual(suggestion.iconName, Exercise.Category.cardio.iconName)
     }
 
     func testSuggestWorkoutUsesActivityFocusesInsteadOfStrengthFallback() async throws {

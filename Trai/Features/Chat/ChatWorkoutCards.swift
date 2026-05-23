@@ -18,7 +18,7 @@ struct SuggestedWorkoutCard: View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
-                Image(systemName: "dumbbell.fill")
+                Image(systemName: workout.iconName)
                     .foregroundStyle(.accent)
                 Text("Start Workout?")
                     .font(.subheadline)
@@ -128,7 +128,7 @@ struct SuggestedWorkoutLogCard: View {
             // Header row
             HStack {
                 HStack(spacing: 6) {
-                    Image(systemName: "dumbbell.fill")
+                    Image(systemName: workoutLog.iconName)
                     Text("Log this?")
                         .font(.subheadline)
                         .fontWeight(.semibold)

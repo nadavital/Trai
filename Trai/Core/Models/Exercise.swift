@@ -111,7 +111,7 @@ extension Exercise {
             }
         }
 
-        var iconName: String {
+        nonisolated var iconName: String {
             switch self {
             case .strength: "dumbbell.fill"
             case .cardio: "figure.run"

@@ -614,6 +614,17 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
             Self.normalizedCategoryKey(category)
         }
 
+        var displayCategory: Exercise.Category? {
+            if let category = Exercise.Category.normalized(from: category)?.userFacingEquivalent {
+                return category
+            }
+            if let activityTypeName,
+               let category = Exercise.Category.normalized(from: activityTypeName)?.userFacingEquivalent {
+                return category
+            }
+            return nil
+        }
+
         var hasActivityMetrics: Bool {
             let hasNotes = !(notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
             return durationMinutes != nil
@@ -746,6 +757,25 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
     var muscleGroupsSummary: String {
         targetMuscleGroups.map { $0.capitalized }.joined(separator: ", ")
     }
+
+    var iconName: String {
+        if let mode = WorkoutMode.normalized(from: workoutType),
+           mode != .mixed,
+           mode != .custom {
+            return mode.iconName
+        }
+
+        let categories = exercises.compactMap(\.displayCategory)
+        let hasStrength = categories.contains(.strength)
+        let nonStrength = categories.first { $0 != .strength }
+        if hasStrength, nonStrength != nil {
+            return WorkoutMode.mixed.iconName
+        }
+        return nonStrength?.iconName
+            ?? categories.first?.iconName
+            ?? WorkoutMode.normalized(from: workoutType)?.iconName
+            ?? "figure.mixed.cardio"
+    }
 }
 
 // MARK: - Suggested Workout Log
@@ -864,6 +894,17 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
 
         private var normalizedCategoryKey: String? {
             Self.normalizedCategoryKey(category)
+        }
+
+        var displayCategory: Exercise.Category? {
+            if let category = Exercise.Category.normalized(from: category)?.userFacingEquivalent {
+                return category
+            }
+            if let activityTypeName,
+               let category = Exercise.Category.normalized(from: activityTypeName)?.userFacingEquivalent {
+                return category
+            }
+            return nil
         }
 
         var hasActivityMetrics: Bool {
@@ -1036,6 +1077,25 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
             parts.append("\(duration) min")
         }
         return parts.isEmpty ? workoutType.capitalized : parts.joined(separator: " • ")
+    }
+
+    var iconName: String {
+        if let mode = WorkoutMode.normalized(from: workoutType),
+           mode != .mixed,
+           mode != .custom {
+            return mode.iconName
+        }
+
+        let categories = exercises.compactMap(\.displayCategory)
+        let hasStrength = categories.contains(.strength)
+        let nonStrength = categories.first { $0 != .strength }
+        if hasStrength, nonStrength != nil {
+            return WorkoutMode.mixed.iconName
+        }
+        return nonStrength?.iconName
+            ?? categories.first?.iconName
+            ?? WorkoutMode.normalized(from: workoutType)?.iconName
+            ?? "figure.mixed.cardio"
     }
 
     /// Whether this is a strength workout
