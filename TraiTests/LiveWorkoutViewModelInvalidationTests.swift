@@ -161,8 +161,10 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(history.activityTags, ["Climbing", "Grip endurance"])
         XCTAssertEqual(history.trackingFields, [.duration, .reps, .notes])
         XCTAssertEqual(history.durationSeconds, 1_200)
-        XCTAssertEqual(history.totalSets, 0)
-        XCTAssertEqual(history.totalReps, 0)
+        XCTAssertEqual(history.totalSets, 1)
+        XCTAssertEqual(history.totalReps, 8)
+        XCTAssertEqual(history.bestSetReps, 8)
+        XCTAssertEqual(history.repPatternArray, [8])
         XCTAssertFalse(history.hasStrengthMetrics)
         XCTAssertNil(ExercisePerformanceService.snapshot(exerciseName: history.exerciseName, history: records))
     }

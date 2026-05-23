@@ -71,21 +71,13 @@ final class ExerciseHistory {
     init() {}
 
     init(from entry: LiveWorkoutEntry, performedAt: Date = Date()) {
+        update(from: entry, performedAt: performedAt)
+    }
+
+    func update(from entry: LiveWorkoutEntry, performedAt: Date = Date()) {
         self.exerciseId = entry.exerciseId
         self.exerciseName = entry.exerciseName
         self.performedAt = performedAt
-
-        if let best = entry.bestSet {
-            // Use pre-computed clean values from SetData
-            self.bestSetWeightKg = WeightUtility.round(best.weightKg, unit: .kg)
-            self.bestSetWeightLbs = WeightUtility.round(best.weightLbs, unit: .lbs)
-            self.bestSetReps = best.reps
-        }
-
-        self.totalVolume = entry.totalVolume
-        self.totalSets = entry.completedSets?.count ?? 0
-        self.totalReps = entry.totalReps
-        self.estimatedOneRepMax = entry.estimatedOneRepMax
         self.sourceWorkoutEntryId = entry.id
         self.activityTypeName = entry.activityTypeName
         self.activityKind = entry.activityKind ?? WorkoutPlan.TrainingBlock.BlockKind.liveWorkoutFallbackKind(for: entry.exerciseType)
@@ -94,6 +86,30 @@ final class ExerciseHistory {
         self.durationSeconds = entry.trackedDurationSeconds
         self.distanceMeters = entry.trackedDistanceMeters
 
+        if entry.isStrength {
+            updateStrengthMetrics(from: entry)
+        } else {
+            updateActivityMetrics(from: entry)
+        }
+    }
+
+    private func updateStrengthMetrics(from entry: LiveWorkoutEntry) {
+        if let best = entry.bestSet {
+            // Use pre-computed clean values from SetData
+            self.bestSetWeightKg = WeightUtility.round(best.weightKg, unit: .kg)
+            self.bestSetWeightLbs = WeightUtility.round(best.weightLbs, unit: .lbs)
+            self.bestSetReps = best.reps
+        } else {
+            self.bestSetWeightKg = 0
+            self.bestSetWeightLbs = 0
+            self.bestSetReps = 0
+        }
+
+        self.totalVolume = entry.totalVolume
+        self.totalSets = entry.completedSets?.count ?? 0
+        self.totalReps = entry.totalReps
+        self.estimatedOneRepMax = entry.estimatedOneRepMax
+
         // Store rep and weight patterns from completed sets
         if let completedSets = entry.completedSets, !completedSets.isEmpty {
             self.repPattern = completedSets.map { "\($0.reps)" }.joined(separator: ",")
@@ -101,7 +117,35 @@ final class ExerciseHistory {
                 let rounded = WeightUtility.round(set.weightKg, unit: .kg)
                 return String(format: "%.1f", rounded)
             }.joined(separator: ",")
+        } else {
+            self.repPattern = nil
+            self.weightPattern = nil
         }
+    }
+
+    private func updateActivityMetrics(from entry: LiveWorkoutEntry) {
+        let loggedSegments = entry.activitySegments.filter(\.hasLoggedData)
+        let segmentWeights = loggedSegments
+            .compactMap(\.weightKg)
+            .filter { $0 > 0 }
+        let segmentReps = loggedSegments
+            .compactMap(\.reps)
+            .filter { $0 > 0 }
+
+        self.bestSetWeightKg = segmentWeights.max() ?? 0
+        self.bestSetWeightLbs = bestSetWeightKg > 0
+            ? WeightUtility.round(bestSetWeightKg * WeightUtility.kgToLbs, unit: .lbs)
+            : 0
+        self.bestSetReps = segmentReps.max() ?? 0
+        self.totalVolume = 0
+        self.totalSets = loggedSegments.count
+        self.totalReps = segmentReps.reduce(0, +)
+        self.estimatedOneRepMax = nil
+        self.repPattern = segmentReps.isEmpty ? nil : segmentReps.map(String.init).joined(separator: ",")
+        self.weightPattern = segmentWeights.isEmpty ? nil : segmentWeights.map { weightKg in
+            let rounded = WeightUtility.round(weightKg, unit: .kg)
+            return String(format: "%.1f", rounded)
+        }.joined(separator: ",")
     }
 
     /// Get rep pattern as array of integers
@@ -176,7 +220,13 @@ extension ExerciseHistory {
     }
 
     var hasStrengthMetrics: Bool {
-        bestSetWeightKg > 0 || bestSetReps > 0 || totalVolume > 0 || totalSets > 0 || totalReps > 0
+        let isStrengthRecord = activityKind == .strength || (
+            activityKind == nil &&
+            durationSeconds == 0 &&
+            distanceMeters == 0
+        )
+        guard isStrengthRecord else { return false }
+        return bestSetWeightKg > 0 || bestSetReps > 0 || totalVolume > 0 || totalSets > 0 || totalReps > 0
     }
 
     static func records(

@@ -753,33 +753,7 @@ struct LiveWorkoutDetailSheet: View {
                     continue
                 }
 
-                // Update history with current entry data
-                let completedSets = entry.completedSets ?? []
-                if let best = entry.bestSet {
-                    history.bestSetWeightKg = WeightUtility.round(best.weightKg, unit: .kg)
-                    history.bestSetWeightLbs = WeightUtility.round(best.weightLbs, unit: .lbs)
-                    history.bestSetReps = best.reps
-                }
-                history.exerciseId = entry.exerciseId
-                history.exerciseName = entry.exerciseName
-                history.performedAt = workout.completedAt ?? workout.startedAt
-                history.totalVolume = entry.totalVolume
-                history.totalSets = completedSets.count
-                history.totalReps = entry.totalReps
-                history.estimatedOneRepMax = entry.estimatedOneRepMax
-                history.activityTypeName = entry.activityTypeName
-                history.activityKind = entry.activityKind ?? WorkoutPlan.TrainingBlock.BlockKind.liveWorkoutFallbackKind(for: entry.exerciseType)
-                history.activityTags = entry.targetTags
-                history.trackingFields = entry.trackingFields
-                history.durationSeconds = entry.trackedDurationSeconds
-                history.distanceMeters = entry.trackedDistanceMeters
-
-                // Update rep and weight patterns
-                history.repPattern = completedSets.map { "\($0.reps)" }.joined(separator: ",")
-                history.weightPattern = completedSets.map { set -> String in
-                    let rounded = WeightUtility.round(set.weightKg, unit: .kg)
-                    return String(format: "%.1f", rounded)
-                }.joined(separator: ",")
+                history.update(from: entry, performedAt: workout.completedAt ?? workout.startedAt)
             } else if entry.hasExercisePreferenceSignal {
                 let newHistory = ExerciseHistory(from: entry, performedAt: workout.completedAt ?? workout.startedAt)
                 modelContext.insert(newHistory)
