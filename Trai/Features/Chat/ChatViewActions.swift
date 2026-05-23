@@ -617,7 +617,16 @@ private extension SuggestedWorkoutLog.LoggedExercise {
         if let resolved = Exercise.Category.normalized(from: category) {
             return resolved
         }
-        if fallbackWorkoutType.supportsMuscleTargets || !sets.isEmpty {
+        if !sets.isEmpty && !hasActivityMetrics {
+            return .strength
+        }
+        if let activityTypeName, let inferred = Exercise.Category.normalized(from: activityTypeName) {
+            return inferred.userFacingEquivalent
+        }
+        if fallbackWorkoutType == .mixed || fallbackWorkoutType == .custom {
+            return .custom
+        }
+        if fallbackWorkoutType.supportsMuscleTargets {
             return .strength
         }
         return .cardio
@@ -662,6 +671,12 @@ private extension SuggestedWorkoutEntry.SuggestedExercise {
     func resolvedCategory(fallbackWorkoutType: LiveWorkout.WorkoutType) -> Exercise.Category {
         if let resolved = Exercise.Category.normalized(from: category) {
             return resolved
+        }
+        if hasActivityMetrics {
+            if let activityTypeName, let inferred = Exercise.Category.normalized(from: activityTypeName) {
+                return inferred.userFacingEquivalent
+            }
+            return fallbackWorkoutType.supportsMuscleTargets ? .custom : .cardio
         }
         if fallbackWorkoutType.supportsMuscleTargets {
             return .strength

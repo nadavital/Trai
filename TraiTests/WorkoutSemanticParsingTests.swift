@@ -74,6 +74,78 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         )
     }
 
+    func testActivityLogsWithRoundsDoNotBecomeStrengthLogs() {
+        let log = SuggestedWorkoutLog(
+            name: "Conditioning Rounds",
+            workoutType: "mixed",
+            durationMinutes: 20,
+            exercises: [
+                SuggestedWorkoutLog.LoggedExercise(
+                    name: "Boxing Rounds",
+                    category: "sportPractice",
+                    activityTypeName: "Boxing",
+                    targetTags: ["Boxing", "Footwork"],
+                    trackingFields: ["reps", "duration", "notes"],
+                    durationMinutes: 20,
+                    notes: "Six focused rounds",
+                    segments: [
+                        .init(durationMinutes: 3, reps: 1, notes: "Round 1")
+                    ],
+                    sets: [
+                        .init(reps: 6, weightKg: nil)
+                    ]
+                )
+            ],
+            notes: nil
+        )
+
+        XCTAssertEqual(log.strengthExerciseCount, 0)
+        XCTAssertEqual(log.activityCount, 1)
+        XCTAssertEqual(log.totalSets, 0)
+        XCTAssertEqual(log.summary, "1 activity • 20 min")
+    }
+
+    func testLogWorkoutExecutorKeepsActivityWithRoundsAsActivitySuggestion() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "name": "Boxing Skill Work",
+                    "type": "mixed",
+                    "activity_name": "Boxing",
+                    "activity_tags": ["Boxing", "Footwork"],
+                    "duration_minutes": 20,
+                    "exercises": [
+                        [
+                            "name": "Boxing Rounds",
+                            "category": "sportPractice",
+                            "activity_name": "Boxing",
+                            "target_tags": ["Boxing", "Footwork"],
+                            "tracking_fields": ["reps", "duration", "notes"],
+                            "duration_minutes": 20,
+                            "sets": [
+                                ["reps": 6]
+                            ],
+                            "segments": [
+                                ["duration_minutes": 3, "reps": 1, "notes": "Round 1"]
+                            ]
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutLog(let suggestion) = result else {
+            return XCTFail("Expected workout log suggestion")
+        }
+
+        XCTAssertEqual(suggestion.strengthExerciseCount, 0)
+        XCTAssertEqual(suggestion.activityCount, 1)
+        XCTAssertEqual(suggestion.totalSets, 0)
+        XCTAssertEqual(suggestion.exercises.first?.category, "sportPractice")
+        XCTAssertEqual(suggestion.exercises.first?.activityTypeName, "Boxing")
+    }
+
     func testStartLiveWorkoutKeepsActivitySuggestionsSetFree() async throws {
         let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
             .init(

@@ -604,12 +604,59 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
             }
         }
 
+        private var normalizedCategoryKey: String? {
+            Self.normalizedCategoryKey(category)
+        }
+
+        var hasActivityMetrics: Bool {
+            let hasNotes = !(notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            return durationMinutes != nil
+                || distanceMeters != nil
+                || hasNotes
+                || segments?.isEmpty == false
+                || trackingFields?.contains(where: { $0 != "sets" && $0 != "weight" }) == true
+        }
+
         var isStrengthStartItem: Bool {
-            sets > 0
+            if let normalizedCategoryKey {
+                return normalizedCategoryKey == "strength"
+            }
+            return sets > 0 && !hasActivityMetrics
         }
 
         var isActivityStartItem: Bool {
             !isStrengthStartItem
+        }
+
+        private static func normalizedCategoryKey(_ rawValue: String?) -> String? {
+            guard let rawValue else { return nil }
+            let compact = rawValue
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: " ", with: "")
+
+            switch compact {
+            case "strength", "lifting", "weights", "weighttraining", "resistancetraining":
+                return "strength"
+            case "cardio", "endurance", "aerobic":
+                return "cardio"
+            case "conditioning", "hiit", "circuit":
+                return "conditioning"
+            case "mobility", "stretching", "stretch", "yoga", "flow":
+                return "mobility"
+            case "sport", "sports", "sportpractice", "practice", "climbing", "bouldering", "boxing", "basketball", "tennis", "soccer", "padel", "skill":
+                return "sportPractice"
+            case "recovery", "recover", "cooldown", "easy":
+                return "recovery"
+            case "flexibility":
+                return "mobility"
+            case "custom", "activity", "other":
+                return "custom"
+            default:
+                return nil
+            }
         }
     }
 
@@ -747,15 +794,62 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
             }
         }
 
-        /// Total sets count
-        var setCount: Int { sets.count }
+        private var normalizedCategoryKey: String? {
+            Self.normalizedCategoryKey(category)
+        }
+
+        var hasActivityMetrics: Bool {
+            let hasNotes = !(notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            return durationMinutes != nil
+                || distanceMeters != nil
+                || hasNotes
+                || segments?.isEmpty == false
+                || trackingFields?.contains(where: { $0 != "sets" && $0 != "weight" }) == true
+        }
+
+        /// Total strength set count.
+        var setCount: Int { isStrengthLog ? sets.count : 0 }
 
         var isStrengthLog: Bool {
-            !sets.isEmpty
+            if let normalizedCategoryKey {
+                return normalizedCategoryKey == "strength"
+            }
+            return !sets.isEmpty && !hasActivityMetrics
         }
 
         var isActivityLog: Bool {
-            sets.isEmpty
+            !isStrengthLog
+        }
+
+        private static func normalizedCategoryKey(_ rawValue: String?) -> String? {
+            guard let rawValue else { return nil }
+            let compact = rawValue
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: " ", with: "")
+
+            switch compact {
+            case "strength", "lifting", "weights", "weighttraining", "resistancetraining":
+                return "strength"
+            case "cardio", "endurance", "aerobic":
+                return "cardio"
+            case "conditioning", "hiit", "circuit":
+                return "conditioning"
+            case "mobility", "stretching", "stretch", "yoga", "flow":
+                return "mobility"
+            case "sport", "sports", "sportpractice", "practice", "climbing", "bouldering", "boxing", "basketball", "tennis", "soccer", "padel", "skill":
+                return "sportPractice"
+            case "recovery", "recover", "cooldown", "easy":
+                return "recovery"
+            case "flexibility":
+                return "mobility"
+            case "custom", "activity", "other":
+                return "custom"
+            default:
+                return nil
+            }
         }
 
         /// Summary string for display (e.g., "3×10" or "12, 10, 8")
