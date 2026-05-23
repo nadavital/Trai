@@ -314,8 +314,9 @@ extension AIService {
         - Write rationale, successCriteria, and notes directly to the person using the app with "you" and "your"; do not say "the user".
         - Frequency, duration, distance, count, and weight goals must have a targetValue greater than 0 and a clear targetUnit.
         - Use count goals for trackable reps, attempts, rounds, completed routes, laps, or segments when the app can count them from logged sets or activity segments.
-        - Frequency and count goals must also include periodUnitRaw and periodCount.
+        - Frequency, duration, distance, and count goals must also include periodUnitRaw and periodCount.
         - For frequency and count goals, periodCount means the denominator period, not the goal horizon. Use periodCount 1 for "per week", "per day", or "per month"; use targetDateISO8601/checkInCadenceDays to express a 4-8 week horizon.
+        - For duration and distance goals, use periodUnitRaw/periodCount to describe the accumulation window, such as 45 min per week or 10 km per month.
         - Do not return vague frequency goals unless the structured fields make the tracked behavior clear.
         - Do not name a modality, activity, exercise, or event that does not actually appear in the plan or context.
         - This is often the user's first Trai workout plan. Unless the context explicitly includes recent performance numbers, a current baseline, or the user gave one in the setup answers, do not create exercise-specific progression goals.
@@ -332,6 +333,7 @@ extension AIService {
         - goalKind must be one of: milestone, frequency, duration, distance, count, weight
         - For milestone goals, leave targetValue, targetUnit, periodUnitRaw, and periodCount empty.
         - For frequency goals, targetValue must be the session/activity count, targetUnit should usually be "sessions" or a specific activity unit, periodUnitRaw must be day, week, or month, and periodCount must be 1.
+        - For duration and distance goals, periodUnitRaw must be day, week, or month and periodCount must be greater than 0.
         - For count goals, targetUnit should be the thing being counted, such as reps, attempts, rounds, laps, routes, or segments.
         - When it helps, include a soft targetDateISO8601 roughly 4-8 weeks out.
         - For weight goals, use \(prefersMetricWeight ? "kg by default" : "lbs by default") unless the user context clearly suggests the other unit.

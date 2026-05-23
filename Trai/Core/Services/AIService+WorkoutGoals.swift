@@ -457,8 +457,9 @@ extension AIService {
             - For a brand-new workout plan with little history, use goals that establish the plan: weekly structure adherence, named-day/session-type completion across several weeks, requested recurring habits, check-in cadence, or logging enough sessions for Trai to personalize the next revision.
             - Every frequency, duration, distance, count, or weight goal must have a targetValue greater than 0 and a clear targetUnit.
             - Use count goals for trackable reps, attempts, rounds, completed routes, laps, or segments when the app can count them from logged sets or activity segments.
-            - Every frequency and count goal must also include periodUnitRaw and periodCount.
+            - Every frequency, duration, distance, and count goal must also include periodUnitRaw and periodCount.
             - For frequency and count goals, periodCount means the denominator period, not the goal horizon. Use periodCount 1 for "per week", "per day", or "per month"; use targetDateISO8601/checkInCadenceDays to express a 4-8 week horizon.
+            - For duration and distance goals, use periodUnitRaw/periodCount to describe the accumulation window, such as 45 min per week or 10 km per month.
             - Every goal must include successCriteria: one concise sentence that says how Trai and the person using the app will know the goal is achieved. This is especially important for creative, skill, sport, form, consistency quality, or milestone goals that do not fit a simple numeric target.
             - Write rationale, successCriteria, and notes directly to the person using the app with "you" and "your"; do not say "the user".
             - Do not return vague frequency goals unless the structured fields make the tracked behavior clear.
@@ -479,6 +480,7 @@ extension AIService {
             - goalKind must be one of: milestone, frequency, duration, distance, count, weight
             - For milestone goals, leave targetValue and targetUnit empty.
             - For frequency goals, targetValue must be the session/activity count, targetUnit should usually be "sessions" or another unit matching the tracked activity, periodUnitRaw must be day, week, or month, and periodCount must be 1.
+            - For duration and distance goals, periodUnitRaw must be day, week, or month and periodCount must be greater than 0.
             - For count goals, targetUnit should be the thing being counted, such as reps, attempts, rounds, laps, routes, or segments.
             - When it helps, include a soft targetDateISO8601 roughly 4-8 weeks out.
             - checkInCadenceDays can be provided for more open-ended goals that should be revisited.
@@ -608,7 +610,13 @@ extension WorkoutGoalSuggestion {
                   !targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 return false
             }
-            if goalKind == .count {
+            if goalKind == .duration || goalKind == .distance {
+                guard periodUnit != nil,
+                      let periodCount,
+                      periodCount > 0 else {
+                    return false
+                }
+            } else if goalKind == .count {
                 guard periodUnit != nil,
                       let periodCount,
                       periodCount == 1 else {

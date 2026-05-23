@@ -111,7 +111,7 @@ extension WorkoutGoal {
         }
 
         var usesPeriodTarget: Bool {
-            self == .frequency || self == .count
+            self == .frequency || self == .duration || self == .distance || self == .count
         }
     }
 

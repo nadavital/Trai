@@ -2071,7 +2071,7 @@ struct AddWorkoutGoalSheet: View {
                                 .pickerStyle(.segmented)
                             }
 
-                            if goalKind != .frequency && goalKind != .count {
+                            if goalKind == .weight {
                                 TextField(
                                     "Starting point (optional, e.g. \(targetUnit.isEmpty ? "130" : "130 \(targetUnit)"))",
                                     text: $baselineValueText
@@ -2147,7 +2147,7 @@ struct AddWorkoutGoalSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", systemImage: "checkmark") {
                         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                        let baseline = goalKind != .frequency && goalKind != .count
+                        let baseline = goalKind == .weight
                             ? Double(baselineValueText.trimmingCharacters(in: .whitespacesAndNewlines))
                             : nil
 

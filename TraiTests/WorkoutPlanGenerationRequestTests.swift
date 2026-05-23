@@ -409,6 +409,15 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
     }
 
     func testDurationGoalSuggestionPreservesPeriodForCumulativeTracking() throws {
+        let missingPeriod = makeGoalSuggestion(
+            title: "Build cardio support",
+            goalKindRaw: WorkoutGoal.GoalKind.duration.rawValue,
+            targetValue: 45,
+            targetUnit: "min",
+            periodUnitRaw: nil,
+            periodCount: nil,
+            successCriteria: "You log 45 minutes of cardio support in one week."
+        )
         let suggestion = makeGoalSuggestion(
             title: "Build weekly cardio support",
             goalKindRaw: WorkoutGoal.GoalKind.duration.rawValue,
@@ -419,12 +428,44 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             successCriteria: "You log 45 minutes of cardio support in one week."
         )
 
-        let goal = try XCTUnwrap(WorkoutGoalSuggestion.validatedUnique([suggestion]).first?.asWorkoutGoal())
+        let goals = WorkoutGoalSuggestion.validatedUnique([missingPeriod, suggestion]).map { $0.asWorkoutGoal() }
 
+        let goal = try XCTUnwrap(goals.first)
+        XCTAssertEqual(goals.count, 1)
         XCTAssertEqual(goal.goalKind, .duration)
         XCTAssertEqual(goal.periodUnit, .week)
         XCTAssertEqual(goal.periodCount, 1)
         XCTAssertEqual(goal.trackingSummary, "45 min / week")
+    }
+
+    func testDistanceGoalSuggestionRequiresPeriodForCumulativeTracking() throws {
+        let missingPeriod = makeGoalSuggestion(
+            title: "Build running volume",
+            goalKindRaw: WorkoutGoal.GoalKind.distance.rawValue,
+            targetValue: 10,
+            targetUnit: "km",
+            periodUnitRaw: nil,
+            periodCount: nil,
+            successCriteria: "You log 10 km of running in one week."
+        )
+        let trackable = makeGoalSuggestion(
+            title: "Build weekly running volume",
+            goalKindRaw: WorkoutGoal.GoalKind.distance.rawValue,
+            targetValue: 10,
+            targetUnit: "km",
+            periodUnitRaw: WorkoutGoal.PeriodUnit.week.rawValue,
+            periodCount: 1,
+            successCriteria: "You log 10 km of running in one week."
+        )
+
+        let goals = WorkoutGoalSuggestion.validatedUnique([missingPeriod, trackable]).map { $0.asWorkoutGoal() }
+
+        let goal = try XCTUnwrap(goals.first)
+        XCTAssertEqual(goals.count, 1)
+        XCTAssertEqual(goal.goalKind, .distance)
+        XCTAssertEqual(goal.periodUnit, .week)
+        XCTAssertEqual(goal.periodCount, 1)
+        XCTAssertEqual(goal.trackingSummary, "10 km / week")
     }
 
     func testCountGoalSuggestionRequiresAndPreservesPeriodForActivityTracking() throws {
