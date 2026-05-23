@@ -362,6 +362,36 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(goal.trackingSummary, "45 min / week")
     }
 
+    func testCountGoalSuggestionRequiresAndPreservesPeriodForActivityTracking() throws {
+        let missingPeriod = makeGoalSuggestion(
+            title: "Build climbing attempts",
+            goalKindRaw: WorkoutGoal.GoalKind.count.rawValue,
+            targetValue: 12,
+            targetUnit: "attempts",
+            periodUnitRaw: nil,
+            periodCount: nil,
+            successCriteria: "You log 12 climbing attempts in one week."
+        )
+        let trackable = makeGoalSuggestion(
+            title: "Build weekly climbing attempts",
+            goalKindRaw: WorkoutGoal.GoalKind.count.rawValue,
+            targetValue: 12,
+            targetUnit: "attempts",
+            periodUnitRaw: WorkoutGoal.PeriodUnit.week.rawValue,
+            periodCount: 1,
+            successCriteria: "You log 12 climbing attempts in one week."
+        )
+
+        let goals = WorkoutGoalSuggestion.validatedUnique([missingPeriod, trackable]).map { $0.asWorkoutGoal() }
+
+        let goal = try XCTUnwrap(goals.first)
+        XCTAssertEqual(goals.count, 1)
+        XCTAssertEqual(goal.goalKind, .count)
+        XCTAssertEqual(goal.periodUnit, .week)
+        XCTAssertEqual(goal.periodCount, 1)
+        XCTAssertEqual(goal.trackingSummary, "12 attempts / week")
+    }
+
     func testWorkoutTemplateDisplayBlocksSortByDeclaredOrder() {
         let template = WorkoutPlan.WorkoutTemplate(
             name: "Hybrid Day",

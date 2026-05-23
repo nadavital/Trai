@@ -307,9 +307,10 @@ extension AIService {
             - Broad goals are allowed, but the intent must be accurate: title, target fields, linkedWorkoutType/linkedActivityName/linkedActivityTags/linkedActivityKindRaw/linkedActivityRoleRaw, and successCriteria should all describe the same behavior Trai can track.
             - If the current plan includes a personalized constraint, habit, or recurring support block, prefer a goal for that specific plan behavior over generic progression.
             - For a brand-new workout plan with little history, use goals that establish the plan: weekly structure adherence, named-day/session-type completion across several weeks, requested recurring habits, check-in cadence, or logging enough sessions for Trai to personalize the next revision.
-            - Every frequency, duration, distance, or weight goal must have a targetValue greater than 0 and a clear targetUnit.
-            - Every frequency goal must also include periodUnitRaw and periodCount.
-            - For frequency goals, periodCount means the denominator period, not the goal horizon. Use periodCount 1 for "per week", "per day", or "per month"; use targetDateISO8601/checkInCadenceDays to express a 4-8 week horizon.
+            - Every frequency, duration, distance, count, or weight goal must have a targetValue greater than 0 and a clear targetUnit.
+            - Use count goals for trackable reps, attempts, rounds, completed routes, laps, or segments when the app can count them from logged sets or activity segments.
+            - Every frequency and count goal must also include periodUnitRaw and periodCount.
+            - For frequency and count goals, periodCount means the denominator period, not the goal horizon. Use periodCount 1 for "per week", "per day", or "per month"; use targetDateISO8601/checkInCadenceDays to express a 4-8 week horizon.
             - Every goal must include successCriteria: one concise sentence that says how Trai and the person using the app will know the goal is achieved. This is especially important for creative, skill, sport, form, consistency quality, or milestone goals that do not fit a simple numeric target.
             - Write rationale, successCriteria, and notes directly to the person using the app with "you" and "your"; do not say "the user".
             - Do not return vague frequency goals unless the structured fields make the tracked behavior clear.
@@ -327,9 +328,10 @@ extension AIService {
             - linkedWorkoutType must be one of: \(workoutModes)
             - linkedActivityKindRaw can be \(AIPromptBuilder.workoutGoalActivityKindPromptList). Warmup and cooldown are placement roles, not activity kinds.
             - linkedActivityRoleRaw can be \(AIPromptBuilder.workoutGoalActivityRolePromptList).
-            - goalKind must be one of: milestone, frequency, duration, distance, weight
+            - goalKind must be one of: milestone, frequency, duration, distance, count, weight
             - For milestone goals, leave targetValue and targetUnit empty.
-            - For frequency goals, targetValue must be the count, targetUnit should usually be "sessions" or another unit matching the tracked activity, periodUnitRaw must be day, week, or month, and periodCount must be 1.
+            - For frequency goals, targetValue must be the session/activity count, targetUnit should usually be "sessions" or another unit matching the tracked activity, periodUnitRaw must be day, week, or month, and periodCount must be 1.
+            - For count goals, targetUnit should be the thing being counted, such as reps, attempts, rounds, laps, routes, or segments.
             - When it helps, include a soft targetDateISO8601 roughly 4-8 weeks out.
             - checkInCadenceDays can be provided for more open-ended goals that should be revisited.
             - For weight goals, use \(prefersMetricWeight ? "kg by default" : "lbs by default") unless the user context clearly suggests the other unit.
@@ -451,18 +453,25 @@ extension WorkoutGoalSuggestion {
                 return false
             }
             return true
-        case .duration, .distance, .weight:
+        case .duration, .distance, .count, .weight:
             guard let targetValue,
                   targetValue > 0,
                   let targetUnit,
                   !targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 return false
             }
+            if goalKind == .count {
+                guard periodUnit != nil,
+                      let periodCount,
+                      periodCount == 1 else {
+                    return false
+                }
+            }
             return true
         }
     }
 
     private var periodTrackingGoalKinds: Set<WorkoutGoal.GoalKind> {
-        [.frequency, .duration, .distance]
+        [.frequency, .duration, .distance, .count]
     }
 }

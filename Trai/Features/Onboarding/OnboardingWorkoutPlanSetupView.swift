@@ -3465,7 +3465,7 @@ private extension WorkoutGoal {
             return "cardio-placement|\(linkedWorkoutTypeRaw ?? "any")|\(periodUnitRaw ?? "week")|\(periodCount ?? 1)"
         }
 
-        if goalKind == .frequency {
+        if goalKind == .frequency || goalKind == .count {
             let roundedTarget = targetValue.map { value in
                 String(Int(value.rounded()))
             } ?? ""
@@ -3509,6 +3509,10 @@ private extension WorkoutGoal {
                 !(targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         case .duration, .distance, .weight:
             return targetValue.map { $0 > 0 } == true &&
+                !(targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        case .count:
+            return targetValue.map { $0 > 0 } == true &&
+                periodUnit != nil &&
                 !(targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }

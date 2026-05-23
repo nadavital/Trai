@@ -483,7 +483,7 @@ enum AIFunctionDeclarations {
                     ],
                     "goal_kind": [
                         "type": "string",
-                        "enum": ["milestone", "frequency", "duration", "distance", "weight"]
+                        "enum": WorkoutGoal.GoalKind.allCases.map(\.rawValue)
                     ],
                     "workout_type": [
                         "type": "string",
@@ -519,7 +519,7 @@ enum AIFunctionDeclarations {
                     ],
                     "period_unit": [
                         "type": "string",
-                        "description": "Optional cadence period for frequency goals",
+                        "description": "Optional cadence period for frequency or count goals",
                         "enum": ["day", "week", "month"]
                     ],
                     "period_count": [
@@ -565,7 +565,7 @@ enum AIFunctionDeclarations {
                     ],
                     "goal_kind": [
                         "type": "string",
-                        "enum": ["milestone", "frequency", "duration", "distance", "weight"]
+                        "enum": WorkoutGoal.GoalKind.allCases.map(\.rawValue)
                     ],
                     "status": [
                         "type": "string",

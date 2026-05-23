@@ -389,6 +389,27 @@ enum WorkoutGoalProgressResolver {
                     ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
             )
 
+        case .count:
+            let periodStart = periodStartDate(for: goal, now: Date())
+            let entryCounts = matchingEntries
+                .filter { entry in periodStart.map { progressDate(for: entry) >= $0 } ?? true }
+                .map(countValue)
+                .filter { $0 > 0 }
+            let sessionCounts = matchingSessions
+                .filter { session in periodStart.map { session.loggedAt >= $0 } ?? true }
+                .map(countValue)
+                .filter { $0 > 0 }
+            let currentCount = currentNumericValue(entryCounts + sessionCounts, cumulative: periodStart != nil)
+
+            return numericInsight(
+                for: goal,
+                currentBaseValue: currentCount,
+                formattedCurrentValue: currentCount.map { formatCount($0, unit: goal.targetUnit) },
+                supportingText: latestSupportingNote
+                    ?? (trimmedSuccessCriteria.isEmpty ? nil : trimmedSuccessCriteria)
+                    ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
+            )
+
         case .weight:
             let currentKg: Double?
             let liveEntryMax = matchingEntries
@@ -487,7 +508,7 @@ enum WorkoutGoalProgressResolver {
         } else if let current = currentDisplayValue, let baseline = effectiveBaseline, targetValue != baseline {
             progressFraction = min(max((current - baseline) / (targetValue - baseline), 0), 1)
         } else if let current = currentDisplayValue,
-                  goal.goalKind == .duration || goal.goalKind == .distance {
+                  goal.goalKind == .duration || goal.goalKind == .distance || goal.goalKind == .count {
             progressFraction = min(max(current / targetValue, 0), 1)
         } else {
             progressFraction = nil
@@ -619,6 +640,8 @@ enum WorkoutGoalProgressResolver {
             default:
                 return baseValue / 1000
             }
+        case .count:
+            return baseValue
         case .weight:
             switch unit.lowercased() {
             case "lbs", "lb":
@@ -640,6 +663,10 @@ enum WorkoutGoalProgressResolver {
         let displayUnit = unit.isEmpty ? "km" : unit
         let converted = convertedValue(for: meters, kind: .distance, unit: displayUnit)
         return formatTarget(converted, unit: displayUnit)
+    }
+
+    private static func formatCount(_ value: Double, unit: String) -> String {
+        formatTarget(value, unit: unit.isEmpty ? "count" : unit)
     }
 
     private static func formatWeight(kg: Double, unit: String, useLbsFallback: Bool) -> String {
@@ -733,6 +760,33 @@ enum WorkoutGoalProgressResolver {
         let positiveValues = values.filter { $0 > 0 }
         guard !positiveValues.isEmpty else { return nil }
         return cumulative ? positiveValues.reduce(0, +) : positiveValues.max()
+    }
+
+    nonisolated private static func countValue(for entry: LiveWorkoutEntry) -> Double {
+        if entry.isStrength {
+            let completedReps = entry.completedSets?
+                .map(\.reps)
+                .filter { $0 > 0 }
+                .reduce(0, +) ?? 0
+            return Double(completedReps)
+        }
+
+        let segmentReps = entry.activitySegments
+            .compactMap(\.reps)
+            .filter { $0 > 0 }
+            .reduce(0, +)
+        let segmentCount = entry.activitySegments.filter(\.hasLoggedData).count
+        return Double(segmentReps > 0 ? segmentReps : segmentCount)
+    }
+
+    nonisolated private static func countValue(for session: WorkoutSession) -> Double {
+        if session.reps > 0 {
+            return Double(session.reps)
+        }
+        if session.sets > 0 {
+            return Double(session.sets)
+        }
+        return 0
     }
 
     private static func progressDate(for entry: LiveWorkoutEntry) -> Date {
@@ -1880,6 +1934,8 @@ struct AddWorkoutGoalSheet: View {
             return ["min", "hr"]
         case .distance:
             return prefersMetricWeight ? ["km", "m"] : ["mi", "km"]
+        case .count:
+            return ["reps", "attempts", "rounds"]
         case .weight:
             return prefersMetricWeight ? ["kg", "lbs"] : ["lbs", "kg"]
         }
@@ -2015,7 +2071,7 @@ struct AddWorkoutGoalSheet: View {
                                 .pickerStyle(.segmented)
                             }
 
-                            if goalKind != .frequency {
+                            if goalKind != .frequency && goalKind != .count {
                                 TextField(
                                     "Starting point (optional, e.g. \(targetUnit.isEmpty ? "130" : "130 \(targetUnit)"))",
                                     text: $baselineValueText
@@ -2029,7 +2085,7 @@ struct AddWorkoutGoalSheet: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            if goalKind == .frequency {
+                            if goalKind.usesPeriodTarget {
                                 HStack(spacing: 10) {
                                     TextField("Period count", text: $periodCountText)
                                         .keyboardType(.numberPad)
@@ -2091,7 +2147,7 @@ struct AddWorkoutGoalSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", systemImage: "checkmark") {
                         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                        let baseline = goalKind != .frequency
+                        let baseline = goalKind != .frequency && goalKind != .count
                             ? Double(baselineValueText.trimmingCharacters(in: .whitespacesAndNewlines))
                             : nil
 
@@ -2181,6 +2237,8 @@ struct AddWorkoutGoalSheet: View {
             return "min"
         case .distance:
             return prefersMetricWeight ? "km" : "mi"
+        case .count:
+            return "reps"
         case .weight:
             return prefersMetricWeight ? "kg" : "lbs"
         }

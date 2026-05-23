@@ -350,7 +350,7 @@ extension LiveWorkoutEntry {
             self.notes = notes
         }
 
-        var hasLoggedData: Bool {
+        nonisolated var hasLoggedData: Bool {
             (durationSeconds ?? 0) > 0
                 || (distanceMeters ?? 0) > 0
                 || (reps ?? 0) > 0

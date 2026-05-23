@@ -312,9 +312,10 @@ extension AIService {
         - If the plan includes a personalized constraint, habit, or recurring support block, prefer a goal for that specific plan behavior over generic progression.
         - Every goal must include successCriteria: one concise sentence that says how Trai and the person using the app will know the goal is achieved.
         - Write rationale, successCriteria, and notes directly to the person using the app with "you" and "your"; do not say "the user".
-        - Frequency, duration, distance, and weight goals must have a targetValue greater than 0 and a clear targetUnit.
-        - Frequency goals must also include periodUnitRaw and periodCount.
-        - For frequency goals, periodCount means the denominator period, not the goal horizon. Use periodCount 1 for "per week", "per day", or "per month"; use targetDateISO8601/checkInCadenceDays to express a 4-8 week horizon.
+        - Frequency, duration, distance, count, and weight goals must have a targetValue greater than 0 and a clear targetUnit.
+        - Use count goals for trackable reps, attempts, rounds, completed routes, laps, or segments when the app can count them from logged sets or activity segments.
+        - Frequency and count goals must also include periodUnitRaw and periodCount.
+        - For frequency and count goals, periodCount means the denominator period, not the goal horizon. Use periodCount 1 for "per week", "per day", or "per month"; use targetDateISO8601/checkInCadenceDays to express a 4-8 week horizon.
         - Do not return vague frequency goals unless the structured fields make the tracked behavior clear.
         - Do not name a modality, activity, exercise, or event that does not actually appear in the plan or context.
         - This is often the user's first Trai workout plan. Unless the context explicitly includes recent performance numbers, a current baseline, or the user gave one in the setup answers, do not create exercise-specific progression goals.
@@ -328,9 +329,10 @@ extension AIService {
         - linkedActivityKindRaw can scope a goal to one fallback behavior kind: \(AIPromptBuilder.workoutGoalActivityKindPromptList). Warmup and cooldown are placement roles, not activity kinds.
         - linkedActivityRoleRaw can scope a goal to how that entry fits inside a workout: \(AIPromptBuilder.workoutGoalActivityRolePromptList).
         - For a goal about completing support work inside another workout, prefer linkedActivityTags plus linkedActivityRoleRaw when the activity has a meaningful semantic identity; use linkedActivityKindRaw only as fallback behavior metadata.
-        - goalKind must be one of: milestone, frequency, duration, distance, weight
+        - goalKind must be one of: milestone, frequency, duration, distance, count, weight
         - For milestone goals, leave targetValue, targetUnit, periodUnitRaw, and periodCount empty.
-        - For frequency goals, targetValue must be the count, targetUnit should usually be "sessions" or a specific activity unit, periodUnitRaw must be day, week, or month, and periodCount must be 1.
+        - For frequency goals, targetValue must be the session/activity count, targetUnit should usually be "sessions" or a specific activity unit, periodUnitRaw must be day, week, or month, and periodCount must be 1.
+        - For count goals, targetUnit should be the thing being counted, such as reps, attempts, rounds, laps, routes, or segments.
         - When it helps, include a soft targetDateISO8601 roughly 4-8 weeks out.
         - For weight goals, use \(prefersMetricWeight ? "kg by default" : "lbs by default") unless the user context clearly suggests the other unit.
         - Keep titles short and natural.

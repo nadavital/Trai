@@ -349,6 +349,12 @@ private struct WorkoutGoalSuggestionCard: View {
             let targetUnit = suggestion.targetUnit ?? ""
             guard !targetUnit.isEmpty else { return nil }
             return "\(targetValue.formatted(.number.precision(.fractionLength(0...1)))) \(targetUnit)"
+        case .count:
+            let unit = (suggestion.targetUnit?.isEmpty == false ? suggestion.targetUnit! : "count")
+            let periodUnit = suggestion.periodUnit?.rawValue ?? "week"
+            let periodCount = max(suggestion.periodCount ?? 1, 1)
+            let periodText = periodCount == 1 ? periodUnit : "\(periodCount) \(periodUnit)s"
+            return "\(Int(targetValue.rounded())) \(unit) / \(periodText)"
         }
     }
 

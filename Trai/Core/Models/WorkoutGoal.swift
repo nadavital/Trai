@@ -79,6 +79,7 @@ extension WorkoutGoal {
         case frequency = "frequency"
         case duration = "duration"
         case distance = "distance"
+        case count = "count"
         case weight = "weight"
 
         var id: String { rawValue }
@@ -89,6 +90,7 @@ extension WorkoutGoal {
             case .frequency: "Frequency"
             case .duration: "Duration"
             case .distance: "Distance"
+            case .count: "Count"
             case .weight: "Weight"
             }
         }
@@ -99,6 +101,7 @@ extension WorkoutGoal {
             case .frequency: "calendar.badge.clock"
             case .duration: "clock.badge"
             case .distance: "point.topleft.down.curvedto.point.bottomright.up"
+            case .count: "number"
             case .weight: "dumbbell.fill"
             }
         }
@@ -108,7 +111,7 @@ extension WorkoutGoal {
         }
 
         var usesPeriodTarget: Bool {
-            self == .frequency
+            self == .frequency || self == .count
         }
     }
 
@@ -234,7 +237,7 @@ extension WorkoutGoal {
             return 21
         case .frequency:
             return periodUnit == .month ? 28 : 14
-        case .duration, .distance, .weight:
+        case .duration, .distance, .count, .weight:
             return 21
         }
     }
@@ -270,7 +273,7 @@ extension WorkoutGoal {
         case .milestone:
             let criteria = trimmedSuccessCriteria
             return criteria.isEmpty ? nil : criteria
-        case .duration, .distance, .weight:
+        case .duration, .distance, .count, .weight:
             guard let targetValue, targetValue > 0 else { return nil }
             let target = formattedTargetValue(targetValue, unit: targetUnit)
             guard goalKind != .weight, periodUnit != nil else { return target }
