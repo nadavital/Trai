@@ -975,6 +975,17 @@ extension AIFunctionExecutor {
                 }
             }
         }
+        if exercises.isEmpty,
+           let fallbackExercise = Self.topLevelLoggedActivity(
+            workoutName: workoutName,
+            workoutType: workoutType,
+            activityName: activityName,
+            activityTags: activityTags,
+            durationMinutes: durationMinutes,
+            notes: notes
+           ) {
+            exercises.append(fallbackExercise)
+        }
 
         let semanticActivityTags = Self.loggedWorkoutActivityTags(
             requested: activityTags,
@@ -1011,6 +1022,62 @@ extension AIFunctionExecutor {
                     .compactMap { $0 }
             }
         return derived.dedupedByGoalKey()
+    }
+
+    private static func topLevelLoggedActivity(
+        workoutName: String?,
+        workoutType: String,
+        activityName: String?,
+        activityTags: [String],
+        durationMinutes: Int?,
+        notes: String?
+    ) -> SuggestedWorkoutLog.LoggedExercise? {
+        guard let mode = WorkoutMode(rawValue: workoutType),
+              mode != .strength,
+              durationMinutes != nil || notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            return nil
+        }
+
+        let category = loggedActivityCategory(for: mode)
+        let resolvedActivityName = activityName
+            ?? workoutName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? mode.displayName
+        let resolvedName = workoutName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? resolvedActivityName
+        let trackingFields = Exercise.normalizedTrackingFields(
+            [.duration, .notes],
+            for: category
+        ).map(\.rawValue)
+
+        return SuggestedWorkoutLog.LoggedExercise(
+            name: resolvedName,
+            category: category.rawValue,
+            activityTypeName: resolvedActivityName,
+            targetTags: activityTags.isEmpty ? nil : activityTags,
+            trackingFields: trackingFields,
+            durationMinutes: durationMinutes,
+            notes: notes?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            sets: []
+        )
+    }
+
+    private static func loggedActivityCategory(for mode: WorkoutMode) -> Exercise.Category {
+        switch mode {
+        case .cardio:
+            return .cardio
+        case .hiit:
+            return .conditioning
+        case .climbing:
+            return .sportPractice
+        case .yoga, .pilates, .flexibility, .mobility:
+            return .mobility
+        case .recovery:
+            return .recovery
+        case .mixed, .custom:
+            return .custom
+        case .strength:
+            return .strength
+        }
     }
 
     private func parseLoggedActivitySegments(_ value: Any?) -> [SuggestedWorkoutLog.LoggedExercise.ActivitySegment] {

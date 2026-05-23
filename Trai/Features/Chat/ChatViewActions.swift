@@ -433,19 +433,21 @@ extension ChatView {
             ],
             saveImmediately: false
         )
+        message.workoutLogSaved = true
         do {
             try modelContext.save()
         } catch {
             modelContext.rollback()
+            message.workoutLogSaved = false
             message.errorMessage = "We couldn’t save this workout. Please try again."
             HapticManager.error()
             return
         }
 
-        // Update message state
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.workoutLogSaved = true
         }
+        WidgetDataProvider.shared.scheduleRefresh()
 
         HapticManager.success()
     }

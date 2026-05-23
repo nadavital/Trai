@@ -515,8 +515,12 @@ extension AIService {
                 )
 
                 let responseType = WorkoutPlanRefinementResponse.ResponseType(rawValue: envelope.responseType) ?? .message
-                let proposedPlan = envelope.proposedPlan.flatMap(validatedRefinedWorkoutPlan)
-                let updatedPlan = envelope.updatedPlan.flatMap(validatedRefinedWorkoutPlan)
+                let proposedPlan = envelope.proposedPlan.flatMap {
+                    validatedRefinedWorkoutPlan($0, currentPlan: currentPlan)
+                }
+                let updatedPlan = envelope.updatedPlan.flatMap {
+                    validatedRefinedWorkoutPlan($0, currentPlan: currentPlan)
+                }
                 return WorkoutPlanRefinementResponse(
                     responseType: responseType,
                     message: envelope.message,
@@ -530,7 +534,7 @@ extension AIService {
         }
     }
 
-    private func validatedRefinedWorkoutPlan(_ plan: WorkoutPlan) -> WorkoutPlan? {
+    private func validatedRefinedWorkoutPlan(_ plan: WorkoutPlan, currentPlan: WorkoutPlan) -> WorkoutPlan? {
         guard !plan.templates.isEmpty,
               plan.planIntent != nil,
               plan.modalityProgression != nil,
@@ -540,8 +544,33 @@ extension AIService {
             return nil
         }
 
-        if plan.daysPerWeek != plan.templates.count {
-            return Self.copyWorkoutPlan(plan, daysPerWeek: plan.templates.count)
+        guard plan.templates.count == currentPlan.templates.count else {
+            log("Ignoring workout plan refinement that changed the weekly day count without a structured plan-count change.", type: .error)
+            return nil
+        }
+
+        if plan.daysPerWeek != currentPlan.daysPerWeek {
+            return Self.copyWorkoutPlan(plan, daysPerWeek: currentPlan.daysPerWeek)
+        }
+
+        return plan
+    }
+
+    static func validateRefinedWorkoutPlanForTesting(
+        _ plan: WorkoutPlan,
+        currentPlan: WorkoutPlan
+    ) -> WorkoutPlan? {
+        guard !plan.templates.isEmpty,
+              plan.planIntent != nil,
+              plan.modalityProgression != nil,
+              plan.templates.allSatisfy({ !$0.blocks.isEmpty }),
+              plan.hasUserFacingActivityIdentityForEveryBlock,
+              plan.templates.count == currentPlan.templates.count else {
+            return nil
+        }
+
+        if plan.daysPerWeek != currentPlan.daysPerWeek {
+            return copyWorkoutPlan(plan, daysPerWeek: currentPlan.daysPerWeek)
         }
 
         return plan

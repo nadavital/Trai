@@ -2159,7 +2159,11 @@ final class LiveWorkoutViewModel {
                 ? entries.filter { $0.isCardio || $0.isGeneralActivity }
                 : countableEntries
             let totalItems = progressEntries.count
-            let loggedItems = progressEntries.filter { isEntryStartedForLiveActivity($0) }.count
+            let loggedItems = progressEntries.filter { entry in
+                entry.isStrength
+                    ? isEntryCompleteForLiveActivity(entry)
+                    : isEntryStartedForLiveActivity(entry)
+            }.count
             return LiveActivityProgressSummary(
                 completed: loggedItems,
                 total: totalItems,

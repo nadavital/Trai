@@ -31,7 +31,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         )
 
         XCTAssertTrue(request.requestsCardioAsAccessory)
-        XCTAssertTrue(request.limitsAccessoryCardioToOneSession)
+        XCTAssertFalse(request.limitsAccessoryCardioToOneSession)
     }
 
     func testSupportiveEnduranceDirectiveDoesNotDependOnCardioFinisherPhrase() {
@@ -42,7 +42,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         )
 
         XCTAssertTrue(request.requestsCardioAsAccessory)
-        XCTAssertTrue(request.limitsAccessoryCardioToOneSession)
+        XCTAssertFalse(request.limitsAccessoryCardioToOneSession)
         XCTAssertFalse(request.generationDirectives.joined(separator: " ").contains("cardio finisher"))
     }
 
@@ -84,7 +84,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
     }
 
     @MainActor
-    func testWorkoutPlanValidationRequiresExactlyOneLimitedAccessoryCardioBlock() {
+    func testWorkoutPlanValidationDoesNotInferOneSupportBlockFromOnlyWording() {
         let request = makeRequest(
             workoutType: .mixed,
             selectedWorkoutTypes: [.strength, .cardio],
@@ -106,11 +106,8 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             ]
         )
 
-        XCTAssertThrowsError(try AIService.validateGeneratedWorkoutPlanForTesting(strengthOnlyPlan, request: request)) { error in
-            guard case AIServiceError.parsingError = error else {
-                return XCTFail("Expected parsingError, got \(error)")
-            }
-        }
+        XCTAssertFalse(request.limitsAccessoryCardioToOneSession)
+        XCTAssertNoThrow(try AIService.validateGeneratedWorkoutPlanForTesting(strengthOnlyPlan, request: request))
     }
 
     func testDedicatedCardioSignalOverridesAccessoryCardioDirective() {
@@ -445,6 +442,53 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertTrue(required.contains("focusAreas"))
         XCTAssertTrue(required.contains("blocks"))
         XCTAssertTrue(required.contains("notes"))
+    }
+
+    @MainActor
+    func testWorkoutPlanRefinementValidationPreservesCurrentPlanDayCount() {
+        let currentPlan = makePlan(
+            templateName: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Upper-body lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                )
+            ]
+        )
+        let shortenedPlan = WorkoutPlan(
+            splitType: currentPlan.splitType,
+            daysPerWeek: 1,
+            templates: [],
+            planIntent: currentPlan.planIntent,
+            rationale: currentPlan.rationale,
+            guidelines: currentPlan.guidelines,
+            progressionStrategy: currentPlan.progressionStrategy,
+            modalityProgression: currentPlan.modalityProgression
+        )
+        let wrongDaysPerWeekPlan = WorkoutPlan(
+            splitType: currentPlan.splitType,
+            daysPerWeek: 3,
+            templates: currentPlan.templates,
+            planIntent: currentPlan.planIntent,
+            rationale: currentPlan.rationale,
+            guidelines: currentPlan.guidelines,
+            progressionStrategy: currentPlan.progressionStrategy,
+            modalityProgression: currentPlan.modalityProgression
+        )
+
+        XCTAssertNil(AIService.validateRefinedWorkoutPlanForTesting(shortenedPlan, currentPlan: currentPlan))
+        XCTAssertEqual(
+            AIService.validateRefinedWorkoutPlanForTesting(
+                wrongDaysPerWeekPlan,
+                currentPlan: currentPlan
+            )?.daysPerWeek,
+            currentPlan.daysPerWeek
+        )
     }
 
     func testWorkoutGoalSuggestionsDropDuplicateTitles() {

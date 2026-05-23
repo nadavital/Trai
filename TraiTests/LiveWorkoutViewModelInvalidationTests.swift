@@ -447,6 +447,36 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         )
     }
 
+    func testMixedLiveActivityProgressDoesNotCountUncompletedPrefilledStrengthSets() {
+        let workout = LiveWorkout(name: "Strength + Cardio", workoutType: .mixed)
+
+        let strengthEntry = LiveWorkoutEntry(exerciseName: "Back Squat", orderIndex: 0)
+        strengthEntry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: .zero, completed: false))
+
+        let cardioEntry = LiveWorkoutEntry(
+            exerciseName: "Easy Run",
+            orderIndex: 1,
+            exerciseType: "cardio"
+        )
+        cardioEntry.activityTypeName = "Running"
+        cardioEntry.plannedDurationSeconds = 600
+
+        workout.entries = [strengthEntry, cardioEntry]
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        XCTAssertEqual(
+            viewModel.liveActivityProgressSummary,
+            LiveWorkoutViewModel.LiveActivityProgressSummary(
+                completed: 0,
+                total: 2,
+                label: "items",
+                supportsSetShortcut: true
+            )
+        )
+    }
+
     func testMixedWorkoutHistorySummarySeparatesExercisesAndActivities() {
         let workout = LiveWorkout(name: "Strength + Climb", workoutType: .mixed)
         workout.startedAt = Date(timeIntervalSince1970: 1_000)

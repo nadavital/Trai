@@ -1029,6 +1029,8 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         }
 
         XCTAssertEqual(workoutLog.workoutType, WorkoutMode.cardio.rawValue)
+        XCTAssertEqual(workoutLog.exercises.first?.category, Exercise.Category.cardio.rawValue)
+        XCTAssertEqual(workoutLog.exercises.first?.durationMinutes, 35)
     }
 
     func testLogWorkoutStoresNormalizedActivityCategoryAndTrackingFields() async {
@@ -1126,7 +1128,9 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         let items = try XCTUnwrap(exercises["items"] as? [String: Any])
         let required = try XCTUnwrap(items["required"] as? [String])
 
-        XCTAssertEqual(required, ["name"])
+        XCTAssertEqual(required, ["name", "category"])
+        XCTAssertEqual(exercises["minItems"] as? Int, 1)
+        XCTAssertEqual(parameters["required"] as? [String], ["name", "type", "exercises"])
     }
 
     func testLogWorkoutSchemaUsesCurrentWorkoutModes() throws {

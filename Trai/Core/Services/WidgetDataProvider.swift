@@ -170,9 +170,14 @@ nonisolated struct WidgetDataSnapshotBuilder {
             return true
         }
 
+        let liveWorkoutLookbackStart = Calendar.current.date(
+            byAdding: .day,
+            value: -7,
+            to: startDate
+        ) ?? startDate
         let liveDescriptor = FetchDescriptor<LiveWorkout>(
             predicate: #Predicate { workout in
-                workout.startedAt < endDate
+                workout.startedAt >= liveWorkoutLookbackStart && workout.startedAt < endDate
             }
         )
         return ((try? modelContext.fetch(liveDescriptor)) ?? []).contains { workout in

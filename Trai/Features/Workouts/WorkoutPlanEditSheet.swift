@@ -265,7 +265,7 @@ struct WorkoutPlanEditSheet: View {
         editorDayName = ""
         editorSessionType = orderedTemplates.last?.sessionType ?? .strength
         editorFocusAreasText = ""
-        editorSelectedMuscles = []
+        editorSelectedMuscles = editorSessionType.supportsMuscleTargets ? [.fullBody] : []
         showingDayEditor = true
     }
 
@@ -356,12 +356,16 @@ struct WorkoutPlanEditSheet: View {
                 )
             }
 
+            let changedSemanticFocus = resolvedFocusAreas != template.focusAreas
+                || targetGroups != template.targetMuscleGroups
             return copyTemplate(
                 template,
                 name: finalName,
                 sessionType: sessionType,
                 focusAreas: resolvedFocusAreas,
-                targetMuscleGroups: targetGroups
+                targetMuscleGroups: targetGroups,
+                exercises: changedSemanticFocus ? [] : nil,
+                blocks: changedSemanticFocus ? [] : nil
             )
         }
 
@@ -514,7 +518,8 @@ struct WorkoutPlanEditSheet: View {
         selectedMuscles: Set<LiveWorkout.MuscleGroup>
     ) -> [String] {
         guard sessionType.supportsMuscleTargets else { return [] }
-        return sanitizeTargetGroups(orderedTargetGroups(from: selectedMuscles))
+        let muscles = selectedMuscles.isEmpty ? Set([LiveWorkout.MuscleGroup.fullBody]) : selectedMuscles
+        return sanitizeTargetGroups(orderedTargetGroups(from: muscles))
     }
 
     private func defaultDayName(
@@ -737,6 +742,10 @@ struct WorkoutDayEditorSheet: View {
         }
     }
 
+    private var canConfirm: Bool {
+        !sessionType.supportsMuscleTargets || !selectedMuscles.isEmpty
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -908,6 +917,7 @@ struct WorkoutDayEditorSheet: View {
                     Button(confirmTitle, systemImage: "checkmark", action: onConfirm)
                         .labelStyle(.iconOnly)
                         .tint(.accentColor)
+                        .disabled(!canConfirm)
                 }
             }
         }
@@ -915,6 +925,8 @@ struct WorkoutDayEditorSheet: View {
         .onChange(of: sessionType) { _, newValue in
             if !newValue.supportsMuscleTargets {
                 selectedMuscles = []
+            } else if selectedMuscles.isEmpty {
+                selectedMuscles = [.fullBody]
             }
         }
     }

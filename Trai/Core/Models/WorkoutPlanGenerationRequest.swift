@@ -127,26 +127,7 @@ struct WorkoutPlanGenerationRequest {
     }
 
     var limitsAccessoryCardioToOneSession: Bool {
-        guard requestsCardioAsAccessory else { return false }
-        let text = generationContextText
-        let singlePlacementSignals = [
-            "one strength",
-            "one workout",
-            "one session",
-            "one day",
-            "one lower",
-            "one lower-body",
-            "one upper",
-            "one upper-body",
-            "once",
-            "1x",
-            "only",
-            "just",
-            "legs day",
-            "leg day",
-            "lower day"
-        ]
-        return singlePlacementSignals.contains { text.contains($0) }
+        false
     }
 
     var supportiveCardioRole: WorkoutPlan.TrainingBlock.Role {
