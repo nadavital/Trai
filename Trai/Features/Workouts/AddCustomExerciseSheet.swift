@@ -240,7 +240,6 @@ struct AddCustomExerciseSheet: View {
                         selectedCategory = category
                         didChooseTrackingTemplate = true
                         resetDefaultsForSelectedCategory()
-                        isCategoryExpanded = false
                         HapticManager.selectionChanged()
                     }
                 }
@@ -317,9 +316,9 @@ struct AddCustomExerciseSheet: View {
     private var categoryDisclosure: some View {
         collapsibleManualSection(
             isExpanded: $isCategoryExpanded,
-            title: "How to Log It",
+            title: "Logging Style",
             icon: "square.grid.2x2",
-            summary: selectedCategory.userFacingEquivalent.trackingTemplateName
+            summary: selectedCategory.userFacingEquivalent.displayName
         ) {
             categoryPickerContent
         }
