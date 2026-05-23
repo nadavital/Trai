@@ -56,12 +56,31 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
 
         let plan = WorkoutPlan.createDefault(from: request)
 
+        XCTAssertEqual(request.supportiveCardioRole, .finisher)
         XCTAssertEqual(plan.templates.count, 3)
         XCTAssertFalse(plan.templates.contains { $0.sessionType == .cardio })
         XCTAssertEqual(
             plan.templates.flatMap(\.displayBlocks).filter { $0.kind == .cardio && $0.role == .finisher }.count,
             1
         )
+    }
+
+    func testSupportiveCardioWithoutEndPlacementUsesAccessoryRole() {
+        let request = makeRequest(
+            workoutType: .mixed,
+            selectedWorkoutTypes: [.strength, .cardio],
+            preferences: "Strength is the priority. Include easy cardio support once a week, but not as a dedicated cardio day.",
+            availableDays: 3
+        )
+
+        let plan = WorkoutPlan.createDefault(from: request)
+        let supportBlocks = plan.templates.flatMap(\.displayBlocks).filter { $0.kind == .cardio }
+
+        XCTAssertTrue(request.requestsCardioAsAccessory)
+        XCTAssertEqual(request.supportiveCardioRole, .accessory)
+        XCTAssertTrue(request.generationDirectives.joined(separator: " ").contains("role accessory"))
+        XCTAssertEqual(supportBlocks.map(\.role), [.accessory])
+        XCTAssertFalse(supportBlocks.first?.detail.localizedCaseInsensitiveContains("finish") == true)
     }
 
     func testDedicatedCardioSignalOverridesAccessoryCardioDirective() {

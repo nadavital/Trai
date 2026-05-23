@@ -679,6 +679,7 @@ extension WorkoutPlan {
             return (0..<requestedDays)
                 .map { index in
                     let template = strengthTemplates[index % strengthTemplates.count]
+                    let supportRole = request.supportiveCardioRole
                     let renamed = WorkoutTemplate(
                         id: template.id,
                         name: "Strength \(Character(UnicodeScalar(65 + index)!))",
@@ -687,7 +688,7 @@ extension WorkoutPlan {
                         targetMuscleGroups: template.targetMuscleGroups,
                         exercises: template.exercises,
                         blocks: index == 0
-                            ? blocksWithSupportiveCardioBlock(template.displayBlocks)
+                            ? blocksWithSupportiveCardioBlock(template.displayBlocks, role: supportRole)
                             : template.blocks,
                         estimatedDurationMinutes: template.estimatedDurationMinutes,
                         order: index,
@@ -747,16 +748,18 @@ extension WorkoutPlan {
     }
 
     private static func blocksWithSupportiveCardioBlock(
-        _ blocks: [WorkoutPlan.TrainingBlock]
+        _ blocks: [WorkoutPlan.TrainingBlock],
+        role: WorkoutPlan.TrainingBlock.Role
     ) -> [WorkoutPlan.TrainingBlock] {
         let normalizedBlocks = blocks.sorted { $0.order < $1.order }
         let nextOrder = (normalizedBlocks.map(\.order).max() ?? -1) + 1
+        let detail = role == .finisher ? "Short easy finish after the lift" : "Short easy support inside the session"
         return normalizedBlocks + [
             WorkoutPlan.TrainingBlock(
                 kind: .cardio,
-                role: .finisher,
+                role: role,
                 title: "Easy support cardio",
-                detail: "Short easy finish after the lift",
+                detail: detail,
                 durationMinutes: 10,
                 intensity: "Easy",
                 target: "Conversational effort",

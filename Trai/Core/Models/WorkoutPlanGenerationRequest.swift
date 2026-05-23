@@ -101,9 +101,23 @@ struct WorkoutPlanGenerationRequest {
             "marathon"
         ]
 
+        let negatedDedicatedSignals = [
+            "not a dedicated",
+            "not dedicated",
+            "no dedicated",
+            "without a dedicated",
+            "not as a dedicated",
+            "not standalone",
+            "not a standalone",
+            "no standalone"
+        ]
+
+        let hasDedicatedSignal = dedicatedSignals.contains { text.contains($0) }
+        let negatesDedicatedSignal = negatedDedicatedSignals.contains { text.contains($0) }
+
         return mentionsCardioLikeTraining(text) &&
             supportivePlacementSignals.contains { text.contains($0) } &&
-            !dedicatedSignals.contains { text.contains($0) }
+            (!hasDedicatedSignal || negatesDedicatedSignal)
     }
 
     var limitsAccessoryCardioToOneSession: Bool {
@@ -129,6 +143,27 @@ struct WorkoutPlanGenerationRequest {
         return singlePlacementSignals.contains { text.contains($0) }
     }
 
+    var supportiveCardioRole: WorkoutPlan.TrainingBlock.Role {
+        guard requestsCardioAsAccessory else { return .main }
+        let text = generationContextText
+        let endPlacementSignals = [
+            "finisher",
+            "at the end",
+            "at end",
+            "after strength",
+            "after lifting",
+            "after one lift",
+            "after a lift",
+            "after my lift",
+            "after my strength",
+            "end of one",
+            "end of a strength",
+            "end of my strength",
+            "finish with"
+        ]
+        return endPlacementSignals.contains { text.contains($0) } ? .finisher : .accessory
+    }
+
     var generationDirectives: [String] {
         var directives: [String] = []
 
@@ -137,13 +172,13 @@ struct WorkoutPlanGenerationRequest {
         }
 
         if requestsCardioAsAccessory {
-            directives.append("Primary focus is not standalone cardio; cardio should appear only as a supportive cardio block with role finisher or accessory.")
+            directives.append("Primary focus is not standalone cardio; cardio should appear only as a supportive cardio block with role \(supportiveCardioRole.rawValue).")
             directives.append("Dedicated cardio or HIIT templates are not allowed unless the user explicitly asks for them later.")
             directives.append("Use finisher language only if the user explicitly asked for cardio at the end of a workout; otherwise describe supportive cardio by its purpose, such as endurance support, conditioning, intervals, or recovery.")
         }
 
         if limitsAccessoryCardioToOneSession {
-            directives.append("The user limited supportive cardio to one placement. Include exactly one cardio block with role finisher or accessory in the whole plan, on the requested day when one is named.")
+            directives.append("The user limited supportive cardio to one placement. Include exactly one cardio block with role \(supportiveCardioRole.rawValue) in the whole plan, on the requested day when one is named.")
         }
 
         if let selectedWorkoutTypes, selectedWorkoutTypes.count > 1 {
