@@ -42,6 +42,52 @@ struct ExercisePhotoAnalysis: Codable {
     }
 }
 
+extension ExercisePhotoAnalysis.SuggestedExercise {
+    func resolvedCategory(equipmentName: String? = nil) -> Exercise.Category {
+        if let category = Exercise.Category.normalized(from: category) {
+            return category.userFacingEquivalent
+        }
+
+        for candidate in [activityTypeName, name, equipmentName] {
+            if let category = Exercise.Category.normalized(from: candidate) {
+                return category.userFacingEquivalent
+            }
+        }
+
+        let fields = resolvedTrackingFields(category: .custom)
+        if fields.contains(where: { $0 != .sets && $0 != .weight }) {
+            return .custom
+        }
+
+        return .strength
+    }
+
+    func resolvedActivityTypeName(category: Exercise.Category, equipmentName: String? = nil) -> String {
+        let explicit = activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard explicit.isEmpty else { return explicit }
+        let nameDefault = Exercise.defaultActivityTypeName(for: name, category: category)
+        if nameDefault != category.displayName {
+            return nameDefault
+        }
+        if let equipmentName {
+            let equipmentDefault = Exercise.defaultActivityTypeName(for: equipmentName, category: category)
+            if equipmentDefault != category.displayName {
+                return equipmentDefault
+            }
+        }
+        return nameDefault
+    }
+
+    func resolvedTrackingFields(category: Exercise.Category) -> [Exercise.TrackingField] {
+        let fields = trackingFields?
+            .compactMap(Exercise.TrackingField.init(rawValue:))
+            ?? []
+        return fields.isEmpty
+            ? Exercise.defaultTrackingFields(for: category)
+            : Exercise.normalizedTrackingFields(fields, for: category)
+    }
+}
+
 // MARK: - AIService Exercise Extension
 
 extension AIService {

@@ -619,19 +619,16 @@ struct ExerciseListView: View {
                     EquipmentAnalysisSheet(
                         analysis: analysis,
                         onSelectExercise: { suggestion, equipmentName in
-                            let category = (Exercise.Category.normalized(from: suggestion.category) ?? .strength)
-                                .userFacingEquivalent
-                            let trackingFields = suggestion.trackingFields?
-                                .compactMap(Exercise.TrackingField.init(rawValue:))
+                            let category = suggestion.resolvedCategory(equipmentName: equipmentName)
                             addCustomExercise(
                                 name: suggestion.name,
-                                activityTypeName: suggestion.activityTypeName ?? Exercise.defaultActivityTypeName(for: suggestion.name, category: category),
+                                activityTypeName: suggestion.resolvedActivityTypeName(category: category, equipmentName: equipmentName),
                                 activityAliases: suggestion.activityAliases ?? [],
                                 muscleGroup: suggestion.muscleGroup.flatMap(Exercise.MuscleGroup.init(rawValue:)),
                                 category: category,
                                 equipmentName: equipmentName,
                                 targetTags: suggestion.targetTags ?? [],
-                                trackingFields: trackingFields
+                                trackingFields: suggestion.resolvedTrackingFields(category: category)
                             )
                         }
                     )

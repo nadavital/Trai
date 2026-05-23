@@ -64,6 +64,25 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertEqual(exercise.trackingFields ?? [], ["duration", "reps", "notes"])
     }
 
+    func testExercisePhotoSuggestionInfersActivityCategoryWhenModelOmitsCategory() {
+        let suggestion = ExercisePhotoAnalysis.SuggestedExercise(
+            name: "Route Practice",
+            category: nil,
+            activityTypeName: nil,
+            activityAliases: nil,
+            muscleGroup: nil,
+            targetTags: nil,
+            trackingFields: ["duration", "reps", "notes"],
+            howTo: nil
+        )
+
+        let category = suggestion.resolvedCategory(equipmentName: "Climbing Wall")
+
+        XCTAssertEqual(category, .sportPractice)
+        XCTAssertEqual(suggestion.resolvedActivityTypeName(category: category, equipmentName: "Climbing Wall"), "Climbing")
+        XCTAssertEqual(suggestion.resolvedTrackingFields(category: category), [.duration, .reps, .notes])
+    }
+
     func testTrackingFieldNormalizationPreservesSelectedMetrics() {
         XCTAssertEqual(
             Exercise.normalizedTrackingFields([.duration, .distance, .reps, .weight, .notes], for: .conditioning),
