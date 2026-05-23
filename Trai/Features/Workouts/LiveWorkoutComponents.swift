@@ -189,7 +189,7 @@ struct TimerStat: View {
     }
 }
 
-// MARK: - Add Exercise Button
+// MARK: - Add Item Button
 
 struct AddExerciseButton: View {
     let action: () -> Void
@@ -199,7 +199,7 @@ struct AddExerciseButton: View {
             HStack {
                 Image(systemName: "plus.circle.fill")
                     .font(.title2)
-                Text("Add Exercise")
+                Text("Add Item")
                     .font(.headline)
             }
             .frame(maxWidth: .infinity)
@@ -213,7 +213,7 @@ struct AddExerciseButton: View {
 struct WorkoutBottomBar: View {
     let onAddExercise: () -> Void
     let onAskTrai: () -> Void
-    var addLabel: String = "Add Exercise"
+    var addLabel: String = "Add Item"
     var addSystemImage: String = "plus.circle.fill"
 
     var body: some View {

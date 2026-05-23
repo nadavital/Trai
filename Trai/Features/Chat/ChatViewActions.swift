@@ -721,7 +721,7 @@ private extension SuggestedWorkoutEntry {
         let derived = exercises
             .filter(\.isActivityStartItem)
             .flatMap { exercise in
-                ([exercise.activityTypeName] + (exercise.targetTags ?? []) + [exercise.name])
+                ([exercise.activityTypeName] + (exercise.targetTags ?? []))
                     .compactMap { $0 }
             }
         return (explicit + derived).dedupedByGoalKey()

@@ -381,7 +381,7 @@ struct LiveWorkoutView: View {
             WorkoutBottomBar(
                 onAddExercise: { showingExerciseList = true },
                 onAskTrai: { showingChat = true },
-                addLabel: "Add Exercise",
+                addLabel: "Add Item",
                 addSystemImage: "plus.circle.fill"
             )
         }
@@ -486,8 +486,8 @@ struct LiveWorkoutView: View {
 
                     if entries.isEmpty && upNext == nil && availableSuggestions.isEmpty {
                         ContentUnavailableView(
-                            "No Exercises Yet",
-                            systemImage: "dumbbell.fill",
+                            "No Items Yet",
+                            systemImage: "figure.mixed.cardio",
                             description: Text("Add what you want to track in this session.")
                         )
                         .padding(.top, 4)
@@ -509,7 +509,7 @@ struct LiveWorkoutView: View {
             WorkoutBottomBar(
                 onAddExercise: { showingExerciseList = true },
                 onAskTrai: { showingChat = true },
-                addLabel: viewModel.usesFocusedCardioWorkspace ? "Add Interval" : "Add Exercise",
+                addLabel: viewModel.usesFocusedCardioWorkspace ? "Add Interval" : "Add Item",
                 addSystemImage: "plus.circle.fill"
             )
         }
