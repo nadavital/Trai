@@ -194,6 +194,8 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
 
         XCTAssertTrue(prompt.contains("Bike Support"))
         XCTAssertTrue(prompt.contains("Cycling"))
+        XCTAssertTrue(prompt.contains("1 logged entry"))
+        XCTAssertFalse(prompt.contains("2 items"))
         XCTAssertFalse(prompt.contains("accessory"))
         XCTAssertFalse(prompt.contains("Mobility Cooldown"))
         XCTAssertFalse(prompt.contains("cooldown"))
@@ -285,6 +287,47 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertTrue(entry.isLoggedActivity)
         XCTAssertEqual(workout.entrySummaryStats.activityEntryCount, 1)
         XCTAssertEqual(ExerciseHistory.records(from: workout).count, 1)
+    }
+
+    func testLiveActivityProgressIgnoresUnloggedPlannedActivityGuidance() {
+        let workout = LiveWorkout(name: "Strength + Mobility", workoutType: .mixed)
+
+        let strengthEntry = LiveWorkoutEntry(exerciseName: "Back Squat", orderIndex: 0)
+        strengthEntry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: .zero, completed: true))
+
+        let plannedGuidance = LiveWorkoutEntry(
+            exerciseName: "Mobility Cooldown",
+            orderIndex: 1,
+            exerciseType: "mobility"
+        )
+        plannedGuidance.activityTypeName = "Mobility"
+        plannedGuidance.sourcePlanBlockID = UUID()
+        plannedGuidance.plannedDurationSeconds = 300
+
+        let loggedActivity = LiveWorkoutEntry(
+            exerciseName: "Bouldering",
+            orderIndex: 2,
+            exerciseType: "sportPractice"
+        )
+        loggedActivity.activityTypeName = "Bouldering"
+        loggedActivity.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 600, reps: 4)
+        ]
+
+        workout.entries = [strengthEntry, plannedGuidance, loggedActivity]
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        XCTAssertEqual(
+            viewModel.liveActivityProgressSummary,
+            LiveWorkoutViewModel.LiveActivityProgressSummary(
+                completed: 2,
+                total: 2,
+                label: "done",
+                supportsSetShortcut: false
+            )
+        )
     }
 
     func testMixedWorkoutHistorySummarySeparatesExercisesAndActivities() {

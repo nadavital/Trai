@@ -264,9 +264,9 @@ extension LiveWorkout {
             details.append("duration \(formattedDuration)")
         }
 
-        let entryCount = entries?.count ?? 0
-        if entryCount > 0 {
-            details.append("\(entryCount) \(entryCount == 1 ? "item" : "items")")
+        let loggedEntryCount = entrySummaryStats.entryCount
+        if loggedEntryCount > 0 {
+            details.append("\(loggedEntryCount) logged \(loggedEntryCount == 1 ? "entry" : "entries")")
         }
 
         if let healthKitCalories, healthKitCalories > 0 {

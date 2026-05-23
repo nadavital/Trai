@@ -120,6 +120,13 @@ final class LiveWorkoutViewModel {
         let exerciseName: String
     }
 
+    struct LiveActivityProgressSummary: Equatable {
+        let completed: Int
+        let total: Int
+        let label: String
+        let supportsSetShortcut: Bool
+    }
+
     private var cachedEntries: [LiveWorkoutEntry] = []
     private var cachedMetrics: WorkoutMetrics = .zero
     private var cachedCurrentExerciseNameSet: Set<String> = []
@@ -2113,22 +2120,32 @@ final class LiveWorkoutViewModel {
             ?? entries.last(where: \.isStrength)
     }
 
-    private func liveActivityProgress() -> (completed: Int, total: Int, label: String, supportsSetShortcut: Bool) {
-        let supportsSetShortcut = entries.contains(where: \.isStrength)
+    var liveActivityProgressSummary: LiveActivityProgressSummary {
+        liveActivityProgress()
+    }
+
+    private func shouldCountEntryForLiveActivityProgress(_ entry: LiveWorkoutEntry) -> Bool {
+        entry.isStrength || !entry.isPlannedActivityGuidance
+    }
+
+    private func liveActivityProgress() -> LiveActivityProgressSummary {
+        let currentEntry = liveActivityCurrentEntry()
+        let supportsSetShortcut = currentEntry?.isStrength == true
         let usesItemProgress = entries.contains { $0.isCardio || $0.isGeneralActivity }
 
         if usesItemProgress {
-            let totalItems = entries.count
-            let loggedItems = entries.filter { isEntryStartedForLiveActivity($0) }.count
-            return (
+            let progressEntries = entries.filter(shouldCountEntryForLiveActivityProgress)
+            let totalItems = progressEntries.count
+            let loggedItems = progressEntries.filter { isEntryStartedForLiveActivity($0) }.count
+            return LiveActivityProgressSummary(
                 completed: loggedItems,
                 total: totalItems,
-                label: totalItems == 1 ? "item" : "items",
+                label: "done",
                 supportsSetShortcut: supportsSetShortcut
             )
         }
 
-        return (
+        return LiveActivityProgressSummary(
             completed: completedSets,
             total: totalSets,
             label: totalSets == 1 ? "set" : "sets",
