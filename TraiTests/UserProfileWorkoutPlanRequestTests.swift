@@ -153,4 +153,68 @@ final class UserProfileWorkoutPlanRequestTests: XCTestCase {
             $0.contains("add cardio only as a short finisher")
         } == true)
     }
+
+    func testManualWorkoutDraftPreservesNonStrengthActivityIdentityInBlocks() throws {
+        var draft = OnboardingWorkoutPlanDraft()
+        draft.focuses = [.climbing]
+        draft.schedule = .threeDays
+        draft.duration = .fortyFiveMinutes
+        draft.preferredSplit = .fullBody
+        draft.manualDays = [
+            ManualWorkoutPlanDayDraft(
+                name: "Climbing Day",
+                sessionType: .climbing,
+                focusAreasText: "Bouldering, Grip endurance",
+                selectedMuscles: []
+            )
+        ]
+
+        let plan = draft.buildManualPlan(
+            context: OnboardingWorkoutPlanUserContext(
+                name: "Riley",
+                age: 27,
+                gender: .notSpecified,
+                goal: .health,
+                activityLevel: .moderate
+            )
+        )
+
+        let template = try XCTUnwrap(plan.templates.first)
+        let block = try XCTUnwrap(template.displayBlocks.first)
+        XCTAssertEqual(template.sessionType, .climbing)
+        XCTAssertEqual(template.focusAreas, ["bouldering", "grip endurance"])
+        XCTAssertEqual(block.kind, .sportPractice)
+        XCTAssertEqual(block.displayActivityName, "Bouldering")
+        XCTAssertEqual(block.activityTags, ["Bouldering", "Climbing", "Grip Endurance"])
+        XCTAssertEqual(block.durationMinutes, 45)
+    }
+
+    func testManualWorkoutDraftUsesCustomDayNameWhenNoActivityFocusTextExists() throws {
+        var draft = OnboardingWorkoutPlanDraft()
+        draft.focuses = [.cardio]
+        draft.duration = .thirtyMinutes
+        draft.manualDays = [
+            ManualWorkoutPlanDayDraft(
+                name: "Steady Ride",
+                sessionType: .cardio,
+                selectedMuscles: []
+            )
+        ]
+
+        let plan = draft.buildManualPlan(
+            context: OnboardingWorkoutPlanUserContext(
+                name: "Jordan",
+                age: 35,
+                gender: .notSpecified,
+                goal: .health,
+                activityLevel: .moderate
+            )
+        )
+
+        let block = try XCTUnwrap(plan.templates.first?.displayBlocks.first)
+        XCTAssertEqual(block.kind, .cardio)
+        XCTAssertEqual(block.displayActivityName, "Steady Ride")
+        XCTAssertEqual(block.activityTags, ["Steady Ride", "Cardio"])
+        XCTAssertEqual(block.detail, "30 min cardio session")
+    }
 }

@@ -719,14 +719,21 @@ struct OnboardingWorkoutPlanDraft: Equatable {
         let templates = days.enumerated().map { index, day in
             let focusAreas = sanitizedFocusAreas(from: day.focusAreasText)
             let targets = targetGroups(for: day)
+            let templateName = day.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "Workout Day \(index + 1)"
+                : day.name.trimmingCharacters(in: .whitespacesAndNewlines)
             return WorkoutPlan.WorkoutTemplate(
-                name: day.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? "Workout Day \(index + 1)"
-                    : day.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                name: templateName,
                 sessionType: day.sessionType,
                 focusAreas: focusAreas.isEmpty ? targets : focusAreas,
                 targetMuscleGroups: day.sessionType.supportsMuscleTargets ? targets : [],
                 exercises: [],
+                blocks: manualTrainingBlocks(
+                    for: day,
+                    templateName: templateName,
+                    focusAreas: focusAreas,
+                    order: index
+                ),
                 estimatedDurationMinutes: duration.rawValue,
                 order: index,
                 notes: nil
@@ -854,6 +861,135 @@ struct OnboardingWorkoutPlanDraft: Equatable {
             return ordered.filter { $0 != LiveWorkout.MuscleGroup.fullBody.rawValue }
         }
         return ordered.isEmpty ? [LiveWorkout.MuscleGroup.fullBody.rawValue] : ordered
+    }
+
+    private func manualTrainingBlocks(
+        for day: ManualWorkoutPlanDayDraft,
+        templateName: String,
+        focusAreas: [String],
+        order: Int
+    ) -> [WorkoutPlan.TrainingBlock]? {
+        guard !day.sessionType.supportsMuscleTargets else { return nil }
+
+        let kind = manualBlockKind(for: day.sessionType)
+        guard kind != .strength else { return nil }
+
+        let activityName = primaryManualActivityName(
+            sessionType: day.sessionType,
+            templateName: templateName,
+            focusAreas: focusAreas
+        )
+        let tags = manualActivityTags(
+            sessionType: day.sessionType,
+            activityName: activityName,
+            focusAreas: focusAreas
+        )
+        let detail = manualBlockDetail(
+            sessionType: day.sessionType,
+            activityName: activityName,
+            focusAreas: focusAreas
+        )
+        let notes = day.focusAreasText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return [
+            WorkoutPlan.TrainingBlock(
+                kind: kind,
+                title: activityName,
+                detail: detail,
+                activityTypeName: activityName,
+                activityTags: tags,
+                durationMinutes: duration.rawValue,
+                order: order,
+                notes: notes.isEmpty ? nil : notes
+            )
+        ]
+    }
+
+    private func manualBlockKind(for sessionType: WorkoutMode) -> WorkoutPlan.TrainingBlock.BlockKind {
+        switch sessionType {
+        case .strength:
+            return .strength
+        case .cardio:
+            return .cardio
+        case .hiit:
+            return .conditioning
+        case .climbing:
+            return .sportPractice
+        case .yoga, .pilates, .flexibility, .mobility:
+            return .mobility
+        case .recovery:
+            return .recovery
+        case .mixed, .custom:
+            return .custom
+        }
+    }
+
+    private func primaryManualActivityName(
+        sessionType: WorkoutMode,
+        templateName: String,
+        focusAreas: [String]
+    ) -> String {
+        if let firstFocus = focusAreas.first?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !firstFocus.isEmpty {
+            return formatManualActivityLabel(firstFocus)
+        }
+
+        let trimmedName = templateName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let genericNames = [
+            "workout day",
+            "workout",
+            "session",
+            sessionType.displayName.lowercased()
+        ]
+        if !trimmedName.isEmpty,
+           !genericNames.contains(trimmedName.lowercased()) {
+            return trimmedName
+        }
+
+        return sessionType.displayName
+    }
+
+    private func manualActivityTags(
+        sessionType: WorkoutMode,
+        activityName: String,
+        focusAreas: [String]
+    ) -> [String] {
+        var seen: Set<String> = []
+        return ([activityName, sessionType.displayName] + focusAreas)
+            .map(formatManualActivityLabel)
+            .filter { !$0.isEmpty }
+            .filter { seen.insert($0.goalNormalizedKey).inserted }
+    }
+
+    private func manualBlockDetail(
+        sessionType: WorkoutMode,
+        activityName: String,
+        focusAreas: [String]
+    ) -> String {
+        let supportingFocuses = focusAreas
+            .map(formatManualActivityLabel)
+            .filter { $0.goalNormalizedKey != activityName.goalNormalizedKey }
+
+        if supportingFocuses.isEmpty {
+            return "\(duration.title) \(sessionType.displayName.lowercased()) session"
+        }
+
+        return supportingFocuses.joined(separator: " • ")
+    }
+
+    private func formatManualActivityLabel(_ raw: String) -> String {
+        let normalized = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        guard !normalized.isEmpty else { return "" }
+        switch normalized.lowercased() {
+        case "hiit":
+            return "HIIT"
+        default:
+            return normalized.localizedCapitalized
+        }
     }
 }
 
