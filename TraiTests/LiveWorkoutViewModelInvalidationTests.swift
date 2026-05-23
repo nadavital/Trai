@@ -926,6 +926,50 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(insight?.progressFraction, 1)
     }
 
+    func testActivityScopedGoalsCountWholeCompletedActivityWorkoutWithoutEntries() {
+        let workout = LiveWorkout(
+            name: "Mobility Flow",
+            workoutType: .mobility,
+            focusAreas: ["Mobility Flow"]
+        )
+        workout.startedAt = Date().addingTimeInterval(-1_800)
+        workout.completedAt = Date()
+
+        let frequencyGoal = WorkoutGoal(
+            title: "Keep mobility consistent",
+            goalKind: .frequency,
+            linkedActivityTags: ["Mobility Flow"],
+            targetValue: 1,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete one mobility flow session this week."
+        )
+        let durationGoal = WorkoutGoal(
+            title: "Build mobility time",
+            goalKind: .duration,
+            linkedActivityTags: ["Mobility Flow"],
+            targetValue: 30,
+            targetUnit: "min",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete 30 minutes of mobility flow this week."
+        )
+
+        let insights = WorkoutGoalProgressResolver.insights(
+            goals: [frequencyGoal, durationGoal],
+            workouts: [workout],
+            exerciseHistory: [],
+            useLbs: false
+        )
+
+        XCTAssertTrue(WorkoutGoalProgressResolver.matchingCompletedWorkouts(for: frequencyGoal, in: [workout]).contains { $0.id == workout.id })
+        XCTAssertEqual(insights.first { $0.goal.id == frequencyGoal.id }?.currentValueText, "1")
+        XCTAssertEqual(insights.first { $0.goal.id == frequencyGoal.id }?.progressFraction, 1)
+        XCTAssertEqual(insights.first { $0.goal.id == durationGoal.id }?.currentValueText, "30 min")
+        XCTAssertEqual(insights.first { $0.goal.id == durationGoal.id }?.progressFraction, 1)
+    }
+
     func testActivityScopedGoalIgnoresPlannedGuidanceWithoutLoggedData() {
         let workout = LiveWorkout(name: "Planned Climb", workoutType: .climbing)
         workout.completedAt = Date()

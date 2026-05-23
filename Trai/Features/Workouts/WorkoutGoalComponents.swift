@@ -103,7 +103,7 @@ enum WorkoutGoalProgressResolver {
         sessions: [WorkoutSession] = []
     ) -> [RecentWorkoutSignal] {
         let currentFocus = Set(workout.focusAreas.map(\.goalNormalizedKey))
-        let currentActivities = Set((workout.entries ?? []).map { $0.exerciseName.goalNormalizedKey })
+        let currentActivities = workoutActivityTokens(workout)
 
         let liveSignals: [RecentWorkoutSignal] = workouts
             .filter { candidate in
@@ -114,7 +114,7 @@ enum WorkoutGoalProgressResolver {
                     return true
                 }
 
-                let candidateActivities = Set((candidate.entries ?? []).map { $0.exerciseName.goalNormalizedKey })
+                let candidateActivities = workoutActivityTokens(candidate)
                 return !candidateActivities.isDisjoint(with: currentActivities)
             }
             .compactMap { candidate -> RecentWorkoutSignal? in
@@ -344,7 +344,13 @@ enum WorkoutGoalProgressResolver {
                         guard durationSeconds > 0 else { return nil }
                         return Double(durationSeconds)
                     }
-                    return currentNumericValue(entryValues + sessionValues, cumulative: periodStart != nil)
+                    let workoutValues = matchingWorkouts
+                        .filter { workout in periodStart.map { (workout.completedAt ?? workout.startedAt) >= $0 } ?? true }
+                        .filter { workoutLevelMatchesActivityScope(for: goal, in: $0) }
+                        .filter { !hasLoggedMatchingEntries(for: goal, in: $0) }
+                        .map(\.duration)
+                        .filter { $0 > 0 }
+                    return currentNumericValue(entryValues + workoutValues + sessionValues, cumulative: periodStart != nil)
                 }
 
                 let workoutValues = matchingWorkouts
@@ -563,6 +569,13 @@ enum WorkoutGoalProgressResolver {
         )
     }
 
+    private static func workoutActivityTokens(_ workout: LiveWorkout) -> Set<String> {
+        let values = [workout.name] + workout.focusAreas + (workout.entries ?? []).flatMap { entry in
+            [entry.exerciseName, entry.activityTypeName] + entry.targetTags
+        }
+        return Set(values.map(\.goalNormalizedKey).filter { !$0.isEmpty })
+    }
+
     private static func latestNote(in workout: LiveWorkout) -> String? {
         let workoutNote = workout.notes.trimmingCharacters(in: .whitespacesAndNewlines)
         if !workoutNote.isEmpty {
@@ -592,9 +605,54 @@ enum WorkoutGoalProgressResolver {
             return true
         }
 
-        return (workout.entries ?? []).contains {
+        return hasLoggedMatchingEntries(for: goal, in: workout)
+            || workoutLevelMatchesActivityScope(for: goal, in: workout)
+    }
+
+    private static func hasLoggedMatchingEntries(
+        for goal: WorkoutGoal,
+        in workout: LiveWorkout
+    ) -> Bool {
+        (workout.entries ?? []).contains {
             goal.matches(entry: $0) && $0.hasExercisePreferenceSignal
         }
+    }
+
+    private static func workoutLevelMatchesActivityScope(
+        for goal: WorkoutGoal,
+        in workout: LiveWorkout
+    ) -> Bool {
+        guard goal.hasActivityScope else { return false }
+
+        let workoutTokens = Set(
+            ([workout.name] + workout.focusAreas)
+                .map(\.goalNormalizedKey)
+                .filter { !$0.isEmpty }
+        )
+
+        if let activityName = goal.trimmedActivityName?.goalNormalizedKey,
+           !activityName.isEmpty,
+           workoutTokens.contains(activityName) {
+            return true
+        }
+
+        let activityTags = Set(goal.linkedActivityTags.map(\.goalNormalizedKey).filter { !$0.isEmpty })
+        if !activityTags.isEmpty,
+           !activityTags.isDisjoint(with: workoutTokens) {
+            return true
+        }
+
+        guard goal.trimmedActivityName == nil,
+              activityTags.isEmpty,
+              let linkedActivityKind = goal.linkedActivityKind else {
+            return false
+        }
+
+        let workoutKind = Exercise.Category
+            .normalized(from: workout.workoutType)?
+            .userFacingEquivalent
+            .liveWorkoutActivityKind
+        return workoutKind == linkedActivityKind
     }
 
     private static func latestNote(
@@ -708,7 +766,7 @@ enum WorkoutGoalProgressResolver {
         let workoutCount: Int
         if goal.hasActivityScope {
             workoutCount = workouts.reduce(0) { count, workout in
-                count + (workout.entries ?? []).filter { entry in
+                let entryCount = (workout.entries ?? []).filter { entry in
                     guard goal.matches(entry: entry),
                           entry.hasExercisePreferenceSignal else {
                         return false
@@ -716,6 +774,17 @@ enum WorkoutGoalProgressResolver {
                     let progressDate = entry.completedAt ?? workout.completedAt ?? workout.startedAt
                     return progressDate >= periodStart
                 }.count
+
+                if entryCount > 0 {
+                    return count + entryCount
+                }
+
+                let progressDate = workout.completedAt ?? workout.startedAt
+                guard progressDate >= periodStart,
+                      workoutLevelMatchesActivityScope(for: goal, in: workout) else {
+                    return count
+                }
+                return count + 1
             }
         } else {
             workoutCount = workouts
