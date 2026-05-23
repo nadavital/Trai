@@ -68,7 +68,7 @@ struct WorkoutSummarySheet: View {
         if usesFlexibleSessionPresentation {
             return "Activities"
         }
-        return loggedEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
+        return loggedEntries.contains(where: { !$0.isStrength }) ? "Workout Log" : "Exercises"
     }
 
     private var goalInsights: [WorkoutGoalInsight] {
@@ -321,7 +321,7 @@ struct WorkoutSummaryContent: View {
         if usesFlexibleSessionPresentation {
             return "Activities"
         }
-        return loggedEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
+        return loggedEntries.contains(where: { !$0.isStrength }) ? "Workout Log" : "Exercises"
     }
 
     private var goalInsights: [WorkoutGoalInsight] {

@@ -86,7 +86,7 @@ struct LiveWorkoutDetailSheet: View {
         if usesFlexibleSessionPresentation {
             return "Activities"
         }
-        return visibleEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
+        return visibleEntries.contains(where: { !$0.isStrength }) ? "Workout Log" : "Exercises"
     }
 
     private var addButtonLabel: String {

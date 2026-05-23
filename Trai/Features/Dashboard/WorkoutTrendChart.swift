@@ -44,7 +44,7 @@ struct WorkoutTrendChart: View {
         var displayTitle: String {
             switch self {
             case .frequency: "Workouts"
-            case .items: "Items"
+            case .items: "Logged"
             case .volume: "Strength Volume"
             case .sets: "Sets"
             case .duration: "Duration"
@@ -54,7 +54,7 @@ struct WorkoutTrendChart: View {
         var unit: String {
             switch self {
             case .frequency: "workouts"
-            case .items: "items"
+            case .items: "logged"
             case .volume: "kg"
             case .sets: "sets"
             case .duration: "min"

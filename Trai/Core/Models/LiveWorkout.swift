@@ -384,7 +384,7 @@ extension LiveWorkout {
     }
 
     private static func activitySegmentMetricLabel(for entry: LiveWorkoutEntry) -> String {
-        let category = Exercise.Category.normalized(from: entry.exerciseType)?.userFacingEquivalent ?? .custom
+        let category = entry.resolvedActivityCategory
         switch category {
         case .conditioning:
             return "rounds"
@@ -394,7 +394,7 @@ extension LiveWorkout {
     }
 
     private static func activityCountMetricLabel(for entry: LiveWorkoutEntry) -> String {
-        let category = Exercise.Category.normalized(from: entry.exerciseType)?.userFacingEquivalent ?? .custom
+        let category = entry.resolvedActivityCategory
         switch category {
         case .sportPractice:
             return "attempts"

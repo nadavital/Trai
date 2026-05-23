@@ -73,7 +73,7 @@ struct WorkoutTrendDetailSheet: View {
                     WorkoutTrendChart(
                         data: last7DaysData,
                         metric: .items,
-                        title: "Logged Workout Items"
+                        title: "Logged Work"
                     )
 
                     // Duration trend
@@ -148,7 +148,7 @@ struct WorkoutTrendDetailSheet: View {
 
                 StatItem(
                     value: "\(weekStats.items)",
-                    label: "Items",
+                    label: "Logged",
                     icon: "list.bullet.rectangle",
                     color: .blue
                 )

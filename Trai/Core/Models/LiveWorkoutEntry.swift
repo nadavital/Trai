@@ -138,14 +138,14 @@ final class LiveWorkoutEntry {
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .compactMap(Exercise.TrackingField.init(rawValue:))
-            let category = Exercise.Category.normalized(from: exerciseType) ?? .custom
+            let category = resolvedActivityCategory
             if !fields.isEmpty {
                 return Exercise.normalizedTrackingFields(fields, for: category)
             }
             return Exercise.defaultTrackingFields(for: category)
         }
         set {
-            let category = Exercise.Category.normalized(from: exerciseType) ?? .custom
+            let category = resolvedActivityCategory
             trackingFieldsRaw = Exercise.normalizedTrackingFields(newValue, for: category).map(\.rawValue).joined(separator: ",")
         }
     }
@@ -262,6 +262,15 @@ final class LiveWorkoutEntry {
             for: exerciseName,
             category: Exercise.Category.normalized(from: exerciseType) ?? .custom
         )
+    }
+}
+
+extension LiveWorkoutEntry {
+    var resolvedActivityCategory: Exercise.Category {
+        if let category = activityKind?.exerciseCategoryFallback.userFacingEquivalent {
+            return category
+        }
+        return (Exercise.Category.normalized(from: exerciseType) ?? .custom).userFacingEquivalent
     }
 }
 
@@ -709,7 +718,7 @@ extension LiveWorkoutEntry {
     }
 
     private var segmentMetricLabel: String {
-        let category = Exercise.Category.normalized(from: exerciseType)?.userFacingEquivalent ?? .custom
+        let category = resolvedActivityCategory
         switch category {
         case .conditioning:
             return "rounds"
@@ -719,7 +728,7 @@ extension LiveWorkoutEntry {
     }
 
     private var countMetricLabel: String {
-        let category = Exercise.Category.normalized(from: exerciseType)?.userFacingEquivalent ?? .custom
+        let category = resolvedActivityCategory
         switch category {
         case .sportPractice:
             return "attempts"
