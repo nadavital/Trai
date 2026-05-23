@@ -635,15 +635,11 @@ enum WorkoutGoalProgressResolver {
 
         guard goal.trimmedActivityName == nil,
               activityTags.isEmpty,
-              let linkedActivityKind = goal.linkedActivityKind else {
+              goal.linkedActivityKind != nil else {
             return false
         }
 
-        let workoutKind = Exercise.Category
-            .normalized(from: workout.workoutType)?
-            .userFacingEquivalent
-            .liveWorkoutActivityKind
-        return workoutKind == linkedActivityKind
+        return goal.matches(workout: workout)
     }
 
     private static func latestNote(

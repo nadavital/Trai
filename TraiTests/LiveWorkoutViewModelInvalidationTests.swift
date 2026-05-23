@@ -1167,6 +1167,38 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual("Warm-Up".goalNormalizedKey, "warm_up".goalNormalizedKey)
     }
 
+    func testActivityKindOnlyGoalsMatchWorkoutAndImportedSessions() {
+        let workout = LiveWorkout(
+            name: "Mixed recovery day",
+            workoutType: .mixed,
+            focusAreas: ["Mobility"]
+        )
+        workout.completedAt = Date()
+
+        let importedSession = WorkoutSession(
+            healthKitWorkoutID: "yoga-1",
+            workoutType: "yoga",
+            durationMinutes: 25,
+            caloriesBurned: nil,
+            distanceMeters: nil,
+            loggedAt: Date()
+        )
+
+        let goal = WorkoutGoal(
+            title: "Keep mobility work consistent",
+            goalKind: .frequency,
+            linkedActivityKind: .mobility,
+            targetValue: 1,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete one mobility-focused session this week."
+        )
+
+        XCTAssertTrue(goal.matches(workout: workout))
+        XCTAssertTrue(goal.matches(session: importedSession))
+    }
+
     func testGoalScopeSummaryHidesPlacementWhenActivityIdentityIsPresent() {
         let taggedGoal = WorkoutGoal(
             title: "Complete support work",

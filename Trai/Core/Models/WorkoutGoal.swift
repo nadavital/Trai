@@ -368,6 +368,14 @@ extension WorkoutGoal {
             return true
         }
 
+        if trimmedActivityName == nil,
+           normalizedLinkedActivityTags.isEmpty,
+           linkedActivityRole == nil,
+           let linkedActivityKind,
+           Self.matches(workout: workout, activityKind: linkedActivityKind) {
+            return true
+        }
+
         if let linkedWorkoutType {
             return linkedWorkoutType == workout.type
         }
@@ -417,6 +425,14 @@ extension WorkoutGoal {
         }
 
         let tags = normalizedLinkedActivityTags
+        if trimmedActivityName == nil,
+           tags.isEmpty,
+           linkedActivityRole == nil,
+           let linkedActivityKind,
+           Self.matches(session: session, activityKind: linkedActivityKind) {
+            return true
+        }
+
         guard let activityName = trimmedActivityName?.goalNormalizedKey else {
             guard !tags.isEmpty else { return false }
             return !tags.isDisjoint(with: session.goalMatchingTokens)
@@ -466,6 +482,50 @@ extension WorkoutGoal {
 
     private var normalizedLinkedActivityTags: Set<String> {
         Set(linkedActivityTags.map(\.goalNormalizedKey).filter { !$0.isEmpty })
+    }
+
+    private static func matches(
+        workout: LiveWorkout,
+        activityKind: WorkoutPlan.TrainingBlock.BlockKind
+    ) -> Bool {
+        let candidates = [workout.workoutType, workout.name] + workout.focusAreas
+        if candidates.contains(where: { rawValue in
+            Exercise.Category.normalized(from: rawValue)?
+                .userFacingEquivalent
+                .liveWorkoutActivityKind == activityKind
+        }) {
+            return true
+        }
+
+        return WorkoutPlan.TrainingBlock.BlockKind(sessionType: workout.type) == activityKind
+    }
+
+    private static func matches(
+        session: WorkoutSession,
+        activityKind: WorkoutPlan.TrainingBlock.BlockKind
+    ) -> Bool {
+        if let exerciseKind = session.exercise?
+            .exerciseCategory
+            .userFacingEquivalent
+            .liveWorkoutActivityKind {
+            return exerciseKind == activityKind
+        }
+
+        let candidates = [
+            session.healthKitWorkoutType,
+            session.displayTypeName,
+            session.displayName
+        ] + session.semanticActivityTags
+
+        if candidates.compactMap({ $0 }).contains(where: { rawValue in
+            Exercise.Category.normalized(from: rawValue)?
+                .userFacingEquivalent
+                .liveWorkoutActivityKind == activityKind
+        }) {
+            return true
+        }
+
+        return WorkoutPlan.TrainingBlock.BlockKind(sessionType: session.inferredWorkoutMode) == activityKind
     }
 
     private static func normalizedTargetValue(_ value: Double) -> String {
