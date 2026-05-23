@@ -201,11 +201,9 @@ extension ExerciseHistory {
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .compactMap(Exercise.TrackingField.init(rawValue:))
-                .filter { $0 != .calories }
         }
         set {
             trackingFieldsRaw = newValue
-                .filter { $0 != .calories }
                 .map(\.rawValue)
                 .joined(separator: ",")
         }

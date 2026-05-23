@@ -98,6 +98,19 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         )
     }
 
+    func testExerciseTrackingFieldsDoNotExposeManualCalories() {
+        XCTAssertFalse(Exercise.TrackingField.allCases.map(\.rawValue).contains("calories"))
+
+        let exercise = Exercise(name: "Cycling", category: .cardio)
+        exercise.trackingFieldsRaw = "duration,calories,distance,notes"
+
+        XCTAssertEqual(exercise.trackingFields, [.duration, .distance, .notes])
+        XCTAssertEqual(
+            Exercise.trackingFieldOptions(for: .cardio),
+            [.sets, .reps, .weight, .duration, .distance, .notes]
+        )
+    }
+
     func testHiddenStablePrimitivesMapToVisibleTrackingStyles() {
         XCTAssertEqual(Exercise.Category.skill.userFacingEquivalent, .sportPractice)
         XCTAssertEqual(Exercise.Category.flexibility.userFacingEquivalent, .mobility)

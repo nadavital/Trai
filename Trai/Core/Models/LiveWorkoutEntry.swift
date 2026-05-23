@@ -138,7 +138,6 @@ final class LiveWorkoutEntry {
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .compactMap(Exercise.TrackingField.init(rawValue:))
-                .filter { $0 != .calories }
             let category = Exercise.Category.normalized(from: exerciseType) ?? .custom
             if !fields.isEmpty {
                 return Exercise.normalizedTrackingFields(fields, for: category)

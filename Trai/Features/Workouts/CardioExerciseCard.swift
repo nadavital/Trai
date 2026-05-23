@@ -383,7 +383,7 @@ private struct ActivitySegmentRow: View {
             switch field {
             case .duration, .distance, .reps, .weight:
                 return true
-            case .sets, .calories, .notes:
+            case .sets, .notes:
                 return false
             }
         }
@@ -469,7 +469,7 @@ private struct ActivitySegmentRow: View {
                     let displayValue = Double(value) ?? 0
                     onUpdateWeightKg(usesMetricWeight ? displayValue : displayValue / WeightUtility.kgToLbs)
                 }
-        case .sets, .calories, .notes:
+        case .sets, .notes:
             EmptyView()
         }
     }

@@ -648,7 +648,7 @@ private extension SuggestedWorkoutLog.LoggedExercise {
     func resolvedTrackingFields(category: Exercise.Category) -> [Exercise.TrackingField] {
         let explicitFields = trackingFields?
             .compactMap(Exercise.TrackingField.init(rawValue:))
-            .filter { $0 != .calories } ?? []
+            ?? []
         return explicitFields.isEmpty
             ? Exercise.defaultTrackingFields(for: category)
             : Exercise.normalizedTrackingFields(explicitFields, for: category)
@@ -700,7 +700,7 @@ private extension SuggestedWorkoutEntry.SuggestedExercise {
     func resolvedTrackingFields(category: Exercise.Category) -> [Exercise.TrackingField] {
         let explicitFields = trackingFields?
             .compactMap(Exercise.TrackingField.init(rawValue:))
-            .filter { $0 != .calories } ?? []
+            ?? []
         return explicitFields.isEmpty
             ? Exercise.defaultTrackingFields(for: category)
             : Exercise.normalizedTrackingFields(explicitFields, for: category)

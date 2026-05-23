@@ -48,9 +48,6 @@ enum ExerciseLibrarySeeder {
                 if existing.trackingFieldsRaw.isEmpty {
                     existing.trackingFields = Exercise.defaultTrackingFields(for: existing.exerciseCategory)
                     didMutate = true
-                } else if existing.trackingFields.contains(.calories) {
-                    existing.trackingFields = existing.trackingFields.filter { $0 != .calories }
-                    didMutate = true
                 }
                 if existing.targetTagsRaw.isEmpty {
                     existing.targetTags = defaultTargetTags(category: existing.exerciseCategory, muscleGroup: existing.targetMuscleGroup)

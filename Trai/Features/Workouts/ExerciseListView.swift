@@ -611,7 +611,6 @@ struct ExerciseListView: View {
                                 .userFacingEquivalent
                             let trackingFields = suggestion.trackingFields?
                                 .compactMap(Exercise.TrackingField.init(rawValue:))
-                                .filter { $0 != .calories }
                             addCustomExercise(
                                 name: suggestion.name,
                                 activityTypeName: suggestion.activityTypeName ?? Exercise.defaultActivityTypeName(for: suggestion.name, category: category),

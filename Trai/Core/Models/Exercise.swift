@@ -242,7 +242,6 @@ extension Exercise {
         case weight
         case duration
         case distance
-        case calories
         case notes
 
         var id: String { rawValue }
@@ -254,7 +253,6 @@ extension Exercise {
             case .weight: "Weight"
             case .duration: "Duration"
             case .distance: "Distance"
-            case .calories: "Calories"
             case .notes: "Notes"
             }
         }
@@ -266,7 +264,6 @@ extension Exercise {
             case .weight: "scalemass.fill"
             case .duration: "clock.fill"
             case .distance: "map.fill"
-            case .calories: "flame.fill"
             case .notes: "note.text"
             }
         }
@@ -279,7 +276,7 @@ extension Exercise {
             switch self {
             case .sets, .reps, .weight, .duration, .distance:
                 return true
-            case .calories, .notes:
+            case .notes:
                 return false
             }
         }
@@ -291,7 +288,6 @@ extension Exercise {
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .compactMap(TrackingField.init(rawValue:))
-                .filter { $0 != .calories }
             return fields.isEmpty ? Self.defaultTrackingFields(for: exerciseCategory) : Self.normalizedTrackingFields(fields, for: exerciseCategory)
         }
         set {
@@ -350,7 +346,7 @@ extension Exercise {
         let allowed = Set(trackingFieldOptions(for: category))
         var seen: Set<TrackingField> = []
         let unique = fields.compactMap { field -> TrackingField? in
-            guard field != .calories, allowed.contains(field), seen.insert(field).inserted else { return nil }
+            guard allowed.contains(field), seen.insert(field).inserted else { return nil }
             return field
         }
 
