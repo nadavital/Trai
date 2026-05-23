@@ -85,6 +85,59 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertTrue(prompt.contains("5.10 km"))
     }
 
+    func testActiveWorkoutContextUsesActivityLanguageForMixedSessions() {
+        let context = AIService.WorkoutContext(
+            workoutName: "Climbing Day",
+            workoutType: "Climbing",
+            focusAreas: ["Bouldering"],
+            elapsedMinutes: 18,
+            exercisesCompleted: 1,
+            exercisesTotal: 2,
+            currentExercise: "Limit Bouldering",
+            setsCompleted: 0,
+            totalVolume: 0,
+            targetMuscleGroups: [],
+            sessionNotes: nil,
+            activeGoals: [],
+            entryDetails: [
+                "Limit Bouldering • Bouldering • 18 min • tracks Duration/Attempts/Notes"
+            ]
+        )
+
+        let description = context.description
+
+        XCTAssertTrue(description.contains("Progress: 1/2 workout entries"))
+        XCTAssertTrue(description.contains("Current item: Limit Bouldering"))
+        XCTAssertFalse(description.contains("Progress: 1/2 exercises"))
+        XCTAssertFalse(description.contains("Sets completed"))
+    }
+
+    func testActiveWorkoutContextKeepsStrengthSetLanguageForStrengthSessions() {
+        let context = AIService.WorkoutContext(
+            workoutName: "Push Day",
+            workoutType: "Strength",
+            focusAreas: ["Push"],
+            elapsedMinutes: 22,
+            exercisesCompleted: 1,
+            exercisesTotal: 3,
+            currentExercise: "Bench Press",
+            setsCompleted: 4,
+            totalVolume: 2400,
+            targetMuscleGroups: ["Chest", "Shoulders"],
+            sessionNotes: nil,
+            activeGoals: ["Hit all sessions"],
+            entryDetails: [
+                "Bench Press • 4 logged sets • 80 kg x 8"
+            ]
+        )
+
+        let description = context.description
+
+        XCTAssertTrue(description.contains("Progress: 1/3 exercises"))
+        XCTAssertTrue(description.contains("Current exercise: Bench Press"))
+        XCTAssertTrue(description.contains("Strength sets completed: 4"))
+    }
+
     func testHealthKitImportedActivityTagsDriveGoalMatching() {
         let session = WorkoutSession(
             healthKitWorkoutID: "mobility-1",

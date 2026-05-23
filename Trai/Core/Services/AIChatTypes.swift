@@ -29,6 +29,11 @@ extension AIService {
 
         var description: String {
             var parts: [String] = []
+            let hasActivityEntries = entryDetails.contains { detail in
+                detail.localizedStandardContains("tracks ")
+            }
+            let progressLabel = hasActivityEntries ? "workout entries" : "exercises"
+            let currentLabel = hasActivityEntries ? "Current item" : "Current exercise"
             parts.append("Currently doing: \(workoutName)")
             parts.append("Workout type: \(workoutType)")
             if !focusAreas.isEmpty {
@@ -39,12 +44,14 @@ extension AIService {
                 parts.append("Target muscles: \(targetMuscleGroups.joined(separator: ", "))")
             }
             if exercisesTotal > 0 {
-                parts.append("Progress: \(exercisesCompleted)/\(exercisesTotal) exercises")
+                parts.append("Progress: \(exercisesCompleted)/\(exercisesTotal) \(progressLabel)")
             }
             if let current = currentExercise {
-                parts.append("Current exercise: \(current)")
+                parts.append("\(currentLabel): \(current)")
             }
-            parts.append("Sets completed: \(setsCompleted)")
+            if setsCompleted > 0 {
+                parts.append("Strength sets completed: \(setsCompleted)")
+            }
             if totalVolume > 0 {
                 parts.append("Total volume: \(Int(totalVolume)) kg")
             }

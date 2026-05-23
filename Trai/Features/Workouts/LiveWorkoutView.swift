@@ -717,13 +717,7 @@ struct LiveWorkoutView: View {
         }?.exerciseName ?? entries.last?.exerciseName
 
         let setsWithData = entries.reduce(0) { total, entry in
-            if entry.isGeneralActivity {
-                guard !entry.isPlannedActivityGuidance else { return total }
-                return total + ((entry.completedAt != nil || entry.hasExercisePreferenceSignal) ? 1 : 0)
-            }
-            if entry.isCardio {
-                return total + ((entry.completedAt != nil || entry.hasExercisePreferenceSignal) ? 1 : 0)
-            }
+            guard entry.isStrength else { return total }
             return total + entry.sets.filter { $0.reps > 0 && !$0.isWarmup }.count
         }
 
