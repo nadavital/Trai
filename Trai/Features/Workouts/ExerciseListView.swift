@@ -67,8 +67,10 @@ struct ExerciseListView: View {
         self._selectedExercise = .constant(nil)
         self._selectedCategory = State(initialValue: Self.initialCategory(
             targetMuscleGroups: targetMuscleGroups,
-            targetActivityCategories: targetActivityCategories
+            targetActivityCategories: targetActivityCategories,
+            targetActivityTypes: targetActivityTypes
         ))
+        self._selectedActivityTypeFilter = State(initialValue: Self.initialActivityTypeFilter(targetActivityTypes))
     }
 
     /// Binding-based initializer for form selection
@@ -149,9 +151,19 @@ struct ExerciseListView: View {
 
     private static func initialCategory(
         targetMuscleGroups: [Exercise.MuscleGroup],
-        targetActivityCategories: [Exercise.Category]
+        targetActivityCategories: [Exercise.Category],
+        targetActivityTypes: [String]
     ) -> Exercise.Category? {
+        if !targetActivityTypes.isEmpty {
+            return nil
+        }
         return targetActivityCategories.first
+    }
+
+    private static func initialActivityTypeFilter(_ targetActivityTypes: [String]) -> String? {
+        let trimmed = targetActivityTypes.first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private var muscleGroupDefaultOrder: [Exercise.MuscleGroup: Int] {
