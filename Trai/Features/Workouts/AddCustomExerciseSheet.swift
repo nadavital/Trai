@@ -147,8 +147,6 @@ struct AddCustomExerciseSheet: View {
                     }
                 }
 
-            activityGroupPicker
-
             if !canAccessExerciseAI {
                 lockedExerciseAnalysisCard
             } else {
@@ -157,7 +155,7 @@ struct AddCustomExerciseSheet: View {
         }
     }
 
-    private var activityGroupPicker: some View {
+    private var activityGroupPickerContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text("Activity Group")
@@ -381,7 +379,13 @@ struct AddCustomExerciseSheet: View {
             icon: "square.grid.2x2",
             summary: selectedCategory.userFacingEquivalent.displayName
         ) {
-            categoryPickerContent
+            VStack(alignment: .leading, spacing: 14) {
+                categoryPickerContent
+
+                Divider()
+
+                activityGroupPickerContent
+            }
         }
     }
 
