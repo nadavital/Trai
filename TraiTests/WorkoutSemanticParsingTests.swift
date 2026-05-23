@@ -1248,6 +1248,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         XCTAssertEqual(payload["focus_areas"] as? [String], ["Bouldering", "Climbing", "Grip endurance"])
         XCTAssertEqual(payload["summary_segments"] as? [String], ["1 activity", "8 attempts", "60 min"])
+        XCTAssertEqual(payload["workout_item_count"] as? Int, 1)
         XCTAssertEqual(payload["exercise_count"] as? Int, 0)
         XCTAssertEqual(payload["activity_count"] as? Int, 1)
         XCTAssertEqual(activity["activity_type"] as? String, "Bouldering")
@@ -1315,6 +1316,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         XCTAssertNil(payload["activities"])
         XCTAssertEqual(payload["summary_segments"] as? [String], ["1 exercise", "1 set", "60 min"])
+        XCTAssertEqual(payload["workout_item_count"] as? Int, 1)
         XCTAssertEqual(payload["exercise_count"] as? Int, 1)
         XCTAssertEqual(payload["activity_count"] as? Int, 0)
         XCTAssertEqual(exercise["sets_count"] as? Int, 1)

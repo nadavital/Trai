@@ -224,6 +224,7 @@ extension AIFunctionExecutor {
                 "date": dateFormatter.string(from: liveWorkout.startedAt),
                 "duration_minutes": Int(liveWorkout.duration / 60),
                 "summary_segments": liveWorkout.historySummarySegments,
+                "workout_item_count": exercises.count + activities.count,
                 "exercise_count": exercises.count,
                 "activity_count": activities.count,
                 "total_sets": liveWorkout.totalSets,

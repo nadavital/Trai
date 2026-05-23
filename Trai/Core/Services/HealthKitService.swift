@@ -801,6 +801,7 @@ extension HealthKitService {
             "activity_focus": workout.displayFocusAreas.joined(separator: ","),
             "summary_segments": workout.historySummarySegments.joined(separator: " | "),
             "entry_count": stats.entryCount,
+            "workout_item_count": stats.entryCount,
             "exercise_count": stats.strengthEntryCount,
             "activity_count": stats.activityEntryCount,
             "logged_activity_count": stats.loggedActivityCount,

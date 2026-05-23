@@ -612,6 +612,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
 
         XCTAssertEqual(metadata[HKMetadataKeyWorkoutBrandName] as? String, "Trai")
         XCTAssertEqual(metadata["summary_segments"] as? String, "1 exercise | 1 activity | 8 attempts | 1 set | 60 min")
+        XCTAssertEqual(metadata["workout_item_count"] as? Int, 2)
         XCTAssertEqual(metadata["exercise_count"] as? Int, 1)
         XCTAssertEqual(metadata["activity_count"] as? Int, 1)
         XCTAssertEqual(metadata["logged_activity_count"] as? Int, 1)

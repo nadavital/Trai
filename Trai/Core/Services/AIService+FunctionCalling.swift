@@ -264,12 +264,12 @@ extension AIService {
                 case .suggestedWorkoutStart(let workout):
                     // Workout start suggestion - needs user approval
                     suggestedWorkout = workout
-                    log("🏋️ Workout suggestion: \(workout.name) (\(workout.exercises.count) exercises)", type: .info)
+                    log("🏋️ Workout suggestion: \(workout.name) (\(workout.exercisesSummary))", type: .info)
 
                 case .suggestedWorkoutLog(let workoutLog):
                     // Workout log suggestion - needs user approval
                     suggestedWorkoutLog = workoutLog
-                    log("📝 Workout log suggestion: \(workoutLog.displayName) (\(workoutLog.exercises.count) exercises)", type: .info)
+                    log("📝 Workout log suggestion: \(workoutLog.displayName) (\(workoutLog.summary))", type: .info)
 
                 case .startedLiveWorkout(let workout):
                     // Legacy: Workout started directly (shouldn't happen with new flow)
@@ -397,7 +397,7 @@ extension AIService {
         }
 
         if let workout = suggestedWorkout, textResponse.isEmpty {
-            let exerciseNames = workout.exercises.prefix(3).map { $0.name }.joined(separator: ", ")
+            let itemNames = workout.exercises.prefix(3).map { $0.name }.joined(separator: ", ")
             let followUp = try await sendFunctionResultForSuggestion(
                 name: "start_live_workout",
                 response: [
@@ -405,10 +405,11 @@ extension AIService {
                     "workout_name": workout.name,
                     "workout_type": workout.workoutType,
                     "activity_focuses": workout.activityFocuses ?? [],
-                    "exercise_count": workout.exercises.count,
-                    "exercises_preview": exerciseNames,
+                    "workout_item_count": workout.exercises.count,
+                    "workout_item_summary": workout.exercisesSummary,
+                    "workout_items_preview": itemNames,
                     "duration_minutes": workout.durationMinutes,
-                    "instruction": "The user will see a card with this workout suggestion. Please write a brief message about why this workout fits their goals, recovery, and activity focus without reducing custom activities to broad workout categories. \(toneInstruction)"
+                    "instruction": "The user will see a card with this workout suggestion. Please write a brief message about why these workout items fit their goals, recovery, and activity focus without reducing custom activities to broad workout categories. \(toneInstruction)"
                 ],
                 previousMessages: messages,
                 originalParts: accumulatedParts,
@@ -424,7 +425,7 @@ extension AIService {
         }
 
         if let workoutLog = suggestedWorkoutLog, textResponse.isEmpty {
-            let exercisesSummary = workoutLog.exercises.isEmpty ? "general workout" : workoutLog.exercises.map { $0.name }.joined(separator: ", ")
+            let itemNames = workoutLog.exercises.isEmpty ? "general workout" : workoutLog.exercises.map { $0.name }.joined(separator: ", ")
             let followUp = try await sendFunctionResultForSuggestion(
                 name: "log_workout",
                 response: [
@@ -432,10 +433,11 @@ extension AIService {
                     "workout_type": workoutLog.workoutType,
                     "activity_name": workoutLog.activityName as Any,
                     "activity_tags": workoutLog.activityTags ?? [],
-                    "exercise_count": workoutLog.exercises.count,
-                    "exercises": exercisesSummary,
+                    "workout_item_count": workoutLog.exercises.count,
+                    "workout_item_summary": workoutLog.summary,
+                    "workout_items": itemNames,
                     "duration_minutes": workoutLog.durationMinutes as Any,
-                    "instruction": "The user will see a card to confirm logging this workout. Please write a brief acknowledgement of their effort. \(toneInstruction)"
+                    "instruction": "The user will see a card to confirm logging this workout. Please write a brief acknowledgement of their effort using exercise language only for strength items and activity language for cardio, sport, mobility, recovery, conditioning, or custom items. \(toneInstruction)"
                 ],
                 previousMessages: messages,
                 originalParts: accumulatedParts,
