@@ -1105,7 +1105,10 @@ struct WorkoutPlanChatFlow: View {
         }
         await appendGeneratedResultMessage(planMessageType, delayMilliseconds: 130)
 
-        let goalsToShow = goals
+        let goalsToShow = deduplicatedGoals(goals.map { goal in
+            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+            return goal
+        })
         if !goalsToShow.isEmpty {
             activeGeneratedPlanGoals = goalsToShow
             await appendGeneratedResultMessage(.generatedGoals(goalsToShow), delayMilliseconds: 120)
@@ -1233,7 +1236,11 @@ struct WorkoutPlanChatFlow: View {
                 userIntent: latestUserRefinementIntent,
                 prefersMetricWeight: userProfile?.usesMetricExerciseWeight ?? true
             )
-            let goals = deduplicatedGoals(suggestions.map { $0.asWorkoutGoal() })
+            let goals = deduplicatedGoals(suggestions.map { suggestion in
+                let goal = suggestion.asWorkoutGoal()
+                goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+                return goal
+            })
             return goals.isEmpty ? currentGoals : goals
         } catch {
             return currentGoals

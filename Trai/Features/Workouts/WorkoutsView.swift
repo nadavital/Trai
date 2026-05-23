@@ -1045,7 +1045,7 @@ struct WorkoutsView: View {
         draftSnapshot.applyPreferences(to: profile, generatedPlan: plan)
 
         if mode == .proAI {
-            insertGeneratedWorkoutGoals(generatedGoals)
+            insertGeneratedWorkoutGoals(generatedGoals, for: plan)
         }
 
         if !hadExistingPlan {
@@ -1064,9 +1064,10 @@ struct WorkoutsView: View {
 
     }
 
-    private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal]) {
+    private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) {
         var existingTitles = Set(activeWorkoutGoals.map { $0.trimmedTitle.lowercased() })
         for goal in goals {
+            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
             let titleKey = goal.trimmedTitle.lowercased()
             guard !titleKey.isEmpty, !existingTitles.contains(titleKey) else { continue }
             modelContext.insert(goal)

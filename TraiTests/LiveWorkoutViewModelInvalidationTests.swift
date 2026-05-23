@@ -895,6 +895,152 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(insight?.progressFraction ?? 0, 1.0 / 3.0, accuracy: 0.001)
     }
 
+    func testGeneratedMixedPlanAdherenceGoalCountsEachCompletedTemplateSession() {
+        let plan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 3,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Pull Strength",
+                    sessionType: .strength,
+                    focusAreas: ["Back", "Pull Ups"],
+                    targetMuscleGroups: ["back"],
+                    exercises: [],
+                    estimatedDurationMinutes: 45,
+                    order: 0
+                ),
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Climbing Skill",
+                    sessionType: .climbing,
+                    focusAreas: ["Climbing", "Technique"],
+                    targetMuscleGroups: [],
+                    exercises: [],
+                    estimatedDurationMinutes: 40,
+                    order: 1
+                ),
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Mobility Flow",
+                    sessionType: .mobility,
+                    focusAreas: ["Mobility", "Recovery"],
+                    targetMuscleGroups: [],
+                    exercises: [],
+                    estimatedDurationMinutes: 30,
+                    order: 2
+                )
+            ],
+            rationale: "Balance strength, climbing, and mobility.",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        let goal = WorkoutGoal(
+            title: "Hit all 3 weekly sessions",
+            goalKind: .frequency,
+            linkedWorkoutType: .mixed,
+            linkedActivityTags: ["Weekly Training Plan", "consistency"],
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete 3 planned workouts in a week."
+        )
+        goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+
+        let workout = LiveWorkout(
+            name: "Pull Strength",
+            workoutType: .strength,
+            focusAreas: ["Back", "Pull Ups"]
+        )
+        workout.startedAt = Date().addingTimeInterval(-1_800)
+        workout.completedAt = Date()
+
+        XCTAssertNil(goal.linkedWorkoutType)
+        XCTAssertFalse(goal.hasActivityScope)
+
+        let insight = WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: [workout],
+            exerciseHistory: [],
+            useLbs: false
+        ).first
+
+        XCTAssertEqual(insight?.currentValueText, "1")
+        XCTAssertEqual(insight?.progressFraction ?? 0, 1.0 / 3.0, accuracy: 0.001)
+    }
+
+    func testGeneratedPlanAdherenceGoalClearsActivityTagsEvenWhenTemplatesShareBroadType() {
+        let plan = WorkoutPlan(
+            splitType: .pushPullLegs,
+            daysPerWeek: 3,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Legs + Hinge Power",
+                    sessionType: .mixed,
+                    focusAreas: ["Legs", "Hinge Power"],
+                    targetMuscleGroups: ["legs"],
+                    exercises: [],
+                    estimatedDurationMinutes: 45,
+                    order: 0
+                ),
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Push + Mobility",
+                    sessionType: .mixed,
+                    focusAreas: ["Push", "Mobility Flow"],
+                    targetMuscleGroups: ["chest", "shoulders"],
+                    exercises: [],
+                    estimatedDurationMinutes: 45,
+                    order: 1
+                ),
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Pull + Climbing",
+                    sessionType: .mixed,
+                    focusAreas: ["Pull", "Climbing"],
+                    targetMuscleGroups: ["back"],
+                    exercises: [],
+                    estimatedDurationMinutes: 45,
+                    order: 2
+                )
+            ],
+            rationale: "Strength leads with climbing visible.",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        let goal = WorkoutGoal(
+            title: "Lock in your 3-day rhythm",
+            goalKind: .frequency,
+            linkedWorkoutType: .mixed,
+            linkedActivityTags: ["3-day mixed plan", "strength", "climbing"],
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete all 3 planned sessions in at least 4 of the next 5 weeks."
+        )
+        goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+
+        let workout = LiveWorkout(
+            name: "Legs + Hinge Power",
+            workoutType: .mixed,
+            focusAreas: ["Legs", "Hinge Power"]
+        )
+        workout.startedAt = Date().addingTimeInterval(-1_800)
+        workout.completedAt = Date()
+
+        XCTAssertNil(goal.linkedWorkoutType)
+        XCTAssertFalse(goal.hasActivityScope)
+
+        let insight = WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: [workout],
+            exerciseHistory: [],
+            useLbs: false
+        ).first
+
+        XCTAssertEqual(insight?.currentValueText, "1")
+        XCTAssertEqual(insight?.progressFraction ?? 0, 1.0 / 3.0, accuracy: 0.001)
+    }
+
     func testActivityNameGoalCanMatchBroaderEntryTargetTag() {
         let workout = LiveWorkout(name: "Practice", workoutType: .mixed)
         workout.startedAt = Date().addingTimeInterval(-1_800)

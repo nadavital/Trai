@@ -323,6 +323,57 @@ extension WorkoutGoal {
         .joined(separator: "|")
     }
 
+    func normalizeGeneratedPlanAdherenceScopeIfNeeded(for plan: WorkoutPlan) {
+        guard isGeneratedPlanAdherenceGoal(for: plan) else { return }
+
+        linkedWorkoutTypeRaw = nil
+        linkedActivityName = nil
+        linkedActivityTags = []
+        linkedActivityKindRaw = nil
+        linkedActivityRoleRaw = nil
+        updatedAt = Date()
+    }
+
+    private func isGeneratedPlanAdherenceGoal(for plan: WorkoutPlan) -> Bool {
+        guard goalKind == .frequency,
+              let targetValue,
+              targetValue > 0,
+              plan.daysPerWeek > 0 else {
+            return false
+        }
+
+        let normalizedUnit = targetUnit.goalNormalizedKey
+        guard normalizedUnit.contains("session") || normalizedUnit.contains("workout") else {
+            return false
+        }
+
+        let targetSessions = Int(targetValue.rounded())
+        guard targetSessions == plan.daysPerWeek else {
+            return false
+        }
+
+        let planSessionTypes = Set(plan.templates.map(\.sessionType))
+        let generatedScopeIsNarrowerThanPlan = hasActivityScope || (linkedWorkoutType.map { linkedType in
+            planSessionTypes.contains { $0 != linkedType }
+        } ?? false)
+        guard generatedScopeIsNarrowerThanPlan else {
+            return false
+        }
+
+        let normalizedText = [
+            trimmedTitle,
+            trimmedSuccessCriteria,
+            trimmedNotes
+        ]
+            .joined(separator: " ")
+            .goalNormalizedKey
+
+        return normalizedText.contains("plan")
+            || normalizedText.contains("planned")
+            || normalizedText.contains("weekly-session")
+            || normalizedText.contains("weekly-workout")
+    }
+
     var hasValidTrackingCriteria: Bool {
         guard !trimmedSuccessCriteria.isEmpty else { return false }
 
