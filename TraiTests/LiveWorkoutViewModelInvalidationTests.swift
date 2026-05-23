@@ -1032,6 +1032,34 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(goal.scopeSummary, "Bouldering")
     }
 
+    func testActivityScopedGoalsNormalizeSpacingAndPunctuation() {
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Mobility Flow",
+            orderIndex: 0,
+            exerciseType: "mobility"
+        )
+        entry.activityTypeName = "Mobility Flow"
+        entry.targetTags = ["Hip Mobility", "Warm-Up"]
+        entry.durationSeconds = 900
+        entry.completedAt = Date()
+
+        let goal = WorkoutGoal(
+            title: "Keep mobility consistent",
+            goalKind: .frequency,
+            linkedActivityName: "mobility-flow",
+            linkedActivityTags: ["warm_up"],
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete three mobility entries this week."
+        )
+
+        XCTAssertTrue(goal.matches(entry: entry))
+        XCTAssertEqual("Mobility Flow".goalNormalizedKey, "mobility-flow".goalNormalizedKey)
+        XCTAssertEqual("Warm-Up".goalNormalizedKey, "warm_up".goalNormalizedKey)
+    }
+
     func testGoalScopeSummaryHidesPlacementWhenActivityIdentityIsPresent() {
         let taggedGoal = WorkoutGoal(
             title: "Complete support work",

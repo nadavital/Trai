@@ -423,7 +423,10 @@ extension WorkoutGoal {
 
 extension String {
     var goalNormalizedKey: String {
-        trimmingCharacters(in: .whitespacesAndNewlines)
+        let scalars = trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+            .unicodeScalars
+            .filter { CharacterSet.alphanumerics.contains($0) }
+        return String(String.UnicodeScalarView(scalars))
     }
 }
