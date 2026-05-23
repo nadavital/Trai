@@ -1656,17 +1656,6 @@ final class LiveWorkoutViewModel {
         entry.distanceMeters = distances.isEmpty ? nil : distances.reduce(0, +)
     }
 
-    func toggleCardioCompletion(for entry: LiveWorkoutEntry) {
-        if entry.completedAt != nil {
-            entry.completedAt = nil
-        } else {
-            entry.completedAt = Date()
-        }
-        refreshEntriesAndMetrics()
-        saveImmediately()
-        HapticManager.selectionChanged()
-    }
-
     func addGeneralActivity(
         name: String,
         notes: String = "",
@@ -1698,17 +1687,6 @@ final class LiveWorkoutViewModel {
         workout.entries?.append(entry)
         refreshEntriesAndMetrics()
         saveImmediately()
-    }
-
-    func toggleGeneralEntryCompletion(for entry: LiveWorkoutEntry) {
-        if entry.completedAt != nil {
-            entry.completedAt = nil
-        } else {
-            entry.completedAt = Date()
-        }
-        refreshEntriesAndMetrics()
-        saveImmediately()
-        HapticManager.selectionChanged()
     }
 
     // MARK: - Muscle Groups

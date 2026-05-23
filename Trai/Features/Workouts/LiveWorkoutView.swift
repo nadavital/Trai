@@ -366,7 +366,6 @@ struct LiveWorkoutView: View {
                                 entry: entry,
                                 onUpdateNotes: { viewModel.updateEntryNotes(for: entry, notes: $0) },
                                 onUpdateDuration: { viewModel.updateEntryDuration(for: entry, seconds: $0) },
-                                onToggleComplete: { viewModel.toggleGeneralEntryCompletion(for: entry) },
                                 onDelete: { viewModel.removeExercise(at: index) }
                             )
                         }

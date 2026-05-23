@@ -89,13 +89,11 @@ struct SessionNotesCard: View {
 
 struct GeneralActivityCard: View {
     let entry: LiveWorkoutEntry
-    var allowsCompletionToggle: Bool = false
     var allowsDeletion: Bool = true
     var showsEditableFields: Bool = true
     var isPlannedGuidance: Bool = false
     let onUpdateNotes: (String) -> Void
     let onUpdateDuration: (Int?) -> Void
-    let onToggleComplete: () -> Void
     let onDelete: () -> Void
 
     private var durationMinutesBinding: Binding<String> {
@@ -182,15 +180,6 @@ struct GeneralActivityCard: View {
                 }
 
                 Spacer()
-
-                if allowsCompletionToggle && !isPlannedGuidance {
-                    Button(action: onToggleComplete) {
-                        Image(systemName: entry.completedAt != nil ? "checkmark.circle.fill" : "circle")
-                            .font(.title3)
-                            .foregroundStyle(entry.completedAt != nil ? .green : .secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
 
                 if allowsDeletion && !isPlannedGuidance {
                     Button(role: .destructive, action: onDelete) {

@@ -436,12 +436,10 @@ struct LiveWorkoutDetailSheet: View {
                     if usesFlexibleSessionPresentation || !entry.isStrength {
                         GeneralActivityCard(
                             entry: entry,
-                            allowsCompletionToggle: false,
                             allowsDeletion: isEditing,
                             showsEditableFields: isEditing,
                             onUpdateNotes: { updateNotes(for: entry, notes: $0) },
                             onUpdateDuration: { updateDuration(for: entry, seconds: $0) },
-                            onToggleComplete: { toggleCompletion(for: entry) },
                             onDelete: { removeExercise(entry) }
                         )
                     } else {
@@ -712,11 +710,6 @@ struct LiveWorkoutDetailSheet: View {
 
     private func updateDuration(for entry: LiveWorkoutEntry, seconds: Int?) {
         entry.durationSeconds = seconds
-    }
-
-    private func toggleCompletion(for entry: LiveWorkoutEntry) {
-        entry.completedAt = entry.completedAt == nil ? Date() : nil
-        HapticManager.selectionChanged()
     }
 
     private func toggleGoalCompletion(_ goal: WorkoutGoal) {
