@@ -36,7 +36,6 @@ struct MuscleGroupSelector: View {
     var onSelectPlanTarget: ((PlanTarget) -> Void)?
 
     @State private var isExpanded: Bool = false
-    @State private var customActivityTypeText: String = ""
 
     private let activityTargets: [Exercise.Category] = [.cardio, .conditioning, .mobility, .sportPractice, .recovery]
 
@@ -129,8 +128,6 @@ struct MuscleGroupSelector: View {
                             }
                         }
                     }
-
-                    customActivityTypeEntry
 
                     horizontalTargetRow {
                         ForEach(displayedActivityTargets) { category in
@@ -232,61 +229,6 @@ struct MuscleGroupSelector: View {
         .scrollClipDisabled()
     }
 
-    private var customActivityTypeEntry: some View {
-        HStack(spacing: 8) {
-            TextField("Add activity", text: $customActivityTypeText)
-                .textInputAutocapitalization(.words)
-                .font(.caption.weight(.semibold))
-                .padding(.horizontal, 11)
-                .frame(height: 34)
-                .background(Color(.tertiarySystemFill), in: Capsule())
-                .onSubmit(addCustomActivityTypeTarget)
-
-            Button(action: addCustomActivityTypeTarget) {
-                Image(systemName: "plus")
-                    .font(.caption.weight(.bold))
-                    .frame(width: 34, height: 34)
-                    .background(Color.accentColor.opacity(0.16), in: Circle())
-                    .foregroundStyle(Color.accentColor)
-            }
-            .buttonStyle(.plain)
-            .disabled(customActivityTypeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        }
-    }
-
-    private func addCustomActivityTypeTarget() {
-        let trimmed = customActivityTypeText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        if let broadCategory = exactBroadCategory(named: trimmed) {
-            selectedActivityCategories.formUnion(broadCategory.suggestionCategories)
-        } else if selectedActivityTypes.allSatisfy({ $0.goalNormalizedKey != trimmed.goalNormalizedKey }) {
-            selectedActivityTypes.insert(Self.displayActivityTypeName(trimmed))
-        }
-
-        customActivityTypeText = ""
-        HapticManager.selectionChanged()
-    }
-
-    private func exactBroadCategory(named rawName: String) -> Exercise.Category? {
-        let key = rawName.goalNormalizedKey
-        return Exercise.Category.userFacingCases.first { category in
-            category.rawValue.goalNormalizedKey == key
-                || category.displayName.goalNormalizedKey == key
-                || category.trackingTemplateName.goalNormalizedKey == key
-        }
-    }
-
-    private static func displayActivityTypeName(_ rawName: String) -> String {
-        rawName
-            .replacingOccurrences(of: "_", with: " ")
-            .replacingOccurrences(of: "-", with: " ")
-            .split(separator: " ")
-            .map { word in
-                word.prefix(1).uppercased() + word.dropFirst()
-            }
-            .joined(separator: " ")
-    }
 }
 
 private struct PlanTargetChip: View {

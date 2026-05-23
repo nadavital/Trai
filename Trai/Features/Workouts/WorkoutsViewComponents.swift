@@ -176,6 +176,8 @@ private struct MoreSessionsCard: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
+                    CustomSessionCard(onTap: onStartCustomWorkout)
+
                     ForEach(templates) { template in
                         SessionCard(
                             name: template.name,
@@ -185,8 +187,6 @@ private struct MoreSessionsCard: View {
                             onTap: { onStartTemplate(template) }
                         )
                     }
-
-                    CustomSessionCard(onTap: onStartCustomWorkout)
                 }
                 .padding(.vertical, 2)
             }
@@ -210,13 +210,15 @@ private struct SessionCard: View {
     let onTap: () -> Void
 
     var body: some View {
+        let indicatorColor = recoveryColor ?? accentColor
+
         Button(action: onTap) {
             HStack(spacing: 10) {
                 Image(systemName: icon)
                     .font(.caption.bold())
-                    .foregroundStyle(accentColor)
+                    .foregroundStyle(indicatorColor)
                     .frame(width: 30, height: 30)
-                    .background(accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+                    .background(indicatorColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
 
                 Text(name)
                     .font(.traiLabel(13))
@@ -225,17 +227,18 @@ private struct SessionCard: View {
                     .multilineTextAlignment(.leading)
 
                 Spacer(minLength: 0)
-
-                if let recoveryColor {
-                    Circle()
-                        .fill(recoveryColor)
-                        .frame(width: 7, height: 7)
-                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .frame(width: 128, height: 62)
-            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.tertiarySystemFill))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(indicatorColor.opacity(recoveryColor == nil ? 0 : 0.06))
+                    )
+            )
         }
         .buttonStyle(TraiPressStyle())
     }
@@ -257,7 +260,7 @@ private struct CustomSessionCard: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
-            .frame(width: 54, height: 62)
+            .frame(width: 62, height: 62)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(

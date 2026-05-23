@@ -142,7 +142,7 @@ struct AddCustomExerciseSheet: View {
                 }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Activity")
+                Text("Activity Group")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 TextField("e.g. Climbing, Cycling, Mobility Flow", text: $activityTypeName)
@@ -316,7 +316,7 @@ struct AddCustomExerciseSheet: View {
     private var categoryDisclosure: some View {
         collapsibleManualSection(
             isExpanded: $isCategoryExpanded,
-            title: "Logging Style",
+            title: "Item Type",
             icon: "square.grid.2x2",
             summary: selectedCategory.userFacingEquivalent.displayName
         ) {
