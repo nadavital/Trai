@@ -36,6 +36,25 @@ struct WorkoutGoalInsight: Identifiable {
     }
 }
 
+private extension WorkoutPlan.TrainingBlock.Role {
+    var goalEditorPlacementName: String {
+        switch self {
+        case .main:
+            "Main work"
+        case .warmup:
+            "Warm-up"
+        case .accessory:
+            "Support work"
+        case .finisher:
+            "End of workout"
+        case .cooldown:
+            "Cool-down"
+        case .custom:
+            "Custom placement"
+        }
+    }
+}
+
 struct RecentWorkoutSignal: Identifiable {
     let id = UUID()
     let title: String
@@ -1999,7 +2018,7 @@ struct AddWorkoutGoalSheet: View {
                     .traiCard()
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Label("Track Against", systemImage: "figure.walk.motion")
+                        Label("Track", systemImage: "figure.walk.motion")
                             .font(.headline)
 
                         Picker("Scope", selection: $scope) {
@@ -2022,12 +2041,12 @@ struct AddWorkoutGoalSheet: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Text(scope == .session ? "This goal will follow your \(selectedWorkoutType.displayName.lowercased()) sessions." : "Track an exact movement, activity type, or placement.")
+                        Text(scope == .session ? "This goal will follow your \(selectedWorkoutType.displayName.lowercased()) sessions." : "Tie it to a movement, activity, or part of a workout.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
                         if scope == .activity {
-                            TextField("Activity name (optional)", text: $activityName)
+                            TextField("Movement or activity (optional)", text: $activityName)
                                 .padding(12)
                                 .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
 
@@ -2209,18 +2228,18 @@ struct AddWorkoutGoalSheet: View {
 
     private var activityRoleMenu: some View {
         Menu {
-            Button("Any role") {
+            Button("Anywhere in workout") {
                 selectedActivityRole = nil
             }
             ForEach(WorkoutPlan.TrainingBlock.Role.allCases) { role in
                 Button {
                     selectedActivityRole = role
                 } label: {
-                    Label(role.displayName, systemImage: role.iconName)
+                    Label(role.goalEditorPlacementName, systemImage: role.iconName)
                 }
             }
         } label: {
-            Label(selectedActivityRole?.displayName ?? "Any role", systemImage: selectedActivityRole?.iconName ?? "slider.horizontal.3")
+            Label(selectedActivityRole?.goalEditorPlacementName ?? "Anywhere in workout", systemImage: selectedActivityRole?.iconName ?? "slider.horizontal.3")
                 .font(.caption.weight(.semibold))
                 .frame(maxWidth: .infinity)
         }
