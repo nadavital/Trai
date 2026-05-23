@@ -53,7 +53,7 @@ enum ExerciseLibrarySeeder {
                     existing.targetTags = defaultTargetTags(category: existing.exerciseCategory, muscleGroup: existing.targetMuscleGroup)
                     didMutate = true
                 }
-                if existing.activityTypeNameRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if shouldRefreshDefaultActivityTypeName(for: existing) {
                     existing.activityTypeName = Exercise.defaultActivityTypeName(for: existing.name, category: existing.exerciseCategory)
                     didMutate = true
                 }
@@ -87,5 +87,37 @@ enum ExerciseLibrarySeeder {
             return [muscleGroup.displayName]
         }
         return Exercise.defaultTargetTags(for: category)
+    }
+
+    private static func shouldRefreshDefaultActivityTypeName(for exercise: Exercise) -> Bool {
+        let current = exercise.activityTypeNameRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !current.isEmpty else { return true }
+        guard !exercise.isCustom else { return false }
+
+        let category = exercise.exerciseCategory.userFacingEquivalent
+        guard category != .strength else { return false }
+
+        let specificDefault = Exercise.defaultActivityTypeName(for: exercise.name, category: exercise.exerciseCategory)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !specificDefault.isEmpty,
+              specificDefault.goalNormalizedKey != current.goalNormalizedKey else {
+            return false
+        }
+
+        let broadDefaultNames = Set(
+            Exercise.Category.userFacingCases.flatMap {
+                [$0.rawValue, $0.displayName, $0.trackingTemplateName]
+            } + [
+                exercise.exerciseCategory.rawValue,
+                exercise.exerciseCategory.displayName,
+                exercise.exerciseCategory.trackingTemplateName,
+                category.rawValue,
+                category.displayName,
+                category.trackingTemplateName,
+            ]
+        )
+        .map(\.goalNormalizedKey)
+
+        return broadDefaultNames.contains(current.goalNormalizedKey)
     }
 }

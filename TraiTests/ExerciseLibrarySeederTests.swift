@@ -238,6 +238,76 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertEqual(bouldering.activityTypeName, "Climbing")
     }
 
+    func testEnsureDefaultsRefreshesOldBroadDefaultActivityNames() throws {
+        let container = try ModelContainer(
+            for: Exercise.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+
+        let elliptical = Exercise(name: "Elliptical", category: .cardio)
+        elliptical.isCustom = false
+        elliptical.activityTypeName = "Cardio"
+        context.insert(elliptical)
+
+        let mobility = Exercise(name: "Hip Mobility Flow", category: .mobility)
+        mobility.isCustom = false
+        mobility.activityTypeName = "Mobility"
+        context.insert(mobility)
+
+        let bouldering = Exercise(name: "Bouldering", category: .sportPractice)
+        bouldering.isCustom = false
+        bouldering.activityTypeName = "Sport"
+        context.insert(bouldering)
+
+        try context.save()
+
+        _ = ExerciseLibrarySeeder.ensureDefaults(in: context)
+
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+        XCTAssertEqual(exercises.first { $0.name == "Elliptical" }?.activityTypeName, "Elliptical")
+        XCTAssertEqual(exercises.first { $0.name == "Hip Mobility Flow" }?.activityTypeName, "Hip Mobility Flow")
+        XCTAssertEqual(exercises.first { $0.name == "Bouldering" }?.activityTypeName, "Climbing")
+    }
+
+    func testEnsureDefaultsPreservesEditedDefaultActivityName() throws {
+        let container = try ModelContainer(
+            for: Exercise.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+
+        let elliptical = Exercise(name: "Elliptical", category: .cardio)
+        elliptical.isCustom = false
+        elliptical.activityTypeName = "Low-impact engine"
+        context.insert(elliptical)
+        try context.save()
+
+        _ = ExerciseLibrarySeeder.ensureDefaults(in: context)
+
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+        XCTAssertEqual(exercises.first { $0.name == "Elliptical" }?.activityTypeName, "Low-impact engine")
+    }
+
+    func testEnsureDefaultsPreservesCustomDuplicateActivityName() throws {
+        let container = try ModelContainer(
+            for: Exercise.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+
+        let elliptical = Exercise(name: "Elliptical", category: .cardio)
+        elliptical.isCustom = true
+        elliptical.activityTypeName = "Cardio"
+        context.insert(elliptical)
+        try context.save()
+
+        _ = ExerciseLibrarySeeder.ensureDefaults(in: context)
+
+        let exercises = try context.fetch(FetchDescriptor<Exercise>())
+        XCTAssertEqual(exercises.first { $0.name == "Elliptical" }?.activityTypeName, "Cardio")
+    }
+
     func testEnsureDefaultsRenamesLegacyStrengthRowingMachine() throws {
         let container = try ModelContainer(
             for: Exercise.self,
