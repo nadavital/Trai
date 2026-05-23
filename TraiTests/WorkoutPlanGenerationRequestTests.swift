@@ -540,6 +540,64 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(goal.trackingSummary, "Complete the defined plan milestone with the criteria Trai can verify.")
     }
 
+    func testWorkoutGoalPlanSetupDeduplicationUsesStructuredTrackingFields() {
+        let first = WorkoutGoal(
+            title: "Hit the weekly rhythm",
+            goalKind: .frequency,
+            linkedWorkoutType: .mixed,
+            linkedActivityTags: ["Climbing", "Technique"],
+            targetValue: 2,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You log two climbing technique sessions each week."
+        )
+        let sameTrackingDifferentWords = WorkoutGoal(
+            title: "Keep climbing practice consistent",
+            goalKind: .frequency,
+            linkedWorkoutType: .mixed,
+            linkedActivityTags: ["Technique", "Climbing"],
+            targetValue: 2,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete your two weekly climbing practice sessions."
+        )
+
+        XCTAssertEqual(first.planSetupDeduplicationKey, sameTrackingDifferentWords.planSetupDeduplicationKey)
+    }
+
+    func testWorkoutGoalPlanSetupDeduplicationKeepsDifferentStructuredScopesSeparate() {
+        let supportBlockGoal = WorkoutGoal(
+            title: "Complete cardio support",
+            goalKind: .frequency,
+            linkedWorkoutType: .mixed,
+            linkedActivityTags: ["Cardio"],
+            linkedActivityKind: .cardio,
+            linkedActivityRole: .accessory,
+            targetValue: 1,
+            targetUnit: "blocks",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You log the planned cardio support block each week."
+        )
+        let standaloneCardioGoal = WorkoutGoal(
+            title: "Complete cardio support",
+            goalKind: .frequency,
+            linkedWorkoutType: .mixed,
+            linkedActivityTags: ["Cardio"],
+            linkedActivityKind: .cardio,
+            linkedActivityRole: .main,
+            targetValue: 1,
+            targetUnit: "blocks",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You log the planned cardio session each week."
+        )
+
+        XCTAssertNotEqual(supportBlockGoal.planSetupDeduplicationKey, standaloneCardioGoal.planSetupDeduplicationKey)
+    }
+
     func testDurationGoalSuggestionPreservesPeriodForCumulativeTracking() throws {
         let missingPeriod = makeGoalSuggestion(
             title: "Build cardio support",

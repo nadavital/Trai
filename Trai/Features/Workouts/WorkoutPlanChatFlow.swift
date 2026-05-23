@@ -1707,61 +1707,6 @@ struct WorkoutPlanChatFlow: View {
     }
 }
 
-private extension WorkoutGoal {
-    var planSetupDeduplicationKey: String {
-        let combinedText = [
-            title,
-            successCriteria,
-            notes,
-            linkedActivityName ?? "",
-            linkedActivityTags.joined(separator: " "),
-            linkedActivityKindRaw ?? "",
-            linkedActivityRoleRaw ?? "",
-            linkedWorkoutTypeRaw ?? ""
-        ]
-        .joined(separator: " ")
-        .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-        .lowercased()
-
-        if combinedText.contains("session"),
-           combinedText.contains("week"),
-           combinedText.contains("complete") || combinedText.contains("hit") || combinedText.contains("scheduled") {
-            return "plan-adherence|\(linkedWorkoutTypeRaw ?? "any")|\(periodUnitRaw ?? "week")|\(periodCount ?? 1)"
-        }
-
-        if goalKind == .frequency {
-            let roundedTarget = targetValue.map { value in
-                String(Int(value.rounded()))
-            } ?? ""
-            let normalizedActivityName = linkedActivityName?.goalNormalizedKey ?? ""
-            let normalizedActivityTags = linkedActivityTags
-                .map(\.goalNormalizedKey)
-                .sorted()
-                .joined(separator: ",")
-            let normalizedTargetUnit = targetUnit.goalNormalizedKey
-            let periodCountText = periodCount.map(String.init) ?? ""
-            let parts: [String] = [
-                goalKind.rawValue,
-                linkedWorkoutTypeRaw ?? "any",
-                normalizedActivityName,
-                normalizedActivityTags,
-                linkedActivityKindRaw ?? "",
-                linkedActivityRoleRaw ?? "",
-                roundedTarget,
-                normalizedTargetUnit,
-                periodUnitRaw ?? "",
-                periodCountText
-            ]
-            return parts.joined(separator: "|")
-        }
-
-        return title
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .lowercased()
-    }
-}
-
 private struct GeneratedWorkoutGoalDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
 

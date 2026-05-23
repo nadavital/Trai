@@ -295,6 +295,54 @@ extension WorkoutGoal {
         return "By \(targetDate.formatted(date: .abbreviated, time: .omitted))"
     }
 
+    var planSetupDeduplicationKey: String {
+        let scopeParts: [String] = [
+            linkedWorkoutTypeRaw?.goalNormalizedKey ?? "any",
+            trimmedActivityName?.goalNormalizedKey ?? "",
+            linkedActivityTags.map(\.goalNormalizedKey).filter { !$0.isEmpty }.sorted().joined(separator: ","),
+            linkedActivityKindRaw?.goalNormalizedKey ?? "",
+            linkedActivityRoleRaw?.goalNormalizedKey ?? ""
+        ]
+
+        let targetParts: [String] = [
+            targetValue.map(Self.normalizedTargetValue) ?? "",
+            targetUnit.goalNormalizedKey,
+            periodUnitRaw?.goalNormalizedKey ?? "",
+            periodCount.map(String.init) ?? ""
+        ]
+
+        if goalKind != .milestone {
+            return ([goalKind.rawValue] + scopeParts + targetParts)
+                .joined(separator: "|")
+        }
+
+        return ([goalKind.rawValue] + scopeParts + [
+            trimmedTitle.goalNormalizedKey,
+            trimmedSuccessCriteria.goalNormalizedKey
+        ])
+        .joined(separator: "|")
+    }
+
+    var hasValidTrackingCriteria: Bool {
+        guard !trimmedSuccessCriteria.isEmpty else { return false }
+
+        switch goalKind {
+        case .milestone:
+            return true
+        case .frequency:
+            return targetValue.map { $0 > 0 } == true &&
+                periodUnit != nil &&
+                !(targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        case .duration, .distance, .weight:
+            return targetValue.map { $0 > 0 } == true &&
+                !(targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        case .count:
+            return targetValue.map { $0 > 0 } == true &&
+                periodUnit != nil &&
+                !(targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
+
     func matches(workout: LiveWorkout) -> Bool {
         guard hasActivityScope else {
             if let linkedWorkoutType {
@@ -418,6 +466,13 @@ extension WorkoutGoal {
 
     private var normalizedLinkedActivityTags: Set<String> {
         Set(linkedActivityTags.map(\.goalNormalizedKey).filter { !$0.isEmpty })
+    }
+
+    private static func normalizedTargetValue(_ value: Double) -> String {
+        if value.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(Int(value.rounded()))
+        }
+        return String(format: "%.2f", value)
     }
 }
 
