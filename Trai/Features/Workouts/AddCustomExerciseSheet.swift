@@ -24,6 +24,7 @@ struct AddCustomExerciseSheet: View {
     @State private var selectedTargets: Set<String> = []
     @State private var selectedTrackingFields: Set<Exercise.TrackingField> = Set(Exercise.defaultTrackingFields(for: .strength))
     @State private var customTargetText = ""
+    @State private var didChooseTrackingTemplate = false
 
     // AI Analysis state
     @State private var aiService = AIService()
@@ -133,12 +134,8 @@ struct AddCustomExerciseSheet: View {
                         hasAnalyzed = false
                         analysisResult = nil
                     }
-                    if selectedCategory == .strength,
-                       let inferredCategory = Exercise.Category.normalized(from: exerciseName),
-                       inferredCategory.userFacingEquivalent != .strength {
-                        selectedCategory = inferredCategory.userFacingEquivalent
-                        resetDefaultsForSelectedCategory()
-                    } else if shouldReplaceDefaultActivityName {
+                    inferTrackingTemplateIfNeeded()
+                    if shouldReplaceDefaultActivityName {
                         activityTypeName = Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory)
                     }
                 }
@@ -152,6 +149,9 @@ struct AddCustomExerciseSheet: View {
                     .font(.traiLabel(15))
                     .padding(12)
                     .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                    .onChange(of: activityTypeName) { _, _ in
+                        inferTrackingTemplateIfNeeded()
+                    }
             }
 
             if !canAccessExerciseAI {
@@ -237,6 +237,7 @@ struct AddCustomExerciseSheet: View {
                 ) {
                     withAnimation(.snappy(duration: 0.2)) {
                         selectedCategory = category
+                        didChooseTrackingTemplate = true
                         resetDefaultsForSelectedCategory()
                         isCategoryExpanded = false
                         HapticManager.selectionChanged()
@@ -519,6 +520,20 @@ struct AddCustomExerciseSheet: View {
             || Exercise.Category.userFacingCases.contains { category in
                 trimmed == category.displayName || trimmed == category.trackingTemplateName
             }
+    }
+
+    private func inferTrackingTemplateIfNeeded() {
+        guard !didChooseTrackingTemplate else { return }
+        let inferredCategory = [activityTypeName, exerciseName]
+            .compactMap(Exercise.Category.normalized(from:))
+            .first?
+            .userFacingEquivalent
+        guard let inferredCategory,
+            inferredCategory != selectedCategory else {
+            return
+        }
+        selectedCategory = inferredCategory
+        resetDefaultsForSelectedCategory()
     }
 
     private func addCustomTarget() {
