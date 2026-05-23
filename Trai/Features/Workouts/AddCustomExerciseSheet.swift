@@ -2,12 +2,12 @@
 //  AddCustomExerciseSheet.swift
 //  Trai
 //
-//  Sheet for adding custom exercises with AI analysis
+//  Sheet for adding custom exercises and activities with AI analysis
 //
 
 import SwiftUI
 
-// MARK: - Add Custom Exercise Sheet
+// MARK: - Add Custom Exercise or Activity Sheet
 
 struct AddCustomExerciseSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -67,7 +67,7 @@ struct AddCustomExerciseSheet: View {
                 .padding(.vertical, 14)
             }
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle("New Exercise")
+            .navigationTitle("New Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -170,7 +170,7 @@ struct AddCustomExerciseSheet: View {
             if isAnalyzing {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Analyzing exercise...")
+                    Text("Analyzing item...")
                         .font(.traiHeadline(15))
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -218,7 +218,7 @@ struct AddCustomExerciseSheet: View {
         ProUpsellInlineCard(
             source: .exerciseAnalysis,
             title: "Let Trai set it up",
-            message: "Identify the exercise, choose targets, and pick the right tracking fields automatically.",
+            message: "Identify the movement or activity, choose targets, and pick the right tracking fields automatically.",
             systemImage: "circle.hexagongrid.circle.fill",
             actionTitle: "Unlock Trai Pro",
             usesIconContainer: false

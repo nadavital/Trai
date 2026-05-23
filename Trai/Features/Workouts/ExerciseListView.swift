@@ -569,9 +569,9 @@ struct ExerciseListView: View {
                     }
                 }
             }
-            .navigationTitle("Select Exercise")
+            .navigationTitle("Select Item")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search exercises")
+            .searchable(text: $searchText, prompt: "Search exercises and activities")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {
@@ -631,7 +631,7 @@ struct ExerciseListView: View {
                     photoAnalysisError = nil
                 }
             } message: {
-                Text(photoAnalysisError ?? "Unable to identify the exercise. Try taking a clearer photo.")
+                Text(photoAnalysisError ?? "Unable to identify the item. Try taking a clearer photo.")
             }
             .sheet(isPresented: $showingEquipmentResult) {
                 if let analysis = equipmentAnalysis {
@@ -668,7 +668,7 @@ struct ExerciseListView: View {
                             ProgressView()
                                 .scaleEffect(1.5)
                                 .tint(.white)
-                            Text("Analyzing exercise...")
+                            Text("Analyzing item...")
                                 .font(.headline)
                                 .foregroundStyle(.white)
                             Text("Identifying tracking and setup details")

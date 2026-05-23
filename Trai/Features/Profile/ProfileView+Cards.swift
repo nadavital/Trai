@@ -423,7 +423,7 @@ extension ProfileView {
         }
     }
 
-    // MARK: - Exercises Card
+    // MARK: - Exercise Library Card
 
     @ViewBuilder
     func exercisesCard() -> some View {
@@ -438,11 +438,11 @@ extension ProfileView {
                     .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Custom Exercises")
+                    Text("Exercise Library")
                         .font(.headline)
                         .foregroundStyle(.primary)
 
-                    Text("View and manage your exercises")
+                    Text("Manage exercises and activities")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

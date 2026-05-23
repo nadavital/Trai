@@ -2,7 +2,7 @@
 //  CustomExercisesView.swift
 //  Trai
 //
-//  Manage custom exercises - view, edit, and delete
+//  Manage reusable exercises and activities - view, edit, and delete
 //
 
 import SwiftUI
@@ -47,12 +47,12 @@ struct CustomExercisesView: View {
             if customExercises.isEmpty {
                 VStack(spacing: 16) {
                     ContentUnavailableView(
-                        "No Custom Exercises",
+                        "No Custom Items",
                         systemImage: "dumbbell",
-                        description: Text("Custom exercises you create will appear here")
+                        description: Text("Exercises and activities you create will appear here")
                     )
 
-                    Button("Add Exercise", systemImage: "plus") {
+                    Button("Add Item", systemImage: "plus") {
                         showingAddCustomExercise = true
                     }
                     .buttonStyle(.traiSecondary(color: .orange, fullWidth: false))
@@ -79,8 +79,8 @@ struct CustomExercisesView: View {
                 }
             }
         }
-        .searchable(text: $searchText, prompt: "Search exercises")
-        .navigationTitle("Custom Exercises")
+        .searchable(text: $searchText, prompt: "Search exercises and activities")
+        .navigationTitle("Exercise Library")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Add", systemImage: "plus") {
