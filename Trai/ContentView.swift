@@ -245,7 +245,6 @@ struct MainTabView: View {
     @AppStorage("selectedTab") private var persistedSelectedTabRaw: String = AppTab.dashboard.rawValue
     @Environment(\.showRemindersFromNotification) private var showRemindersFromNotification
     @Environment(\.modelContext) private var modelContext
-    @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
     @Binding var deepLinkDestination: AppRoute?
     @State private var selectedTabState: AppTab = .dashboard
     @State private var hasInitializedSelection = false
@@ -304,7 +303,7 @@ struct MainTabView: View {
 
     @ViewBuilder
     private var tabScene: some View {
-        if let workout = activeWorkout, !activeWorkoutRuntimeState.isLiveWorkoutPresented {
+        if let workout = activeWorkout {
             baseTabScene
                 .tabViewBottomAccessory {
                     WorkoutBanner(
