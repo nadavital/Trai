@@ -170,6 +170,7 @@ struct WorkoutPlan: Codable, Equatable {
             self.exercises = exercises
             self.blocks = blocks?.normalizedForDisplay ?? Self.defaultBlocks(
                 sessionType: sessionType,
+                focusAreas: self.focusAreas,
                 exercises: exercises,
                 durationMinutes: estimatedDurationMinutes,
                 notes: notes
@@ -235,6 +236,7 @@ struct WorkoutPlan: Codable, Equatable {
             blocks.isEmpty
                 ? Self.defaultBlocks(
                     sessionType: sessionType,
+                    focusAreas: focusAreas,
                     exercises: exercises,
                     durationMinutes: estimatedDurationMinutes,
                     notes: notes
@@ -283,6 +285,7 @@ struct WorkoutPlan: Codable, Equatable {
 
         private nonisolated static func defaultBlocks(
             sessionType: WorkoutMode,
+            focusAreas: [String],
             exercises: [ExerciseTemplate],
             durationMinutes: Int,
             notes: String?
@@ -303,13 +306,23 @@ struct WorkoutPlan: Codable, Equatable {
                 ]
             }
 
-            let title = sessionType.displayName
+            let activityName = defaultActivityName(
+                sessionType: sessionType,
+                focusAreas: focusAreas
+            )
+            let title = activityName ?? sessionType.displayName
             return [
                 TrainingBlock(
                     kind: TrainingBlock.BlockKind(sessionType: sessionType),
                     title: title,
                     detail: notes ?? "\(durationMinutes) minutes",
                     exercises: [],
+                    activityTypeName: activityName,
+                    activityTags: defaultActivityTags(
+                        sessionType: sessionType,
+                        activityName: activityName,
+                        focusAreas: focusAreas
+                    ),
                     durationMinutes: durationMinutes,
                     intensity: nil,
                     target: nil,
@@ -317,6 +330,41 @@ struct WorkoutPlan: Codable, Equatable {
                     notes: notes
                 )
             ]
+        }
+
+        private nonisolated static func defaultActivityName(
+            sessionType: WorkoutMode,
+            focusAreas: [String]
+        ) -> String? {
+            guard !sessionType.supportsMuscleTargets else { return nil }
+            return focusAreas
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .first { !$0.isEmpty }
+                .map(formatTargetGroupName)
+        }
+
+        private nonisolated static func defaultActivityTags(
+            sessionType: WorkoutMode,
+            activityName: String?,
+            focusAreas: [String]
+        ) -> [String] {
+            guard !sessionType.supportsMuscleTargets else { return [] }
+            var seen: Set<String> = []
+            let values = [activityName, sessionType.displayName] + focusAreas.map(Optional.some)
+            return values
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .map(formatTargetGroupName)
+                .filter { seen.insert(defaultActivityKey($0)).inserted }
+        }
+
+        private nonisolated static func defaultActivityKey(_ value: String) -> String {
+            value
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: " ", with: "")
         }
     }
 

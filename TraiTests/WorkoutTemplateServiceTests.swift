@@ -347,6 +347,34 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(entry.plannedTarget, "Power and precision")
     }
 
+    func testCreateWorkoutFromTemplateBuildsActivityBlockFromFocusWhenBlocksAreMissing() throws {
+        let context = try makeInMemoryContext()
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Climbing Session",
+            sessionType: .climbing,
+            focusAreas: ["Bouldering", "Grip endurance"],
+            targetMuscleGroups: [],
+            exercises: [],
+            estimatedDurationMinutes: 40,
+            order: 0
+        )
+
+        let workout = service.createWorkoutFromTemplate(
+            template,
+            progressionStrategy: .defaultStrategy,
+            modelContext: context
+        )
+
+        let entry = try XCTUnwrap(workout.entries?.first)
+        XCTAssertEqual(entry.exerciseName, "Bouldering")
+        XCTAssertEqual(entry.exerciseType, "activity")
+        XCTAssertEqual(entry.activityKind, .skill)
+        XCTAssertEqual(entry.activityTypeName, "Bouldering")
+        XCTAssertEqual(entry.targetTags, ["Bouldering", "Climbing", "Grip Endurance"])
+        XCTAssertEqual(entry.plannedDurationSeconds, 2400)
+        XCTAssertEqual(workout.focusAreas, ["Bouldering", "Grip endurance", "Climbing"])
+    }
+
     func testCreateWorkoutFromTemplateUsesActivityNameForGenericActivityBlockTitle() throws {
         let context = try makeInMemoryContext()
         let template = WorkoutPlan.WorkoutTemplate(
