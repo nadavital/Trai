@@ -56,12 +56,15 @@ extension WorkoutPlan.WorkoutTemplate {
 
     var displayWorkloadSummary: String {
         if exerciseCount > 0 {
-            return "\(exerciseCount) exercise\(exerciseCount == 1 ? "" : "s")"
+            let exerciseSummary = "\(exerciseCount) exercise\(exerciseCount == 1 ? "" : "s")"
+            guard let supportSummary = activityBlockSummary(includeStrengthBlocks: false, maxItems: 1) else {
+                return exerciseSummary
+            }
+            return "\(exerciseSummary) • \(supportSummary)"
         }
 
-        let blockCount = displayBlocks.count
-        if blockCount > 1 {
-            return "\(blockCount) blocks"
+        if let activitySummary = activityBlockSummary(includeStrengthBlocks: true, maxItems: 2) {
+            return activitySummary
         }
 
         if let block = displayBlocks.first {
@@ -69,5 +72,23 @@ extension WorkoutPlan.WorkoutTemplate {
         }
 
         return sessionType.displayName
+    }
+
+    private func activityBlockSummary(includeStrengthBlocks: Bool, maxItems: Int) -> String? {
+        var seen = Set<String>()
+        let names = displayBlocks.compactMap { block -> String? in
+            guard includeStrengthBlocks || block.kind != .strength else { return nil }
+            let name = block.displayActivityName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return nil }
+            let key = name.goalNormalizedKey
+            guard !key.isEmpty, seen.insert(key).inserted else { return nil }
+            return name
+        }
+
+        guard !names.isEmpty else { return nil }
+        let visibleNames = names.prefix(maxItems)
+        let suffixCount = names.count - visibleNames.count
+        let base = visibleNames.joined(separator: " • ")
+        return suffixCount > 0 ? "\(base) +\(suffixCount)" : base
     }
 }

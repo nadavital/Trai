@@ -75,6 +75,71 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertFalse(request.limitsAccessoryCardioToOneSession)
     }
 
+    func testActivityOnlyTemplateWorkloadSummaryUsesActivityNames() {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Climb + Mobility",
+            sessionType: .custom,
+            focusAreas: ["Climbing", "Mobility"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                .init(
+                    kind: .sportPractice,
+                    title: "Limit Bouldering",
+                    detail: "Hard attempts",
+                    activityTypeName: "Bouldering",
+                    order: 0
+                ),
+                .init(
+                    kind: .mobility,
+                    title: "Shoulder Prep",
+                    detail: "Controlled range",
+                    activityTypeName: "Mobility Flow",
+                    order: 1
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+
+        XCTAssertEqual(template.displayWorkloadSummary, "Bouldering • Mobility Flow")
+    }
+
+    func testStrengthTemplateWorkloadSummaryIncludesSupportActivity() {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Lower + Easy Spin",
+            sessionType: .mixed,
+            focusAreas: ["Legs", "Cycling"],
+            targetMuscleGroups: ["legs"],
+            exercises: [],
+            blocks: [
+                .init(
+                    kind: .strength,
+                    title: "Lower Strength",
+                    detail: "Primary lifts",
+                    exercises: [
+                        .init(exerciseName: "Back Squat", muscleGroup: "legs", defaultSets: 3, defaultReps: 5, order: 0),
+                        .init(exerciseName: "Romanian Deadlift", muscleGroup: "legs", defaultSets: 3, defaultReps: 8, order: 1)
+                    ],
+                    activityTypeName: "Strength",
+                    order: 0
+                ),
+                .init(
+                    kind: .cardio,
+                    role: .accessory,
+                    title: "Easy Spin",
+                    detail: "Low effort support",
+                    activityTypeName: "Cycling",
+                    order: 1
+                )
+            ],
+            estimatedDurationMinutes: 50,
+            order: 0
+        )
+
+        XCTAssertEqual(template.displayWorkloadSummary, "2 exercises • Cycling")
+    }
+
     func testClimbingSelectionRequiresRealPlanRepresentation() {
         let request = makeRequest(
             workoutType: .mixed,
