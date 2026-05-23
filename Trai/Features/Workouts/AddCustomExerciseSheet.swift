@@ -6,11 +6,13 @@
 //
 
 import SwiftUI
+import SwiftData
 
 // MARK: - Add Custom Exercise or Activity Sheet
 
 struct AddCustomExerciseSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
@@ -25,6 +27,9 @@ struct AddCustomExerciseSheet: View {
     @State private var selectedTargets: Set<String> = []
     @State private var selectedTrackingFields: Set<Exercise.TrackingField> = Set(Exercise.defaultTrackingFields(for: .strength))
     @State private var customTargetText = ""
+    @State private var savedActivityGroups: [String] = []
+    @State private var isAddingActivityGroup = false
+    @State private var newActivityGroupText = ""
     @State private var didChooseTrackingTemplate = false
 
     // AI Analysis state
@@ -97,6 +102,7 @@ struct AddCustomExerciseSheet: View {
             }
             .onAppear {
                 exerciseName = initialName
+                loadSavedActivityGroups()
                 if let inferredCategory = Exercise.Category.normalized(from: initialName) {
                     selectedCategory = inferredCategory.userFacingEquivalent
                 }
@@ -141,24 +147,79 @@ struct AddCustomExerciseSheet: View {
                     }
                 }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Activity Group")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                TextField("e.g. Climbing, Cycling, Mobility Flow", text: $activityTypeName)
-                    .textInputAutocapitalization(.words)
-                    .font(.traiLabel(15))
-                    .padding(12)
-                    .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-                    .onChange(of: activityTypeName) { _, _ in
-                        inferTrackingTemplateIfNeeded()
-                    }
-            }
+            activityGroupPicker
 
             if !canAccessExerciseAI {
                 lockedExerciseAnalysisCard
             } else {
                 aiAnalysisCard
+            }
+        }
+    }
+
+    private var activityGroupPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Activity Group")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        isAddingActivityGroup.toggle()
+                        if !isAddingActivityGroup {
+                            newActivityGroupText = ""
+                        }
+                    }
+                    HapticManager.selectionChanged()
+                } label: {
+                    Label("New", systemImage: "plus")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderless)
+                .tint(.accentColor)
+            }
+
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(activityGroupOptions, id: \.self) { group in
+                        TargetButton(
+                            title: group,
+                            icon: group == resolvedActivityTypeName ? "checkmark" : nil,
+                            isSelected: group.goalNormalizedKey == resolvedActivityTypeName.goalNormalizedKey
+                        ) {
+                            selectActivityGroup(group)
+                        }
+                    }
+                }
+                .padding(.vertical, 1)
+            }
+            .scrollIndicators(.hidden)
+
+            if isAddingActivityGroup {
+                HStack(spacing: 8) {
+                    TextField("New activity group", text: $newActivityGroupText)
+                        .textInputAutocapitalization(.words)
+                        .font(.traiLabel(14))
+                        .padding(.horizontal, 12)
+                        .frame(height: 38)
+                        .background(Color(.tertiarySystemBackground), in: Capsule())
+                        .onSubmit(commitNewActivityGroup)
+
+                    Button {
+                        commitNewActivityGroup()
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .font(.traiLabel(13).weight(.semibold))
+                            .frame(width: 38, height: 38)
+                            .background(Color.accentColor.opacity(0.16), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(newActivityGroupText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -429,7 +490,7 @@ struct AddCustomExerciseSheet: View {
 
                 if let analyzedActivityType = analysis.activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !analyzedActivityType.isEmpty {
-                    activityTypeName = analyzedActivityType
+                    selectActivityGroup(analyzedActivityType, shouldHaptic: false)
                     lastAutoActivityTypeName = ""
                 } else {
                     applyDefaultActivityTypeName()
@@ -515,6 +576,41 @@ struct AddCustomExerciseSheet: View {
         return defaults + extra
     }
 
+    private var activityGroupOptions: [String] {
+        let defaults = defaultActivityGroupOptions
+        let selected = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Self.dedupedNormalizedValues(savedActivityGroups + defaults + [selected])
+    }
+
+    private var defaultActivityGroupOptions: [String] {
+        let category = selectedCategory.userFacingEquivalent
+        var options = [
+            Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory),
+            category.displayName
+        ]
+
+        switch category {
+        case .strength:
+            options += ["Strength Training", "Accessory Work"]
+        case .cardio:
+            options += ["Running", "Cycling", "Rowing", "Swimming"]
+        case .mobility, .flexibility:
+            options += ["Mobility Flow", "Stretching", "Yoga"]
+        case .recovery:
+            options += ["Recovery", "Breathwork", "Sauna"]
+        case .conditioning:
+            options += ["Conditioning", "Circuit Training", "HIIT"]
+        case .skill:
+            options += ["Skill Practice", "Technique Work"]
+        case .sportPractice:
+            options += ["Basketball", "Tennis", "Pickleball", "Climbing"]
+        case .custom:
+            options += ["Custom Activity"]
+        }
+
+        return options
+    }
+
     private func resetDefaultsForSelectedCategory() {
         let defaults = Exercise.defaultTargetTags(for: selectedCategory)
         selectedTargets = Set(defaults)
@@ -539,6 +635,36 @@ struct AddCustomExerciseSheet: View {
         let value = Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory)
         activityTypeName = value
         lastAutoActivityTypeName = value
+    }
+
+    private func loadSavedActivityGroups() {
+        let descriptor = FetchDescriptor<Exercise>(sortBy: [SortDescriptor(\.name)])
+        let exercises = (try? modelContext.fetch(descriptor)) ?? []
+        savedActivityGroups = Self.dedupedNormalizedValues(exercises.map(\.activityTypeName))
+    }
+
+    private func selectActivityGroup(_ value: String, shouldHaptic: Bool = true) {
+        let group = Self.displayTargetTag(value)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !group.isEmpty else { return }
+        withAnimation(.snappy(duration: 0.2)) {
+            activityTypeName = group
+            if !savedActivityGroups.contains(where: { $0.goalNormalizedKey == group.goalNormalizedKey }) {
+                savedActivityGroups = Self.dedupedNormalizedValues(savedActivityGroups + [group])
+            }
+            isAddingActivityGroup = false
+            newActivityGroupText = ""
+        }
+        inferTrackingTemplateIfNeeded()
+        if shouldHaptic {
+            HapticManager.selectionChanged()
+        }
+    }
+
+    private func commitNewActivityGroup() {
+        let group = newActivityGroupText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !group.isEmpty else { return }
+        selectActivityGroup(group)
     }
 
     private func inferTrackingTemplateIfNeeded() {
