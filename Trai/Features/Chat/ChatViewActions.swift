@@ -615,7 +615,7 @@ private extension SuggestedWorkoutLog {
 private extension SuggestedWorkoutLog.LoggedExercise {
     func resolvedCategory(fallbackWorkoutType: LiveWorkout.WorkoutType) -> Exercise.Category {
         if let resolved = Exercise.Category.normalized(from: category) {
-            return resolved
+            return resolved.userFacingEquivalent
         }
         if !sets.isEmpty && !hasActivityMetrics {
             return .strength
@@ -674,7 +674,7 @@ private extension SuggestedWorkoutLog.LoggedExercise {
 private extension SuggestedWorkoutEntry.SuggestedExercise {
     func resolvedCategory(fallbackWorkoutType: LiveWorkout.WorkoutType) -> Exercise.Category {
         if let resolved = Exercise.Category.normalized(from: category) {
-            return resolved
+            return resolved.userFacingEquivalent
         }
         if hasActivityMetrics {
             if let activityTypeName, let inferred = Exercise.Category.normalized(from: activityTypeName) {
