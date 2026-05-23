@@ -46,6 +46,12 @@ struct WorkoutPlanGenerationRequest {
         if let types = selectedWorkoutTypes {
             return types.contains(.cardio) || types.contains(.mixed) || types.contains(.hiit)
         }
+        if let cardioTypes, !cardioTypes.isEmpty {
+            return true
+        }
+        if customWorkoutType?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            return false
+        }
         return workoutType == .cardio || workoutType == .mixed || workoutType == .hiit
     }
 
@@ -225,7 +231,9 @@ struct WorkoutPlanGenerationRequest {
         }
 
         if let customWorkoutType {
-            appendGroup([customWorkoutType])
+            customWorkoutType
+                .components(separatedBy: CharacterSet(charactersIn: ",•\n"))
+                .forEach { appendGroup([$0]) }
         }
 
         if let customCardioType {

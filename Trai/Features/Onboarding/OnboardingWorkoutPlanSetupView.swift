@@ -154,21 +154,20 @@ enum OnboardingWorkoutFocus: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    var workoutType: WorkoutPlanGenerationRequest.WorkoutType {
+    var workoutType: WorkoutPlanGenerationRequest.WorkoutType? {
         switch self {
         case .strength: .strength
-        case .cardio, .climbing: .cardio
+        case .cardio: .cardio
         case .mobility: .flexibility
         case .hiit: .hiit
-        case .sport: .mixed
+        case .climbing, .sport: nil
         }
     }
 
     var cardioType: WorkoutPlanGenerationRequest.CardioType? {
         switch self {
         case .cardio: .anyCardio
-        case .climbing: .climbing
-        case .strength, .mobility, .hiit, .sport: nil
+        case .strength, .climbing, .mobility, .hiit, .sport: nil
         }
     }
 
@@ -500,7 +499,7 @@ struct OnboardingWorkoutPlanDraft: Equatable {
 
     func buildRequest(context: OnboardingWorkoutPlanUserContext) -> WorkoutPlanGenerationRequest {
         let selectedTypes = focuses
-            .map(\.workoutType)
+            .compactMap(\.workoutType)
             .uniquedPreservingOrder
         let primaryType: WorkoutPlanGenerationRequest.WorkoutType = selectedTypes.count == 1
             ? (selectedTypes.first ?? .mixed)
@@ -522,7 +521,7 @@ struct OnboardingWorkoutPlanDraft: Equatable {
             timePerWorkout: duration.rawValue,
             preferredSplit: preferredSplit,
             cardioTypes: cardioTypes.isEmpty ? nil : cardioTypes,
-            customWorkoutType: trimmedCustomFocus.isEmpty ? nil : trimmedCustomFocus,
+            customWorkoutType: explicitActivityFocusSummary(),
             customExperience: nil,
             customEquipment: nil,
             customCardioType: nil,
@@ -556,6 +555,27 @@ struct OnboardingWorkoutPlanDraft: Equatable {
             values.append(.anyCardio)
         }
         return values
+    }
+
+    private func explicitActivityFocusSummary() -> String? {
+        var values = focuses
+            .filter { focus in
+                switch focus {
+                case .climbing, .sport:
+                    return true
+                case .strength, .cardio, .mobility, .hiit:
+                    return false
+                }
+            }
+            .sorted { $0.rawValue < $1.rawValue }
+            .map(\.title)
+
+        if !trimmedCustomFocus.isEmpty {
+            values.append(trimmedCustomFocus)
+        }
+
+        let unique = values.uniquedPreservingOrder
+        return unique.isEmpty ? nil : unique.joined(separator: ", ")
     }
 
     private func preferenceSummary() -> String? {

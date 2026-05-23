@@ -1517,7 +1517,6 @@ struct WorkoutPlanChatFlow: View {
             case "Cardio": return .cardio
             case "HIIT": return .hiit
             case "Yoga", "Pilates", "Mobility", "Flexibility": return .flexibility
-            case "Climbing": return .cardio
             case "Mixed": return .mixed
             default: return nil
             }
@@ -1574,7 +1573,6 @@ struct WorkoutPlanChatFlow: View {
             case "Running": return .running
             case "Cycling": return .cycling
             case "Swimming": return .swimming
-            case "Climbing": return .climbing
             case "Walking": return .walking
             case "Rowing": return .rowing
             case "Jump Rope": return .jumpRope

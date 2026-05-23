@@ -42,8 +42,10 @@ final class UserProfileWorkoutPlanRequestTests: XCTestCase {
 
         XCTAssertEqual(request.name, "Sam")
         XCTAssertEqual(request.workoutType, .mixed)
-        XCTAssertEqual(Set(request.selectedWorkoutTypes ?? []), [.strength, .flexibility, .cardio])
-        XCTAssertEqual(request.cardioTypes, [.climbing, .anyCardio])
+        XCTAssertEqual(Set(request.selectedWorkoutTypes ?? []), [.strength, .flexibility])
+        XCTAssertEqual(request.cardioTypes, [.anyCardio])
+        XCTAssertEqual(request.customWorkoutType, "Climbing")
+        XCTAssertTrue(request.requiredVisibleActivityIdentityGroups.contains { $0 == ["Climbing"] })
         XCTAssertEqual(request.availableDays, 4)
         XCTAssertEqual(request.timePerWorkout, 60)
         XCTAssertEqual(request.equipmentAccess, .homeBasic)
@@ -75,6 +77,53 @@ final class UserProfileWorkoutPlanRequestTests: XCTestCase {
         XCTAssertEqual(request.timePerWorkout, 45)
         XCTAssertEqual(request.equipmentAccess, .fullGym)
         XCTAssertEqual(request.experienceLevel, .beginner)
+    }
+
+    func testOnboardingWorkoutDraftTreatsClimbingAsNamedActivityInsteadOfCardio() {
+        var draft = OnboardingWorkoutPlanDraft()
+        draft.focuses = [.climbing]
+        draft.schedule = .threeDays
+        draft.duration = .fortyFiveMinutes
+
+        let request = draft.buildRequest(
+            context: OnboardingWorkoutPlanUserContext(
+                name: "Riley",
+                age: 27,
+                gender: .notSpecified,
+                goal: .health,
+                activityLevel: .moderate
+            )
+        )
+
+        XCTAssertEqual(request.workoutType, .mixed)
+        XCTAssertNil(request.selectedWorkoutTypes)
+        XCTAssertNil(request.cardioTypes)
+        XCTAssertEqual(request.customWorkoutType, "Climbing")
+        XCTAssertFalse(request.includesCardio)
+        XCTAssertTrue(request.requiredVisibleActivityIdentityGroups.contains { $0 == ["Climbing"] })
+    }
+
+    func testOnboardingWorkoutDraftPreservesSportAndCustomFocusAsNamedActivity() {
+        var draft = OnboardingWorkoutPlanDraft()
+        draft.focuses = [.sport]
+        draft.customFocus = "Pickleball"
+
+        let request = draft.buildRequest(
+            context: OnboardingWorkoutPlanUserContext(
+                name: "Jordan",
+                age: 35,
+                gender: .notSpecified,
+                goal: .health,
+                activityLevel: .moderate
+            )
+        )
+
+        XCTAssertEqual(request.workoutType, .mixed)
+        XCTAssertNil(request.selectedWorkoutTypes)
+        XCTAssertEqual(request.customWorkoutType, "Sport, Pickleball")
+        XCTAssertFalse(request.includesCardio)
+        XCTAssertTrue(request.requiredVisibleActivityIdentityGroups.contains { $0 == ["Sport"] })
+        XCTAssertTrue(request.requiredVisibleActivityIdentityGroups.contains { $0 == ["Pickleball"] })
     }
 
     func testOnboardingWorkoutDraftPassesProPersonalizationAsHighPriorityContext() {
