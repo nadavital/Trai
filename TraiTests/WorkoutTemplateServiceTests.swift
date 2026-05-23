@@ -662,4 +662,66 @@ final class MuscleRecoveryServicePerformanceTests: XCTestCase {
         XCTAssertEqual(result.score, 0.2)
         XCTAssertTrue(result.reason.contains("Chest"))
     }
+
+    func testScoreTemplateTreatsNonStrengthPlanDaysAsReadyPlanSessions() {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Easy Run",
+            sessionType: .cardio,
+            focusAreas: ["Running"],
+            targetMuscleGroups: [],
+            exercises: [],
+            estimatedDurationMinutes: 35,
+            order: 0
+        )
+
+        let result = service.scoreTemplate(
+            template,
+            recoveryInfo: [
+                MuscleRecoveryService.MuscleRecoveryInfo(
+                    muscleGroup: .quads,
+                    status: .tired,
+                    lastTrainedAt: Date(),
+                    hoursSinceTraining: 4
+                )
+            ]
+        )
+
+        XCTAssertEqual(result.score, 1.0)
+        XCTAssertEqual(result.reason, "Running from your plan")
+    }
+
+    func testNonStrengthPlanDaysCanWinWhenStrengthTargetsNeedRest() {
+        let strengthTemplate = WorkoutPlan.WorkoutTemplate(
+            name: "Push Day",
+            sessionType: .strength,
+            focusAreas: ["Push"],
+            targetMuscleGroups: ["chest", "shoulders", "triceps"],
+            exercises: [],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let cardioTemplate = WorkoutPlan.WorkoutTemplate(
+            name: "Bike Ride",
+            sessionType: .cardio,
+            focusAreas: ["Cycling"],
+            targetMuscleGroups: [],
+            exercises: [],
+            estimatedDurationMinutes: 40,
+            order: 1
+        )
+        let recoveryInfo = [
+            MuscleRecoveryService.MuscleRecoveryInfo(
+                muscleGroup: .chest,
+                status: .tired,
+                lastTrainedAt: Date(),
+                hoursSinceTraining: 4
+            )
+        ]
+
+        let strengthScore = service.scoreTemplate(strengthTemplate, recoveryInfo: recoveryInfo)
+        let cardioScore = service.scoreTemplate(cardioTemplate, recoveryInfo: recoveryInfo)
+
+        XCTAssertLessThan(strengthScore.score, cardioScore.score)
+        XCTAssertEqual(cardioScore.reason, "Cycling from your plan")
+    }
 }

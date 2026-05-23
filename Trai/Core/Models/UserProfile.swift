@@ -612,7 +612,7 @@ extension UserProfile {
         var description: String {
             switch self {
             case .customWorkout: "Start an empty workout where you add exercises"
-            case .recommendedWorkout: "Start the best workout from your plan based on recovery"
+            case .recommendedWorkout: "Start the next recommended session from your plan"
             }
         }
     }

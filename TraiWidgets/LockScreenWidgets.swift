@@ -94,9 +94,9 @@ struct StatsRectangularView: View {
                         .font(.caption2)
                         .lineLimit(1)
                 } else {
-                    Image(systemName: "dumbbell.fill")
+                    Image(systemName: "figure.run")
                         .font(.caption2)
-                    Text("\(entry.data.readyMuscleCount) muscles ready")
+                    Text("Ready to train")
                         .font(.caption2)
                 }
             }
@@ -124,11 +124,21 @@ struct StatsInlineWidget: Widget {
 struct StatsInlineView: View {
     let entry: TraiWidgetEntry
 
+    private var workoutStatusText: String {
+        if entry.data.todayWorkoutCompleted {
+            return "workout done"
+        }
+        if let workout = entry.data.recommendedWorkout {
+            return workout
+        }
+        return "ready to train"
+    }
+
     var body: some View {
         let calorieText = "\(Int(entry.data.calorieProgress * 100))% cal"
         let proteinText = "\(Int(entry.data.proteinProgress * 100))% protein"
 
-        Text("\(calorieText) | \(proteinText) | \(entry.data.readyMuscleCount) ready")
+        Text("\(calorieText) | \(proteinText) | \(workoutStatusText)")
     }
 }
 
