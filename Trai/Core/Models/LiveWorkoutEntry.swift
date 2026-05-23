@@ -66,7 +66,7 @@ final class LiveWorkoutEntry {
     /// Distance in meters (for cardio exercises)
     var distanceMeters: Double?
 
-    /// Calories burned (from HealthKit or manual entry)
+    /// Calories burned from imported external workout data. Not exposed as a manual tracking metric.
     var caloriesBurned: Double?
 
     /// Notes for this specific exercise

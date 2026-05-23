@@ -75,6 +75,46 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertTrue(viewModel.isWorkoutComplete)
     }
 
+    func testFinishWorkoutDoesNotLogBlankActivityEntry() {
+        let workout = LiveWorkout(name: "Mixed Session", workoutType: .mixed)
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Cycling",
+            orderIndex: 0,
+            exerciseType: "cardio"
+        )
+        entry.trackingFields = [.duration, .distance]
+        entry.workout = workout
+        workout.entries = [entry]
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+        viewModel.finishWorkout()
+
+        XCTAssertNotNil(workout.completedAt)
+        XCTAssertNil(entry.completedAt)
+        XCTAssertFalse(entry.hasExercisePreferenceSignal)
+    }
+
+    func testFinishWorkoutTimestampsActivityEntryWithLoggedData() {
+        let workout = LiveWorkout(name: "Mixed Session", workoutType: .mixed)
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Cycling",
+            orderIndex: 0,
+            exerciseType: "cardio"
+        )
+        entry.durationSeconds = 900
+        entry.workout = workout
+        workout.entries = [entry]
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+        viewModel.finishWorkout()
+
+        XCTAssertNotNil(workout.completedAt)
+        XCTAssertNotNil(entry.completedAt)
+        XCTAssertTrue(entry.hasExercisePreferenceSignal)
+    }
+
     func testActivitySegmentTotalsCountAsLoggedData() {
         let workout = LiveWorkout(name: "Rowing Intervals", workoutType: .cardio)
         let entry = LiveWorkoutEntry(

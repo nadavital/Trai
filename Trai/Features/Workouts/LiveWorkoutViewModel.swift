@@ -1524,12 +1524,6 @@ final class LiveWorkoutViewModel {
         saveDebounced(updateLiveActivity: false)
     }
 
-    func updateEntryCalories(for entry: LiveWorkoutEntry, calories: Double?) {
-        guard entry.caloriesBurned != calories else { return }
-        entry.caloriesBurned = calories
-        saveDebounced(updateLiveActivity: false)
-    }
-
     func updateEntryReps(for entry: LiveWorkoutEntry, reps: Int?) {
         let normalizedReps = max(reps ?? 0, 0)
         var sets = entry.sets
@@ -1774,7 +1768,9 @@ final class LiveWorkoutViewModel {
         // Auto-mark all sets with data as completed
         // (since set checking was removed from UI, we infer completion from having data)
         for entry in entries {
-            if (entry.isCardio || entry.isGeneralActivity) && !entry.isPlannedActivityGuidance {
+            if (entry.isCardio || entry.isGeneralActivity)
+                && !entry.isPlannedActivityGuidance
+                && entry.hasExercisePreferenceSignal {
                 entry.completedAt = entry.completedAt ?? Date()
             }
             for index in entry.sets.indices {
