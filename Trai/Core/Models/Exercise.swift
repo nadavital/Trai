@@ -382,6 +382,72 @@ extension Exercise {
         }
     }
 
+    static func targetOptions(
+        for category: Category,
+        activityTypeName: String?,
+        exerciseName: String?
+    ) -> [String] {
+        let defaults = targetOptions(for: category)
+        let activityOptions = activitySpecificTargetOptions(
+            category: category,
+            activityTypeName: activityTypeName,
+            exerciseName: exerciseName
+        )
+        var seen: Set<String> = []
+        return (activityOptions + defaults)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { seen.insert($0.goalNormalizedKey).inserted }
+    }
+
+    private static func activitySpecificTargetOptions(
+        category: Category,
+        activityTypeName: String?,
+        exerciseName: String?
+    ) -> [String] {
+        let text = [activityTypeName, exerciseName]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .joined(separator: " ")
+            .lowercased()
+
+        guard !text.isEmpty else { return [] }
+
+        if text.contains("climb") || text.contains("boulder") {
+            return ["Technique", "Grip", "Power", "Endurance", "Mobility"]
+        }
+
+        if text.contains("padel") || text.contains("tennis") || text.contains("pickleball") {
+            return ["Footwork", "Reaction", "Agility", "Power", "Consistency"]
+        }
+
+        if text.contains("basketball") || text.contains("soccer") || text.contains("football") {
+            return ["Skill", "Footwork", "Agility", "Conditioning", "Consistency"]
+        }
+
+        if text.contains("boxing") || text.contains("martial") {
+            return ["Technique", "Footwork", "Power", "Conditioning", "Reaction"]
+        }
+
+        if text.contains("run") || text.contains("cycle") || text.contains("bike") || text.contains("row") || text.contains("swim") {
+            return ["Endurance", "Intervals", "Speed", "Distance", "Easy Effort"]
+        }
+
+        if text.contains("yoga") || text.contains("pilates") || text.contains("mobility") || text.contains("stretch") {
+            return ["Hips", "Shoulders", "Back", "Control", "Recovery"]
+        }
+
+        switch category.userFacingEquivalent {
+        case .sportPractice:
+            return ["Technique", "Agility", "Power", "Endurance", "Consistency"]
+        case .cardio:
+            return ["Endurance", "Intervals", "Distance", "Speed", "Easy Effort"]
+        case .mobility:
+            return ["Hips", "Shoulders", "Back", "Control", "Recovery"]
+        default:
+            return []
+        }
+    }
+
     static func defaultTargetTags(for category: Category) -> [String] {
         []
     }

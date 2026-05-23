@@ -504,7 +504,11 @@ struct AddCustomExerciseSheet: View {
     }
 
     private var visibleTargetOptions: [String] {
-        let defaults = Exercise.targetOptions(for: selectedCategory)
+        let defaults = Exercise.targetOptions(
+            for: selectedCategory,
+            activityTypeName: resolvedActivityTypeName,
+            exerciseName: exerciseName
+        )
         let extra = selectedTargets
             .filter { !defaults.contains($0) }
             .sorted()

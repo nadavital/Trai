@@ -157,6 +157,32 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertFalse(Exercise.targetOptions(for: .custom).contains("Sport"))
     }
 
+    func testTargetOptionsUseActivityIdentityWithoutChangingStableCategory() {
+        XCTAssertEqual(
+            Array(Exercise.targetOptions(
+                for: .sportPractice,
+                activityTypeName: "Climbing",
+                exerciseName: "Limit Bouldering"
+            ).prefix(5)),
+            ["Technique", "Grip", "Power", "Endurance", "Mobility"]
+        )
+
+        XCTAssertEqual(
+            Array(Exercise.targetOptions(
+                for: .custom,
+                activityTypeName: "Dance",
+                exerciseName: "Footwork Flow"
+            ).prefix(6)),
+            ["Technique", "Endurance", "Power", "Speed", "Consistency", "Control"]
+        )
+
+        XCTAssertTrue(Exercise.targetOptions(
+            for: .sportPractice,
+            activityTypeName: "Padel",
+            exerciseName: "Padel Drills"
+        ).starts(with: ["Footwork", "Reaction", "Agility"]))
+    }
+
     func testExerciseCategoryNormalizationAcceptsUserFacingActivityNames() {
         XCTAssertEqual(Exercise.Category.normalized(from: "sport"), .sportPractice)
         XCTAssertEqual(Exercise.Category.normalized(from: "sport practice"), .sportPractice)
