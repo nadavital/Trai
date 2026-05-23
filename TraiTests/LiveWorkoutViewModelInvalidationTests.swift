@@ -166,6 +166,31 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertFalse(prompt.contains("7 reps"))
     }
 
+    func testLiveWorkoutReviewPromptIncludesLoggedActivityNotes() {
+        let workout = LiveWorkout(name: "Row + Mobility", workoutType: .mixed)
+        workout.completedAt = Date()
+
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Rowing Intervals",
+            orderIndex: 0,
+            exerciseType: "conditioning"
+        )
+        entry.activityTypeName = "Rowing"
+        entry.notes = "Keep the stroke rate calmer next time"
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 300, distanceMeters: 1_000, notes: "First interval felt smooth"),
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 240, distanceMeters: 850, notes: "Grip tired near the end")
+        ]
+        workout.entries = [entry]
+
+        let prompt = workout.traiReviewPrompt
+
+        XCTAssertTrue(prompt.contains("Rowing Intervals"))
+        XCTAssertTrue(prompt.contains("notes Keep the stroke rate calmer next time"))
+        XCTAssertTrue(prompt.contains("First interval felt smooth"))
+        XCTAssertTrue(prompt.contains("Grip tired near the end"))
+    }
+
     func testLiveWorkoutReviewPromptExcludesUnloggedPlannedActivityGuidance() {
         let workout = LiveWorkout(name: "Strength + Mobility", workoutType: .mixed)
         workout.completedAt = Date()

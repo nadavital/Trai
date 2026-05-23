@@ -1000,6 +1000,8 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         )
         entry.activityTypeName = "Bouldering"
         entry.targetTags = ["Climbing", "Grip endurance"]
+        entry.trackingFields = [.duration, .reps, .notes]
+        entry.activityRole = .main
         entry.activitySegments = [
             LiveWorkoutEntry.ActivitySegment(durationSeconds: 1_200, reps: 8, notes: "Limit attempts")
         ]
@@ -1040,6 +1042,8 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(payload["activity_count"] as? Int, 1)
         XCTAssertEqual(activity["activity_type"] as? String, "Bouldering")
         XCTAssertEqual(activity["activity_tags"] as? [String], ["Climbing", "Grip endurance"])
+        XCTAssertEqual(activity["tracking_fields"] as? [String], ["duration", "reps", "notes"])
+        XCTAssertEqual(activity["role"] as? String, "main")
         XCTAssertEqual(activity["logged"] as? Bool, true)
         XCTAssertEqual(segment["duration_minutes"] as? Int, 20)
         XCTAssertEqual(segment["reps"] as? Int, 8)

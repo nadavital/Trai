@@ -287,6 +287,10 @@ extension LiveWorkout {
                     parts.append(role.placementDisplayName.lowercased())
                 }
                 parts.append(contentsOf: entry.traiActivitySummarySegments())
+                let noteSummary = entry.activityReviewNoteSummary
+                if !noteSummary.isEmpty {
+                    parts.append("notes \(noteSummary)")
+                }
                 return parts.joined(separator: " • ")
             }
 
@@ -300,6 +304,29 @@ extension LiveWorkout {
 
         prompt += " Tell me what this says about my progress and what I should focus on next."
         return prompt
+    }
+}
+
+private extension LiveWorkoutEntry {
+    var activityReviewNoteSummary: String {
+        var notes: [String] = []
+        let entryNote = self.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !entryNote.isEmpty {
+            notes.append(entryNote)
+        }
+
+        let segmentNotes = activitySegments
+            .filter(\.hasLoggedData)
+            .compactMap { segment -> String? in
+                let note = segment.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                return note.isEmpty ? nil : note
+            }
+
+        for note in segmentNotes where !notes.contains(note) {
+            notes.append(note)
+        }
+
+        return notes.prefix(3).joined(separator: "; ")
     }
 }
 

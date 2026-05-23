@@ -171,6 +171,8 @@ extension AIFunctionExecutor {
                         "type": entry.exerciseType,
                         "activity_type": entry.activityTypeName,
                         "activity_tags": entry.targetTags,
+                        "tracking_fields": entry.trackingFields.map(\.rawValue),
+                        "role": entry.activityRole?.rawValue ?? "",
                         "duration_minutes": entry.trackedDurationSeconds / 60,
                         "distance_meters": entry.trackedDistanceMeters,
                         "segments": entry.activitySegments
