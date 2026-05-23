@@ -623,6 +623,10 @@ private extension SuggestedWorkoutLog.LoggedExercise {
         if let activityTypeName, let inferred = Exercise.Category.normalized(from: activityTypeName) {
             return inferred.userFacingEquivalent
         }
+        if let activityTypeName,
+           !activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .custom
+        }
         if fallbackWorkoutType == .mixed || fallbackWorkoutType == .custom {
             return .custom
         }
@@ -677,6 +681,10 @@ private extension SuggestedWorkoutEntry.SuggestedExercise {
                 return inferred.userFacingEquivalent
             }
             return fallbackWorkoutType.supportsMuscleTargets ? .custom : .cardio
+        }
+        if let activityTypeName,
+           !activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .custom
         }
         if fallbackWorkoutType.supportsMuscleTargets {
             return .strength

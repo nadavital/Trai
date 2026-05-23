@@ -347,6 +347,38 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(exercise.startSummarySegments, ["Bouldering", "30 min", "2 segments", "7 attempts"])
     }
 
+    func testStartLiveWorkoutUsesCustomCategoryForUnknownNamedActivity() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "start_live_workout",
+                arguments: [
+                    "name": "Dance Practice",
+                    "workout_type": "mixed",
+                    "activity_focuses": ["Dance"],
+                    "suggested_exercises": [
+                        [
+                            "name": "Dance Flow",
+                            "activity_name": "Dance"
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutStart(let suggestion) = result,
+              let exercise = suggestion.exercises.first else {
+            return XCTFail("Expected start workout suggestion")
+        }
+
+        XCTAssertEqual(suggestion.exercisesSummary, "1 activity")
+        XCTAssertEqual(exercise.category, "custom")
+        XCTAssertEqual(exercise.activityTypeName, "Dance")
+        XCTAssertEqual(exercise.sets, 0)
+        XCTAssertEqual(exercise.reps, 0)
+        XCTAssertEqual(exercise.trackingFields, ["duration", "notes"])
+        XCTAssertFalse(exercise.isStrengthStartItem)
+    }
+
     func testStartLiveWorkoutStoresNormalizedActivityCategoryAndTrackingFields() async throws {
         let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
             .init(

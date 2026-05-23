@@ -427,6 +427,7 @@ extension AIFunctionExecutor {
                 let trackingFields = stringArray(from: exerciseData["tracking_fields"])
                 let resolvedCategory = Exercise.Category.normalized(from: category)?.userFacingEquivalent
                     ?? activityTypeName.flatMap { Exercise.Category.normalized(from: $0)?.userFacingEquivalent }
+                    ?? activityTypeName.map { _ in Exercise.Category.custom }
                     ?? (workoutType.supportsMuscleTargets ? .strength : .cardio)
                 let normalizedTrackingFields = Exercise.normalizedTrackingFields(
                     trackingFields.compactMap(Exercise.TrackingField.init(rawValue:)),
