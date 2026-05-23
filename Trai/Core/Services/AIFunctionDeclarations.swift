@@ -519,12 +519,12 @@ enum AIFunctionDeclarations {
                     ],
                     "period_unit": [
                         "type": "string",
-                        "description": "Optional cadence period for frequency or count goals",
+                        "description": "Cadence period for frequency, duration, distance, or count goals",
                         "enum": ["day", "week", "month"]
                     ],
                     "period_count": [
                         "type": "integer",
-                        "description": "Optional number of period units, e.g. 1 week or 4 weeks"
+                        "description": "Number of period units. Use 1 for per-day, per-week, or per-month frequency/count goals."
                     ],
                     "success_criteria": [
                         "type": "string",
@@ -605,11 +605,12 @@ enum AIFunctionDeclarations {
                     ],
                     "period_unit": [
                         "type": "string",
+                        "description": "Updated cadence period for frequency, duration, distance, or count goals. Pass empty string to clear only when the goal kind does not use periods.",
                         "enum": ["day", "week", "month", ""]
                     ],
                     "period_count": [
                         "type": "integer",
-                        "description": "Updated period count"
+                        "description": "Updated period count. Use 1 for per-day, per-week, or per-month frequency/count goals."
                     ],
                     "success_criteria": [
                         "type": "string",

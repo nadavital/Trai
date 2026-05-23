@@ -409,6 +409,20 @@ extension AIFunctionExecutor {
         let targetDate = parseDate(args["target_date"] as? String)
         let checkInCadenceDays = numericInt(from: args["check_in_cadence_days"])
 
+        if let error = workoutGoalValidationError(
+            goalKind: goalKind,
+            targetValue: targetValue,
+            targetUnit: targetUnit,
+            periodUnit: periodUnit,
+            periodCount: periodCount,
+            successCriteria: successCriteria
+        ) {
+            return .dataResponse(FunctionResult(
+                name: "create_workout_goal",
+                response: ["error": error]
+            ))
+        }
+
         let goal = WorkoutGoal(
             title: title,
             goalKind: goalKind,
@@ -475,26 +489,44 @@ extension AIFunctionExecutor {
             ))
         }
 
+        var title = goal.title
+        var goalKind = goal.goalKind
+        var status = goal.status
+        var completedAt = goal.completedAt
+        var linkedWorkoutType = goal.linkedWorkoutType
+        var linkedActivityName = goal.linkedActivityName
+        var linkedActivityTags = goal.linkedActivityTags
+        var linkedActivityKind = goal.linkedActivityKind
+        var linkedActivityRole = goal.linkedActivityRole
+        var targetValue = goal.targetValue
+        var targetUnit = goal.targetUnit
+        var periodUnit = goal.periodUnit
+        var periodCount = goal.periodCount
+        var successCriteria = goal.trimmedSuccessCriteria
+        var targetDate = goal.targetDate
+        var checkInCadenceDays = goal.checkInCadenceDays
+        var notes = goal.trimmedNotes
+
         if let rawTitle = args["title"] as? String {
             let trimmed = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
-                goal.title = trimmed
+                title = trimmed
             }
         }
 
         if let rawKind = args["goal_kind"] as? String,
-           let goalKind = WorkoutGoal.GoalKind(rawValue: rawKind) {
-            goal.goalKind = goalKind
+           let parsedGoalKind = WorkoutGoal.GoalKind(rawValue: rawKind) {
+            goalKind = parsedGoalKind
         }
 
         if let rawStatus = args["status"] as? String,
-           let status = WorkoutGoal.GoalStatus(rawValue: rawStatus) {
-            goal.status = status
+           let parsedStatus = WorkoutGoal.GoalStatus(rawValue: rawStatus) {
+            status = parsedStatus
             switch status {
             case .completed:
-                goal.completedAt = goal.completedAt ?? Date()
+                completedAt = completedAt ?? Date()
             case .active:
-                goal.completedAt = nil
+                completedAt = nil
             case .paused:
                 break
             }
@@ -502,62 +534,93 @@ extension AIFunctionExecutor {
 
         if let rawWorkoutType = args["workout_type"] as? String {
             let trimmedType = rawWorkoutType.trimmingCharacters(in: .whitespacesAndNewlines)
-            goal.linkedWorkoutType = trimmedType.isEmpty ? nil : WorkoutMode.normalized(from: trimmedType)
+            linkedWorkoutType = trimmedType.isEmpty ? nil : WorkoutMode.normalized(from: trimmedType)
         }
 
         if let rawActivityName = args["activity_name"] as? String {
             let trimmedActivity = rawActivityName.trimmingCharacters(in: .whitespacesAndNewlines)
-            goal.linkedActivityName = trimmedActivity.isEmpty ? nil : trimmedActivity
+            linkedActivityName = trimmedActivity.isEmpty ? nil : trimmedActivity
         }
 
         if args.keys.contains("activity_tags") {
-            goal.linkedActivityTags = stringArray(from: args["activity_tags"])
+            linkedActivityTags = stringArray(from: args["activity_tags"])
         }
 
         if let rawActivityKind = args["activity_kind"] as? String {
             let trimmedKind = rawActivityKind.trimmingCharacters(in: .whitespacesAndNewlines)
-            goal.linkedActivityKind = trimmedKind.isEmpty ? nil : WorkoutPlan.TrainingBlock.BlockKind(rawValue: trimmedKind)
+            linkedActivityKind = trimmedKind.isEmpty ? nil : WorkoutPlan.TrainingBlock.BlockKind(rawValue: trimmedKind)
         }
 
         if let rawActivityRole = args["activity_role"] as? String {
             let trimmedRole = rawActivityRole.trimmingCharacters(in: .whitespacesAndNewlines)
-            goal.linkedActivityRole = trimmedRole.isEmpty ? nil : WorkoutPlan.TrainingBlock.Role(rawValue: trimmedRole)
+            linkedActivityRole = trimmedRole.isEmpty ? nil : WorkoutPlan.TrainingBlock.Role(rawValue: trimmedRole)
         }
 
         if args.keys.contains("target_value") {
-            goal.targetValue = numericDouble(from: args["target_value"])
+            targetValue = numericDouble(from: args["target_value"])
         }
 
         if let rawTargetUnit = args["target_unit"] as? String {
-            goal.targetUnit = rawTargetUnit.trimmingCharacters(in: .whitespacesAndNewlines)
+            targetUnit = rawTargetUnit.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         if let rawPeriodUnit = args["period_unit"] as? String {
             let trimmedPeriodUnit = rawPeriodUnit.trimmingCharacters(in: .whitespacesAndNewlines)
-            goal.periodUnit = trimmedPeriodUnit.isEmpty ? nil : WorkoutGoal.PeriodUnit(rawValue: trimmedPeriodUnit)
+            periodUnit = trimmedPeriodUnit.isEmpty ? nil : WorkoutGoal.PeriodUnit(rawValue: trimmedPeriodUnit)
         }
 
         if args.keys.contains("period_count") {
-            goal.periodCount = numericInt(from: args["period_count"])
+            periodCount = numericInt(from: args["period_count"])
         }
 
         if let rawSuccessCriteria = args["success_criteria"] as? String {
-            goal.successCriteria = rawSuccessCriteria.trimmingCharacters(in: .whitespacesAndNewlines)
+            successCriteria = rawSuccessCriteria.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         if let rawTargetDate = args["target_date"] as? String {
             let trimmedTargetDate = rawTargetDate.trimmingCharacters(in: .whitespacesAndNewlines)
-            goal.targetDate = trimmedTargetDate.isEmpty ? nil : parseDate(trimmedTargetDate)
+            targetDate = trimmedTargetDate.isEmpty ? nil : parseDate(trimmedTargetDate)
         }
 
         if args.keys.contains("check_in_cadence_days") {
-            goal.checkInCadenceDays = numericInt(from: args["check_in_cadence_days"])
+            checkInCadenceDays = numericInt(from: args["check_in_cadence_days"])
         }
 
         if let rawNotes = args["notes"] as? String {
-            goal.notes = rawNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+            notes = rawNotes.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
+        if let error = workoutGoalValidationError(
+            goalKind: goalKind,
+            targetValue: targetValue,
+            targetUnit: targetUnit,
+            periodUnit: periodUnit,
+            periodCount: periodCount,
+            successCriteria: successCriteria
+        ) {
+            return .dataResponse(FunctionResult(
+                name: "update_workout_goal",
+                response: ["error": error]
+            ))
+        }
+
+        goal.title = title
+        goal.goalKind = goalKind
+        goal.status = status
+        goal.completedAt = completedAt
+        goal.linkedWorkoutType = linkedWorkoutType
+        goal.linkedActivityName = linkedActivityName
+        goal.linkedActivityTags = linkedActivityTags
+        goal.linkedActivityKind = linkedActivityKind
+        goal.linkedActivityRole = linkedActivityRole
+        goal.targetValue = goalKind.supportsNumericTarget ? targetValue : nil
+        goal.targetUnit = goalKind.supportsNumericTarget ? targetUnit : ""
+        goal.periodUnit = goalKind.usesPeriodTarget ? periodUnit : nil
+        goal.periodCount = goalKind.usesPeriodTarget ? periodCount : nil
+        goal.successCriteria = successCriteria
+        goal.targetDate = targetDate
+        goal.checkInCadenceDays = checkInCadenceDays
+        goal.notes = notes
         goal.updatedAt = Date()
         try? modelContext.save()
         return .dataResponse(FunctionResult(
@@ -643,6 +706,43 @@ extension AIFunctionExecutor {
         default:
             return nil
         }
+    }
+
+    private func workoutGoalValidationError(
+        goalKind: WorkoutGoal.GoalKind,
+        targetValue: Double?,
+        targetUnit: String,
+        periodUnit: WorkoutGoal.PeriodUnit?,
+        periodCount: Int?,
+        successCriteria: String
+    ) -> String? {
+        guard !successCriteria.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "success_criteria is required"
+        }
+
+        guard goalKind.supportsNumericTarget else { return nil }
+        guard let targetValue, targetValue > 0 else {
+            return "target_value must be greater than 0"
+        }
+        guard !targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "target_unit is required"
+        }
+
+        if goalKind.usesPeriodTarget {
+            guard periodUnit != nil else {
+                return "period_unit is required for \(goalKind.rawValue) goals"
+            }
+            guard let periodCount, periodCount > 0 else {
+                return "period_count must be greater than 0 for \(goalKind.rawValue) goals"
+            }
+        }
+
+        if goalKind == .frequency || goalKind == .count,
+           periodCount != 1 {
+            return "period_count must be 1 for \(goalKind.rawValue) goals"
+        }
+
+        return nil
     }
 
     private func stringArray(from value: Any?) -> [String] {

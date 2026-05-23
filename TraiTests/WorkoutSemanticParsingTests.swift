@@ -320,6 +320,8 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                     "title": "Run three times per week",
                     "goal_kind": "frequency",
                     "workout_type": "running",
+                    "target_value": 3,
+                    "target_unit": "sessions",
                     "period_unit": "week",
                     "period_count": 1,
                     "success_criteria": "Complete three cardio sessions in one week."
@@ -336,11 +338,38 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(goal["success_criteria"] as? String, "Complete three cardio sessions in one week.")
     }
 
+    func testCreateWorkoutGoalRejectsDurationGoalWithoutPeriod() async throws {
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
+        let result = await executor.execute(
+            .init(
+                name: "create_workout_goal",
+                arguments: [
+                    "title": "Build cardio support",
+                    "goal_kind": "duration",
+                    "target_value": 45,
+                    "target_unit": "min",
+                    "success_criteria": "You log 45 minutes of cardio support in one week."
+                ]
+            )
+        )
+
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected workout goal error response")
+        }
+
+        XCTAssertEqual(functionResult.response["error"] as? String, "period_unit is required for duration goals")
+    }
+
     func testUpdateWorkoutGoalNormalizesWeightLiftingToStrength() async throws {
         let goal = WorkoutGoal(
             title: "Move more",
             goalKind: .frequency,
-            linkedWorkoutType: .cardio
+            linkedWorkoutType: .cardio,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "Complete three cardio sessions in one week."
         )
         context.insert(goal)
         try context.save()
@@ -363,6 +392,46 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         XCTAssertEqual(updatedGoal["workout_type"] as? String, WorkoutMode.strength.rawValue)
         XCTAssertEqual(goal.linkedWorkoutType, .strength)
+    }
+
+    func testUpdateWorkoutGoalRejectsDistanceGoalWithoutPeriod() async throws {
+        let goal = WorkoutGoal(
+            title: "Run more",
+            goalKind: .frequency,
+            linkedWorkoutType: .cardio,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete three cardio sessions in one week."
+        )
+        context.insert(goal)
+        try context.save()
+
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
+        let result = await executor.execute(
+            .init(
+                name: "update_workout_goal",
+                arguments: [
+                    "goal_id": goal.id.uuidString,
+                    "goal_kind": "distance",
+                    "target_value": 10,
+                    "target_unit": "km",
+                    "period_unit": "",
+                    "period_count": NSNull(),
+                    "success_criteria": "You log 10 km of running in one week."
+                ]
+            )
+        )
+
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected workout goal error response")
+        }
+
+        XCTAssertEqual(functionResult.response["error"] as? String, "period_unit is required for distance goals")
+        XCTAssertEqual(goal.goalKind, .frequency)
+        XCTAssertEqual(goal.periodUnit, .week)
+        XCTAssertEqual(goal.periodCount, 1)
     }
 
     func testLogWorkoutNormalizesRunningType() async {
