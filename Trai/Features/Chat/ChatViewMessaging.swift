@@ -622,9 +622,7 @@ extension ChatView {
             .compactMap { workout in
                 let note = workout.notes.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !note.isEmpty else { return nil }
-                let subtitle = [workout.type.displayName, workout.displayFocusSummary, workout.formattedDuration]
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " • ")
+                let subtitle = workout.workoutContextSummarySegments.joined(separator: " • ")
                 return WorkoutNoteSignal(
                     date: workout.completedAt ?? workout.startedAt,
                     title: workout.name,

@@ -119,9 +119,7 @@ enum WorkoutGoalProgressResolver {
             }
             .compactMap { candidate -> RecentWorkoutSignal? in
                 guard let note = latestNote(in: candidate), !note.isEmpty else { return nil }
-                let subtitle = [candidate.displayFocusSummary, candidate.formattedDuration]
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " • ")
+                let subtitle = candidate.workoutContextSummarySegments.joined(separator: " • ")
 
                 return RecentWorkoutSignal(
                     title: candidate.name,
@@ -160,9 +158,7 @@ enum WorkoutGoalProgressResolver {
             .filter { $0.completedAt != nil }
             .compactMap { workout -> RecentWorkoutSignal? in
                 guard let note = latestNote(in: workout), !note.isEmpty else { return nil }
-                let subtitle = [workout.type.displayName, workout.displayFocusSummary, workout.formattedDuration]
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " • ")
+                let subtitle = workout.workoutContextSummarySegments.joined(separator: " • ")
 
                 return RecentWorkoutSignal(
                     title: workout.name,
@@ -542,9 +538,7 @@ enum WorkoutGoalProgressResolver {
 
     private static func signal(from workout: LiveWorkout) -> RecentWorkoutSignal? {
         guard let note = latestNote(in: workout), !note.isEmpty else { return nil }
-        let subtitle = [workout.displayFocusSummary, workout.type.displayName, workout.formattedDuration]
-            .filter { !$0.isEmpty }
-            .joined(separator: " • ")
+        let subtitle = workout.workoutContextSummarySegments.joined(separator: " • ")
 
         return RecentWorkoutSignal(
             title: workout.name,

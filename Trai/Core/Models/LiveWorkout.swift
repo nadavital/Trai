@@ -234,6 +234,24 @@ extension LiveWorkout {
         displayFocusAreas.first ?? type.displayName
     }
 
+    var workoutContextSummarySegments: [String] {
+        var segments: [String] = []
+        let focusSummary = displayFocusSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let typeName = type.displayName
+
+        if focusSummary.isEmpty {
+            segments.append(typeName)
+        } else {
+            segments.append(focusSummary)
+        }
+
+        if !formattedDuration.isEmpty {
+            segments.append(formattedDuration)
+        }
+
+        return segments
+    }
+
     var historyIconName: String {
         if let mode = WorkoutMode.normalized(from: historyDistributionLabel), mode != .mixed {
             return mode.iconName

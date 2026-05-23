@@ -511,6 +511,35 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(sportWorkout.historyIconName, Exercise.Category.sportPractice.iconName)
     }
 
+    func testWorkoutContextSignalsOmitBroadMixedModeWhenActivityIdentityExists() {
+        let workout = LiveWorkout(name: "Open Practice", workoutType: .mixed)
+        workout.startedAt = Date(timeIntervalSince1970: 1_000)
+        workout.completedAt = Date(timeIntervalSince1970: 2_800)
+        workout.notes = "Felt smoother on overhangs."
+
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 0,
+            exerciseType: "sportPractice"
+        )
+        entry.activityTypeName = "Bouldering"
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 600, reps: 4)
+        ]
+        entry.workout = workout
+        workout.entries = [entry]
+
+        XCTAssertEqual(workout.workoutContextSummarySegments, ["Bouldering", "30 min"])
+
+        let signal = WorkoutGoalProgressResolver.globalRecentSignals(
+            from: [workout],
+            sessions: []
+        ).first
+
+        XCTAssertEqual(signal?.subtitle, "Bouldering • 30 min")
+        XCTAssertFalse(signal?.subtitle.contains("Mixed") == true)
+    }
+
     func testWorkoutTrendAggregationCountsLoggedItemsOnly() {
         let workout = LiveWorkout(name: "Strength + Planned Climb", workoutType: .mixed)
         workout.startedAt = Date()
