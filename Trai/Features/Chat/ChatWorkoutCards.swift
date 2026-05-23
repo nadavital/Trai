@@ -48,6 +48,12 @@ struct SuggestedWorkoutCard: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if let firstExerciseSummary {
+                    Text(firstExerciseSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 if !workout.rationale.isEmpty {
                     Text(workout.rationale)
                         .font(.caption)
@@ -79,6 +85,13 @@ struct SuggestedWorkoutCard: View {
         .padding()
         .background(Color(.secondarySystemBackground))
         .clipShape(.rect(cornerRadius: 16))
+    }
+
+    private var firstExerciseSummary: String? {
+        guard let exercise = workout.exercises.first else { return nil }
+        let details = exercise.startSummarySegments
+        guard !details.isEmpty else { return exercise.name }
+        return ([exercise.name] + Array(details.prefix(3))).joined(separator: " • ")
     }
 }
 

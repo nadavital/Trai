@@ -628,6 +628,94 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
             !isStrengthStartItem
         }
 
+        var startSummarySegments: [String] {
+            if isStrengthStartItem {
+                var segments: [String] = []
+                if sets > 0, reps > 0 {
+                    segments.append("\(sets)x\(reps)")
+                } else if sets > 0 {
+                    segments.append("\(sets) \(sets == 1 ? "set" : "sets")")
+                } else if reps > 0 {
+                    segments.append("\(reps) reps")
+                }
+                if let weightKg, weightKg > 0 {
+                    segments.append("\(Int(weightKg.rounded())) kg")
+                }
+                return segments
+            }
+
+            var details: [String] = []
+            let activityName = activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !activityName.isEmpty, Self.normalizedTextKey(activityName) != Self.normalizedTextKey(name) {
+                details.append(activityName)
+            }
+            if let durationMinutes, durationMinutes > 0 {
+                details.append("\(durationMinutes) min")
+            }
+            if let distanceMeters, distanceMeters > 0 {
+                if distanceMeters >= 1000 {
+                    details.append(String(format: "%.1f km", distanceMeters / 1000))
+                } else {
+                    details.append("\(Int(distanceMeters.rounded())) m")
+                }
+            }
+            let segmentCount = segments?.count ?? 0
+            if segmentCount > 1 {
+                details.append("\(segmentCount) \(metricName(for: segmentCount, pluralLabel: segmentMetricLabel))")
+            }
+            let countTotal = segments?
+                .compactMap(\.reps)
+                .filter { $0 > 0 }
+                .reduce(0, +) ?? 0
+            if countTotal > 0 {
+                details.append("\(countTotal) \(metricName(for: countTotal, pluralLabel: countMetricLabel))")
+            }
+            let trimmedNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmedNotes.isEmpty {
+                details.append(trimmedNotes)
+            }
+            return details
+        }
+
+        private var segmentMetricLabel: String {
+            switch normalizedCategoryKey {
+            case "conditioning":
+                return "rounds"
+            default:
+                return "segments"
+            }
+        }
+
+        private var countMetricLabel: String {
+            switch normalizedCategoryKey {
+            case "sportPractice":
+                return "attempts"
+            case "conditioning":
+                return "rounds"
+            case "mobility", "recovery":
+                return "reps"
+            default:
+                return "count"
+            }
+        }
+
+        private func metricName(for value: Int, pluralLabel: String) -> String {
+            guard value == 1 else { return pluralLabel }
+            if pluralLabel.hasSuffix("s") {
+                return String(pluralLabel.dropLast())
+            }
+            return pluralLabel
+        }
+
+        private static func normalizedTextKey(_ value: String) -> String {
+            value
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: " ", with: "")
+        }
+
         private static func normalizedCategoryKey(_ rawValue: String?) -> String? {
             guard let rawValue else { return nil }
             let compact = rawValue

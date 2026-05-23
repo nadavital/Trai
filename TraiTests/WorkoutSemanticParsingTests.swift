@@ -223,6 +223,31 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(suggestion.exercises.first?.durationMinutes, 30)
     }
 
+    func testStartWorkoutActivitySummaryUsesActivityMetrics() {
+        let exercise = SuggestedWorkoutEntry.SuggestedExercise(
+            name: "Limit Bouldering",
+            category: "sportPractice",
+            activityTypeName: "Bouldering",
+            targetTags: ["Climbing", "Grip power"],
+            trackingFields: ["duration", "reps", "notes"],
+            sets: 0,
+            reps: 0,
+            weightKg: nil,
+            durationMinutes: 40,
+            distanceMeters: nil,
+            notes: nil,
+            segments: [
+                .init(durationMinutes: 20, reps: 4),
+                .init(durationMinutes: 20, reps: 3)
+            ]
+        )
+
+        XCTAssertEqual(
+            exercise.startSummarySegments,
+            ["Bouldering", "40 min", "2 segments", "7 attempts"]
+        )
+    }
+
     func testTargetMuscleParsingHandlesDisplayNames() {
         XCTAssertEqual(LiveWorkout.MuscleGroup.fromTargetStrings(["Full Body"]), [.fullBody])
         XCTAssertEqual(
