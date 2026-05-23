@@ -575,6 +575,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(day?.workoutCount, 1)
         XCTAssertEqual(day?.totalEntries, 2)
         XCTAssertEqual(day?.totalSets, 1)
+        XCTAssertEqual(day?.totalVolume, 0)
     }
 
     func testHealthKitLiveWorkoutMetadataIncludesActivitySummary() {

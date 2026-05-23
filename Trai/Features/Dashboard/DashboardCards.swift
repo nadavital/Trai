@@ -564,6 +564,10 @@ struct WorkoutTrendCard: View {
         last7DaysData.reduce(0.0) { $0 + $1.totalVolume }
     }
 
+    private var weeklyItems: Int {
+        last7DaysData.reduce(0) { $0 + $1.totalEntries }
+    }
+
     private var weeklyMinutes: Int {
         last7DaysData.reduce(0) { $0 + $1.totalDurationMinutes }
     }
@@ -625,8 +629,8 @@ struct WorkoutTrendCard: View {
                     Divider().frame(height: 30)
 
                     TrendStatItem(
-                        value: formatVolume(weeklyVolume),
-                        label: "Volume",
+                        value: weeklyVolume > 0 ? formatVolume(weeklyVolume) : "\(weeklyItems)",
+                        label: weeklyVolume > 0 ? "Strength Vol" : "Logged",
                         color: .purple
                     )
 
