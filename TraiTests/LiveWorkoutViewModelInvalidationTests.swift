@@ -166,6 +166,39 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertFalse(prompt.contains("7 reps"))
     }
 
+    func testLiveWorkoutReviewPromptExcludesUnloggedPlannedActivityGuidance() {
+        let workout = LiveWorkout(name: "Strength + Mobility", workoutType: .mixed)
+        workout.completedAt = Date()
+
+        let loggedActivity = LiveWorkoutEntry(
+            exerciseName: "Bike Support",
+            orderIndex: 0,
+            exerciseType: "cardio"
+        )
+        loggedActivity.activityTypeName = "Cycling"
+        loggedActivity.activityRole = .accessory
+        loggedActivity.durationSeconds = 600
+
+        let plannedGuidance = LiveWorkoutEntry(
+            exerciseName: "Mobility Cooldown",
+            orderIndex: 1,
+            exerciseType: "activity"
+        )
+        plannedGuidance.activityTypeName = "Mobility"
+        plannedGuidance.activityRole = .cooldown
+        plannedGuidance.sourcePlanBlockID = UUID()
+
+        workout.entries = [loggedActivity, plannedGuidance]
+
+        let prompt = workout.traiReviewPrompt
+
+        XCTAssertTrue(prompt.contains("Bike Support"))
+        XCTAssertTrue(prompt.contains("Cycling"))
+        XCTAssertFalse(prompt.contains("accessory"))
+        XCTAssertFalse(prompt.contains("Mobility Cooldown"))
+        XCTAssertFalse(prompt.contains("cooldown"))
+    }
+
     func testExerciseHistoryRecordsIncludeGeneralActivitiesWithLoggedData() {
         let workout = LiveWorkout(
             name: "Bouldering Session",

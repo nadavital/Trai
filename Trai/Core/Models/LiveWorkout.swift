@@ -278,12 +278,12 @@ extension LiveWorkout {
         }
 
         let activityDetails = (entries ?? [])
-            .filter { $0.isCardio || $0.isGeneralActivity }
+            .filter { ($0.isCardio || $0.isGeneralActivity) && $0.hasExercisePreferenceSignal }
             .sorted { $0.orderIndex < $1.orderIndex }
             .prefix(4)
             .map { entry in
                 var parts: [String] = [entry.exerciseName]
-                if let role = entry.activityRole {
+                if let role = entry.activityRole?.reviewPromptDisplayRole {
                     parts.append(role.displayName.lowercased())
                 }
                 parts.append(contentsOf: entry.traiActivitySummarySegments())
@@ -300,6 +300,17 @@ extension LiveWorkout {
 
         prompt += " Tell me what this says about my progress and what I should focus on next."
         return prompt
+    }
+}
+
+private extension WorkoutPlan.TrainingBlock.Role {
+    var reviewPromptDisplayRole: WorkoutPlan.TrainingBlock.Role? {
+        switch self {
+        case .warmup, .finisher, .cooldown:
+            return self
+        case .main, .accessory, .custom:
+            return nil
+        }
     }
 }
 
