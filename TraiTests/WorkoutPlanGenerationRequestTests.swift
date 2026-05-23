@@ -445,6 +445,49 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(validated.map(\.title), ["Complete the plan milestone"])
     }
 
+    func testWorkoutGoalSuggestionsDropGoalsWithoutTrackableScope() {
+        let unscoped = WorkoutGoalSuggestion(
+            title: "Improve training",
+            rationale: "Too broad.",
+            goalKindRaw: WorkoutGoal.GoalKind.milestone.rawValue,
+            linkedWorkoutTypeRaw: nil,
+            linkedActivityName: nil,
+            linkedActivityTags: nil,
+            linkedActivityKindRaw: nil,
+            linkedActivityRoleRaw: WorkoutPlan.TrainingBlock.Role.accessory.rawValue,
+            targetValue: nil,
+            targetUnit: nil,
+            periodUnitRaw: nil,
+            periodCount: nil,
+            successCriteria: "You improve your training over time.",
+            notes: nil,
+            targetDateISO8601: nil,
+            checkInCadenceDays: nil
+        )
+        let scoped = WorkoutGoalSuggestion(
+            title: "Build climbing consistency",
+            rationale: "Matches the plan.",
+            goalKindRaw: WorkoutGoal.GoalKind.milestone.rawValue,
+            linkedWorkoutTypeRaw: nil,
+            linkedActivityName: nil,
+            linkedActivityTags: ["Climbing"],
+            linkedActivityKindRaw: nil,
+            linkedActivityRoleRaw: nil,
+            targetValue: nil,
+            targetUnit: nil,
+            periodUnitRaw: nil,
+            periodCount: nil,
+            successCriteria: "You complete the climbing work Trai places in your plan.",
+            notes: nil,
+            targetDateISO8601: nil,
+            checkInCadenceDays: nil
+        )
+
+        let validated = WorkoutGoalSuggestion.validatedUnique([unscoped, scoped])
+
+        XCTAssertEqual(validated.map(\.title), ["Build climbing consistency"])
+    }
+
     func testWorkoutGoalSuggestionPreservesSuccessCriteria() throws {
         let suggestion = makeGoalSuggestion(
             title: "Complete the plan milestone",

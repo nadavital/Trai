@@ -588,6 +588,7 @@ extension WorkoutGoalSuggestion {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return false }
         guard successCriteria?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else { return false }
+        guard hasTrackableScope else { return false }
 
         switch goalKind {
         case .milestone:
@@ -625,6 +626,26 @@ extension WorkoutGoalSuggestion {
             }
             return true
         }
+    }
+
+    private var hasTrackableScope: Bool {
+        if linkedWorkoutType != nil {
+            return true
+        }
+
+        if linkedActivityKindRaw.flatMap(WorkoutPlan.TrainingBlock.BlockKind.init(rawValue:)) != nil {
+            return true
+        }
+
+        let activityName = linkedActivityName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !activityName.isEmpty {
+            return true
+        }
+
+        let activityTags = linkedActivityTags?
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+        return !activityTags.isEmpty
     }
 
     private var periodTrackingGoalKinds: Set<WorkoutGoal.GoalKind> {
