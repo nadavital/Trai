@@ -333,9 +333,9 @@ extension Exercise {
         }
 
         let source = unique.isEmpty ? fallback : unique
-        let metrics = source.filter(\.isPrimaryMetric).prefix(3)
+        let metrics = source.filter(\.isPrimaryMetric)
         let includesNotes = source.contains(.notes)
-        let normalized = Array(metrics) + (includesNotes ? [.notes] : [])
+        let normalized = metrics + (includesNotes ? [.notes] : [])
         return normalized.isEmpty ? fallback : normalized
     }
 

@@ -64,10 +64,10 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertEqual(exercise.trackingFields ?? [], ["duration", "reps", "notes"])
     }
 
-    func testTrackingFieldNormalizationKeepsRowsScannable() {
+    func testTrackingFieldNormalizationPreservesSelectedMetrics() {
         XCTAssertEqual(
             Exercise.normalizedTrackingFields([.duration, .distance, .reps, .weight, .notes], for: .conditioning),
-            [.duration, .distance, .reps, .notes]
+            [.duration, .distance, .reps, .weight, .notes]
         )
         XCTAssertEqual(
             Exercise.normalizedTrackingFields([.duration, .reps, .weight], for: .cardio),

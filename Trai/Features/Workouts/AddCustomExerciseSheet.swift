@@ -289,7 +289,7 @@ struct AddCustomExerciseSheet: View {
                     title: trackingFieldTitle(field),
                     icon: field.iconName,
                     isSelected: selectedTrackingFields.contains(field),
-                    isDisabled: isTrackingFieldDisabled(field)
+                    isDisabled: false
                 ) {
                     withAnimation(.snappy(duration: 0.2)) {
                         if selectedTrackingFields.contains(field) {
@@ -513,11 +513,6 @@ struct AddCustomExerciseSheet: View {
             customTargetText = ""
         }
         HapticManager.selectionChanged()
-    }
-
-    private func isTrackingFieldDisabled(_ field: Exercise.TrackingField) -> Bool {
-        guard !selectedTrackingFields.contains(field), field.isPrimaryMetric else { return false }
-        return selectedTrackingFields.filter(\.isPrimaryMetric).count >= 3
     }
 
     private func trackingFieldTitle(_ field: Exercise.TrackingField) -> String {
