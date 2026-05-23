@@ -25,6 +25,7 @@ extension AIService {
         let targetMuscleGroups: [String]
         let sessionNotes: String?
         let activeGoals: [String]
+        let entryDetails: [String]
 
         var description: String {
             var parts: [String] = []
@@ -46,6 +47,9 @@ extension AIService {
             parts.append("Sets completed: \(setsCompleted)")
             if totalVolume > 0 {
                 parts.append("Total volume: \(Int(totalVolume)) kg")
+            }
+            if !entryDetails.isEmpty {
+                parts.append("Workout entries:\n- \(entryDetails.joined(separator: "\n- "))")
             }
             if let sessionNotes, !sessionNotes.isEmpty {
                 parts.append("Session notes: \(sessionNotes)")

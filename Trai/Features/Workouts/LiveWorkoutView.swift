@@ -744,8 +744,51 @@ struct LiveWorkoutView: View {
             totalVolume: volumeWithData,
             targetMuscleGroups: viewModel.targetMuscleGroups,
             sessionNotes: viewModel.workout.notes.isEmpty ? nil : viewModel.workout.notes,
-            activeGoals: relevantSessionGoals.map(\.trimmedTitle)
+            activeGoals: relevantSessionGoals.map(\.trimmedTitle),
+            entryDetails: entries
+                .sorted { $0.orderIndex < $1.orderIndex }
+                .map(workoutContextEntryDetail)
         )
+    }
+
+    private func workoutContextEntryDetail(_ entry: LiveWorkoutEntry) -> String {
+        if entry.isStrength {
+            let completedSets = entry.sets.filter { $0.reps > 0 && !$0.isWarmup }
+            var parts = [entry.exerciseName, "\(completedSets.count) logged sets"]
+            if let bestSet = completedSets.max(by: { $0.volume < $1.volume }) {
+                parts.append("\(WeightUtility.format(bestSet.weightKg, displayUnit: WeightUnit(usesMetric: usesMetricExerciseWeight))) x \(bestSet.reps)")
+            }
+            if !entry.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                parts.append("notes: \(entry.notes)")
+            }
+            return parts.joined(separator: " • ")
+        }
+
+        var parts: [String] = [entry.exerciseName]
+        let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
+            parts.append(activityName)
+        }
+        let summary = entry.traiActivitySummarySegments(usesMetric: usesMetricExerciseWeight)
+        parts.append(contentsOf: summary.filter { segment in
+            segment.goalNormalizedKey != activityName.goalNormalizedKey
+        }.prefix(4))
+
+        let trackingFields = entry.trackingFields.map(\.displayName)
+        if !trackingFields.isEmpty {
+            parts.append("tracks \(trackingFields.joined(separator: "/"))")
+        }
+
+        let tags = entry.targetTags.prefix(3)
+        if !tags.isEmpty {
+            parts.append("targets \(tags.joined(separator: ", "))")
+        }
+
+        if !entry.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append("notes: \(entry.notes)")
+        }
+
+        return parts.joined(separator: " • ")
     }
 
     private func toggleGoalCompletion(_ goal: WorkoutGoal) {
