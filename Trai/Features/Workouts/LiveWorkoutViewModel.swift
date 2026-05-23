@@ -897,7 +897,8 @@ final class LiveWorkoutViewModel {
     private func rebuildSuggestionPool(reason _: SuggestionRebuildReason) {
         guard let modelContext else { return }
         let activityCategories = suggestedActivityCategories()
-        guard !workout.targetMuscleGroups.isEmpty || !activityCategories.isEmpty else {
+        let activityFocusKeys = targetActivityFocusKeys
+        guard !workout.targetMuscleGroups.isEmpty || !activityCategories.isEmpty || !activityFocusKeys.isEmpty else {
             exerciseSuggestions = []
             applyRankedSuggestions([])
             return
@@ -938,6 +939,7 @@ final class LiveWorkoutViewModel {
             }
 
             return activityCategories.contains(exercise.exerciseCategory)
+                || !activityFocusKeys.isDisjoint(with: exercise.activityMatchingTokens)
                 || !targetActivityKeys.isDisjoint(with: exercise.activityMatchingTokens)
         }
 

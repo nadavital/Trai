@@ -1007,6 +1007,37 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertFalse(viewModel.availableSuggestions.contains { $0.exerciseName == "Hip Mobility Flow" })
     }
 
+    func testNamedActivityTargetCanDriveSuggestionsWithoutBroadCategory() throws {
+        container = try ModelContainer(
+            for: LiveWorkout.self,
+            LiveWorkoutEntry.self,
+            Exercise.self,
+            ExerciseHistory.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        context = ModelContext(container)
+
+        let dance = Exercise(name: "Footwork Flow", category: .custom)
+        dance.activityTypeName = "Dance"
+        dance.targetTags = ["Footwork", "Rhythm"]
+        dance.trackingFields = [.duration, .reps, .notes]
+        context.insert(dance)
+
+        let unrelated = Exercise(name: "Running", category: .cardio)
+        context.insert(unrelated)
+
+        let workout = LiveWorkout(
+            name: "Dance Practice",
+            workoutType: .mixed,
+            focusAreas: ["Dance"]
+        )
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+        viewModel.debugRebuildSuggestionPoolForTests(modelContext: context)
+
+        XCTAssertTrue(viewModel.availableSuggestions.contains { $0.exerciseName == "Footwork Flow" })
+        XCTAssertFalse(viewModel.availableSuggestions.contains { $0.exerciseName == "Running" })
+    }
+
     func testActivityTypeTargetsPreserveBroadActivityTargets() {
         let workout = LiveWorkout(
             name: "Mixed",
