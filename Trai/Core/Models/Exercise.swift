@@ -92,6 +92,25 @@ extension Exercise {
             }
         }
 
+        var trackingTemplateName: String {
+            switch self {
+            case .strength:
+                return "Weighted sets"
+            case .cardio:
+                return "Timed distance"
+            case .conditioning:
+                return "Rounds"
+            case .mobility, .flexibility:
+                return "Mobility flow"
+            case .skill, .sportPractice:
+                return "Attempts"
+            case .recovery:
+                return "Recovery"
+            case .custom:
+                return "Custom metrics"
+            }
+        }
+
         var iconName: String {
             switch self {
             case .strength: "dumbbell.fill"
@@ -331,15 +350,15 @@ extension Exercise {
         case .mobility:
             return ["Hips", "Shoulders", "Ankles", "Back", "Warm-Up"]
         case .skill:
-            return ["Technique", "Footwork", "Coordination", "Balance", "Drills"]
+            return ["Technique", "Power", "Endurance", "Balance", "Consistency"]
         case .sportPractice:
-            return ["Technique", "Drills", "Agility", "Conditioning", "Game Pace"]
+            return ["Technique", "Power", "Endurance", "Agility", "Consistency"]
         case .recovery:
             return ["Easy Movement", "Breathing", "Cooldown", "Walking", "Mobility"]
         case .flexibility:
             return ["Hamstrings", "Hips", "Shoulders", "Back", "Cooldown"]
         case .custom:
-            return ["Strength", "Cardio", "Conditioning", "Mobility", "Sport", "Recovery"]
+            return ["Technique", "Endurance", "Power", "Speed", "Consistency", "Control"]
         }
     }
 

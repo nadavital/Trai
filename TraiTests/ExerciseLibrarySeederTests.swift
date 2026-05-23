@@ -103,6 +103,17 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertEqual(Exercise.Category.flexibility.userFacingEquivalent, .mobility)
         XCTAssertTrue(Exercise.Category.sportPractice.suggestionCategories.contains(.skill))
         XCTAssertTrue(Exercise.Category.mobility.suggestionCategories.contains(.flexibility))
+        XCTAssertEqual(Exercise.Category.sportPractice.trackingTemplateName, "Attempts")
+        XCTAssertEqual(Exercise.Category.cardio.trackingTemplateName, "Timed distance")
+    }
+
+    func testCustomTargetsStayOutcomeBasedInsteadOfBroadCategories() {
+        XCTAssertEqual(
+            Exercise.targetOptions(for: .custom),
+            ["Technique", "Endurance", "Power", "Speed", "Consistency", "Control"]
+        )
+        XCTAssertFalse(Exercise.targetOptions(for: .custom).contains("Cardio"))
+        XCTAssertFalse(Exercise.targetOptions(for: .custom).contains("Sport"))
     }
 
     func testExerciseCategoryNormalizationAcceptsUserFacingActivityNames() {

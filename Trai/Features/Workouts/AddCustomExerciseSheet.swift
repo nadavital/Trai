@@ -307,9 +307,9 @@ struct AddCustomExerciseSheet: View {
     private var categoryDisclosure: some View {
         collapsibleManualSection(
             isExpanded: $isCategoryExpanded,
-            title: "Tracking style",
+            title: "Tracking template",
             icon: "square.grid.2x2",
-            summary: selectedCategory.userFacingEquivalent.displayName
+            summary: selectedCategory.userFacingEquivalent.trackingTemplateName
         ) {
             categoryPickerContent
         }
@@ -527,13 +527,13 @@ struct AddCustomExerciseSheet: View {
         guard field == .reps else { return field.displayName }
         switch selectedCategory {
         case .cardio, .mobility, .flexibility, .recovery:
-            return "Count"
+            return "Counts"
         case .conditioning:
             return "Rounds"
         case .skill, .sportPractice:
             return "Attempts"
         case .custom:
-            return "Count"
+            return "Counts"
         default:
             return field.displayName
         }
@@ -610,7 +610,7 @@ private struct CategoryButton: View {
         HStack(spacing: 6) {
             Image(systemName: category.iconName)
                 .font(.traiLabel(12))
-            Text(category.displayName)
+            Text(category.trackingTemplateName)
                 .font(.traiLabel(12))
                 .lineLimit(1)
                 .truncationMode(.tail)
