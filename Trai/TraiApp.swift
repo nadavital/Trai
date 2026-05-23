@@ -1354,13 +1354,7 @@ private func migrateExistingWorkoutSets(modelContainer: ModelContainer) async {
     var fixedCount = 0
     var insertedHistoryCount = 0
     let historyDescriptor = FetchDescriptor<ExerciseHistory>()
-    let existingHistories = (try? context.fetch(historyDescriptor)) ?? []
-    var historyDatesByExercise: [String: [Date]] = Dictionary(
-        grouping: existingHistories,
-        by: \.exerciseName
-    ).mapValues { histories in
-        histories.map(\.performedAt).sorted()
-    }
+    var existingHistories = (try? context.fetch(historyDescriptor)) ?? []
 
     for (index, workout) in workouts.enumerated() {
         guard let entries = workout.entries else { continue }
@@ -1385,20 +1379,20 @@ private func migrateExistingWorkoutSets(modelContainer: ModelContainer) async {
                 entry.sets = updatedSets
                 fixedCount += 1
             }
-            guard let completedAt else { continue }
-
-            // Ensure ExerciseHistory exists for this entry around workout completion.
-            let completedSets = entry.sets.filter { $0.completed && !$0.isWarmup && $0.reps > 0 }
-            guard !completedSets.isEmpty else { continue }
-
-            let existingDates = historyDatesByExercise[entry.exerciseName] ?? []
-            guard !hasDateInWindow(existingDates, around: completedAt) else { continue }
-
-            let history = ExerciseHistory(from: entry, performedAt: completedAt)
-            context.insert(history)
-            insertedHistoryCount += 1
-            historyDatesByExercise[entry.exerciseName] = insertingSortedDate(completedAt, into: existingDates)
         }
+
+        guard let completedAt else { continue }
+
+        let missingHistory = ExerciseHistory.recordsToInsert(
+            from: workout,
+            existingHistories: existingHistories,
+            performedAt: completedAt
+        )
+        for history in missingHistory {
+            context.insert(history)
+        }
+        insertedHistoryCount += missingHistory.count
+        existingHistories.append(contentsOf: missingHistory)
 
         if index.isMultiple(of: 20) {
             await Task.yield()
@@ -1480,37 +1474,4 @@ private func migrateLegacyCloudImagesAndBackfillFoodEmoji(modelContainer: ModelC
     }
 
     UserDefaults.standard.set(true, forKey: migrationKey)
-}
-
-private func hasDateInWindow(_ dates: [Date], around target: Date, tolerance: TimeInterval = 60) -> Bool {
-    guard !dates.isEmpty else { return false }
-
-    let lowerBound = target.addingTimeInterval(-tolerance)
-    let upperBound = target.addingTimeInterval(tolerance)
-    let startIndex = lowerBoundIndex(for: lowerBound, in: dates)
-    guard startIndex < dates.count else { return false }
-    return dates[startIndex] <= upperBound
-}
-
-private func lowerBoundIndex(for value: Date, in dates: [Date]) -> Int {
-    var lower = 0
-    var upper = dates.count
-
-    while lower < upper {
-        let mid = (lower + upper) / 2
-        if dates[mid] < value {
-            lower = mid + 1
-        } else {
-            upper = mid
-        }
-    }
-
-    return lower
-}
-
-private func insertingSortedDate(_ value: Date, into dates: [Date]) -> [Date] {
-    var updated = dates
-    let insertIndex = lowerBoundIndex(for: value, in: updated)
-    updated.insert(value, at: insertIndex)
-    return updated
 }

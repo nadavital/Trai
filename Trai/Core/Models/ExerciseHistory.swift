@@ -239,6 +239,33 @@ extension ExerciseHistory {
         }
     }
 
+    static func recordsToInsert(
+        from workout: LiveWorkout,
+        existingHistories: [ExerciseHistory],
+        performedAt: Date? = nil
+    ) -> [ExerciseHistory] {
+        let candidateRecords = records(from: workout, performedAt: performedAt)
+        guard !candidateRecords.isEmpty else { return [] }
+
+        let existingSourceEntryIDs = Set(existingHistories.compactMap(\.sourceWorkoutEntryId))
+        let legacyHistoriesByExercise = Dictionary(
+            grouping: existingHistories.filter { $0.sourceWorkoutEntryId == nil },
+            by: \.exerciseName
+        )
+
+        return candidateRecords.filter { record in
+            if let sourceWorkoutEntryId = record.sourceWorkoutEntryId,
+               existingSourceEntryIDs.contains(sourceWorkoutEntryId) {
+                return false
+            }
+
+            let legacyMatches = legacyHistoriesByExercise[record.exerciseName] ?? []
+            return !legacyMatches.contains { existing in
+                abs(existing.performedAt.timeIntervalSince(record.performedAt)) <= 60
+            }
+        }
+    }
+
     /// Best set volume (weight × reps)
     var bestSetVolume: Double {
         bestSetWeightKg * Double(bestSetReps)

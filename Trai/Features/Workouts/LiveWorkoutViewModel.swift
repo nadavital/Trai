@@ -1963,8 +1963,16 @@ final class LiveWorkoutViewModel {
     }
 
     private func createExerciseHistoryEntries() {
-        for history in ExerciseHistory.records(from: workout, performedAt: workout.completedAt ?? Date()) {
-            modelContext?.insert(history)
+        guard let modelContext else { return }
+        let historyDescriptor = FetchDescriptor<ExerciseHistory>()
+        let existingHistories = (try? modelContext.fetch(historyDescriptor)) ?? []
+        let historiesToInsert = ExerciseHistory.recordsToInsert(
+            from: workout,
+            existingHistories: existingHistories,
+            performedAt: workout.completedAt ?? Date()
+        )
+
+        for history in historiesToInsert {
             guard history.hasStrengthMetrics else { continue }
 
             // Check for PRs against canonical per-metric records.
@@ -2009,6 +2017,13 @@ final class LiveWorkoutViewModel {
                     volumePRMode: volumePRModePreference
                 )
             }
+
+            modelContext.insert(history)
+            clearPerformanceCache(for: history.exerciseName)
+        }
+
+        for history in historiesToInsert where !history.hasStrengthMetrics {
+            modelContext.insert(history)
         }
     }
 

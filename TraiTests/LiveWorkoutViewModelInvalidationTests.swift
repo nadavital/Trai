@@ -243,6 +243,59 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertNil(ExercisePerformanceService.snapshot(exerciseName: history.exerciseName, history: records))
     }
 
+    func testExerciseHistoryRecordsToInsertIncludesLoggedGeneralActivities() {
+        let workout = LiveWorkout(name: "Mixed Session", workoutType: .mixed)
+        workout.completedAt = Date()
+
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Rowing Intervals",
+            orderIndex: 0,
+            exerciseType: "conditioning"
+        )
+        entry.activityTypeName = "Rowing"
+        entry.trackingFields = [.duration, .distance]
+        entry.activitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 300, distanceMeters: 1_000),
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 240, distanceMeters: 850)
+        ]
+        entry.workout = workout
+        workout.entries = [entry]
+
+        let records = ExerciseHistory.recordsToInsert(from: workout, existingHistories: [])
+
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.exerciseName, "Rowing Intervals")
+        XCTAssertEqual(records.first?.activityTypeName, "Rowing")
+        XCTAssertEqual(records.first?.durationSeconds, 540)
+        XCTAssertEqual(records.first?.distanceMeters, 1_850)
+    }
+
+    func testExerciseHistoryRecordsToInsertSkipsExistingSourceEntryOnly() {
+        let workout = LiveWorkout(name: "Repeated Work", workoutType: .mixed)
+        let completedAt = Date()
+        workout.completedAt = completedAt
+
+        let firstEntry = LiveWorkoutEntry(exerciseName: "Rowing", orderIndex: 0, exerciseType: "conditioning")
+        firstEntry.activitySegments = [LiveWorkoutEntry.ActivitySegment(durationSeconds: 300)]
+        firstEntry.workout = workout
+
+        let secondEntry = LiveWorkoutEntry(exerciseName: "Rowing", orderIndex: 1, exerciseType: "conditioning")
+        secondEntry.activitySegments = [LiveWorkoutEntry.ActivitySegment(durationSeconds: 240)]
+        secondEntry.workout = workout
+
+        workout.entries = [firstEntry, secondEntry]
+        let existing = ExerciseHistory(from: firstEntry, performedAt: completedAt)
+
+        let records = ExerciseHistory.recordsToInsert(
+            from: workout,
+            existingHistories: [existing],
+            performedAt: completedAt
+        )
+
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.sourceWorkoutEntryId, secondEntry.id)
+    }
+
     func testExerciseHistoryRecordsIgnoreBlankGeneralActivityGuidance() {
         let workout = LiveWorkout(name: "Cardio Guidance", workoutType: .cardio)
         workout.completedAt = Date()
