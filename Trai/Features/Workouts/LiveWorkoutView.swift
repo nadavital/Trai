@@ -735,10 +735,12 @@ struct LiveWorkoutView: View {
 
         let currentExercise = entries.first { entry in
             if entry.isGeneralActivity {
-                return !entry.isPlannedActivityGuidance && entry.completedAt == nil
+                return !entry.isPlannedActivityGuidance
+                    && entry.completedAt == nil
+                    && !entry.hasExercisePreferenceSignal
             }
             if entry.isCardio {
-                return entry.completedAt == nil
+                return entry.completedAt == nil && !entry.hasExercisePreferenceSignal
             }
             return entry.sets.isEmpty || entry.sets.contains { $0.reps == 0 }
         }?.exerciseName ?? entries.last?.exerciseName

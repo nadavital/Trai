@@ -121,6 +121,20 @@ struct GeneralActivityCard: View {
         )
     }
 
+    private var hasLoggedData: Bool {
+        entry.completedAt != nil || entry.hasExercisePreferenceSignal
+    }
+
+    private var statusText: String {
+        if let completedAt = entry.completedAt {
+            return "Logged \(completedAt.formatted(date: .omitted, time: .shortened))"
+        }
+        if hasLoggedData {
+            return "Logged in this workout"
+        }
+        return "Added to this workout"
+    }
+
     private var metadataChips: [ActivityMetadataChip] {
         guard !isPlannedGuidance else { return [] }
 
@@ -158,7 +172,7 @@ struct GeneralActivityCard: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: entry.activityIconName)
                     .font(.subheadline)
-                    .foregroundStyle(entry.completedAt != nil ? .green : .secondary)
+                    .foregroundStyle(hasLoggedData ? .green : .secondary)
                     .frame(width: 34, height: 34)
                     .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10))
 
@@ -167,15 +181,9 @@ struct GeneralActivityCard: View {
                         .font(isPlannedGuidance ? .subheadline.weight(.semibold) : .headline)
 
                     if !isPlannedGuidance {
-                        if let completedAt = entry.completedAt {
-                            Text("Logged \(completedAt.formatted(date: .omitted, time: .shortened))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("Added to this workout")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        Text(statusText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
