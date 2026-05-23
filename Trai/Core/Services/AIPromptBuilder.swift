@@ -207,17 +207,7 @@ enum AIPromptBuilder {
         if !history.isEmpty {
             prompt += "\n\nRecent Workouts:\n"
             for session in history.suffix(5) {
-                let name = session.displayName
-                let date = session.loggedAt.formatted(date: .abbreviated, time: .omitted)
-                if session.isStrengthTraining {
-                    prompt += "- \(date): \(name) - \(session.sets) sets x \(session.reps) reps"
-                    if let weight = session.weightKg {
-                        prompt += " @ \(Int(weight))kg"
-                    }
-                    prompt += "\n"
-                } else if let duration = session.formattedDuration {
-                    prompt += "- \(date): \(name) - \(duration)\n"
-                }
+                prompt += "- \(workoutSuggestionHistoryLine(for: session))\n"
             }
         }
 
@@ -232,6 +222,62 @@ enum AIPromptBuilder {
         """
 
         return prompt
+    }
+
+    private static func workoutSuggestionHistoryLine(for session: WorkoutSession) -> String {
+        let date = session.loggedAt.formatted(date: .abbreviated, time: .omitted)
+        let name = session.displayName
+        var details: [String] = []
+
+        if session.isStrengthTraining {
+            details.append("\(session.sets) sets x \(session.reps) reps")
+            if let weight = session.weightKg {
+                details.append("@ \(Int(weight))kg")
+            }
+        } else {
+            let typeName = session.displayTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !typeName.isEmpty, typeName.goalNormalizedKey != name.goalNormalizedKey {
+                details.append(typeName)
+            }
+            if let duration = session.formattedDuration {
+                details.append(duration)
+            }
+            if let distance = session.formattedDistance {
+                details.append(distance)
+            }
+            if let setMetricPhrase = session.setMetricPhrase {
+                details.append(setMetricPhrase)
+            }
+            if let repMetricPhrase = session.repMetricPhrase {
+                details.append(repMetricPhrase)
+            }
+
+            let tags = session.semanticActivityTags.filter { tag in
+                let key = tag.goalNormalizedKey
+                return key != name.goalNormalizedKey && key != typeName.goalNormalizedKey
+            }
+            if !tags.isEmpty {
+                details.append("context: \(tags.prefix(3).joined(separator: ", "))")
+            }
+        }
+
+        let note = session.trimmedNotes
+        if !note.isEmpty {
+            details.append("notes: \(shortPromptSnippet(note))")
+        }
+
+        guard !details.isEmpty else {
+            return "\(date): \(name)"
+        }
+
+        return "\(date): \(name) - \(details.joined(separator: ", "))"
+    }
+
+    private static func shortPromptSnippet(_ value: String, maxLength: Int = 120) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > maxLength else { return trimmed }
+        let endIndex = trimmed.index(trimmed.startIndex, offsetBy: maxLength)
+        return "\(trimmed[..<endIndex])..."
     }
 
     // MARK: - System Prompt

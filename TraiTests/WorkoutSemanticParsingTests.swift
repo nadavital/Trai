@@ -33,6 +33,52 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(WorkoutMode.normalized(from: "stretching"), .flexibility)
     }
 
+    func testWorkoutSuggestionPromptIncludesGeneralActivityContext() {
+        let exercise = Exercise(name: "Limit Bouldering", category: .sportPractice)
+        exercise.activityTypeName = "Bouldering"
+        exercise.targetTags = ["Climbing", "Grip power"]
+
+        let session = WorkoutSession(exercise: exercise, sets: 2, reps: 8, weightKg: 20)
+        session.durationMinutes = 45
+        session.notes = "Avoids slab, wants overhang power."
+
+        let prompt = AIPromptBuilder.buildWorkoutSuggestionPrompt(
+            history: [session],
+            goal: "Build a useful mixed workout",
+            availableTime: 45
+        )
+
+        XCTAssertTrue(prompt.contains("Limit Bouldering"))
+        XCTAssertTrue(prompt.contains("Bouldering"))
+        XCTAssertTrue(prompt.contains("45m"))
+        XCTAssertTrue(prompt.contains("2 segments"))
+        XCTAssertTrue(prompt.contains("8 attempts"))
+        XCTAssertTrue(prompt.contains("Grip power"))
+        XCTAssertTrue(prompt.contains("Avoids slab"))
+        XCTAssertFalse(prompt.contains("2 sets x 8 reps"))
+    }
+
+    func testWorkoutSuggestionPromptIncludesImportedWorkoutDistance() {
+        let session = WorkoutSession(
+            healthKitWorkoutID: "run-1",
+            workoutType: "running",
+            durationMinutes: 32,
+            caloriesBurned: nil,
+            distanceMeters: 5100,
+            loggedAt: Date()
+        )
+
+        let prompt = AIPromptBuilder.buildWorkoutSuggestionPrompt(
+            history: [session],
+            goal: "Keep improving cardio",
+            availableTime: nil
+        )
+
+        XCTAssertTrue(prompt.contains("Running"))
+        XCTAssertTrue(prompt.contains("32m"))
+        XCTAssertTrue(prompt.contains("5.10 km"))
+    }
+
     func testSuggestedWorkoutLogSummaryPreservesActivityItems() {
         let log = SuggestedWorkoutLog(
             name: "Climb + Conditioning",
