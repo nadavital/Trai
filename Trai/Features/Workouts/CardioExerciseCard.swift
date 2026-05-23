@@ -56,8 +56,12 @@ struct CardioExerciseCard: View {
         case .sportPractice, .skill:
             return "attempts"
         default:
-            return "count"
+            return "counts"
         }
+    }
+
+    private var countRowTitle: String {
+        countUnitLabel.capitalized
     }
 
     private var supportsSegments: Bool {
@@ -203,7 +207,7 @@ struct CardioExerciseCard: View {
     }
 
     private var repsRow: some View {
-        trackingRow(icon: "repeat", title: "Reps / Rounds") {
+        trackingRow(icon: "repeat", title: countRowTitle) {
             compactNumberField("0", text: $reps, width: 58)
                 .onChange(of: reps) { _, newValue in
                     onUpdateReps?(Int(newValue))
