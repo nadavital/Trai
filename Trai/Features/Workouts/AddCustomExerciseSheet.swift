@@ -95,6 +95,9 @@ struct AddCustomExerciseSheet: View {
             }
             .onAppear {
                 exerciseName = initialName
+                if let inferredCategory = Exercise.Category.normalized(from: initialName) {
+                    selectedCategory = inferredCategory.userFacingEquivalent
+                }
                 resetDefaultsForSelectedCategory()
                 if canAccessExerciseAI
                     && !requiresAuthenticatedAccountForExerciseAI
@@ -130,7 +133,12 @@ struct AddCustomExerciseSheet: View {
                         hasAnalyzed = false
                         analysisResult = nil
                     }
-                    if activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if selectedCategory == .strength,
+                       let inferredCategory = Exercise.Category.normalized(from: exerciseName),
+                       inferredCategory.userFacingEquivalent != .strength {
+                        selectedCategory = inferredCategory.userFacingEquivalent
+                        resetDefaultsForSelectedCategory()
+                    } else if shouldReplaceDefaultActivityName {
                         activityTypeName = Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory)
                     }
                 }
@@ -499,9 +507,18 @@ struct AddCustomExerciseSheet: View {
         let defaults = Exercise.defaultTargetTags(for: selectedCategory)
         selectedTargets = Set(defaults)
         selectedTrackingFields = Set(Exercise.defaultTrackingFields(for: selectedCategory))
-        if activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if shouldReplaceDefaultActivityName {
             activityTypeName = Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory)
         }
+    }
+
+    private var shouldReplaceDefaultActivityName: Bool {
+        let trimmed = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty
+            || trimmed == Exercise.defaultActivityTypeName(for: exerciseName, category: .strength)
+            || Exercise.Category.userFacingCases.contains { category in
+                trimmed == category.displayName || trimmed == category.trackingTemplateName
+            }
     }
 
     private func addCustomTarget() {

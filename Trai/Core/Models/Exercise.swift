@@ -189,7 +189,7 @@ extension Exercise {
             switch token {
             case "strength", "lifting", "weights", "weighttraining", "resistancetraining":
                 return .strength
-            case "cardio", "endurance", "aerobic":
+            case "cardio", "endurance", "aerobic", "run", "running", "jog", "jogging", "cycle", "cycling", "bike", "biking", "row", "rowing", "swim", "swimming", "walk", "walking", "stairclimber", "elliptical", "jumprope":
                 return .cardio
             case "conditioning", "hiit", "circuit":
                 return .conditioning
@@ -204,6 +204,28 @@ extension Exercise {
             case "custom", "activity", "other":
                 return .custom
             default:
+                if token.contains("run")
+                    || token.contains("cycle")
+                    || token.contains("bike")
+                    || token.contains("rowing")
+                    || token.contains("rower")
+                    || token.contains("swim")
+                    || token.contains("walk")
+                    || token.contains("stairclimber")
+                    || token.contains("elliptical")
+                    || token.contains("jumprope") {
+                    return .cardio
+                }
+                if token.contains("climb")
+                    || token.contains("boulder")
+                    || token.contains("boxing")
+                    || token.contains("basketball")
+                    || token.contains("tennis")
+                    || token.contains("soccer")
+                    || token.contains("padel")
+                    || token.contains("pickleball") {
+                    return .sportPractice
+                }
                 return nil
             }
         }
@@ -424,7 +446,7 @@ extension Exercise {
         if normalizedName.contains("cycle") || normalizedName.contains("bike") {
             return "Cycling"
         }
-        if normalizedName.contains("row") {
+        if normalizedName.contains("rowing") || normalizedName.contains("rower") {
             return "Rowing"
         }
         if normalizedName.contains("swim") {
@@ -435,6 +457,24 @@ extension Exercise {
         }
         if normalizedName.contains("walk") {
             return "Walking"
+        }
+        if normalizedName.contains("padel") {
+            return "Padel"
+        }
+        if normalizedName.contains("pickleball") {
+            return "Pickleball"
+        }
+        if normalizedName.contains("tennis") {
+            return "Tennis"
+        }
+        if normalizedName.contains("boxing") {
+            return "Boxing"
+        }
+        if normalizedName.contains("basketball") {
+            return "Basketball"
+        }
+        if normalizedName.contains("soccer") || normalizedName.contains("football") {
+            return "Soccer"
         }
         if category == .strength {
             return "Strength"

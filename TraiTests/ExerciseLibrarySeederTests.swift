@@ -120,8 +120,13 @@ final class ExerciseLibrarySeederTests: XCTestCase {
         XCTAssertEqual(Exercise.Category.normalized(from: "sport"), .sportPractice)
         XCTAssertEqual(Exercise.Category.normalized(from: "sport practice"), .sportPractice)
         XCTAssertEqual(Exercise.Category.normalized(from: "climbing"), .sportPractice)
+        XCTAssertEqual(Exercise.Category.normalized(from: "Outdoor Run"), .cardio)
+        XCTAssertEqual(Exercise.Category.normalized(from: "Padel drills"), .sportPractice)
         XCTAssertEqual(Exercise.Category.normalized(from: "yoga"), .mobility)
         XCTAssertEqual(Exercise.Category.normalized(from: "activity"), .custom)
+        XCTAssertNil(Exercise.Category.normalized(from: "Cable Row"))
+        XCTAssertEqual(Exercise.defaultActivityTypeName(for: "Padel drills", category: .sportPractice), "Padel")
+        XCTAssertEqual(Exercise.defaultActivityTypeName(for: "Seated Cable Row", category: .strength), "Strength")
 
         let hiddenPrimitive = Exercise(name: "Limit Bouldering", category: .skill)
         XCTAssertEqual(hiddenPrimitive.exerciseCategory, .skill)
