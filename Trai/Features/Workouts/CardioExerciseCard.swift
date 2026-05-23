@@ -65,11 +65,16 @@ struct CardioExerciseCard: View {
     }
 
     private var supportsSegments: Bool {
-        fields.contains(.duration)
+        !isNotesOnly
+            && (fields.contains(.duration)
             || fields.contains(.distance)
             || fields.contains(.reps)
             || fields.contains(.weight)
-            || fields.contains(.notes)
+            || fields.contains(.notes))
+    }
+
+    private var isNotesOnly: Bool {
+        Set(fields) == [.notes]
     }
 
     var body: some View {
@@ -78,7 +83,9 @@ struct CardioExerciseCard: View {
 
             if isExpanded {
                 VStack(spacing: 12) {
-                    if supportsSegments {
+                    if isNotesOnly {
+                        alwaysVisibleNotesRow
+                    } else if supportsSegments {
                         segmentsSection
 
                         Button {
@@ -305,6 +312,18 @@ struct CardioExerciseCard: View {
                     }
             }
         }
+    }
+
+    private var alwaysVisibleNotesRow: some View {
+        TextField("Add notes", text: $notes, axis: .vertical)
+            .lineLimit(3...6)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+            .onChange(of: notes) { _, value in
+                onUpdateNotes?(value)
+            }
+            .accessibilityLabel("Activity notes")
     }
 
     private var segmentsSection: some View {
