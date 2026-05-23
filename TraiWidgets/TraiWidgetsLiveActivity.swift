@@ -168,7 +168,7 @@ private struct LockScreenWorkoutView: View {
 
                 Spacer(minLength: 8)
 
-                Text(context.state.progressCountDisplay)
+                Text(context.state.progressDisplay)
                     .font(.system(.headline, design: .rounded, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(LiveActivityTheme.accent)
@@ -243,7 +243,7 @@ private struct LockScreenWorkoutView: View {
             }
             .frame(height: 5)
 
-            Text(context.state.progressCountDisplay)
+            Text(context.state.progressDisplay)
                 .font(.caption2)
                 .monospacedDigit()
                 .foregroundStyle(LiveActivityTheme.textSecondary)
@@ -343,7 +343,7 @@ private struct LockScreenWorkoutView: View {
                             .monospacedDigit()
                     }
 
-                    Text(context.state.progressCountDisplay)
+                    Text(context.state.progressDisplay)
                         .font(.caption2)
                         .monospacedDigit()
                         .foregroundStyle(LiveActivityTheme.textSecondary)
@@ -554,9 +554,10 @@ private struct CompactTrailingView: View {
     let context: ActivityViewContext<TraiWorkoutAttributes>
 
     var body: some View {
-        Text(context.state.progressCountDisplay)
+        Text(context.state.progressDisplay)
             .font(.system(.caption, design: .rounded, weight: .semibold))
             .foregroundStyle(LiveActivityTheme.accent)
+            .lineLimit(1)
     }
 }
 
