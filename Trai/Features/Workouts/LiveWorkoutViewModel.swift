@@ -374,7 +374,8 @@ final class LiveWorkoutViewModel {
         case .hiit:
             categories.formUnion([.conditioning, .cardio])
         case .climbing:
-            categories.formUnion([.skill, .conditioning, .mobility])
+            categories.formUnion(Exercise.Category.sportPractice.suggestionCategories)
+            categories.formUnion([.conditioning, .mobility])
         case .yoga, .pilates, .flexibility:
             categories.formUnion([.flexibility, .mobility])
         case .mobility:

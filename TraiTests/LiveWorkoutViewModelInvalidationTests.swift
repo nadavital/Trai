@@ -1194,6 +1194,35 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertFalse(viewModel.availableSuggestions.contains { $0.exerciseName == "Running" })
     }
 
+    func testClimbingWorkoutSuggestionsIncludeSportPracticeExercises() throws {
+        container = try ModelContainer(
+            for: LiveWorkout.self,
+            LiveWorkoutEntry.self,
+            Exercise.self,
+            ExerciseHistory.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        context = ModelContext(container)
+
+        let bouldering = Exercise(name: "Bouldering", category: .sportPractice)
+        bouldering.activityTypeName = "Bouldering"
+        bouldering.targetTags = ["Climbing"]
+        context.insert(bouldering)
+
+        let running = Exercise(name: "Running", category: .cardio)
+        context.insert(running)
+
+        let workout = LiveWorkout(
+            name: "Climbing Session",
+            workoutType: .climbing
+        )
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+        viewModel.debugRebuildSuggestionPoolForTests(modelContext: context)
+
+        XCTAssertTrue(viewModel.availableSuggestions.contains { $0.exerciseName == "Bouldering" && $0.category == .sportPractice })
+        XCTAssertFalse(viewModel.availableSuggestions.contains { $0.exerciseName == "Running" })
+    }
+
     func testActivityTypeTargetsPreserveBroadActivityTargets() {
         let workout = LiveWorkout(
             name: "Mixed",
