@@ -267,7 +267,7 @@ extension AIFunctionExecutor {
                     ?? activityTypeName.flatMap { Exercise.Category.normalized(from: $0)?.userFacingEquivalent }
                     ?? (workoutType.supportsMuscleTargets ? .strength : .cardio)
                 let sets = numericInt(from: exerciseData["sets"]) ?? (resolvedCategory == .strength ? 3 : 0)
-                let reps = exerciseData["reps"] as? Int ?? 10
+                let reps = numericInt(from: exerciseData["reps"]) ?? (resolvedCategory == .strength ? 10 : 0)
                 let weight = exerciseData["weight_kg"] as? Double
                 let durationMinutes = numericInt(from: exerciseData["duration_minutes"])
                 let distanceMeters = numericDouble(from: exerciseData["distance_meters"])

@@ -220,7 +220,9 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(suggestion.exercisesSummary, "1 activity")
         XCTAssertEqual(suggestion.activityFocuses, ["Running", "Aerobic base"])
         XCTAssertEqual(suggestion.exercises.first?.sets, 0)
+        XCTAssertEqual(suggestion.exercises.first?.reps, 0)
         XCTAssertEqual(suggestion.exercises.first?.durationMinutes, 30)
+        XCTAssertEqual(suggestion.exercises.first?.startSummarySegments, ["Running", "30 min"])
     }
 
     func testStartLiveWorkoutInfersActivityCategoryFromActivityName() async throws {
@@ -512,6 +514,48 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         let required = try XCTUnwrap(items["required"] as? [String])
 
         XCTAssertEqual(required, ["name"])
+    }
+
+    func testLogWorkoutSchemaUsesCurrentWorkoutModes() throws {
+        let typeValues = try propertyEnum(in: AIFunctionDeclarations.logWorkout, property: "type")
+        XCTAssertEqual(Set(typeValues), Set(WorkoutMode.allCases.map(\.rawValue)))
+        XCTAssertFalse(typeValues.contains("running"))
+        XCTAssertFalse(typeValues.contains("sports"))
+        XCTAssertFalse(typeValues.contains("other"))
+    }
+
+    func testLogWorkoutKeepsNoteOnlyCustomActivities() async {
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
+        let result = await executor.execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "type": "custom",
+                    "name": "Technique practice",
+                    "activity_name": "Technique",
+                    "exercises": [
+                        [
+                            "name": "Footwork practice",
+                            "category": "custom",
+                            "activity_name": "Footwork",
+                            "tracking_fields": ["notes"],
+                            "notes": "Worked on smooth pivots and balance."
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutLog(let workoutLog) = result,
+              let exercise = workoutLog.exercises.first else {
+            return XCTFail("Expected note-only activity log suggestion")
+        }
+
+        XCTAssertEqual(workoutLog.workoutType, WorkoutMode.custom.rawValue)
+        XCTAssertEqual(exercise.category, "custom")
+        XCTAssertEqual(exercise.activityTypeName, "Footwork")
+        XCTAssertEqual(exercise.trackingFields ?? [], ["notes"])
+        XCTAssertEqual(exercise.notes, "Worked on smooth pivots and balance.")
     }
 
     func testWorkoutFunctionSchemasSupportAllStableActivityPrimitives() throws {

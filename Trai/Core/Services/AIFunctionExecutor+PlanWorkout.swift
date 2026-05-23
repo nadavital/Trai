@@ -964,7 +964,12 @@ extension AIFunctionExecutor {
                     }
                 }
 
-                if !sets.isEmpty || exerciseDurationMinutes != nil || distanceMeters != nil || !segments.isEmpty {
+                if !sets.isEmpty
+                    || exerciseDurationMinutes != nil
+                    || distanceMeters != nil
+                    || exerciseNotes != nil
+                    || !trackingFields.isEmpty
+                    || !segments.isEmpty {
                     exercises.append(SuggestedWorkoutLog.LoggedExercise(
                         name: name,
                         category: category,

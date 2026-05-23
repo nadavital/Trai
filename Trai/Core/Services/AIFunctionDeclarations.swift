@@ -674,8 +674,8 @@ enum AIFunctionDeclarations {
                     ],
                     "type": [
                         "type": "string",
-                        "description": "Stable internal workout primitive. Use strength for lifting, cardio for running/cycling/rowing, hiit for intervals, yoga for yoga, sports for sport practice, other for custom/mixed activity. Put the user-facing activity identity in activity_name/activity_tags.",
-                        "enum": ["strength", "cardio", "hiit", "yoga", "running", "cycling", "swimming", "walking", "sports", "other"]
+                        "description": "Stable internal workout primitive. Use strength for lifting, cardio for running/cycling/rowing/walking, hiit for intervals/conditioning, climbing/yoga/pilates/flexibility/mobility/recovery when appropriate, mixed for hybrid sessions, and custom for user-defined activity. Put the user-facing activity identity in activity_name/activity_tags.",
+                        "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom"]
                     ],
                     "activity_name": [
                         "type": "string",
