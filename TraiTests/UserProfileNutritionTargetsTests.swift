@@ -114,6 +114,17 @@ final class UserProfileNutritionTargetsTests: XCTestCase {
         XCTAssertNil(data.workoutActionURLString)
     }
 
+    func testWidgetWorkoutActionIsDisabledWithoutDurableTemplateID() {
+        let data = WidgetData.empty.updatingWorkoutAction(
+            recommendedWorkout: "Upper Strength",
+            recommendedWorkoutTemplateID: nil,
+            todayWorkoutCompleted: false
+        )
+
+        XCTAssertNil(data.workoutActionRoute)
+        XCTAssertNil(data.workoutActionURLString)
+    }
+
     private func makeWidgetSnapshotContext() throws -> ModelContext {
         let schema = Schema([
             UserProfile.self,

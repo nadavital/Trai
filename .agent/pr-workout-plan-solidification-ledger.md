@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `3fe2783 Harden rest-day widget workout routes`
+- Latest pushed fix before current round: `fdda366 Clean widget route isolation tests`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -31,6 +31,7 @@
 - Made generated plan-adherence goals match workout history rows by durable source template ID instead of falling through to broad unscoped goal matching.
 - Normalized generated plan-adherence goals from the durable `tracksGeneratedPlanAdherence` flag instead of a fixed target-unit vocabulary.
 - Routed widget workout actions through the recommended durable template ID and disabled completed workout rows so they cannot start duplicate sessions.
+- Required widget workout actions to have a durable recommended template ID and kept the small widget from falling back to a generic custom workout route.
 
 ## Fresh Review Rounds
 
@@ -183,6 +184,12 @@
 - Fresh focused sweep found no additional serious issue in Review with Trai startup gating, generated-plan stale save guards, refinement request/presentation ordering, or rest-day widget workout routing.
 - Validation note: escalated iOS simulator XCTest pass succeeded for `testWidgetWorkoutActionUsesRecommendedTemplateRoute`, `testWidgetWorkoutActionIsDisabledAfterWorkoutComplete`, and `testWidgetWorkoutActionIsDisabledOnRestDayWithoutRecommendation`. The sandboxed retry could not access CoreSimulator and failed before running tests.
 
+### Round 2026-05-24 After `fdda366`
+- Fresh agent results: lifecycle/review flow, semantic durability, and persistence/history passes found no additional serious issues. Routing/widgets/adherence found two actual widget P2s.
+- Widget routing: fixed verified small-widget gap where the workout icon always emitted a generic `workout` route instead of the durable recommended-template route.
+- Durable widget routes: fixed verified name-only fallback where widget payloads with `recommendedWorkout` but no `recommendedWorkoutTemplateID` could still deep-link to a workout by label.
+- Regression-test coverage: added focused coverage that widget workout actions are disabled when the payload lacks a durable recommended template ID.
+
 ## Manual Test Queue
 - From Profile, Settings, and Workouts, open standard workout-plan setup, mutate/save a different workout plan elsewhere before tapping Save, and confirm the stale setup is blocked instead of overwriting the newer plan.
 - Run two rapid generated-plan refinements back to back and confirm only the latest result package remains, with no duplicate or stale plan/goals/save rows.
@@ -197,6 +204,8 @@
 - Generate/save a plan-adherence goal with AI wording like `planned sessions`; confirm it stores the generated template IDs and progresses from planned workouts.
 - From the medium widget, tap the workout action beside `Up Next` and confirm it starts the exact recommended planned template. After completing today's workout, confirm the large widget completed row does not start a duplicate workout.
 - On a rest day with no recommendation, confirm the medium/large widget does not expose a generic start-workout action.
+- From the small widget, tap the workout icon on a planned workout day and confirm it starts the exact recommended template; on rest/completed days, confirm the center icon is not tappable.
+- With a stale widget payload that has only `recommendedWorkout` and no `recommendedWorkoutTemplateID`, confirm small/medium/large widgets do not start a generic or label-matched workout.
 
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.

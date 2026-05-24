@@ -84,10 +84,7 @@ nonisolated struct WidgetData: Codable {
 
     var workoutActionRoute: AppRoute? {
         guard !todayWorkoutCompleted else { return nil }
-        guard recommendedWorkoutTemplateID != nil ||
-            recommendedWorkout?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-            return nil
-        }
+        guard let recommendedWorkoutTemplateID else { return nil }
         return .workout(
             templateID: recommendedWorkoutTemplateID,
             templateName: recommendedWorkout

@@ -111,7 +111,13 @@ struct SmallWidgetView: View {
             // Larger icon-only action buttons
             HStack(spacing: 12) {
                 SmallWidgetActionButton(icon: "fork.knife", url: AppRoute.logFood.urlString, color: .green)
-                SmallWidgetActionButton(icon: "figure.run", url: AppRoute.workout(templateID: nil, templateName: nil).urlString, color: .orange)
+                if let workoutURLString = entry.data.workoutActionURLString {
+                    SmallWidgetActionButton(icon: "figure.run", url: workoutURLString, color: .orange)
+                } else if entry.data.todayWorkoutCompleted {
+                    SmallWidgetStatusIcon(icon: "checkmark.circle.fill", color: .green)
+                } else {
+                    SmallWidgetStatusIcon(icon: "moon.zzz.fill", color: .secondary)
+                }
                 SmallWidgetActionButton(icon: "circle.hexagongrid.circle", url: AppRoute.chat.urlString, color: .calorieColor)
             }
         }
@@ -575,6 +581,20 @@ struct SmallWidgetActionButton: View {
                 .background(color.opacity(0.12))
                 .clipShape(.circle)
         }
+    }
+}
+
+struct SmallWidgetStatusIcon: View {
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        Image(systemName: icon)
+            .font(.body)
+            .foregroundStyle(color)
+            .frame(width: 40, height: 40)
+            .background(color.opacity(0.12))
+            .clipShape(.circle)
     }
 }
 
