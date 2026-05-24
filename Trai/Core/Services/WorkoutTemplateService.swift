@@ -96,11 +96,7 @@ struct WorkoutTemplateService {
             return nil
         }
 
-        guard let trimmedName, !trimmedName.isEmpty else {
-            return createCustomWorkout()
-        }
-
-        return createCustomWorkout(name: trimmedName)
+        return createCustomWorkout()
     }
 
     /// Resolve app-intent/deep-link workout names into concrete workout instances.

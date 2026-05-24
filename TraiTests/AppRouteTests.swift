@@ -24,7 +24,6 @@ final class AppRouteTests: XCTestCase {
             .logFood,
             .logWeight,
             .workout(templateID: nil, templateName: nil),
-            .workout(templateID: nil, templateName: "Push Pull Legs"),
             .workout(templateID: UUID(uuidString: "11111111-1111-1111-1111-111111111111"), templateName: "Push Pull Legs"),
             .chat
         ]
@@ -35,9 +34,9 @@ final class AppRouteTests: XCTestCase {
         }
     }
 
-    func testWorkoutRouteParsesTemplateFromQuery() {
+    func testWorkoutRouteIgnoresNameOnlyTemplateFromQuery() {
         let route = AppRoute(urlString: "trai://workout?template=Upper%20Body")
-        XCTAssertEqual(route, .workout(templateID: nil, templateName: "Upper Body"))
+        XCTAssertNil(route)
     }
 
     func testWorkoutRouteParsesDurableTemplateIDFromQuery() {
@@ -97,7 +96,7 @@ final class AppRouteTests: XCTestCase {
         defaults.set("Leg Day", forKey: SharedStorageKeys.LegacyLaunchIntents.startWorkout)
 
         let consumed = PendingAppRouteStore.consumePendingRoute(defaults: defaults)
-        XCTAssertEqual(consumed, .workout(templateID: nil, templateName: "Leg Day"))
+        XCTAssertNil(consumed)
     }
 
     func testPendingRouteStoreReturnsNilWhenNoPendingData() {

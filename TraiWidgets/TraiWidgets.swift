@@ -76,7 +76,7 @@ struct TraiDataProvider: TimelineProvider {
             score += 0.2
         }
 
-        if data.recommendedWorkout != nil && !data.todayWorkoutCompleted {
+        if data.actionableRecommendedWorkoutName != nil {
             score += 0.1
         }
 

@@ -657,6 +657,7 @@ struct WorkoutPlanEditSheet: View {
         refreshGeneratedPlanAdherenceGoals(for: normalizedPlan)
         do {
             try modelContext.save()
+            WidgetDataProvider.shared.scheduleRefresh()
             return true
         } catch {
             modelContext.rollback()

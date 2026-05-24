@@ -587,7 +587,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.sourcePlanTemplateID, profile.workoutPlan?.templates.first?.id)
     }
 
-    func testCreateWorkoutForIntentDoesNotBindNameOnlyRouteToSavedTemplate() throws {
+    func testCreateWorkoutForIntentDoesNotUseNameOnlyRouteSemantics() throws {
         let context = try makeInMemoryContext()
         let profile = UserProfile()
         profile.workoutPlan = WorkoutPlan(
@@ -623,14 +623,14 @@ final class WorkoutTemplateServiceTests: XCTestCase {
             name: "upper body strength",
             modelContext: context
         ))
-        XCTAssertEqual(exactName.name, "upper body strength")
+        XCTAssertEqual(exactName.name, "Custom Workout")
         XCTAssertNil(exactName.sourcePlanTemplateID)
 
         let partial = try XCTUnwrap(service.createWorkoutForIntent(
             name: "upper body",
             modelContext: context
         ))
-        XCTAssertEqual(partial.name, "upper body")
+        XCTAssertEqual(partial.name, "Custom Workout")
         XCTAssertNil(partial.sourcePlanTemplateID)
     }
 
@@ -683,14 +683,14 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertNil(workout)
     }
 
-    func testCreateWorkoutForIntentFallsBackToCustomNamedWorkout() throws {
+    func testCreateWorkoutForIntentFallsBackToGenericCustomWorkout() throws {
         let context = try makeInMemoryContext()
         let workout = try XCTUnwrap(service.createWorkoutForIntent(
             name: "Fight Camp",
             modelContext: context
         ))
 
-        XCTAssertEqual(workout.name, "Fight Camp")
+        XCTAssertEqual(workout.name, "Custom Workout")
         XCTAssertEqual(workout.type, .strength)
         XCTAssertEqual(workout.muscleGroups, [])
     }

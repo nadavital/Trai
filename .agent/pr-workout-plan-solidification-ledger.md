@@ -193,6 +193,11 @@
 - Chat create stale guard: fixed verified no-plan Workouts chat flow overwrite where a plan created elsewhere after the flow opened could be archived and replaced.
 - Generated-plan ID durability: fixed verified duplicate template/block ID acceptance in generated plans.
 - Name-only workout routes: stopped resolving saved workout-plan templates by display name; durable template IDs are now required for planned-template starts, while name-only requests create unlinked custom workouts.
+- Direct edit freshness: fixed verified direct workout-plan edit save gap by refreshing widget snapshots after successful manual plan edits.
+- Lock-screen widget display state: fixed verified non-durable name-only recommendation display by using the durable actionable workout contract for lock-screen widgets and widget relevance.
+- Refined-plan ID durability: fixed verified duplicate block ID acceptance in workout-plan refinements.
+- Name-only workout routes: tightened name-only `template=` deep links and legacy named workout intents so they cannot create planned-looking custom workouts.
+- Refinement lifecycle: fixed verified canceled/failed refinement context so only successful refinement prompts can drive regenerated saved goals.
 - Regression-test coverage: added focused coverage that widget workout actions are disabled when the payload lacks a durable recommended template ID.
 
 ## Manual Test Queue
@@ -211,6 +216,7 @@
 - On a rest day with no recommendation, confirm the medium/large widget does not expose a generic start-workout action.
 - From the small widget, tap the workout icon on a planned workout day and confirm it starts the exact recommended template; on rest/completed days, confirm the center icon is not tappable.
 - With a stale widget payload that has only `recommendedWorkout` and no `recommendedWorkoutTemplateID`, confirm small/medium/large widgets do not start a generic or label-matched workout.
+- With that same stale widget payload, confirm lock-screen rectangular/inline widgets do not display the non-durable workout label as the next workout.
 
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.

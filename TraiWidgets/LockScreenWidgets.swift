@@ -87,7 +87,7 @@ struct StatsRectangularView: View {
                         .font(.caption2)
                     Text("Workout done")
                         .font(.caption2)
-                } else if let workout = entry.data.recommendedWorkout {
+                } else if let workout = entry.data.actionableRecommendedWorkoutName {
                     Image(systemName: "figure.run")
                         .font(.caption2)
                     Text(workout)
@@ -128,7 +128,7 @@ struct StatsInlineView: View {
         if entry.data.todayWorkoutCompleted {
             return "workout done"
         }
-        if let workout = entry.data.recommendedWorkout {
+        if let workout = entry.data.actionableRecommendedWorkoutName {
             return workout
         }
         return "ready to train"

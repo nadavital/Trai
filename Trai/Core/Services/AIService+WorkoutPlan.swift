@@ -220,13 +220,11 @@ extension AIService {
             emitValidationLog("Workout plan included one or more blocks without activityTypeName.")
             throw AIServiceError.parsingError
         }
-        let templateIDs = plan.templates.map(\.id)
-        guard Set(templateIDs).count == templateIDs.count else {
+        guard plan.hasUniqueTemplateIDs else {
             emitValidationLog("Workout plan included duplicate template IDs.")
             throw AIServiceError.parsingError
         }
-        let blockIDs = plan.templates.flatMap { $0.blocks.map(\.id) }
-        guard Set(blockIDs).count == blockIDs.count else {
+        guard plan.hasUniqueBlockIDs else {
             emitValidationLog("Workout plan included duplicate block IDs.")
             throw AIServiceError.parsingError
         }
@@ -587,6 +585,10 @@ extension AIService {
             log("Ignoring workout plan refinement that dropped explicit plan structure.", type: .error)
             return nil
         }
+        guard plan.hasUniqueTemplateIDs, plan.hasUniqueBlockIDs else {
+            log("Ignoring workout plan refinement with duplicate durable template or block IDs.", type: .error)
+            return nil
+        }
 
         guard allowsTemplateCountChange || plan.templates.count == currentPlan.templates.count else {
             log("Ignoring workout plan refinement that changed the weekly day count without a structured plan-count change.", type: .error)
@@ -639,6 +641,8 @@ extension AIService {
               plan.modalityProgression != nil,
               plan.templates.allSatisfy({ !$0.blocks.isEmpty }),
               plan.hasUserFacingActivityIdentityForEveryBlock,
+              plan.hasUniqueTemplateIDs,
+              plan.hasUniqueBlockIDs,
               allowsTemplateCountChange || plan.templates.count == currentPlan.templates.count,
               plan.preservesDurableActivityTopology(
                 from: currentPlan,
@@ -672,6 +676,16 @@ extension AIService {
 }
 
 private extension WorkoutPlan {
+    var hasUniqueTemplateIDs: Bool {
+        let templateIDs = templates.map(\.id)
+        return Set(templateIDs).count == templateIDs.count
+    }
+
+    var hasUniqueBlockIDs: Bool {
+        let blockIDs = templates.flatMap { $0.blocks.map(\.id) }
+        return Set(blockIDs).count == blockIDs.count
+    }
+
     var hasUserFacingActivityIdentityForEveryBlock: Bool {
         templates.allSatisfy { template in
             template.blocks.allSatisfy { block in

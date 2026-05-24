@@ -35,9 +35,9 @@ enum AppRoute: Equatable, Codable {
             var queryItems: [URLQueryItem] = []
             if let templateID {
                 queryItems.append(URLQueryItem(name: Self.workoutTemplateIDQueryName, value: templateID.uuidString))
-            }
-            if let templateName, !templateName.isEmpty {
-                queryItems.append(URLQueryItem(name: Self.workoutTemplateQueryName, value: templateName))
+                if let templateName, !templateName.isEmpty {
+                    queryItems.append(URLQueryItem(name: Self.workoutTemplateQueryName, value: templateName))
+                }
             }
             if !queryItems.isEmpty {
                 components.queryItems = queryItems
@@ -78,7 +78,11 @@ enum AppRoute: Equatable, Codable {
             if templateIDValue?.isEmpty == false && parsedTemplateID == nil {
                 return nil
             }
-            let templateName = components?.queryItems?
+            if parsedTemplateID == nil,
+               components?.queryItems?.contains(where: { $0.name == Self.workoutTemplateQueryName }) == true {
+                return nil
+            }
+            let templateName = parsedTemplateID == nil ? nil : components?.queryItems?
                 .first(where: { $0.name == Self.workoutTemplateQueryName })?
                 .value
             self = .workout(templateID: parsedTemplateID, templateName: templateName)
@@ -114,7 +118,7 @@ enum PendingAppRouteStore {
 
         if let workoutName = defaults.string(forKey: SharedStorageKeys.LegacyLaunchIntents.startWorkout) {
             defaults.removeObject(forKey: SharedStorageKeys.LegacyLaunchIntents.startWorkout)
-            return .workout(templateID: nil, templateName: workoutName == "custom" ? nil : workoutName)
+            return workoutName == "custom" ? .workout(templateID: nil, templateName: nil) : nil
         }
 
         return nil

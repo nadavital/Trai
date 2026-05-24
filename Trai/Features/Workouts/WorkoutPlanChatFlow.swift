@@ -67,6 +67,7 @@ struct WorkoutPlanChatFlow: View {
     @State private var isTransitioning = false  // For question transition animation
     @State private var didSubmitInitialRefinementPrompt = false
     @State private var didRefineGeneratedPlan = false
+    @State private var completedRefinementMessages: [String] = []
     @State private var activeGeneratedPlanGoals: [WorkoutGoal] = []
     @State private var selectedGeneratedGoal: WorkoutGoal?
     @State private var isRefiningPlan = false
@@ -1038,7 +1039,6 @@ struct WorkoutPlanChatFlow: View {
         let messageText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !messageText.isEmpty, let currentPlan = generatedPlan, !isGenerating, !isRefiningPlan else { return }
 
-        didRefineGeneratedPlan = true
         let requestID = UUID()
         refinementRequestID = requestID
         generatedResultPresentationID = nil
@@ -1084,6 +1084,8 @@ struct WorkoutPlanChatFlow: View {
                         }
                         generatedPlan = newPlan
                         activeGeneratedPlanGoals = refreshedGoals
+                        completedRefinementMessages.append(messageText)
+                        didRefineGeneratedPlan = true
                     } else {
                         refinementRequestID = nil
                         messages.removeAll(where: isGeneratedPlanReviewMessage)
@@ -1415,10 +1417,8 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private var latestUserRefinementIntent: String? {
-        let userMessages = refinementConversationHistory
-            .filter { $0.role == .user }
+        let userMessages = completedRefinementMessages
             .suffix(4)
-            .map(\.content)
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
         guard !userMessages.isEmpty else { return nil }
