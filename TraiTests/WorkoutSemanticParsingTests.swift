@@ -526,6 +526,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
     func testChatWorkoutStartSuggestionRejectsCardsOlderThanCurrentPlanUpdate() {
         let templateID = UUID()
+        let blockID = UUID()
         let suggestion = SuggestedWorkoutEntry(
             name: "Plan Pull Day",
             workoutType: LiveWorkout.WorkoutType.strength.rawValue,
@@ -534,6 +535,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                 .init(
                     name: "Pull Up",
                     category: Exercise.Category.strength.rawValue,
+                    sourcePlanBlockID: blockID,
                     sets: 4,
                     reps: 6
                 )
@@ -548,6 +550,10 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             messageTimestamp: Date(timeIntervalSince1970: 100),
             currentPlanUpdatedAt: Date(timeIntervalSince1970: 101),
             currentTemplateIDs: [templateID]
+        ))
+        XCTAssertTrue(ChatWorkoutStartFreshness.isCurrent(
+            suggestion,
+            currentPlan: makeChatWorkoutStartFreshnessPlan(templateID: templateID, blockID: blockID)
         ))
     }
 
@@ -581,6 +587,14 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             currentPlanUpdatedAt: nil,
             currentTemplateIDs: nil
         ))
+        XCTAssertFalse(ChatWorkoutStartFreshness.isCurrent(
+            suggestion,
+            currentPlan: nil as WorkoutPlan?
+        ))
+        XCTAssertFalse(ChatWorkoutStartFreshness.isCurrent(
+            suggestion,
+            currentPlan: makeChatWorkoutStartFreshnessPlan(templateID: UUID(), blockID: UUID())
+        ))
     }
 
     func testChatWorkoutStartSuggestionAllowsUnlinkedCustomCardsThroughPlanChanges() {
@@ -607,6 +621,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             currentPlanUpdatedAt: Date(timeIntervalSince1970: 101),
             currentTemplateIDs: nil
         ))
+        XCTAssertTrue(ChatWorkoutStartFreshness.isCurrent(suggestion, currentPlan: nil))
     }
 
     func testChatWorkoutPlanSuggestionContextRejectsExternallyStaleCards() {
@@ -2642,6 +2657,38 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         let itemProperties = try XCTUnwrap(items["properties"] as? [String: Any])
         let category = try XCTUnwrap(itemProperties["category"] as? [String: Any])
         return try XCTUnwrap(category["enum"] as? [String])
+    }
+
+    private func makeChatWorkoutStartFreshnessPlan(templateID: UUID, blockID: UUID) -> WorkoutPlan {
+        WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    id: templateID,
+                    name: "Plan Pull Day",
+                    sessionType: .strength,
+                    targetMuscleGroups: ["back"],
+                    exercises: [],
+                    blocks: [
+                        WorkoutPlan.TrainingBlock(
+                            id: blockID,
+                            kind: .strength,
+                            title: "Pull Strength",
+                            detail: "Planned pulling volume",
+                            activityTypeName: "Strength",
+                            activityTags: ["Pull"],
+                            order: 0
+                        )
+                    ],
+                    estimatedDurationMinutes: 45,
+                    order: 0
+                )
+            ],
+            rationale: "Planned workout",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
     }
 
     private func blockEnum(in schema: [String: Any], field: String) throws -> [String] {

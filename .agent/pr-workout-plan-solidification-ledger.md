@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `0ede45b Fix workout plan PR review issues`
+- Latest pushed fix before current round: `b114791 Harden workout plan starts and semantic edits`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -122,6 +122,14 @@
 - Durable workout routes: fixed verified no-current-plan variant where a stale durable route could still create an unlinked custom workout, and malformed `template_id` URLs are now rejected instead of converted to generic custom routes.
 - Refinement validation: fixed verified schedule-change edge cases so intentional weekly schedule reductions can remove sessions while retained sessions keep durable template IDs; activity-semantic edits still cannot churn unrelated template IDs.
 - Validation note: second focused XCTest pass succeeded for direct edit stale guards, malformed/stale/no-plan routes, schedule reductions, and semantic-change ID preservation.
+
+### Round 2026-05-24 After `8d3e0fb`
+- AI refinement validation: fixed verified duplicate-template schedule additions by rejecting repeated durable template IDs even when weekly schedule changes are allowed.
+- Durable semantic changes: replaced the broad `changesActivitySemantics` bypass with scoped AI-produced `changedTemplateIDs` / `changedBlockIDs`, so intentional semantic edits can proceed while unrelated retained sessions still preserve block kind, role, activity name, and tags.
+- Planned workout starts: fixed verified stale chat start cards by rechecking the current saved plan/template/block IDs at accept time, not only when the card is generated or rendered.
+- Chat UI freshness: kept planned workout start cards from rendering after their source template disappears or a newer plan save makes the card stale.
+- Regression-test coverage: added focused coverage for duplicate template IDs, scoped semantic edits, unrelated retained-session mutation rejection, and discovered planned-start freshness assertions.
+- Validation note: `b114791` is pushed; focused XCTest passes succeeded for semantic refinement, schedule changes, planned-start stale-card checks, and direct accept-time freshness assertions. The first full focused run hit an XCTest runner bootstrap failure before assertions; reruns with UI tests skipped passed.
 
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
@@ -267,6 +275,10 @@
 - Result after current fixes: passed, 40 tests, 0 failures.
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest9Esc CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/AppRouteTests -only-testing:TraiTests/WorkoutTemplateServiceTests/testCreateWorkoutForIntentDoesNotNameFallbackWhenDurableIDIsStale -only-testing:TraiTests/WorkoutTemplateServiceTests/testCreateWorkoutForIntentDoesNotNameFallbackForDurableIDWhenNoPlanExists -only-testing:TraiTests/WorkoutTemplateServiceTests/testCreateWorkoutForIntentMatchesTemplateByDurableID -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsChangedTemplateIDWithoutSemanticChange -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsChangedTemplateIDWithActivitySemanticChange -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementAllowsScheduleReductionToDropRemovedTemplateIDs -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanEditSheetRejectsStaleEditingBase -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsDroppedLegacyExerciseOnlyActivitySemantics -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsDroppedExplicitStrengthMainActivityNameWithoutTags`
 - Result after latest fixes: passed, 20 tests, 0 failures.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest10 -skip-testing:TraiUITests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsDroppedDurableBlockTagsWithoutSemanticChange -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsDuplicateTemplateIDsWhenAddingSchedule -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementAllowsExplicitActivitySemanticChange -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsUnscopedRetainedActivityMutation -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementAllowsScheduleReductionToDropRemovedTemplateIDs -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsChangedTemplateIDWithActivitySemanticChange -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatWorkoutStartSuggestionRejectsCardsOlderThanCurrentPlanUpdate -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatWorkoutStartSuggestionRejectsMissingSourceTemplate -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatWorkoutStartSuggestionAllowsUnlinkedCustomCardsThroughPlanChanges`
+- Result after `b114791` fixes: passed, 9 tests, 0 failures.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest11 -skip-testing:TraiUITests -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatWorkoutStartSuggestionRejectsCardsOlderThanCurrentPlanUpdate -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatWorkoutStartSuggestionRejectsMissingSourceTemplate -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatWorkoutStartSuggestionAllowsUnlinkedCustomCardsThroughPlanChanges`
+- Result after direct planned-start freshness assertions: passed, 3 tests, 0 failures.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -333,3 +345,5 @@
 - Open normal Edit Plan from Profile/Settings/Workouts, change the saved plan elsewhere, then return and tap Save; confirm the stale-plan alert blocks the old sheet.
 - Ask Trai to reduce a generated plan from 4 days to 3 days while keeping the same focus; confirm the proposal is accepted and retained sessions keep their planned workout routing.
 - Ask Trai to add a modality to one session while leaving others alone; confirm unrelated retained sessions still preserve template/block IDs and planned starts still route correctly.
+- Ask Trai to add a new training day and confirm the saved proposal does not duplicate an existing planned session/template ID.
+- Generate a planned workout start card, replace/edit the saved plan before accepting it, then tap the old start card and confirm it is rejected as stale.
