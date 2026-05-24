@@ -848,7 +848,14 @@ struct ChatBubble: View {
             }
 
             // Show workout log suggestion card if pending
-            if message.hasPendingWorkoutLogSuggestion, let workoutLog = message.suggestedWorkoutLog {
+            if message.hasPendingWorkoutLogSuggestion,
+               let workoutLog = message.suggestedWorkoutLog,
+               !ChatWorkoutLogSuggestionContext.isStale(
+                suggestion: workoutLog,
+                messageTimestamp: message.timestamp,
+                currentPlanUpdatedAt: currentWorkoutPlanUpdatedAt,
+                currentTemplateIDs: currentWorkoutPlanTemplateIDs
+               ) {
                 SuggestedWorkoutLogCard(
                     workoutLog: workoutLog,
                     useLbs: useExerciseWeightLbs,

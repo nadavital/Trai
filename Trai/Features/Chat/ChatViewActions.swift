@@ -62,6 +62,26 @@ enum ChatWorkoutStartSuggestionContext {
     }
 }
 
+enum ChatWorkoutLogSuggestionContext {
+    static func isStale(
+        suggestion: SuggestedWorkoutLog,
+        messageTimestamp: Date,
+        currentPlanUpdatedAt: Date?,
+        currentTemplateIDs: Set<UUID>?
+    ) -> Bool {
+        guard let sourcePlanTemplateID = suggestion.sourcePlanTemplateID else {
+            return false
+        }
+        guard let currentTemplateIDs, currentTemplateIDs.contains(sourcePlanTemplateID) else {
+            return true
+        }
+        return ChatSuggestionFreshness.isStale(
+            messageTimestamp: messageTimestamp,
+            currentPlanUpdatedAt: currentPlanUpdatedAt
+        )
+    }
+}
+
 enum ChatWorkoutStartFreshness {
     static func isCurrent(_ workout: SuggestedWorkoutEntry, currentPlan: WorkoutPlan?) -> Bool {
         guard let sourcePlanTemplateID = workout.sourcePlanTemplateID else { return true }
@@ -578,6 +598,19 @@ extension ChatView {
 
 extension ChatView {
     func acceptWorkoutLogSuggestion(_ workoutLog: SuggestedWorkoutLog, for message: ChatMessage) {
+        guard !ChatWorkoutLogSuggestionContext.isStale(
+            suggestion: workoutLog,
+            messageTimestamp: message.timestamp,
+            currentPlanUpdatedAt: profile?.workoutPlanGeneratedAt,
+            currentTemplateIDs: profile?.workoutPlan.map { Set($0.templates.map(\.id)) }
+        ) else {
+            message.suggestedWorkoutLogDismissed = true
+            message.errorMessage = "This planned workout log is no longer current. Ask Trai to log the latest plan session instead."
+            try? modelContext.save()
+            HapticManager.error()
+            return
+        }
+
         // Create a LiveWorkout with proper exercise details
         guard let workoutType = LiveWorkout.WorkoutType(rawValue: workoutLog.workoutType) else {
             message.errorMessage = "This workout log needs stable activity data before it can be saved. Ask Trai to regenerate it."

@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `fdda366 Clean widget route isolation tests`
+- Latest pushed code fix before current round: `d7e34b8 Cover duplicate refinement block IDs`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -32,6 +32,7 @@
 - Normalized generated plan-adherence goals from the durable `tracksGeneratedPlanAdherence` flag instead of a fixed target-unit vocabulary.
 - Routed widget workout actions through the recommended durable template ID and disabled completed workout rows so they cannot start duplicate sessions.
 - Required widget workout actions to have a durable recommended template ID and kept the small widget from falling back to a generic custom workout route.
+- Blocked stale planned workout log suggestion cards from saving after the current workout plan changes, so generated plan-adherence stays tied to current durable template IDs.
 
 ## Fresh Review Rounds
 
@@ -200,6 +201,13 @@
 - Refinement lifecycle: fixed verified canceled/failed refinement context so only successful refinement prompts can drive regenerated saved goals.
 - Regression-test coverage: added focused coverage that widget workout actions are disabled when the payload lacks a durable recommended template ID.
 
+### Round 2026-05-24 After `d7e34b8`
+- Fresh persistence/history review pass: clean for serious issues. Profile, Settings, Workouts, onboarding, chat suggestion, chat flow, and direct edit save paths all stale-guard where needed, archive/replace through the shared history service, reconcile generated plan-adherence goals, and refresh widget snapshots after successful saves.
+- Local final audit: found one actual P2 where stale planned `log_workout` cards could remain accept-able after a plan change even though start cards were gated.
+- Chat workout-log freshness: fixed verified stale-card gap by hiding and reject-on-accepting planned workout log cards whose source template is missing or whose message predates the current plan update.
+- Generated plan-adherence safety: planned workout logs now only attach/count against the current plan when their durable `sourcePlanTemplateID` still belongs to the current plan snapshot.
+- Keyword-matching audit: no new serious semantic fallback found in current workout-plan routing/adherence/refinement paths. Remaining string checks in the audited files are enum/choice parsing, UI copy, explicit numeric parsing, or validation against structured durable plan fields rather than label-based semantic routing.
+
 ## Manual Test Queue
 - From Profile, Settings, and Workouts, open standard workout-plan setup, mutate/save a different workout plan elsewhere before tapping Save, and confirm the stale setup is blocked instead of overwriting the newer plan.
 - Run two rapid generated-plan refinements back to back and confirm only the latest result package remains, with no duplicate or stale plan/goals/save rows.
@@ -211,6 +219,7 @@
 - Try moving a durable activity block into a different template and confirm validation rejects it.
 - Reduce a mixed plan from two modalities to one day; confirm unchanged modalities are merged/preserved or the edit is rejected unless the removed template is explicitly changed.
 - Complete one generated-plan workout, then log an unrelated custom workout and confirm generated plan-adherence goals do not badge the unrelated history row.
+- Create a planned workout log card, change/refine the saved workout plan before accepting it, and confirm the old log card is hidden or rejected instead of counting toward the new plan.
 - Generate/save a plan-adherence goal with AI wording like `planned sessions`; confirm it stores the generated template IDs and progresses from planned workouts.
 - From the medium widget, tap the workout action beside `Up Next` and confirm it starts the exact recommended planned template. After completing today's workout, confirm the large widget completed row does not start a duplicate workout.
 - On a rest day with no recommendation, confirm the medium/large widget does not expose a generic start-workout action.
