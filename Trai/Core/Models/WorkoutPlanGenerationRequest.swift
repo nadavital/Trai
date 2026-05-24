@@ -116,6 +116,13 @@ struct WorkoutPlanGenerationRequest {
         includesCardio && cardioSupportConstraint != nil
     }
 
+    var requiresGenericCardioStructure: Bool {
+        guard includesCardio else { return false }
+        let selectedOnlyGenericCardio = (cardioTypes ?? []).isEmpty
+            || (cardioTypes ?? []).contains(.anyCardio)
+        return selectedOnlyGenericCardio
+    }
+
     var limitsAccessoryCardioToOneSession: Bool {
         guard let maximumPlacements = cardioSupportConstraint?.maximumPlacements else { return false }
         return maximumPlacements == 1

@@ -60,6 +60,7 @@ struct WorkoutsView: View {
     @State private var celebratedWorkoutGoal: WorkoutGoal?
     @State private var standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
     @State private var standardWorkoutPlanAIService = AIService()
+    @State private var standardWorkoutPlanSaveError: StandardWorkoutPlanSaveError?
 
     // MARK: - Sheet States
 
@@ -464,6 +465,13 @@ struct WorkoutsView: View {
                     CustomExercisesView()
                 }
                 .traiSheetBranding()
+            }
+            .alert(item: $standardWorkoutPlanSaveError) { error in
+                Alert(
+                    title: Text("Workout Plan Not Saved"),
+                    message: Text(error.message),
+                    dismissButton: .default(Text("OK"))
+                )
             }
             .sheet(isPresented: $showingMuscleRecoveryDetail) {
                 MuscleRecoveryDetailSheet(recoveryInfo: recoveryInfo)
@@ -1083,11 +1091,16 @@ struct WorkoutsView: View {
             )
         }
 
-        try? modelContext.save()
-        standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
-        showingStandardPlanSetup = false
-        HapticManager.success()
-
+        do {
+            try modelContext.save()
+            standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+            showingStandardPlanSetup = false
+            HapticManager.success()
+        } catch {
+            modelContext.rollback()
+            standardWorkoutPlanSaveError = StandardWorkoutPlanSaveError(message: error.localizedDescription)
+            HapticManager.error()
+        }
     }
 
     private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) {
@@ -1472,6 +1485,11 @@ struct WorkoutsView: View {
             try? modelContext.save()
         }
     }
+}
+
+private struct StandardWorkoutPlanSaveError: Identifiable {
+    let id = UUID()
+    let message: String
 }
 
 // MARK: - Preview

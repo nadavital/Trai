@@ -1428,12 +1428,15 @@ final class LiveWorkoutViewModel {
             set.preferredWeightUnit = preferredWeightUnit
             didChange = true
         }
+        if didChange, !set.isWarmup, !set.completed, set.hasLoggedData {
+            set.completed = true
+        }
         guard didChange else { return }
         entry.updateSet(at: index, with: set)
         if metricsImpactChanged(from: originalSet, to: set) {
             refreshCachedMetrics()
         }
-        saveDebounced(updateLiveActivity: false)
+        saveDebounced(updateLiveActivity: true)
     }
 
     func removeSet(at index: Int, from entry: LiveWorkoutEntry) {

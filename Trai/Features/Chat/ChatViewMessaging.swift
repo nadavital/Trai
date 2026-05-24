@@ -200,6 +200,7 @@ extension ChatView {
     ) {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
+        guard currentMessageTask == nil, !isLoading else { return }
 
         updateLastActivity()
         retirePendingPlanSuggestionsInCurrentSession()
@@ -327,6 +328,7 @@ extension ChatView {
         isLoading = false
         currentActivity = nil
         currentMessageTask = nil
+        checkForPendingStartupActions()
     }
 
     func handleChatResult(_ result: AIService.ChatFunctionResult, aiMessage: ChatMessage) {

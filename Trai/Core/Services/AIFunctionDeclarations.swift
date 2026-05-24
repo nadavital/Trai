@@ -509,6 +509,10 @@ enum AIFunctionDeclarations {
                         "description": "Optional placement role inside a workout, such as warmup, add-on, finish, or cooldown.",
                         "enum": AIPromptBuilder.workoutGoalActivityRoleRawValues
                     ],
+                    "tracks_plan_adherence": [
+                        "type": "boolean",
+                        "description": "True only when the goal tracks completion of the user's whole generated weekly workout plan, not a specific activity, modality, exercise, or support block."
+                    ],
                     "target_value": [
                         "type": "number",
                         "description": "Numeric target when relevant"
@@ -594,6 +598,10 @@ enum AIFunctionDeclarations {
                         "type": "string",
                         "description": "Updated placement role inside a workout; pass empty string to clear it.",
                         "enum": AIPromptBuilder.workoutGoalActivityRoleRawValues + [""]
+                    ],
+                    "tracks_plan_adherence": [
+                        "type": "boolean",
+                        "description": "Set true only when the goal tracks completion of the whole generated weekly workout plan; set false for activity-, modality-, exercise-, or support-block-specific goals."
                     ],
                     "target_value": [
                         "type": "number",
@@ -897,7 +905,8 @@ enum AIFunctionDeclarations {
                                     ],
                                     "description": "Repeatable sections for non-strength work."
                                 ]
-                            ]
+                            ],
+                            "required": ["name", "category", "activity_name"]
                         ],
                         "description": "Pre-populated strength exercises or activity items for the workout (optional)"
                     ]

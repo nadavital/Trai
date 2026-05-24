@@ -537,6 +537,7 @@ extension ChatView {
                 if let distanceMeters = exercise.distanceMeters, distanceMeters > 0 {
                     entry.plannedTarget = String(format: "%.0f m", distanceMeters)
                 }
+                exercise.activitySegments.forEach { entry.addActivitySegment($0) }
             }
             entries.append(entry)
         }
@@ -632,9 +633,6 @@ private extension SuggestedWorkoutLog.LoggedExercise {
         if !sets.isEmpty && !hasActivityMetrics {
             return .strength
         }
-        if let activityTypeName, let inferred = Exercise.Category.normalized(from: activityTypeName) {
-            return inferred.userFacingEquivalent
-        }
         if let activityTypeName,
            !activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return .custom
@@ -689,9 +687,6 @@ private extension SuggestedWorkoutEntry.SuggestedExercise {
             return resolved.userFacingEquivalent
         }
         if hasActivityMetrics {
-            if let activityTypeName, let inferred = Exercise.Category.normalized(from: activityTypeName) {
-                return inferred.userFacingEquivalent
-            }
             return fallbackWorkoutType.supportsMuscleTargets ? .custom : .cardio
         }
         if let activityTypeName,
@@ -724,6 +719,18 @@ private extension SuggestedWorkoutEntry.SuggestedExercise {
         return explicitFields.isEmpty
             ? Exercise.defaultTrackingFields(for: category)
             : Exercise.normalizedTrackingFields(explicitFields, for: category)
+    }
+
+    var activitySegments: [LiveWorkoutEntry.ActivitySegment] {
+        (segments ?? []).map {
+            LiveWorkoutEntry.ActivitySegment(
+                durationSeconds: $0.durationMinutes.map { max(0, $0) * 60 },
+                distanceMeters: $0.distanceMeters,
+                reps: $0.reps,
+                weightKg: $0.weightKg,
+                notes: $0.notes ?? ""
+            )
+        }
     }
 }
 
@@ -1152,6 +1159,8 @@ extension ChatView {
 
     /// Check for pending cross-tab startup actions that should open in chat
     func checkForPendingStartupActions() {
+        guard currentMessageTask == nil, !isLoading else { return }
+
         let trimmedPrompt = pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedPrompt.isEmpty {
             let trimmedLaunchLabel = pendingChatLaunchLabel.trimmingCharacters(in: .whitespacesAndNewlines)

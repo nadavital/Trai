@@ -440,9 +440,9 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         XCTAssertEqual(suggestion.exercisesSummary, "1 activity")
         XCTAssertEqual(suggestion.exercises.first?.name, "Basketball")
-        XCTAssertEqual(suggestion.exercises.first?.category, "sportPractice")
+        XCTAssertEqual(suggestion.exercises.first?.category, "custom")
         XCTAssertEqual(suggestion.exercises.first?.activityTypeName, "Basketball")
-        XCTAssertEqual(suggestion.exercises.first?.trackingFields, ["duration", "reps", "notes"])
+        XCTAssertEqual(suggestion.exercises.first?.trackingFields, ["duration", "notes"])
         XCTAssertEqual(suggestion.exercises.first?.sets, 0)
         XCTAssertEqual(suggestion.exercises.first?.durationMinutes, 40)
     }
@@ -522,7 +522,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertTrue(suggestion.rationale.contains("from your plan"))
     }
 
-    func testStartLiveWorkoutInfersActivityCategoryFromActivityName() async throws {
+    func testStartLiveWorkoutPreservesAIProvidedActivityCategory() async throws {
         let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
             .init(
                 name: "start_live_workout",
@@ -533,6 +533,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                     "suggested_exercises": [
                         [
                             "name": "Limit Bouldering",
+                            "category": "sportPractice",
                             "activity_name": "Bouldering",
                             "target_tags": ["Climbing", "Power"],
                             "tracking_fields": ["duration", "reps", "notes"],
@@ -556,6 +557,34 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(exercise.category, "sportPractice")
         XCTAssertEqual(exercise.sets, 0)
         XCTAssertEqual(exercise.startSummarySegments, ["Bouldering", "30 min", "2 segments", "7 attempts"])
+    }
+
+    func testStartLiveWorkoutDoesNotInferCategoryFromActivityName() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "start_live_workout",
+                arguments: [
+                    "name": "Climbing Power",
+                    "workout_type": "mixed",
+                    "suggested_exercises": [
+                        [
+                            "name": "Limit Bouldering",
+                            "activity_name": "Bouldering",
+                            "duration_minutes": 30
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutStart(let suggestion) = result,
+              let exercise = suggestion.exercises.first else {
+            return XCTFail("Expected start workout suggestion")
+        }
+
+        XCTAssertEqual(exercise.category, "custom")
+        XCTAssertEqual(exercise.activityTypeName, "Bouldering")
+        XCTAssertFalse(exercise.isStrengthStartItem)
     }
 
     func testStartLiveWorkoutUsesCustomCategoryForUnknownNamedActivity() async throws {
@@ -701,7 +730,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
     func testStartWorkoutActivitySummaryUsesActivityNameForMetricLabels() {
         let exercise = SuggestedWorkoutEntry.SuggestedExercise(
             name: "Limit Bouldering",
-            category: nil,
+            category: "sportPractice",
             activityTypeName: "Bouldering",
             targetTags: ["Climbing", "Grip power"],
             trackingFields: ["duration", "reps", "notes"],
@@ -770,7 +799,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
     func testSuggestedWorkoutLogUsesActivityNameForMetricLabels() {
         let padel = SuggestedWorkoutLog.LoggedExercise(
             name: "Padel Drills",
-            category: nil,
+            category: "sportPractice",
             activityTypeName: "Padel",
             targetTags: ["Footwork"],
             trackingFields: ["duration", "reps", "notes"],
@@ -1160,6 +1189,38 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(set.weightKg, 80)
     }
 
+    func testLogWorkoutCoercesDoubleDurationAndReps() async {
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
+        let result = await executor.execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "type": "strength",
+                    "name": "Upper lift",
+                    "duration_minutes": 35.0,
+                    "exercises": [
+                        [
+                            "name": "Bench Press",
+                            "category": "strength",
+                            "sets": [
+                                ["reps": 12.0, "weight_kg": 80.0]
+                            ]
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutLog(let workoutLog) = result,
+              let exercise = workoutLog.exercises.first,
+              let set = exercise.sets.first else {
+            return XCTFail("Expected workout log suggestion")
+        }
+
+        XCTAssertEqual(workoutLog.durationMinutes, 35)
+        XCTAssertEqual(set.reps, 12)
+    }
+
     func testLogWorkoutStoresNormalizedActivityCategoryAndTrackingFields() async {
         let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
         let result = await executor.execute(
@@ -1171,7 +1232,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                     "exercises": [
                         [
                             "name": "Padel Drills",
-                            "category": "padel drills",
+                            "category": "sportPractice",
                             "activity_name": "Padel",
                             "target_tags": ["Footwork", "Reaction"],
                             "tracking_fields": ["duration", "calories", "reps", "notes"],

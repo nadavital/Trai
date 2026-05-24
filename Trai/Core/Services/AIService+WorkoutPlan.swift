@@ -240,6 +240,12 @@ extension AIService {
             throw AIServiceError.parsingError
         }
 
+        if request.requiresGenericCardioStructure,
+           !plan.hasCardioOrConditioningStructure {
+            emitValidationLog("Workout plan dropped the requested cardio training style.")
+            throw AIServiceError.parsingError
+        }
+
         let maximumSupportPlacements = request.cardioSupportConstraint?.maximumPlacements
             ?? plan.planIntent?.supportiveCardioConstraint?.maximumPlacements
         if maximumSupportPlacements == 1 {
@@ -322,6 +328,7 @@ extension AIService {
         - For new users or thin context, avoid goals that sound like performance progression unless Trai has a baseline to compare against.
         - Do not create vague progression goals unless the structured target and successCriteria make the exact achievement verifiable from app data.
         - Broad goals are allowed, but the intent must be accurate: goal title, target fields, linkedWorkoutType/linkedActivityName/linkedActivityTags/linkedActivityKindRaw/linkedActivityRoleRaw, and successCriteria should all describe the same behavior Trai can track.
+        - Set tracksGeneratedPlanAdherence true only when the goal tracks completion of the whole generated weekly plan structure, not a specific activity family, support block, exercise, or modality.
         - If the plan includes a personalized constraint, habit, or recurring support block, prefer a goal for that specific plan behavior over generic progression.
         - Every goal must include successCriteria: one concise sentence that says how Trai and the person using the app will know the goal is achieved.
         - Write rationale, successCriteria, and notes directly to the person using the app with "you" and "your"; do not say "the user".
@@ -563,6 +570,11 @@ extension AIService {
             return nil
         }
 
+        guard plan.preservesDurableActivitySemantics(from: currentPlan) else {
+            log("Ignoring workout plan refinement that dropped durable activity semantics from the current plan.", type: .error)
+            return nil
+        }
+
         if allowsTemplateCountChange {
             return plan.daysPerWeek == plan.templates.count
                 ? plan
@@ -586,7 +598,8 @@ extension AIService {
               plan.modalityProgression != nil,
               plan.templates.allSatisfy({ !$0.blocks.isEmpty }),
               plan.hasUserFacingActivityIdentityForEveryBlock,
-              allowsTemplateCountChange || plan.templates.count == currentPlan.templates.count else {
+              allowsTemplateCountChange || plan.templates.count == currentPlan.templates.count,
+              plan.preservesDurableActivitySemantics(from: currentPlan) else {
             return nil
         }
 
@@ -609,6 +622,48 @@ private extension WorkoutPlan {
         templates.allSatisfy { template in
             template.blocks.allSatisfy { block in
                 block.activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            }
+        }
+    }
+
+    var hasCardioOrConditioningStructure: Bool {
+        templates.contains { template in
+            template.sessionType == .cardio
+                || template.sessionType == .hiit
+                || template.blocks.contains { block in
+                    block.kind == .cardio || block.kind == .conditioning
+                }
+        }
+    }
+
+    func preservesDurableActivitySemantics(from currentPlan: WorkoutPlan) -> Bool {
+        if currentPlan.planIntent?.supportiveCardioConstraint != nil,
+           planIntent?.supportiveCardioConstraint == nil {
+            return false
+        }
+
+        let currentSupportBlockCount = currentPlan.templates.reduce(0) { $0 + $1.cardioSupportBlockCount }
+        if currentSupportBlockCount > 0 {
+            let nextSupportBlockCount = templates.reduce(0) { $0 + $1.cardioSupportBlockCount }
+            guard nextSupportBlockCount >= currentSupportBlockCount else { return false }
+        }
+
+        let currentGroups = currentPlan.requiredDurableActivityIdentityGroups
+        guard !currentGroups.isEmpty else { return true }
+        return currentGroups.allSatisfy { containsVisibleActivityIdentity(matching: $0) }
+    }
+
+    var requiredDurableActivityIdentityGroups: [[String]] {
+        templates.flatMap { template in
+            template.blocks.compactMap { block in
+                let values = ([block.activityTypeName].compactMap { $0 } + block.activityTags + block.exercises.map(\.exerciseName))
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                guard !values.isEmpty else { return nil }
+                guard block.kind != .strength || block.role != .main || !block.activityTags.isEmpty else {
+                    return nil
+                }
+                return values
             }
         }
     }

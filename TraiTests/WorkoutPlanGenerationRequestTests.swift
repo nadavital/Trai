@@ -88,7 +88,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
     }
 
     @MainActor
-    func testWorkoutPlanValidationDoesNotInferOneSupportBlockFromOnlyWording() {
+    func testWorkoutPlanValidationRequiresGenericCardioStructureWhenCardioSelected() {
         let request = makeRequest(
             workoutType: .mixed,
             selectedWorkoutTypes: [.strength, .cardio],
@@ -112,7 +112,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         )
 
         XCTAssertFalse(request.limitsAccessoryCardioToOneSession)
-        XCTAssertNoThrow(try AIService.validateGeneratedWorkoutPlanForTesting(strengthOnlyPlan, request: request))
+        XCTAssertThrowsError(try AIService.validateGeneratedWorkoutPlanForTesting(strengthOnlyPlan, request: request))
     }
 
     func testDedicatedCardioSignalOverridesAccessoryCardioDirective() {
@@ -671,7 +671,8 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             successCriteria: "You complete all three planned sessions each week.",
             notes: nil,
             targetDateISO8601: nil,
-            checkInCadenceDays: nil
+            checkInCadenceDays: nil,
+            tracksGeneratedPlanAdherence: true
         )
 
         let validated = WorkoutGoalSuggestion.validatedUnique([planAdherence])
@@ -1084,6 +1085,41 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         )
 
         XCTAssertEqual(request.missingVisibleActivityIdentityDescriptions(in: genericStrengthPlan), ["Climbing"])
+    }
+
+    @MainActor
+    func testWorkoutPlanRefinementRejectsDroppedActivitySemantics() {
+        let currentPlan = makePlan(
+            templateName: "Climbing Skill",
+            sessionType: .mixed,
+            focusAreas: ["Climbing"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Skill work",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing"],
+                    order: 0
+                )
+            ]
+        )
+        let genericPlan = makePlan(
+            templateName: "Strength",
+            sessionType: .strength,
+            focusAreas: ["Strength"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Generic lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertNil(AIService.validateRefinedWorkoutPlanForTesting(genericPlan, currentPlan: currentPlan))
     }
 
     private func makeGoalSuggestion(

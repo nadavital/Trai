@@ -26,6 +26,7 @@ final class WorkoutGoal {
     var targetDate: Date?
     var checkInCadenceDays: Int?
     var baselineValue: Double?
+    var tracksGeneratedPlanAdherence: Bool = false
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var completedAt: Date?
@@ -51,7 +52,8 @@ final class WorkoutGoal {
         notes: String = "",
         targetDate: Date? = nil,
         checkInCadenceDays: Int? = nil,
-        baselineValue: Double? = nil
+        baselineValue: Double? = nil,
+        tracksGeneratedPlanAdherence: Bool = false
     ) {
         self.title = title
         self.goalKindRaw = goalKind.rawValue
@@ -70,6 +72,7 @@ final class WorkoutGoal {
         self.targetDate = targetDate
         self.checkInCadenceDays = checkInCadenceDays
         self.baselineValue = baselineValue
+        self.tracksGeneratedPlanAdherence = tracksGeneratedPlanAdherence
     }
 }
 
@@ -301,7 +304,8 @@ extension WorkoutGoal {
             trimmedActivityName?.goalNormalizedKey ?? "",
             linkedActivityTags.map(\.goalNormalizedKey).filter { !$0.isEmpty }.sorted().joined(separator: ","),
             linkedActivityKindRaw?.goalNormalizedKey ?? "",
-            linkedActivityRoleRaw?.goalNormalizedKey ?? ""
+            linkedActivityRoleRaw?.goalNormalizedKey ?? "",
+            tracksGeneratedPlanAdherence ? "planAdherence" : ""
         ]
 
         let targetParts: [String] = [
@@ -342,8 +346,12 @@ extension WorkoutGoal {
             return false
         }
 
+        guard tracksGeneratedPlanAdherence else {
+            return false
+        }
+
         let normalizedUnit = targetUnit.goalNormalizedKey
-        guard normalizedUnit.contains("session") || normalizedUnit.contains("workout") else {
+        guard Self.planAdherenceTargetUnits.contains(normalizedUnit) else {
             return false
         }
 
@@ -360,19 +368,15 @@ extension WorkoutGoal {
             return false
         }
 
-        let normalizedText = [
-            trimmedTitle,
-            trimmedSuccessCriteria,
-            trimmedNotes
-        ]
-            .joined(separator: " ")
-            .goalNormalizedKey
-
-        return normalizedText.contains("plan")
-            || normalizedText.contains("planned")
-            || normalizedText.contains("weekly-session")
-            || normalizedText.contains("weekly-workout")
+        return true
     }
+
+    private static let planAdherenceTargetUnits: Set<String> = [
+        "session",
+        "sessions",
+        "workout",
+        "workouts"
+    ]
 
     var hasValidTrackingCriteria: Bool {
         guard !trimmedSuccessCriteria.isEmpty else { return false }
@@ -425,10 +429,6 @@ extension WorkoutGoal {
            let linkedActivityKind,
            Self.matches(workout: workout, activityKind: linkedActivityKind) {
             return true
-        }
-
-        if let linkedWorkoutType {
-            return linkedWorkoutType == workout.type
         }
 
         return false
@@ -595,4 +595,5 @@ extension String {
             .filter { CharacterSet.alphanumerics.contains($0) }
         return String(String.UnicodeScalarView(scalars))
     }
+
 }

@@ -611,15 +611,11 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
         }
 
         private var normalizedCategoryKey: String? {
-            Self.normalizedCategoryKey(category) ?? Self.normalizedCategoryKey(activityTypeName)
+            Self.normalizedCategoryKey(category)
         }
 
         var displayCategory: Exercise.Category? {
             if let category = Exercise.Category.normalized(from: category)?.userFacingEquivalent {
-                return category
-            }
-            if let activityTypeName,
-               let category = Exercise.Category.normalized(from: activityTypeName)?.userFacingEquivalent {
                 return category
             }
             return nil
@@ -893,15 +889,11 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
         }
 
         private var normalizedCategoryKey: String? {
-            Self.normalizedCategoryKey(category) ?? Self.normalizedCategoryKey(activityTypeName)
+            Self.normalizedCategoryKey(category)
         }
 
         var displayCategory: Exercise.Category? {
             if let category = Exercise.Category.normalized(from: category)?.userFacingEquivalent {
-                return category
-            }
-            if let activityTypeName,
-               let category = Exercise.Category.normalized(from: activityTypeName)?.userFacingEquivalent {
                 return category
             }
             return nil

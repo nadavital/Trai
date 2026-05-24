@@ -389,6 +389,7 @@ extension AIFunctionExecutor {
         let successCriteria = (args["success_criteria"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let targetDate = parseDate(args["target_date"] as? String)
         let checkInCadenceDays = numericInt(from: args["check_in_cadence_days"])
+        let tracksPlanAdherence = args["tracks_plan_adherence"] as? Bool == true
 
         if let error = workoutGoalValidationError(
             goalKind: goalKind,
@@ -419,7 +420,8 @@ extension AIFunctionExecutor {
             successCriteria: successCriteria,
             notes: notes,
             targetDate: targetDate,
-            checkInCadenceDays: checkInCadenceDays
+            checkInCadenceDays: checkInCadenceDays,
+            tracksGeneratedPlanAdherence: tracksPlanAdherence
         )
 
         modelContext.insert(goal)
@@ -471,6 +473,7 @@ extension AIFunctionExecutor {
         var targetDate = goal.targetDate
         var checkInCadenceDays = goal.checkInCadenceDays
         var notes = goal.trimmedNotes
+        var tracksPlanAdherence = goal.tracksGeneratedPlanAdherence
 
         if let rawTitle = args["title"] as? String {
             let trimmed = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -555,6 +558,10 @@ extension AIFunctionExecutor {
             notes = rawNotes.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
+        if let rawTracksPlanAdherence = args["tracks_plan_adherence"] as? Bool {
+            tracksPlanAdherence = rawTracksPlanAdherence
+        }
+
         if let error = workoutGoalValidationError(
             goalKind: goalKind,
             targetValue: targetValue,
@@ -586,6 +593,7 @@ extension AIFunctionExecutor {
         goal.targetDate = targetDate
         goal.checkInCadenceDays = checkInCadenceDays
         goal.notes = notes
+        goal.tracksGeneratedPlanAdherence = tracksPlanAdherence
         goal.updatedAt = Date()
         try? modelContext.save()
         return .dataResponse(FunctionResult(
@@ -608,6 +616,7 @@ extension AIFunctionExecutor {
             "activity_tags": goal.linkedActivityTags,
             "activity_kind": goal.linkedActivityKind?.rawValue ?? "",
             "activity_role": goal.linkedActivityRole?.rawValue ?? "",
+            "tracks_plan_adherence": goal.tracksGeneratedPlanAdherence,
             "target_value": goal.targetValue as Any,
             "target_unit": goal.targetUnit,
             "period_unit": goal.periodUnit?.rawValue ?? "",
@@ -891,7 +900,7 @@ extension AIFunctionExecutor {
         let activityTags = stringArray(from: args["activity_tags"])
 
         let workoutName = args["name"] as? String  // Trai-generated name
-        let durationMinutes = args["duration_minutes"] as? Int
+        let durationMinutes = numericInt(from: args["duration_minutes"])
         let notes = args["notes"] as? String
 
         // Parse exercises with per-set data
@@ -919,7 +928,7 @@ extension AIFunctionExecutor {
                 // New format: sets is an array of {reps, weight_kg}
                 if let setsArray = exerciseData["sets"] as? [[String: Any]] {
                     for setData in setsArray {
-                        let reps = setData["reps"] as? Int ?? 10
+                        let reps = numericInt(from: setData["reps"]) ?? 10
                         let weight = numericDouble(from: setData["weight_kg"])
                         sets.append(SuggestedWorkoutLog.LoggedExercise.SetData(
                             reps: reps,
@@ -928,8 +937,8 @@ extension AIFunctionExecutor {
                     }
                 }
                 // Legacy format: sets/reps as integers
-                else if let setCount = exerciseData["sets"] as? Int {
-                    let reps = exerciseData["reps"] as? Int ?? 10
+                else if let setCount = numericInt(from: exerciseData["sets"]) {
+                    let reps = numericInt(from: exerciseData["reps"]) ?? 10
                     let weight = numericDouble(from: exerciseData["weight_kg"])
                     for _ in 0..<setCount {
                         sets.append(SuggestedWorkoutLog.LoggedExercise.SetData(
@@ -947,7 +956,6 @@ extension AIFunctionExecutor {
                     set.reps > 0 || (set.weightKg ?? 0) > 0
                 }
                 let resolvedCategory = Exercise.Category.normalized(from: category)?.userFacingEquivalent
-                    ?? exerciseActivityName.flatMap { Exercise.Category.normalized(from: $0)?.userFacingEquivalent }
                     ?? (!sets.isEmpty && !hasActivityMetrics ? .strength : nil)
                 let normalizedTrackingFields = resolvedCategory.map { category in
                     Exercise.normalizedTrackingFields(

@@ -403,6 +403,11 @@ extension AIPromptBuilder {
                     "enum": workoutGoalActivityRoleRawValues,
                     "nullable": true
                 ],
+                "tracksGeneratedPlanAdherence": [
+                    "type": "boolean",
+                    "nullable": true,
+                    "description": "True only when this goal tracks completion of the whole generated weekly plan structure rather than a specific activity, modality, exercise, or support block."
+                ],
                 "targetValue": [
                     "type": "number",
                     "nullable": true
@@ -436,7 +441,7 @@ extension AIPromptBuilder {
                     "nullable": true
                 ]
             ],
-            "required": ["title", "rationale", "goalKindRaw", "targetValue", "targetUnit", "periodUnitRaw", "periodCount", "successCriteria"]
+            "required": ["title", "rationale", "goalKindRaw", "tracksGeneratedPlanAdherence", "targetValue", "targetUnit", "periodUnitRaw", "periodCount", "successCriteria"]
         ]
     }
 

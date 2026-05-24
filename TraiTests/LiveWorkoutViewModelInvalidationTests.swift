@@ -477,6 +477,38 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         )
     }
 
+    func testMixedLiveActivityProgressCountsEditedStrengthSets() {
+        let workout = LiveWorkout(name: "Strength + Cardio", workoutType: .mixed)
+
+        let strengthEntry = LiveWorkoutEntry(exerciseName: "Back Squat", orderIndex: 0)
+        strengthEntry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: .zero, completed: false))
+
+        let cardioEntry = LiveWorkoutEntry(
+            exerciseName: "Easy Run",
+            orderIndex: 1,
+            exerciseType: "cardio"
+        )
+        cardioEntry.activityTypeName = "Running"
+        cardioEntry.plannedDurationSeconds = 600
+
+        workout.entries = [strengthEntry, cardioEntry]
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+        viewModel.updateSet(at: 0, in: strengthEntry, reps: 9)
+
+        XCTAssertTrue(strengthEntry.sets.first?.completed == true)
+        XCTAssertEqual(
+            viewModel.liveActivityProgressSummary,
+            LiveWorkoutViewModel.LiveActivityProgressSummary(
+                completed: 1,
+                total: 2,
+                label: "items",
+                supportsSetShortcut: false
+            )
+        )
+    }
+
     func testMixedWorkoutHistorySummarySeparatesExercisesAndActivities() {
         let workout = LiveWorkout(name: "Strength + Climb", workoutType: .mixed)
         workout.startedAt = Date(timeIntervalSince1970: 1_000)
@@ -827,6 +859,28 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(insight?.progressFraction, 1)
     }
 
+    func testActivityScopedGoalDoesNotMatchOnlyByBroadWorkoutType() {
+        let workout = LiveWorkout(name: "Plain Mixed Workout", workoutType: .mixed)
+        workout.completedAt = Date()
+        let entry = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)
+        entry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: .zero, completed: true))
+        workout.entries = [entry]
+
+        let goal = WorkoutGoal(
+            title: "Climb once this week",
+            goalKind: .frequency,
+            linkedWorkoutType: .mixed,
+            linkedActivityTags: ["Climbing"],
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You log one climbing activity this week."
+        )
+
+        XCTAssertFalse(goal.matches(workout: workout))
+    }
+
     func testActivityScopedGoalCanProgressInsideMixedWorkoutWithDifferentBroadType() {
         let workout = LiveWorkout(name: "Strength + Climbing", workoutType: .mixed)
         workout.completedAt = Date()
@@ -972,7 +1026,8 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
             targetUnit: "sessions",
             periodUnit: .week,
             periodCount: 1,
-            successCriteria: "You complete 3 planned workouts in a week."
+            successCriteria: "You complete 3 planned workouts in a week.",
+            tracksGeneratedPlanAdherence: true
         )
         goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
 
@@ -1045,7 +1100,8 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
             targetUnit: "sessions",
             periodUnit: .week,
             periodCount: 1,
-            successCriteria: "You complete all 3 planned sessions in at least 4 of the next 5 weeks."
+            successCriteria: "You complete all 3 planned sessions in at least 4 of the next 5 weeks.",
+            tracksGeneratedPlanAdherence: true
         )
         goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
 
@@ -1069,6 +1125,43 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
 
         XCTAssertEqual(insight?.currentValueText, "1")
         XCTAssertEqual(insight?.progressFraction ?? 0, 1.0 / 3.0, accuracy: 0.001)
+    }
+
+    func testPlankGoalDoesNotNormalizeAsPlanAdherenceGoal() {
+        let plan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 3,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Core A",
+                    sessionType: .strength,
+                    focusAreas: ["Core"],
+                    targetMuscleGroups: ["abs"],
+                    exercises: [],
+                    estimatedDurationMinutes: 30,
+                    order: 0
+                )
+            ],
+            rationale: "Core work.",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        let goal = WorkoutGoal(
+            title: "Complete 3 plank sessions",
+            goalKind: .frequency,
+            linkedWorkoutType: .strength,
+            linkedActivityName: "Plank",
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete three plank sessions each week."
+        )
+        goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+
+        XCTAssertEqual(goal.linkedWorkoutType, .strength)
+        XCTAssertEqual(goal.trimmedActivityName, "Plank")
     }
 
     func testActivityNameGoalCanMatchBroaderEntryTargetTag() {
@@ -1596,7 +1689,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         viewModel.updateActivityTypeTargets(["Padel"])
 
         XCTAssertEqual(viewModel.workout.focusAreas, ["cardio", "Padel"])
-        XCTAssertEqual(viewModel.targetActivityCategories, [.cardio, .sportPractice])
+        XCTAssertEqual(viewModel.targetActivityCategories, [.cardio])
         XCTAssertEqual(viewModel.targetActivityTypes, ["Padel"])
     }
 
@@ -1610,7 +1703,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         viewModel.updateActivityTypeTargets(["Climbing"])
 
         XCTAssertEqual(viewModel.workout.focusAreas, ["Climbing"])
-        XCTAssertEqual(viewModel.targetActivityCategories, [.sportPractice])
+        XCTAssertEqual(viewModel.targetActivityCategories, [])
         XCTAssertEqual(viewModel.targetActivityTypes, ["Climbing"])
     }
 
@@ -1625,7 +1718,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         viewModel.updateActivityTargets([.cardio])
 
         XCTAssertEqual(viewModel.workout.focusAreas, ["Padel", "Cardio"])
-        XCTAssertEqual(viewModel.targetActivityCategories, [.cardio, .sportPractice])
+        XCTAssertEqual(viewModel.targetActivityCategories, [.cardio])
         XCTAssertEqual(viewModel.targetActivityTypes, ["Padel"])
     }
 

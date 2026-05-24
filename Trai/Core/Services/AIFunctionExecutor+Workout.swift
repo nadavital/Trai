@@ -29,13 +29,14 @@ extension AIFunctionExecutor {
 
         // Get workout preferences from args
         let workoutTypeString = args["workout_type"] as? String
-        let workoutType = LiveWorkout.WorkoutType.normalized(from: workoutTypeString) ?? .strength
-        let durationMinutes = args["duration_minutes"] as? Int ?? 45
         let requestedActivityFocuses = stringArray(from: args["activity_focuses"])
         let targetMuscleStrings = args["target_muscle_groups"] as? [String] ?? []
         let hasExplicitWorkoutType = workoutTypeString?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty == false
+        let workoutType = LiveWorkout.WorkoutType.normalized(from: workoutTypeString)
+            ?? (requestedActivityFocuses.isEmpty ? .strength : .custom)
+        let durationMinutes = numericInt(from: args["duration_minutes"]) ?? 45
 
         if !hasExplicitWorkoutType,
            requestedActivityFocuses.isEmpty,
@@ -333,8 +334,7 @@ extension AIFunctionExecutor {
         workoutType: LiveWorkout.WorkoutType,
         durationMinutes: Int
     ) -> SuggestedWorkoutEntry.SuggestedExercise {
-        let category = Exercise.Category.normalized(from: focus)?.userFacingEquivalent
-            ?? defaultExerciseCategory(for: workoutType)
+        let category = defaultExerciseCategory(for: workoutType)
         let activityName = Exercise.defaultActivityTypeName(for: focus, category: category)
         let targetTags = [focus, activityName]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -580,7 +580,6 @@ extension AIFunctionExecutor {
                 let targetTags = stringArray(from: exerciseData["target_tags"])
                 let trackingFields = stringArray(from: exerciseData["tracking_fields"])
                 let resolvedCategory = Exercise.Category.normalized(from: category)?.userFacingEquivalent
-                    ?? activityTypeName.flatMap { Exercise.Category.normalized(from: $0)?.userFacingEquivalent }
                     ?? activityTypeName.map { _ in Exercise.Category.custom }
                     ?? (workoutType.supportsMuscleTargets ? .strength : .cardio)
                 let normalizedTrackingFields = Exercise.normalizedTrackingFields(
@@ -637,7 +636,7 @@ extension AIFunctionExecutor {
             targetMuscleGroups: muscleStrings,
             activityFocuses: activityFocuses,
             exercises: exercises,
-            durationMinutes: args["duration_minutes"] as? Int ?? 45,
+            durationMinutes: numericInt(from: args["duration_minutes"]) ?? 45,
             rationale: rationale
         )
 

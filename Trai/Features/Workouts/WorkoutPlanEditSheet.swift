@@ -11,13 +11,14 @@ import SwiftData
 struct WorkoutPlanEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.appTabSelection) private var appTabSelection
+    @AppStorage("pendingWorkoutPlanSetupRequest") private var pendingWorkoutPlanSetupRequest = false
 
     @Query private var profiles: [UserProfile]
     private var userProfile: UserProfile? { profiles.first }
 
     let currentPlan: WorkoutPlan
 
-    @State private var showingFullSetup = false
     @State private var showingDayEditor = false
     @State private var editingTemplateID: UUID?
     @State private var editorDayName = ""
@@ -68,10 +69,6 @@ struct WorkoutPlanEditSheet: View {
                     .tint(.accentColor)
                 }
             }
-        }
-        .fullScreenCover(isPresented: $showingFullSetup) {
-            WorkoutPlanChatFlow()
-                .traiSheetBranding()
         }
         .alert(item: $saveError) { error in
             Alert(
@@ -259,7 +256,9 @@ struct WorkoutPlanEditSheet: View {
     private var quickActionsSection: some View {
         Section {
             Button {
-                showingFullSetup = true
+                dismiss()
+                pendingWorkoutPlanSetupRequest = true
+                appTabSelection.wrappedValue = .workouts
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "arrow.counterclockwise")

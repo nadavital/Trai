@@ -22,6 +22,7 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
     let notes: String?
     let targetDateISO8601: String?
     let checkInCadenceDays: Int?
+    var tracksGeneratedPlanAdherence: Bool? = nil
 
     var id: String {
         [
@@ -31,7 +32,8 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
             linkedActivityName ?? "",
             linkedActivityTags?.joined(separator: ",") ?? "",
             linkedActivityKindRaw ?? "",
-            linkedActivityRoleRaw ?? ""
+            linkedActivityRoleRaw ?? "",
+            tracksGeneratedPlanAdherence == true ? "planAdherence" : ""
         ].joined(separator: "|")
     }
 
@@ -76,7 +78,8 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
             successCriteria: successCriteria?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             notes: notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? rationale,
             targetDate: targetDate,
-            checkInCadenceDays: checkInCadenceDays
+            checkInCadenceDays: checkInCadenceDays,
+            tracksGeneratedPlanAdherence: tracksGeneratedPlanAdherence == true
         )
     }
 }
@@ -450,6 +453,7 @@ extension AIService {
             - Weight/load goals require a known current baseline and should progress from that baseline.
             - Do not create vague progression goals unless the structured target and successCriteria make the exact achievement verifiable from app data.
             - Broad goals are allowed, but the intent must be accurate: title, target fields, linkedWorkoutType/linkedActivityName/linkedActivityTags/linkedActivityKindRaw/linkedActivityRoleRaw, and successCriteria should all describe the same behavior Trai can track.
+            - Set tracksGeneratedPlanAdherence true only when the goal tracks completion of the whole generated weekly plan structure, not a specific activity family, support block, exercise, or modality.
             - If the current plan includes a personalized constraint, habit, or recurring support block, prefer a goal for that specific plan behavior over generic progression.
             - For a brand-new workout plan with little history, use goals that establish the plan: weekly structure adherence, named-day/session-type completion across several weeks, requested recurring habits, check-in cadence, or logging enough sessions for Trai to personalize the next revision.
             - Every frequency, duration, distance, count, or weight goal must have a targetValue greater than 0 and a clear targetUnit.
@@ -556,7 +560,8 @@ extension WorkoutGoalSuggestion {
             linkedActivityName?.goalNormalizedKey ?? "",
             linkedActivityTags?.map(\.goalNormalizedKey).sorted().joined(separator: ",") ?? "",
             linkedActivityKindRaw ?? "",
-            linkedActivityRoleRaw ?? ""
+            linkedActivityRoleRaw ?? "",
+            tracksGeneratedPlanAdherence == true ? "planAdherence" : ""
         ].joined(separator: "|")
     }
 
@@ -605,6 +610,10 @@ extension WorkoutGoalSuggestion {
     }
 
     private var hasTrackableScope: Bool {
+        if tracksGeneratedPlanAdherence == true {
+            return true
+        }
+
         if linkedWorkoutType != nil {
             return true
         }
@@ -624,23 +633,7 @@ extension WorkoutGoalSuggestion {
         if !activityTags.isEmpty {
             return true
         }
-
-        return isUnscopedPlanAdherenceFrequencyGoal
-    }
-
-    private var isUnscopedPlanAdherenceFrequencyGoal: Bool {
-        guard goalKind == .frequency,
-              let targetValue,
-              targetValue > 0,
-              let targetUnit,
-              periodUnit != nil,
-              let periodCount,
-              periodCount == 1 else {
-            return false
-        }
-
-        let normalizedUnit = targetUnit.goalNormalizedKey
-        return normalizedUnit.contains("session") || normalizedUnit.contains("workout")
+        return false
     }
 
     private var periodTrackingGoalKinds: Set<WorkoutGoal.GoalKind> {
