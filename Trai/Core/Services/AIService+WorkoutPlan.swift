@@ -707,15 +707,33 @@ private extension WorkoutPlan {
         changedTemplateIDs: Set<UUID>,
         changedBlockIDs: Set<UUID>
     ) -> Bool {
-        if currentPlan.planIntent?.supportiveCardioConstraint != nil,
+        let supportChangeIsScoped = currentPlan.templates.contains { currentTemplate in
+            currentTemplate.hasScopedSupportChange(
+                changedTemplateIDs: changedTemplateIDs,
+                changedBlockIDs: changedBlockIDs
+            )
+        }
+        if !supportChangeIsScoped,
+           currentPlan.planIntent?.supportiveCardioConstraint != nil,
            planIntent?.supportiveCardioConstraint == nil {
             return false
         }
 
-        let currentSupportBlockCount = currentPlan.templates.reduce(0) { $0 + $1.cardioSupportBlockCount }
-        if currentSupportBlockCount > 0 {
-            let nextSupportBlockCount = templates.reduce(0) { $0 + $1.cardioSupportBlockCount }
-            guard nextSupportBlockCount >= currentSupportBlockCount else { return false }
+        let unchangedSupportTemplates = currentPlan.templates.filter { currentTemplate in
+            trainingTemplate(matching: currentTemplate.id) != nil &&
+                !changedTemplateIDs.contains(currentTemplate.id)
+        }
+        for currentTemplate in unchangedSupportTemplates {
+            let supportBlockIDsToPreserve = Set(currentTemplate.displayBlocks
+                .filter(\.isCardioSupportBlock)
+                .map(\.id))
+                .subtracting(changedBlockIDs)
+            guard !supportBlockIDsToPreserve.isEmpty else { continue }
+            guard let nextTemplate = trainingTemplate(matching: currentTemplate.id) else { return false }
+            let nextSupportBlockIDs = Set(nextTemplate.displayBlocks
+                .filter(\.isCardioSupportBlock)
+                .map(\.id))
+            guard supportBlockIDsToPreserve.isSubset(of: nextSupportBlockIDs) else { return false }
         }
 
         let currentTemplatesToPreserve = currentPlan.templates.filter { currentTemplate in
@@ -723,23 +741,25 @@ private extension WorkoutPlan {
                 !changedTemplateIDs.contains(currentTemplate.id)
         }
 
-        let currentBlocks = currentTemplatesToPreserve
-            .flatMap(\.blocks)
-            .filter { $0.hasDurableActivitySemanticsToPreserve && !changedBlockIDs.contains($0.id) }
-        if !currentBlocks.isEmpty {
-            return currentBlocks.allSatisfy { currentBlock in
-                guard let nextBlock = trainingBlock(matching: currentBlock.id) else {
-                    return false
+        return currentTemplatesToPreserve.allSatisfy { currentTemplate in
+            let currentBlocks = currentTemplate.blocks
+                .filter { $0.hasDurableActivitySemanticsToPreserve && !changedBlockIDs.contains($0.id) }
+            if !currentBlocks.isEmpty {
+                return currentBlocks.allSatisfy { currentBlock in
+                    guard let nextBlock = trainingBlock(matching: currentBlock.id) else {
+                        return false
+                    }
+                    return nextBlock.preservesDurableActivitySemantics(from: currentBlock)
                 }
-                return nextBlock.preservesDurableActivitySemantics(from: currentBlock)
             }
-        }
 
-        let currentGroups = currentTemplatesToPreserve.requiredDurableActivityIdentityGroups(
-            excludingBlockIDs: changedBlockIDs
-        )
-        guard !currentGroups.isEmpty else { return true }
-        return currentGroups.allSatisfy { containsVisibleActivityIdentity(matching: $0) }
+            let currentGroups = currentTemplate.requiredDurableActivityIdentityGroups(
+                excludingBlockIDs: changedBlockIDs
+            )
+            guard !currentGroups.isEmpty else { return true }
+            guard let nextTemplate = trainingTemplate(matching: currentTemplate.id) else { return false }
+            return currentGroups.allSatisfy { nextTemplate.containsVisibleActivityIdentity(matching: $0) }
+        }
     }
 
     var requiredDurableActivityBlocks: [WorkoutPlan.TrainingBlock] {
@@ -766,36 +786,93 @@ private extension Array where Element == WorkoutPlan.WorkoutTemplate {
 
     func requiredDurableActivityIdentityGroups(excludingBlockIDs blockIDs: Set<UUID>) -> [[String]] {
         flatMap { template in
-            let identityBlocks = template.blocks.isEmpty ? template.displayBlocks : template.blocks
-            let blockGroups: [[String]] = identityBlocks
-                .filter { !blockIDs.contains($0.id) }
-                .compactMap { block in
-                    let values = ([block.activityTypeName].compactMap { $0 } + block.activityTags + block.exercises.map(\.exerciseName))
-                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
-                    guard !values.isEmpty else { return nil }
-                    return values
-                }
-
-            if !blockGroups.isEmpty {
-                return blockGroups
-            }
-
-            guard template.blocks.isEmpty,
-                  template.exercises.isEmpty,
-                  !template.sessionType.supportsMuscleTargets || template.targetMuscleGroups.isEmpty else {
-                return []
-            }
-
-            let fallbackValues = template.focusAreas
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            return fallbackValues.isEmpty ? [] : [fallbackValues]
+            template.requiredDurableActivityIdentityGroups(excludingBlockIDs: blockIDs)
         }
     }
 }
 
+private extension WorkoutPlan.WorkoutTemplate {
+    func requiredDurableActivityIdentityGroups(excludingBlockIDs blockIDs: Set<UUID>) -> [[String]] {
+        let identityBlocks = blocks.isEmpty ? displayBlocks : blocks
+        let blockGroups: [[String]] = identityBlocks
+            .filter { !blockIDs.contains($0.id) }
+            .compactMap { block in
+                let values = ([block.activityTypeName].compactMap { $0 } + block.activityTags + block.exercises.map(\.exerciseName))
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                guard !values.isEmpty else { return nil }
+                return values
+            }
+
+        if !blockGroups.isEmpty {
+            return blockGroups
+        }
+
+        guard blocks.isEmpty,
+              exercises.isEmpty,
+              !sessionType.supportsMuscleTargets || targetMuscleGroups.isEmpty else {
+            return []
+        }
+
+        let fallbackValues = focusAreas
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return fallbackValues.isEmpty ? [] : [fallbackValues]
+    }
+
+    func hasScopedSupportChange(
+        changedTemplateIDs: Set<UUID>,
+        changedBlockIDs: Set<UUID>
+    ) -> Bool {
+        changedTemplateIDs.contains(id) ||
+            displayBlocks.contains { block in
+                block.isCardioSupportBlock && changedBlockIDs.contains(block.id)
+            }
+    }
+
+    func containsVisibleActivityIdentity(matching aliases: [String]) -> Bool {
+        let visibleKeys = Set(visibleActivityIdentityValues
+            .map(\.goalNormalizedKey)
+            .filter { !$0.isEmpty })
+        guard !visibleKeys.isEmpty else { return false }
+
+        return aliases
+            .map(\.goalNormalizedKey)
+            .filter { !$0.isEmpty }
+            .contains { visibleKeys.contains($0) }
+    }
+
+    var visibleActivityIdentityValues: [String] {
+        var values: [String] = [
+            name,
+            sessionType.displayName
+        ]
+        values.append(contentsOf: focusAreas)
+        values.append(contentsOf: displayBlocks.flatMap { block in
+            var blockValues: [String] = []
+            if let activityTypeName = block.activityTypeName {
+                blockValues.append(activityTypeName)
+            }
+            blockValues.append(contentsOf: block.activityTags)
+            blockValues.append(contentsOf: block.exercises.map(\.exerciseName))
+            return blockValues
+        })
+        return values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+}
+
 private extension WorkoutPlan.TrainingBlock {
+    var isCardioSupportBlock: Bool {
+        switch kind {
+        case .cardio, .conditioning:
+            return role != .main
+        case .strength, .skill, .mobility, .recovery, .sportPractice, .custom:
+            return false
+        }
+    }
+
     var hasDurableActivitySemanticsToPreserve: Bool {
         return activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             || !activityTags.isEmpty
@@ -822,15 +899,7 @@ private extension WorkoutPlan.TrainingBlock {
 
 private extension WorkoutPlan.WorkoutTemplate {
     var cardioSupportBlockCount: Int {
-        displayBlocks.filter { block in
-            switch block.kind {
-            case .cardio, .conditioning:
-                return block.role != .main
-            case .strength, .skill, .mobility, .recovery, .sportPractice, .custom:
-                return false
-            }
-        }
-        .count
+        displayBlocks.filter(\.isCardioSupportBlock).count
     }
 
     var isStandaloneCardioTemplate: Bool {

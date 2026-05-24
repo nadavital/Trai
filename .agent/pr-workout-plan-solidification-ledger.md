@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `b114791 Harden workout plan starts and semantic edits`
+- Latest pushed fix before current round: `984c5ff Cover planned workout freshness checks`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -22,6 +22,8 @@
 - Prevented stale workout-plan chat proposals from being reused as follow-up refinement context after the active plan changes elsewhere.
 - Invalidated generated onboarding workout-plan review state when profile/nutrition inputs change after a generated workout plan/goals already exist.
 - Stabilized current-period workout goal tests so they do not fail around a local week/day boundary.
+- Scoped supportive-cardio removal and legacy display-activity preservation to the AI's durable changed IDs, not plan-wide keyword/name presence.
+- Preserved valid planned start cards for legacy exercise-only saved plans by checking durable exercise IDs instead of nondeterministic fallback block IDs.
 
 ## Fresh Review Rounds
 
@@ -130,6 +132,14 @@
 - Chat UI freshness: kept planned workout start cards from rendering after their source template disappears or a newer plan save makes the card stale.
 - Regression-test coverage: added focused coverage for duplicate template IDs, scoped semantic edits, unrelated retained-session mutation rejection, and discovered planned-start freshness assertions.
 - Validation note: `b114791` is pushed; focused XCTest passes succeeded for semantic refinement, schedule changes, planned-start stale-card checks, and direct accept-time freshness assertions. The first full focused run hit an XCTest runner bootstrap failure before assertions; reruns with UI tests skipped passed.
+
+### Round 2026-05-24 After `984c5ff`
+- Fresh agent results: chat/review lifecycle, planned routing/adherence, and broad whole-PR passes found no serious issues beyond the verified items below.
+- Semantic validation: fixed verified over-broad supportive-cardio preservation so explicit AI-scoped removal/replacement of a support cardio block is allowed only when the changed block/template ID is reported; unrelated support blocks still preserve by durable IDs.
+- Legacy display-block semantics: fixed verified plan-global activity-identity fallback so moving a legacy/display-only activity identity to a different template no longer satisfies preservation for the original retained template.
+- Planned workout starts: fixed verified legacy exercise-only start-card rejection caused by synthesized fallback block UUIDs; blockless strength templates now validate against durable exercise IDs while block-based generated plans still validate by source block IDs.
+- Regression-test coverage: added focused tests for scoped support-cardio removal, moved legacy/display activity identity rejection, and legacy exercise-only start-card accept/reject freshness.
+- Validation note: focused XCTest pass succeeded for 12 selected semantic and planned-start tests; `git diff --check` is clean.
 
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
@@ -347,3 +357,7 @@
 - Ask Trai to add a modality to one session while leaving others alone; confirm unrelated retained sessions still preserve template/block IDs and planned starts still route correctly.
 - Ask Trai to add a new training day and confirm the saved proposal does not duplicate an existing planned session/template ID.
 - Generate a planned workout start card, replace/edit the saved plan before accepting it, then tap the old start card and confirm it is rejected as stale.
+- Ask Trai to remove or replace a supportive cardio finisher from one generated plan session and confirm the scoped edit is accepted without weakening unrelated sessions.
+- Ask Trai to revise a legacy/display-only plan where one session is a specific activity such as bouldering; confirm the activity cannot be moved to another retained template unless that template is explicitly changed.
+- Accept a planned start card from an older exercise-only saved plan and confirm it starts instead of being rejected as stale.
+- Accept a planned start card from a new block-based generated plan and confirm it still rejects after replacing the saved plan before tapping Start.

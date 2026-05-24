@@ -597,6 +597,61 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         ))
     }
 
+    func testChatWorkoutStartFreshnessAllowsLegacyExerciseOnlyTemplate() {
+        let templateID = UUID()
+        let exerciseID = UUID()
+        let suggestion = SuggestedWorkoutEntry(
+            name: "Legacy Pull Day",
+            workoutType: LiveWorkout.WorkoutType.strength.rawValue,
+            targetMuscleGroups: ["back"],
+            exercises: [
+                .init(
+                    id: exerciseID,
+                    name: "Pull Up",
+                    category: Exercise.Category.strength.rawValue,
+                    sourcePlanBlockID: UUID(),
+                    sets: 4,
+                    reps: 6
+                )
+            ],
+            sourcePlanTemplateID: templateID,
+            durationMinutes: 45,
+            rationale: "From your plan."
+        )
+
+        XCTAssertTrue(ChatWorkoutStartFreshness.isCurrent(
+            suggestion,
+            currentPlan: makeLegacyExerciseOnlyStartFreshnessPlan(templateID: templateID, exerciseID: exerciseID)
+        ))
+    }
+
+    func testChatWorkoutStartFreshnessRejectsChangedLegacyExerciseOnlyTemplate() {
+        let templateID = UUID()
+        let suggestion = SuggestedWorkoutEntry(
+            name: "Legacy Pull Day",
+            workoutType: LiveWorkout.WorkoutType.strength.rawValue,
+            targetMuscleGroups: ["back"],
+            exercises: [
+                .init(
+                    id: UUID(),
+                    name: "Pull Up",
+                    category: Exercise.Category.strength.rawValue,
+                    sourcePlanBlockID: UUID(),
+                    sets: 4,
+                    reps: 6
+                )
+            ],
+            sourcePlanTemplateID: templateID,
+            durationMinutes: 45,
+            rationale: "From your plan."
+        )
+
+        XCTAssertFalse(ChatWorkoutStartFreshness.isCurrent(
+            suggestion,
+            currentPlan: makeLegacyExerciseOnlyStartFreshnessPlan(templateID: templateID, exerciseID: UUID())
+        ))
+    }
+
     func testChatWorkoutStartSuggestionAllowsUnlinkedCustomCardsThroughPlanChanges() {
         let suggestion = SuggestedWorkoutEntry(
             name: "Custom Strength",
@@ -2686,6 +2741,37 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                 )
             ],
             rationale: "Planned workout",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+    }
+
+    private func makeLegacyExerciseOnlyStartFreshnessPlan(templateID: UUID, exerciseID: UUID) -> WorkoutPlan {
+        WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    id: templateID,
+                    name: "Legacy Pull Day",
+                    sessionType: .strength,
+                    targetMuscleGroups: ["back"],
+                    exercises: [
+                        WorkoutPlan.ExerciseTemplate(
+                            id: exerciseID,
+                            exerciseName: "Pull Up",
+                            muscleGroup: "back",
+                            defaultSets: 4,
+                            defaultReps: 6,
+                            order: 0
+                        )
+                    ],
+                    blocks: [],
+                    estimatedDurationMinutes: 45,
+                    order: 0
+                )
+            ],
+            rationale: "Legacy workout",
             guidelines: [],
             progressionStrategy: .defaultStrategy
         )

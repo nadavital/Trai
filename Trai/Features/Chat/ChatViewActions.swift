@@ -69,6 +69,16 @@ enum ChatWorkoutStartFreshness {
             return false
         }
 
+        if template.blocks.isEmpty {
+            let currentExerciseIDs = Set(template.structuredExercises.map(\.id))
+            return workout.exercises.allSatisfy { exercise in
+                guard let category = exercise.strictCategory else { return false }
+                guard category == .strength else { return true }
+                guard !currentExerciseIDs.isEmpty else { return false }
+                return currentExerciseIDs.contains(exercise.id)
+            }
+        }
+
         let currentBlockIDs = Set(template.displayBlocks.map(\.id))
         guard !currentBlockIDs.isEmpty else { return false }
 
