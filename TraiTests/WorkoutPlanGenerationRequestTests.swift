@@ -1738,6 +1738,63 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutPlanRefinementRejectsDuplicateBlockIDsWhenAddingSchedule() {
+        let blockID = UUID()
+        let upperTemplate = WorkoutPlan.WorkoutTemplate(
+            id: UUID(),
+            name: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: blockID,
+                    kind: .strength,
+                    title: "Upper Strength",
+                    detail: "Upper-body lifting",
+                    activityTypeName: "Strength",
+                    activityTags: ["Upper"],
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let lowerTemplate = WorkoutPlan.WorkoutTemplate(
+            id: UUID(),
+            name: "Lower Strength",
+            sessionType: .strength,
+            focusAreas: ["Lower"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: blockID,
+                    kind: .strength,
+                    title: "Lower Strength",
+                    detail: "Lower-body lifting",
+                    activityTypeName: "Strength",
+                    activityTags: ["Lower"],
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 1
+        )
+        let currentPlan = makePlan(templates: [upperTemplate], daysPerWeek: 1)
+        let duplicatedPlan = makePlan(templates: [upperTemplate, lowerTemplate], daysPerWeek: 2)
+
+        XCTAssertNil(
+            AIService.validateRefinedWorkoutPlanForTesting(
+                duplicatedPlan,
+                currentPlan: currentPlan,
+                allowsTemplateCountChange: true
+            )
+        )
+    }
+
+    @MainActor
     func testWorkoutPlanRefinementAllowsScopedSupportCardioRemoval() {
         let templateID = UUID()
         let strengthBlockID = UUID()
