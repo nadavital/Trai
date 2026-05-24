@@ -560,11 +560,25 @@ struct MainTabView: View {
             return
         }
 
-        let workout = workoutTemplateService.createWorkoutForIntent(
+        guard let workout = workoutTemplateService.createWorkoutForIntent(
             templateID: templateID,
             name: name,
             modelContext: modelContext
-        )
+        ) else {
+            BehaviorTracker(modelContext: modelContext).record(
+                actionKey: BehaviorActionKey.startWorkout,
+                domain: .workout,
+                surface: .intent,
+                outcome: .dismissed,
+                metadata: [
+                    "source": "deep_link",
+                    "reason": "stale_template_id",
+                    "template_id": templateID?.uuidString ?? "",
+                    "name": name ?? ""
+                ]
+            )
+            return
+        }
 
         if AppLaunchArguments.isUITesting, AppLaunchArguments.shouldUseLiveWorkoutUITestPreset {
             applyLiveWorkoutUITestPresetIfNeeded(to: workout)

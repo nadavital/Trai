@@ -1094,6 +1094,7 @@ struct OnboardingWorkoutPlanSetupView: View {
     @State private var dynamicProPersonalizationQuestions: [ProPersonalizationQuestion] = []
     @State private var isGeneratingProPersonalizationQuestion = false
     @State private var hasQueuedProPlanGeneration = false
+    @State private var queuedProPlanGenerationTask: Task<Void, Never>?
     @State private var generationTask: Task<Void, Never>?
     @State private var generationRequestID: UUID?
     @State private var generationStartedAt: Date?
@@ -2441,14 +2442,22 @@ struct OnboardingWorkoutPlanSetupView: View {
         }
 
         hasQueuedProPlanGeneration = true
-        Task { @MainActor in
+        queuedProPlanGenerationTask?.cancel()
+        queuedProPlanGenerationTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(180))
-            guard hasAnsweredAllProPersonalizationQuestions,
+            guard !Task.isCancelled,
+                  hasQueuedProPlanGeneration,
+                  hasAnsweredAllProPersonalizationQuestions,
                   !isGenerating,
                   generatedPlanForReview == nil else {
-                hasQueuedProPlanGeneration = false
+                if !Task.isCancelled {
+                    hasQueuedProPlanGeneration = false
+                    queuedProPlanGenerationTask = nil
+                }
                 return
             }
+            hasQueuedProPlanGeneration = false
+            queuedProPlanGenerationTask = nil
             generatePlan()
         }
     }
@@ -3428,7 +3437,7 @@ struct OnboardingWorkoutPlanSetupView: View {
     }
 
     private func goBack() {
-        if isGenerating {
+        if isGenerating || hasQueuedProPlanGeneration {
             cancelPlanGeneration(clearReview: true)
         }
 
@@ -3447,6 +3456,9 @@ struct OnboardingWorkoutPlanSetupView: View {
     private func generatePlan() {
         guard draft.canGenerate, !isGenerating else { return }
 
+        queuedProPlanGenerationTask?.cancel()
+        queuedProPlanGenerationTask = nil
+        hasQueuedProPlanGeneration = false
         generationTask?.cancel()
         let requestID = UUID()
         generationRequestID = requestID
@@ -3523,6 +3535,8 @@ struct OnboardingWorkoutPlanSetupView: View {
     }
 
     private func cancelPlanGeneration(clearReview: Bool) {
+        queuedProPlanGenerationTask?.cancel()
+        queuedProPlanGenerationTask = nil
         generationTask?.cancel()
         generationTask = nil
         generationRequestID = nil

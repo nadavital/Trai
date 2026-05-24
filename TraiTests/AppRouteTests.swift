@@ -46,6 +46,11 @@ final class AppRouteTests: XCTestCase {
         XCTAssertEqual(route, .workout(templateID: id, templateName: "Upper Body"))
     }
 
+    func testWorkoutRouteWithMalformedTemplateIDDoesNotFallbackToName() {
+        let route = AppRoute(urlString: "trai://workout?template_id=not-a-template-id&template=Upper%20Body")
+        XCTAssertEqual(route, .workout(templateID: nil, templateName: nil))
+    }
+
     func testInitRejectsUnknownSchemeOrHost() {
         XCTAssertNil(AppRoute(urlString: "https://example.com/workout"))
         XCTAssertNil(AppRoute(urlString: "trai://unknown"))

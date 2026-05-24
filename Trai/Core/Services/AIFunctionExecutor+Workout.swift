@@ -183,6 +183,7 @@ extension AIFunctionExecutor {
                         category: Exercise.Category.strength.rawValue,
                         activityTypeName: Exercise.defaultActivityTypeName(for: exercise.exerciseName, category: .strength),
                         activityRole: block.role.rawValue,
+                        sourcePlanBlockID: block.id,
                         targetTags: block.resolvedStartSuggestionTags(including: exercise.muscleGroup),
                         trackingFields: Exercise.defaultTrackingFields(for: .strength).map(\.rawValue),
                         sets: exercise.defaultSets,

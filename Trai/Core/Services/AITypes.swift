@@ -551,6 +551,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
         let category: String?
         let activityTypeName: String?
         let activityRole: String?
+        let sourcePlanBlockID: UUID?
         let targetTags: [String]?
         let trackingFields: [String]?
         let sets: Int
@@ -567,6 +568,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
             category: String? = nil,
             activityTypeName: String? = nil,
             activityRole: String? = nil,
+            sourcePlanBlockID: UUID? = nil,
             targetTags: [String]? = nil,
             trackingFields: [String]? = nil,
             sets: Int,
@@ -582,6 +584,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
             self.category = category
             self.activityTypeName = activityTypeName
             self.activityRole = activityRole
+            self.sourcePlanBlockID = sourcePlanBlockID
             self.targetTags = targetTags
             self.trackingFields = trackingFields
             self.sets = sets

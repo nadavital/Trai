@@ -652,6 +652,11 @@ private extension WorkoutPlan {
             guard nextSupportBlockCount >= currentSupportBlockCount else { return false }
         }
 
+        let nextTemplateIDs = Set(templates.map(\.id))
+        guard currentPlan.templates.allSatisfy({ nextTemplateIDs.contains($0.id) }) else {
+            return false
+        }
+
         let currentBlocks = currentPlan.requiredDurableActivityBlocks
         if !currentBlocks.isEmpty {
             return currentBlocks.allSatisfy { currentBlock in
@@ -679,14 +684,12 @@ private extension WorkoutPlan {
 
     var requiredDurableActivityIdentityGroups: [[String]] {
         templates.flatMap { template in
-            let blockGroups: [[String]] = template.blocks.compactMap { block in
+            let identityBlocks = template.blocks.isEmpty ? template.displayBlocks : template.blocks
+            let blockGroups: [[String]] = identityBlocks.compactMap { block in
                 let values = ([block.activityTypeName].compactMap { $0 } + block.activityTags + block.exercises.map(\.exerciseName))
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
                 guard !values.isEmpty else { return nil }
-                guard block.kind != .strength || block.role != .main || !block.activityTags.isEmpty else {
-                    return nil
-                }
                 return values
             }
 
@@ -710,10 +713,6 @@ private extension WorkoutPlan {
 
 private extension WorkoutPlan.TrainingBlock {
     var hasDurableActivitySemanticsToPreserve: Bool {
-        guard kind != .strength || role != .main || !activityTags.isEmpty else {
-            return false
-        }
-
         return activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             || !activityTags.isEmpty
             || kind != .strength

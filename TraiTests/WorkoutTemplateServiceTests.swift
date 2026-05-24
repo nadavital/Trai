@@ -570,11 +570,11 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         try context.save()
 
         let templateID = try XCTUnwrap(profile.workoutPlan?.templates.first?.id)
-        let workout = service.createWorkoutForIntent(
+        let workout = try XCTUnwrap(service.createWorkoutForIntent(
             templateID: templateID,
             name: "renamed shortcut label",
             modelContext: context
-        )
+        ))
 
         XCTAssertEqual(workout.name, "Upper Body Strength")
         XCTAssertEqual(workout.type, .mixed)
@@ -619,17 +619,17 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         context.insert(profile)
         try context.save()
 
-        let exact = service.createWorkoutForIntent(
+        let exact = try XCTUnwrap(service.createWorkoutForIntent(
             name: "upper body strength",
             modelContext: context
-        )
+        ))
         XCTAssertEqual(exact.name, "Upper Body Strength")
         XCTAssertEqual(exact.sourcePlanTemplateID, profile.workoutPlan?.templates[0].id)
 
-        let partial = service.createWorkoutForIntent(
+        let partial = try XCTUnwrap(service.createWorkoutForIntent(
             name: "upper body",
             modelContext: context
-        )
+        ))
         XCTAssertEqual(partial.name, "upper body")
         XCTAssertNil(partial.sourcePlanTemplateID)
     }
@@ -664,16 +664,15 @@ final class WorkoutTemplateServiceTests: XCTestCase {
             modelContext: context
         )
 
-        XCTAssertEqual(workout.name, "Upper Body Strength")
-        XCTAssertNil(workout.sourcePlanTemplateID)
+        XCTAssertNil(workout)
     }
 
     func testCreateWorkoutForIntentFallsBackToCustomNamedWorkout() throws {
         let context = try makeInMemoryContext()
-        let workout = service.createWorkoutForIntent(
+        let workout = try XCTUnwrap(service.createWorkoutForIntent(
             name: "Fight Camp",
             modelContext: context
-        )
+        ))
 
         XCTAssertEqual(workout.name, "Fight Camp")
         XCTAssertEqual(workout.type, .strength)
@@ -682,10 +681,10 @@ final class WorkoutTemplateServiceTests: XCTestCase {
 
     func testCreateWorkoutForIntentCustomCreatesDefaultWorkout() throws {
         let context = try makeInMemoryContext()
-        let workout = service.createWorkoutForIntent(
+        let workout = try XCTUnwrap(service.createWorkoutForIntent(
             name: "custom",
             modelContext: context
-        )
+        ))
 
         XCTAssertEqual(workout.name, "Custom Workout")
         XCTAssertEqual(workout.type, .strength)

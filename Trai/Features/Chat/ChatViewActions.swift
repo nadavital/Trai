@@ -737,6 +737,9 @@ extension ChatView {
                !notes.isEmpty {
                 entry.notes = notes
             }
+            if category == .strength {
+                entry.sourcePlanBlockID = exercise.sourcePlanBlockID
+            }
 
             if category == .strength {
                 let setDefaults = WorkoutTemplateService().suggestedSetDefaults(

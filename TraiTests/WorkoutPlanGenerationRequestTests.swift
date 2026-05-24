@@ -1226,6 +1226,146 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutPlanRefinementRejectsChangedTemplateIDWithoutSemanticChange() {
+        let templateID = UUID()
+        let blockID = UUID()
+        let currentPlan = makePlan(
+            templateID: templateID,
+            templateName: "Climbing Skill",
+            sessionType: .mixed,
+            focusAreas: ["Climbing"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: blockID,
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Skill work",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing"],
+                    order: 0
+                )
+            ]
+        )
+        let changedTemplateIDPlan = makePlan(
+            templateID: UUID(),
+            templateName: "Climbing Skill",
+            sessionType: .mixed,
+            focusAreas: ["Climbing"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: blockID,
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Skill work",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing"],
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertNil(AIService.validateRefinedWorkoutPlanForTesting(changedTemplateIDPlan, currentPlan: currentPlan))
+    }
+
+    @MainActor
+    func testWorkoutPlanRefinementRejectsDroppedLegacyExerciseOnlyActivitySemantics() {
+        let exercise = WorkoutPlan.ExerciseTemplate(
+            exerciseName: "Limit Bouldering",
+            muscleGroup: "forearms",
+            defaultSets: 4,
+            defaultReps: 5,
+            order: 0
+        )
+        let legacyTemplate = WorkoutPlan.WorkoutTemplate(
+            name: "Bouldering Day",
+            sessionType: .climbing,
+            focusAreas: ["Bouldering", "Climbing"],
+            targetMuscleGroups: ["forearms"],
+            exercises: [exercise],
+            blocks: [],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let currentPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [legacyTemplate],
+            planIntent: WorkoutPlan.PlanIntent(
+                primaryFocus: "Climbing",
+                sessionAllocation: "One climbing session",
+                summary: "Climbing stays in the plan."
+            ),
+            rationale: "Legacy climbing plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy,
+            modalityProgression: WorkoutPlan.ModalityProgression(
+                focus: .skill,
+                weeklyProgression: "Build climbing volume.",
+                targets: []
+            )
+        )
+        let genericPlan = makePlan(
+            templateID: legacyTemplate.id,
+            templateName: "Strength",
+            sessionType: .strength,
+            focusAreas: ["Strength"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Generic lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertNil(AIService.validateRefinedWorkoutPlanForTesting(genericPlan, currentPlan: currentPlan))
+    }
+
+    @MainActor
+    func testWorkoutPlanRefinementRejectsDroppedExplicitStrengthMainActivityNameWithoutTags() {
+        let templateID = UUID()
+        let blockID = UUID()
+        let currentPlan = makePlan(
+            templateID: templateID,
+            templateName: "Bouldering Strength",
+            sessionType: .strength,
+            focusAreas: ["Bouldering"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: blockID,
+                    kind: .strength,
+                    title: "Limit Bouldering",
+                    detail: "Board climbing",
+                    activityTypeName: "Bouldering",
+                    activityTags: [],
+                    order: 0
+                )
+            ]
+        )
+        let genericPlan = makePlan(
+            templateID: templateID,
+            templateName: "Bouldering Strength",
+            sessionType: .strength,
+            focusAreas: ["Bouldering"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: blockID,
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Generic lifting",
+                    activityTypeName: "Strength",
+                    activityTags: [],
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertNil(AIService.validateRefinedWorkoutPlanForTesting(genericPlan, currentPlan: currentPlan))
+    }
+
+    @MainActor
     func testWorkoutPlanRefinementRejectsDroppedManualActivityFocusWithoutAuthoredBlocks() {
         let currentPlan = makePlan(
             templateName: "Bouldering Day",
@@ -1323,6 +1463,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
     }
 
     private func makePlan(
+        templateID: UUID = UUID(),
         templateName: String,
         sessionType: WorkoutMode,
         focusAreas: [String],
@@ -1333,6 +1474,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             daysPerWeek: 1,
             templates: [
                 WorkoutPlan.WorkoutTemplate(
+                    id: templateID,
                     name: templateName,
                     sessionType: sessionType,
                     focusAreas: focusAreas,

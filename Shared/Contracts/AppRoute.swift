@@ -70,14 +70,16 @@ enum AppRoute: Equatable, Codable {
             self = .logWeight
         case "workout":
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            let templateID = components?.queryItems?
+            let templateIDValue = components?.queryItems?
                 .first(where: { $0.name == Self.workoutTemplateIDQueryName })?
-                .value
-                .flatMap(UUID.init(uuidString:))
-            let templateName = components?.queryItems?
+                .value?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let parsedTemplateID = templateIDValue.flatMap(UUID.init(uuidString:))
+            let hasInvalidTemplateID = templateIDValue?.isEmpty == false && parsedTemplateID == nil
+            let templateName = hasInvalidTemplateID ? nil : components?.queryItems?
                 .first(where: { $0.name == Self.workoutTemplateQueryName })?
                 .value
-            self = .workout(templateID: templateID, templateName: templateName)
+            self = .workout(templateID: parsedTemplateID, templateName: templateName)
         case "chat":
             self = .chat
         default:

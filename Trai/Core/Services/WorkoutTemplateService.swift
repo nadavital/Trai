@@ -61,7 +61,7 @@ struct WorkoutTemplateService {
         templateID: UUID? = nil,
         name: String?,
         modelContext: ModelContext
-    ) -> LiveWorkout {
+    ) -> LiveWorkout? {
         let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         if templateID == nil,
            trimmedName == nil || trimmedName?.localizedCaseInsensitiveCompare("custom") == .orderedSame {
@@ -88,6 +88,10 @@ struct WorkoutTemplateService {
                     prefillStrengthExercises: true
                 )
             }
+
+            if templateID != nil {
+                return nil
+            }
         }
 
         guard let trimmedName, !trimmedName.isEmpty else {
@@ -98,7 +102,7 @@ struct WorkoutTemplateService {
     }
 
     /// Resolve app-intent/deep-link workout names into concrete workout instances.
-    func createWorkoutForIntent(name: String, modelContext: ModelContext) -> LiveWorkout {
+    func createWorkoutForIntent(name: String, modelContext: ModelContext) -> LiveWorkout? {
         createWorkoutForIntent(templateID: nil, name: name, modelContext: modelContext)
     }
 

@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `cae67dd Fix recursive workout chaining and stale review context`
+- Latest pushed fix before current round: `0ede45b Fix workout plan PR review issues`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -109,6 +109,16 @@
 - Regression-test coverage: added focused route parsing coverage for `template_id` and service coverage proving durable IDs win over labels while partial names do not bind to saved templates.
 - Fresh verification follow-up: fixed stale durable-ID fallback where a route with an obsolete `template_id` could still bind to a different current template with the same display name; name matching is now only used for ID-less legacy routes.
 
+### Round 2026-05-24 After `0ede45b`
+- Chat proposal lifecycle: no serious issue found in the requested read-only pass. Session-scoped retirement, stale nutrition/workout rendering, apply/save freshness checks, and app-initiated Review with Trai startup guards are present in current code.
+- Prior serious findings: current code includes cancellation/request identity for setup generation, stale edit-base guards for workout-plan chat save, durable activity semantic preservation, strict `source_plan_template_id` validation, planned strength exercise prefill, and widget template IDs.
+- Intent/deep-link contracts: fixed verified malformed durable route gap where a present but invalid `template_id` was treated as an ID-less legacy name route. Malformed durable workout routes no longer fall back to saved-template name matching.
+- Setup generation lifecycle: fixed verified queued Pro generation race where the 180ms delayed task could still start after Back/dismiss before `isGenerating` became true.
+- Durable workout semantics: fixed verified non-semantic refinement gaps by requiring existing template IDs to survive, preserving legacy exercise-only/display-block activity identities, and treating explicit strength-main activity names as durable even without tags.
+- Intent/deep-link contracts: fixed verified stale durable-ID route gap where an obsolete `template_id` still started a custom workout named like the old plan. Stale durable IDs now resolve to no workout; legacy name-only routes still work.
+- Planned workout starts: fixed verified chat/function-call path so strength entries carry `sourcePlanBlockID`, matching direct Workouts/Dashboard starts.
+- Validation note: focused XCTest pass succeeded for route parsing, route resolution, planned-start provenance, malformed `source_plan_template_id`, and semantic refinement regressions; `git diff --check` is clean.
+
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
 - Generated workout plan blocks decoded unknown free-text `kind` values as `.custom`, letting malformed AI payloads store generic behavior data.
@@ -173,6 +183,12 @@
 - Follow-up edits to an unsaved nutrition-plan proposal in chat retired the pending card before building AI context, so revisions could fall back to the saved nutrition targets.
 - Start Workout intents/deep links used name-only, partial template matching, so generated plans with overlapping names could launch the wrong stored template and corrupt generated plan-adherence identity.
 - Start Workout routes with a stale durable template ID could still fall back to an exact display-name match, binding to a different current template after plan replacement.
+- Start Workout routes with a malformed non-empty durable template ID could still fall back to an exact display-name match, binding to a generated-plan template even though the durable ID was invalid.
+- Queued Pro workout-plan generation could still run after Back/dismiss if the user left during the short pre-generation delay.
+- Workout plan refinement could rotate template IDs during non-semantic edits, breaking durable plan routing/adherence contracts.
+- Legacy exercise-only workout plans and explicit strength-main activity names without tags were not fully protected by durable semantic validation.
+- Stale durable-ID workout routes could still start an unlinked custom workout named like the old planned session.
+- Chat/function-call planned starts preserved `sourcePlanTemplateID` but dropped strength-entry `sourcePlanBlockID`.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -231,6 +247,16 @@
 - Result after stale durable-ID fallback fix: CoreSimulator stopped listing simulator devices; no app code assertions ran.
 - `xcodebuild build -project Trai.xcodeproj -scheme Trai -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/TraiRouteFixBuild2 CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO`
 - Result after stale durable-ID fallback fix: blocked by CoreSimulator/actool runtime failure before useful Swift diagnostics; earlier route-fix app build had succeeded before CoreSimulator entered this bad state.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidCurrent CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/AppRouteTests -only-testing:TraiTests/WorkoutTemplateServiceTests -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests -only-testing:TraiTests/OnboardingFlowPlannerTests`
+- Result after `0ede45b` current pass: blocked before app code because CoreSimulator could not find/list simulator devices; no XCTest assertions ran.
+- `xcodebuild build -project Trai.xcodeproj -scheme Trai -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/TraiPRSolidCurrentBuild CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO`
+- Result after `0ede45b` current pass: blocked before Swift diagnostics by CoreSimulator/actool runtime failure: no available simulator runtimes for `iphonesimulator`.
+- `xcodebuild build -project Trai.xcodeproj -scheme Trai -destination 'id=00006030-0006096E3628001C' -derivedDataPath /tmp/TraiPRSolidDesignedBuild CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO`
+- Result after `0ede45b` current pass: blocked before Swift diagnostics by the same CoreSimulator/actool runtime failure.
+- `git diff --check`
+- Result after `0ede45b` current pass: no whitespace errors.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest8Esc CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/AppRouteTests -only-testing:TraiTests/WorkoutTemplateServiceTests -only-testing:TraiTests/WorkoutSemanticParsingTests/testSuggestWorkoutPreservesAllSavedPlanBlocksWhenNoExplicitPreference -only-testing:TraiTests/WorkoutSemanticParsingTests/testStartLiveWorkoutRejectsMalformedSourcePlanTemplateID -only-testing:TraiTests/WorkoutSemanticParsingTests/testStartLiveWorkoutPreservesSourcePlanTemplateID -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsDroppedDurableBlockTagsWithoutSemanticChange -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsChangedDurableBlockIDWithoutSemanticChange -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsChangedTemplateIDWithoutSemanticChange -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsDroppedLegacyExerciseOnlyActivitySemantics -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsDroppedExplicitStrengthMainActivityNameWithoutTags`
+- Result after current fixes: passed, 40 tests, 0 failures.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -290,3 +316,7 @@
 - In chat, get a nutrition-plan proposal, type a follow-up like "before applying, keep calories but raise carbs and reduce fat," and confirm the old card retires while the new AI proposal is based on the pending card's full structured targets, not the saved plan.
 - Retry a failed nutrition-plan follow-up edit and confirm the retry still uses the fresh retired unsaved proposal when building the next AI response.
 - Create or keep two generated plan templates with overlapping names, invoke Start Workout from Shortcuts/Siri/widget/deep link for one template, and confirm the live workout uses that exact template's items plus `sourcePlanTemplateID`; a legacy partial-name route like "upper body" should open a custom named workout rather than a generated-plan template.
+- Open a workout deep link with a malformed `template_id` plus a valid-looking `template` name and confirm it does not attach to a saved generated-plan template.
+- After replacing/editing a workout plan, tap an old large-widget/Shortcut planned workout route and confirm it does not start an empty custom workout named like the stale planned session.
+- In Profile workout-plan setup Pro flow, answer the final personalization prompt and immediately tap Back/dismiss; confirm the old queued generation does not later show a stale review plan.
+- Ask Trai in chat to start a planned strength or mixed session, accept the workout card, and confirm planned strength rows still count against the correct generated-plan block/template.
