@@ -20,6 +20,8 @@ struct SettingsView: View {
     @State private var showWorkoutPlanSetup = false
     @State private var showWorkoutPlanEdit = false
     @State private var standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+    @State private var standardGeneratedWorkoutPlan: WorkoutPlan?
+    @State private var standardGeneratedWorkoutGoals: [WorkoutGoal] = []
     @State private var standardWorkoutPlanAIService = AIService()
     @State private var pendingEnabledMacroReveal: MacroType?
     @State private var presentedAccountSetupContext: AccountSetupContext?
@@ -365,6 +367,8 @@ struct SettingsView: View {
         .sheet(isPresented: $showWorkoutPlanSetup) {
             WorkoutPlanSetupChoiceFlow(
                 draft: $standardWorkoutPlanDraft,
+                generatedPlanForReview: $standardGeneratedWorkoutPlan,
+                generatedPlanGoalsForReview: $standardGeneratedWorkoutGoals,
                 context: standardWorkoutPlanSetupContext,
                 aiService: standardWorkoutPlanAIService,
                 canAccessAIFeatures: monetizationService?.canAccessAIFeatures ?? true,
@@ -452,6 +456,8 @@ struct SettingsView: View {
             return
         }
         standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+        standardGeneratedWorkoutPlan = nil
+        standardGeneratedWorkoutGoals = []
         showWorkoutPlanSetup = false
         HapticManager.success()
     }

@@ -9,6 +9,8 @@ import SwiftUI
 
 struct WorkoutPlanSetupChoiceFlow: View {
     @Binding var draft: OnboardingWorkoutPlanDraft
+    @Binding var generatedPlanForReview: WorkoutPlan?
+    @Binding var generatedPlanGoalsForReview: [WorkoutGoal]
 
     let context: OnboardingWorkoutPlanUserContext
     let aiService: AIService
@@ -27,6 +29,8 @@ struct WorkoutPlanSetupChoiceFlow: View {
     var body: some View {
         OnboardingWorkoutPlanSetupView(
             draft: $draft,
+            generatedPlanForReview: $generatedPlanForReview,
+            generatedPlanGoalsForReview: $generatedPlanGoalsForReview,
             context: context,
             aiService: aiService,
             mode: activeMode,
@@ -133,6 +137,8 @@ struct WorkoutPlanSetupChoiceFlow: View {
 #Preview {
     WorkoutPlanSetupChoiceFlow(
         draft: .constant(OnboardingWorkoutPlanDraft()),
+        generatedPlanForReview: .constant(nil),
+        generatedPlanGoalsForReview: .constant([]),
         context: OnboardingWorkoutPlanUserContext(
             name: "Nadav",
             age: 30,

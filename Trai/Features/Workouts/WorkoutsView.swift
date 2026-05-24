@@ -59,6 +59,8 @@ struct WorkoutsView: View {
     @State private var suggestedWorkoutGoals: [WorkoutGoalSuggestion] = []
     @State private var celebratedWorkoutGoal: WorkoutGoal?
     @State private var standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+    @State private var standardGeneratedWorkoutPlan: WorkoutPlan?
+    @State private var standardGeneratedWorkoutGoals: [WorkoutGoal] = []
     @State private var standardWorkoutPlanAIService = AIService()
     @State private var standardWorkoutPlanSaveError: StandardWorkoutPlanSaveError?
 
@@ -448,6 +450,8 @@ struct WorkoutsView: View {
             .sheet(isPresented: $showingStandardPlanSetup) {
                 WorkoutPlanSetupChoiceFlow(
                     draft: $standardWorkoutPlanDraft,
+                    generatedPlanForReview: $standardGeneratedWorkoutPlan,
+                    generatedPlanGoalsForReview: $standardGeneratedWorkoutGoals,
                     context: standardWorkoutPlanSetupContext,
                     aiService: standardWorkoutPlanAIService,
                     canAccessAIFeatures: canAccessAIFeatures,
@@ -1094,6 +1098,8 @@ struct WorkoutsView: View {
         do {
             try modelContext.save()
             standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+            standardGeneratedWorkoutPlan = nil
+            standardGeneratedWorkoutGoals = []
             showingStandardPlanSetup = false
             HapticManager.success()
         } catch {

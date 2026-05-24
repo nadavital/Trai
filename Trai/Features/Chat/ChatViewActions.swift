@@ -406,6 +406,7 @@ extension ChatView {
             )
             entry.activityTypeName = exercise.resolvedActivityName(category: category)
             entry.activityKind = category.liveWorkoutActivityKind
+            entry.activityRole = exercise.resolvedActivityRole
             entry.targetTags = exercise.resolvedTargetTags(category: category)
             entry.trackingFields = exercise.resolvedTrackingFields(category: category)
             if let exerciseNotes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !exerciseNotes.isEmpty {
@@ -571,6 +572,7 @@ extension ChatView {
             )
             entry.activityTypeName = exercise.resolvedActivityName(category: category)
             entry.activityKind = category.liveWorkoutActivityKind
+            entry.activityRole = exercise.resolvedActivityRole
             entry.targetTags = exercise.resolvedTargetTags(category: category)
             entry.trackingFields = exercise.resolvedTrackingFields(category: category)
             if category == .strength,
@@ -728,6 +730,11 @@ private extension SuggestedWorkoutLog.LoggedExercise {
         return Exercise.defaultActivityTypeName(for: name, category: category)
     }
 
+    var resolvedActivityRole: WorkoutPlan.TrainingBlock.Role? {
+        guard let activityRole else { return nil }
+        return WorkoutPlan.TrainingBlock.Role(rawValue: activityRole.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
     func resolvedTargetTags(category: Exercise.Category) -> [String] {
         let explicitTags = targetTags?.dedupedByGoalKey() ?? []
         if !explicitTags.isEmpty { return explicitTags }
@@ -773,6 +780,11 @@ private extension SuggestedWorkoutEntry.SuggestedExercise {
             return activityTypeName
         }
         return Exercise.defaultActivityTypeName(for: name, category: category)
+    }
+
+    var resolvedActivityRole: WorkoutPlan.TrainingBlock.Role? {
+        guard let activityRole else { return nil }
+        return WorkoutPlan.TrainingBlock.Role(rawValue: activityRole.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     func resolvedTargetTags(category: Exercise.Category) -> [String] {

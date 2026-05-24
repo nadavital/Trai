@@ -225,6 +225,11 @@ extension ChatView {
         isLoading = true
 
         let previousMessages = Array(currentSessionMessages.suffix(10))
+        let userMessage = ChatMessage(
+            content: trimmedText,
+            isFromUser: true,
+            sessionId: currentSessionId
+        )
         let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
         let baseContext = buildFitnessContext()
         aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.calorieContextSummary)"
@@ -233,8 +238,10 @@ extension ChatView {
         }
 
         if isTemporarySession {
+            temporaryMessages.append(userMessage)
             temporaryMessages.append(aiMessage)
         } else {
+            modelContext.insert(userMessage)
             modelContext.insert(aiMessage)
         }
         rebuildSessionMessages(preferLiveQueryData: true)
@@ -463,13 +470,18 @@ extension ChatView {
         let capturedImage = userMessage.imageData.flatMap { UIImage(data: $0) }
         let text = userMessage.content
         let previousMessages = Array(currentSessionMessages.prefix(messageIndex - 1).suffix(10))
+        let pendingWorkoutPlanSuggestionForContext = currentSessionMessages
+            .prefix(messageIndex)
+            .reversed()
+            .compactMap(\.suggestedWorkoutPlan)
+            .first
 
         currentMessageTask = Task {
             await performSendMessage(
                 text: text,
                 capturedImage: capturedImage,
                 previousMessages: previousMessages,
-                pendingWorkoutPlanSuggestionForContext: nil,
+                pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext,
                 aiMessage: aiMessage
             )
         }

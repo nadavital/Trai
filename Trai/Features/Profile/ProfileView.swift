@@ -25,6 +25,8 @@ struct ProfileView: View {
     @State var showSettingsSheet = false
     @State var customRemindersCount = 0
     @State var standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+    @State var standardGeneratedWorkoutPlan: WorkoutPlan?
+    @State var standardGeneratedWorkoutGoals: [WorkoutGoal] = []
     @State var standardWorkoutPlanAIService = AIService()
 
     // Workout plan management sheets
@@ -241,6 +243,8 @@ struct ProfileView: View {
             .sheet(isPresented: $showPlanSetupSheet) {
                 WorkoutPlanSetupChoiceFlow(
                     draft: $standardWorkoutPlanDraft,
+                    generatedPlanForReview: $standardGeneratedWorkoutPlan,
+                    generatedPlanGoalsForReview: $standardGeneratedWorkoutGoals,
                     context: standardWorkoutPlanSetupContext,
                     aiService: standardWorkoutPlanAIService,
                     canAccessAIFeatures: canAccessAIFeatures,
@@ -830,6 +834,8 @@ struct ProfileView: View {
             return
         }
         standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+        standardGeneratedWorkoutPlan = nil
+        standardGeneratedWorkoutGoals = []
         showPlanSetupSheet = false
         HapticManager.success()
     }

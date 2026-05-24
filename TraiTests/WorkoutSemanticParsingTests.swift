@@ -406,6 +406,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                             "name": "Limit Bouldering",
                             "category": "sportPractice",
                             "activity_name": "Bouldering",
+                            "activity_role": "finisher",
                             "duration_minutes": 35,
                             "notes": "Finished the planned climbing block."
                         ]
@@ -419,6 +420,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         }
 
         XCTAssertEqual(workoutLog.sourcePlanTemplateID, templateID)
+        XCTAssertEqual(workoutLog.exercises.first?.activityRole, "finisher")
     }
 
     func testSuggestWorkoutUsesActivityFocusesInsteadOfStrengthFallback() async throws {
@@ -576,6 +578,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                 ),
                 WorkoutPlan.TrainingBlock(
                     kind: .conditioning,
+                    role: .finisher,
                     title: "Finisher",
                     detail: "Bike intervals",
                     activityTypeName: "Cycling",
@@ -609,6 +612,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(suggestion.sourcePlanTemplateID, template.id)
         XCTAssertEqual(suggestion.exercises.map(\.name), ["Back Squat", "Bench Press", "Cycling"])
         XCTAssertEqual(suggestion.exercises.map(\.category), ["strength", "strength", "conditioning"])
+        XCTAssertEqual(suggestion.exercises.map(\.activityRole), ["main", "main", "finisher"])
         XCTAssertEqual(suggestion.exercises[2].activityTypeName, "Cycling")
         XCTAssertEqual(suggestion.exercises[2].targetTags, ["Conditioning", "Cycling"])
         XCTAssertEqual(suggestion.exercises[2].durationMinutes, 12)
@@ -627,6 +631,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                             "name": "Limit Bouldering",
                             "category": "sportPractice",
                             "activity_name": "Bouldering",
+                            "activity_role": "finisher",
                             "target_tags": ["Climbing", "Power"],
                             "tracking_fields": ["duration", "reps", "notes"],
                             "duration_minutes": 30,
@@ -647,6 +652,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         XCTAssertEqual(suggestion.exercisesSummary, "1 activity")
         XCTAssertEqual(exercise.category, "sportPractice")
+        XCTAssertEqual(exercise.activityRole, "finisher")
         XCTAssertEqual(exercise.sets, 0)
         XCTAssertEqual(exercise.startSummarySegments, ["Bouldering", "30 min", "2 segments", "7 attempts"])
     }
@@ -1280,6 +1286,41 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(goal.generatedPlanTemplateIDs, revisedPlan.templates.map { $0.id })
         XCTAssertNil(goal.linkedWorkoutType)
         XCTAssertFalse(goal.hasActivityScope)
+    }
+
+    func testGeneratedPlanAdherenceGoalAcceptsDaysUnit() {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Generated Strength",
+            sessionType: .strength,
+            targetMuscleGroups: ["Back"],
+            exercises: [],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let plan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let goal = WorkoutGoal(
+            title: "Train one day from the plan",
+            goalKind: .frequency,
+            targetValue: 1,
+            targetUnit: "days",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "Complete the generated plan day.",
+            tracksGeneratedPlanAdherence: true
+        )
+
+        goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+
+        XCTAssertEqual(goal.generatedPlanTemplateIDs, [template.id])
+        XCTAssertEqual(goal.targetValue, 1.0)
+        XCTAssertNil(goal.linkedWorkoutType)
     }
 
     func testCreateWorkoutGoalRejectsFreeTextActivityKindAndRole() async throws {

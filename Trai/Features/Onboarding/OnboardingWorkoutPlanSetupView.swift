@@ -1068,6 +1068,8 @@ private struct ProPersonalizationQuestion {
 
 struct OnboardingWorkoutPlanSetupView: View {
     @Binding var draft: OnboardingWorkoutPlanDraft
+    @Binding var generatedPlanForReview: WorkoutPlan?
+    @Binding var generatedPlanGoalsForReview: [WorkoutGoal]
 
     let context: OnboardingWorkoutPlanUserContext
     let aiService: AIService
@@ -1081,8 +1083,6 @@ struct OnboardingWorkoutPlanSetupView: View {
 
     @State private var isGenerating = false
     @State private var generationNote: String?
-    @State private var generatedPlanForReview: WorkoutPlan?
-    @State private var generatedPlanGoalsForReview: [WorkoutGoal] = []
     @State private var generatedPlanUsedFallback = false
     @State private var currentStep: WorkoutPlanSetupStep = .focus
     @State private var navigationDirection: WorkoutPlanSetupNavigationDirection = .forward
@@ -3571,6 +3571,8 @@ private extension Array where Element: Hashable {
 #Preview {
     OnboardingWorkoutPlanSetupView(
         draft: .constant(OnboardingWorkoutPlanDraft()),
+        generatedPlanForReview: .constant(nil),
+        generatedPlanGoalsForReview: .constant([]),
         context: OnboardingWorkoutPlanUserContext(
             name: "Nadav",
             age: 30,

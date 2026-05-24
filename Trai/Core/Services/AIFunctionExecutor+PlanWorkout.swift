@@ -1000,6 +1000,22 @@ extension AIFunctionExecutor {
                 let exerciseActivityName = (exerciseData["activity_name"] as? String)?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .nilIfEmpty
+                let activityRole: WorkoutPlan.TrainingBlock.Role?
+                if let rawActivityRole = exerciseData["activity_role"] as? String {
+                    let trimmedRole = rawActivityRole.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmedRole.isEmpty {
+                        activityRole = nil
+                    } else if let stableRole = WorkoutPlan.TrainingBlock.Role(rawValue: trimmedRole) {
+                        activityRole = stableRole
+                    } else {
+                        return .dataResponse(FunctionResult(
+                            name: "log_workout",
+                            response: ["error": "activity_role must be a stable training block role enum."]
+                        ))
+                    }
+                } else {
+                    activityRole = nil
+                }
                 let targetTags = stringArray(from: exerciseData["target_tags"])
                 let trackingFields = stringArray(from: exerciseData["tracking_fields"])
                 let exerciseDurationMinutes = numericInt(from: exerciseData["duration_minutes"])
@@ -1068,6 +1084,7 @@ extension AIFunctionExecutor {
                         name: name,
                         category: resolvedCategory?.rawValue ?? category,
                         activityTypeName: exerciseActivityName,
+                        activityRole: activityRole?.rawValue,
                         targetTags: targetTags,
                         trackingFields: normalizedTrackingFields ?? trackingFields,
                         durationMinutes: exerciseDurationMinutes,

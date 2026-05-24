@@ -790,7 +790,16 @@ enum WorkoutGoalProgressResolver {
         let periodStart = periodStartDate(for: goal, now: now) ?? Calendar.current.startOfDay(for: now)
 
         let workoutCount: Int
-        if goal.hasActivityScope && frequencyGoalCountsActivityEntries(goal) {
+        if goal.tracksGeneratedPlanAdherence {
+            workoutCount = Set(workouts.compactMap { workout -> UUID? in
+                let progressDate = workout.completedAt ?? workout.startedAt
+                guard progressDate >= periodStart,
+                      goal.matchesGeneratedPlanTemplate(workout: workout) else {
+                    return nil
+                }
+                return workout.sourcePlanTemplateID
+            }).count
+        } else if goal.hasActivityScope && frequencyGoalCountsActivityEntries(goal) {
             workoutCount = workouts.reduce(0) { count, workout in
                 let entryCount = (workout.entries ?? []).filter { entry in
                     guard goal.matches(entry: entry),

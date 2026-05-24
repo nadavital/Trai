@@ -1232,6 +1232,74 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         )
     }
 
+    func testGeneratedPlanAdherenceCountsDistinctTemplatesOnly() {
+        let templates = [
+            WorkoutPlan.WorkoutTemplate(
+                name: "Pull Strength",
+                sessionType: .strength,
+                targetMuscleGroups: ["back"],
+                exercises: [],
+                estimatedDurationMinutes: 45,
+                order: 0
+            ),
+            WorkoutPlan.WorkoutTemplate(
+                name: "Climbing Skill",
+                sessionType: .climbing,
+                focusAreas: ["Climbing"],
+                targetMuscleGroups: ["back", "forearms"],
+                exercises: [],
+                estimatedDurationMinutes: 40,
+                order: 1
+            ),
+            WorkoutPlan.WorkoutTemplate(
+                name: "Mobility Flow",
+                sessionType: .mobility,
+                focusAreas: ["Mobility"],
+                targetMuscleGroups: ["hips", "shoulders"],
+                exercises: [],
+                estimatedDurationMinutes: 30,
+                order: 2
+            )
+        ]
+        let plan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 3,
+            templates: templates,
+            rationale: "Plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let goal = WorkoutGoal(
+            title: "Complete the weekly plan",
+            goalKind: .frequency,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "Complete each planned session.",
+            tracksGeneratedPlanAdherence: true
+        )
+        goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+
+        let repeatedWorkouts = (0..<3).map { index in
+            let workout = LiveWorkout(name: "Pull Strength", workoutType: .strength)
+            workout.startedAt = Date().addingTimeInterval(TimeInterval(-3_600 + index * 600))
+            workout.completedAt = workout.startedAt.addingTimeInterval(1_800)
+            workout.sourcePlanTemplateID = templates[0].id
+            return workout
+        }
+
+        let insight = WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: repeatedWorkouts,
+            exerciseHistory: [],
+            useLbs: false
+        ).first
+
+        XCTAssertEqual(insight?.currentValueText, "1")
+        XCTAssertEqual(insight?.progressFraction ?? 0, 1.0 / 3.0, accuracy: 0.001)
+    }
+
     func testGeneratedPlanAdherenceGoalClearsActivityTagsEvenWhenTemplatesShareBroadType() {
         let plan = WorkoutPlan(
             splitType: .pushPullLegs,

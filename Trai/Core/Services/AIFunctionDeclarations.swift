@@ -725,6 +725,11 @@ enum AIFunctionDeclarations {
                                     "type": "string",
                                     "description": "User-facing activity identity for this logged item, such as Rowing, Climbing, Mobility Flow, or Push Strength."
                                 ],
+                                "activity_role": [
+                                    "type": "string",
+                                    "description": "Optional stable planned-block placement role when this item corresponds to a plan block.",
+                                    "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom"]
+                                ],
                                 "target_tags": [
                                     "type": "array",
                                     "items": ["type": "string"],
@@ -882,6 +887,11 @@ enum AIFunctionDeclarations {
                                     "enum": ["strength", "cardio", "conditioning", "mobility", "skill", "sportPractice", "recovery", "flexibility", "custom"]
                                 ],
                                 "activity_name": ["type": "string", "description": "User-facing activity identity for this item."],
+                                "activity_role": [
+                                    "type": "string",
+                                    "description": "Optional stable planned-block placement role when this item corresponds to a plan block.",
+                                    "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom"]
+                                ],
                                 "target_tags": [
                                     "type": "array",
                                     "items": ["type": "string"],

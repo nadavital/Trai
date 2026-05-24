@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `1c4afbc Fix workout plan chat state regressions`
+- Latest pushed fix before current round: `d4a8ece Fix workout plan review edge cases`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -56,6 +56,13 @@
 - Live workout planned/logged semantics: fixed verified generated plan-adherence detachment after plan edits by reconciling active adherence goals to revised template IDs and day count.
 - Regression-test coverage: added focused coverage for direct start source IDs, onboarding workout setup flow inclusion, and plan-adherence goal reconciliation.
 
+### Round 2026-05-23 After `d4a8ece`
+- AI function contracts: fixed verified dropped `activity_role` data by requiring and preserving role on AI-started and AI-logged workout items.
+- Plan persistence/edit/review flow: fixed verified parent-state gap where unsaved generated workout-plan proposals/goals from onboarding/profile/workouts setup were local to the setup view instead of reopenable draft state.
+- Chat/review pending state: fixed verified retry gaps where failed follow-up edits lost pending workout-plan proposal context and app-initiated Review with Trai retries had no user prompt to resend.
+- Live workout planned/logged semantics: fixed verified generated plan-adherence progress overcount by counting distinct generated template IDs, and accepted AI `days` units for generated-plan adherence goals.
+- Regression-test coverage: added focused coverage for activity role propagation, generated-plan adherence `days`, distinct-template counting, profile/workouts setup call sites, and the updated onboarding UI skip path.
+
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
 - Generated workout plan blocks decoded unknown free-text `kind` values as `.custom`, letting malformed AI payloads store generic behavior data.
@@ -87,6 +94,13 @@
 - Follow-up edits to an unsaved workout-plan proposal in main chat retired the pending proposal before building AI context, causing revisions to fall back to the saved plan.
 - Cancelled generated-plan refinement tasks could restore old review cards over a newer refinement request.
 - Existing generated plan-adherence goals could detach from the current plan after manual/chat plan edits because their stored template IDs were not reconciled to the revised plan.
+- Generated plan-adherence progress could be completed by repeating the same generated template instead of completing each distinct planned template.
+- Generated plan-adherence goals using AI-produced `day` / `days` units were not recognized as plan-adherence targets.
+- AI-started and AI-logged workout items dropped durable block role, so role-scoped goals could not progress from those accepted suggestions.
+- Unsaved generated workout-plan proposals/goals in onboarding/profile/workouts setup were owned by the setup view, making them vulnerable to dismissal/reopen state loss before final save.
+- Retrying a failed follow-up edit to an unsaved workout-plan proposal rebuilt context from the saved plan instead of the pending proposal.
+- Retrying a failed app-initiated Review with Trai request was a no-op because the synthetic review prompt was never inserted as a user message.
+- Onboarding UI tests used an exact label for a compound workout setup card, so they failed even when the real skip card was visible.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -101,6 +115,10 @@
 - Result after `fcb8ee2` review fix round: 204 selected tests, 0 failures.
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests -only-testing:TraiTests/WorkoutTemplateServiceTests -only-testing:TraiTests/OnboardingFlowPlannerTests`
 - Result after `1c4afbc` review fix round: 207 selected tests, 0 failures.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests -only-testing:TraiTests/WorkoutTemplateServiceTests -only-testing:TraiTests/OnboardingFlowPlannerTests`
+- Result after `d4a8ece` review fix round: 209 selected tests, 0 failures.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiUITests/TraiUITests/testOnboardingCriticalFlowCompletesIntoDashboard -only-testing:TraiUITests/TraiUITests/testPostOnboardingChecklistOffersWorkoutAndHealthSetupForExistingPro`
+- Result after `d4a8ece` review fix round: 2 selected UI tests, 0 failures.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -132,3 +150,8 @@
 - Start a specific generated plan session directly from chat and confirm the accepted live workout advances the generated plan-adherence goal for that template.
 - Start a generated-plan refinement, tap Stop, immediately submit a new refinement, and confirm the cancelled request does not restore old review cards over the new request.
 - Save a generated plan with an adherence goal, edit the plan manually or through chat to change days/templates, then confirm the adherence goal tracks the revised template IDs and updated session count.
+- Repeat the same generated template multiple times in a week and confirm generated-plan adherence only counts it once until distinct planned templates are completed.
+- Ask AI to create a generated-plan adherence goal using a `days` unit and confirm the goal tracks the generated plan.
+- Start/log an AI workout with warmup/accessory/finisher roles and confirm matching role-scoped goals progress.
+- Generate a workout plan in onboarding/profile/workouts setup, dismiss/reopen before final save, and confirm the review proposal/goals are still available.
+- Retry a failed Review with Trai request and a failed pending-plan follow-up edit; confirm both resend with the right plan context.

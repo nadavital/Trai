@@ -450,6 +450,7 @@ final class TraiUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Your Plan is Ready"].waitForExistence(timeout: 12))
         tapOnboardingPrimaryButton(in: app)
+        skipWorkoutSetupInOnboarding(in: app)
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["Finish setting up Trai"].waitForExistence(timeout: 5))
     }
@@ -473,6 +474,7 @@ final class TraiUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Your Plan is Ready"].waitForExistence(timeout: 12))
         tapOnboardingPrimaryButton(in: app)
+        skipWorkoutSetupInOnboarding(in: app)
 
         XCTAssertTrue(app.staticTexts["Finish setting up Trai"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["Create a workout plan"].exists)
@@ -563,6 +565,16 @@ final class TraiUITests: XCTestCase {
         }
         XCTAssertTrue(button.isEnabled)
         button.tap()
+    }
+
+    private func skipWorkoutSetupInOnboarding(in app: XCUIApplication) {
+        XCTAssertTrue(app.staticTexts["Set Up Workouts"].waitForExistence(timeout: 8))
+        let skipButton = button(containing: "Track Workouts Only", in: app)
+        XCTAssertTrue(skipButton.waitForExistence(timeout: 5))
+        if !skipButton.isHittable {
+            app.swipeUp()
+        }
+        skipButton.tap()
     }
 
     private func ensurePersistentStoreProfileForRealDataTests() {

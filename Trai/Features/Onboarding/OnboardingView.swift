@@ -154,6 +154,8 @@ struct OnboardingView: View {
             if showingWorkoutSetup {
                 WorkoutPlanSetupChoiceFlow(
                     draft: $workoutPlanDraft,
+                    generatedPlanForReview: $generatedWorkoutPlan,
+                    generatedPlanGoalsForReview: $generatedWorkoutGoals,
                     context: workoutPlanUserContext,
                     aiService: aiService,
                     canAccessAIFeatures: monetizationService?.canAccessAIFeatures ?? false,

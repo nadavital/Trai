@@ -182,6 +182,7 @@ extension AIFunctionExecutor {
                         name: exercise.exerciseName,
                         category: Exercise.Category.strength.rawValue,
                         activityTypeName: Exercise.defaultActivityTypeName(for: exercise.exerciseName, category: .strength),
+                        activityRole: block.role.rawValue,
                         targetTags: block.resolvedStartSuggestionTags(including: exercise.muscleGroup),
                         trackingFields: Exercise.defaultTrackingFields(for: .strength).map(\.rawValue),
                         sets: exercise.defaultSets,
@@ -198,6 +199,7 @@ extension AIFunctionExecutor {
                     name: activityName,
                     category: category.rawValue,
                     activityTypeName: block.displayActivityName,
+                    activityRole: block.role.rawValue,
                     targetTags: block.resolvedStartSuggestionTags(),
                     trackingFields: Exercise.defaultTrackingFields(for: category).map(\.rawValue),
                     sets: 0,
@@ -609,6 +611,22 @@ extension AIFunctionExecutor {
                 let activityTypeName = (exerciseData["activity_name"] as? String)?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .nilIfEmpty
+                let activityRole: WorkoutPlan.TrainingBlock.Role?
+                if let rawActivityRole = exerciseData["activity_role"] as? String {
+                    let trimmedRole = rawActivityRole.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmedRole.isEmpty {
+                        activityRole = nil
+                    } else if let stableRole = WorkoutPlan.TrainingBlock.Role(rawValue: trimmedRole) {
+                        activityRole = stableRole
+                    } else {
+                        return .dataResponse(FunctionResult(
+                            name: "start_live_workout",
+                            response: ["error": "activity_role must be a stable training block role enum."]
+                        ))
+                    }
+                } else {
+                    activityRole = nil
+                }
                 let targetTags = stringArray(from: exerciseData["target_tags"])
                 let trackingFields = stringArray(from: exerciseData["tracking_fields"])
                 guard let resolvedCategory = category.flatMap({ Exercise.Category(rawValue: $0)?.userFacingEquivalent }) else {
@@ -641,6 +659,7 @@ extension AIFunctionExecutor {
                     name: exerciseName,
                     category: resolvedCategory.rawValue,
                     activityTypeName: activityTypeName,
+                    activityRole: activityRole?.rawValue,
                     targetTags: targetTags,
                     trackingFields: normalizedTrackingFields.map(\.rawValue),
                     sets: sets,

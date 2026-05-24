@@ -362,6 +362,8 @@ extension WorkoutGoal {
     }
 
     private static let planAdherenceTargetUnits: Set<String> = [
+        "day",
+        "days",
         "session",
         "sessions",
         "workout",

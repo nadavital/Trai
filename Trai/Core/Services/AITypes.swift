@@ -550,6 +550,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
         let name: String
         let category: String?
         let activityTypeName: String?
+        let activityRole: String?
         let targetTags: [String]?
         let trackingFields: [String]?
         let sets: Int
@@ -565,6 +566,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
             name: String,
             category: String? = nil,
             activityTypeName: String? = nil,
+            activityRole: String? = nil,
             targetTags: [String]? = nil,
             trackingFields: [String]? = nil,
             sets: Int,
@@ -579,6 +581,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
             self.name = name
             self.category = category
             self.activityTypeName = activityTypeName
+            self.activityRole = activityRole
             self.targetTags = targetTags
             self.trackingFields = trackingFields
             self.sets = sets
@@ -820,6 +823,7 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
         let name: String
         let category: String?
         let activityTypeName: String?
+        let activityRole: String?
         let targetTags: [String]?
         let trackingFields: [String]?
         let durationMinutes: Int?
@@ -833,6 +837,7 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
             name: String,
             category: String? = nil,
             activityTypeName: String? = nil,
+            activityRole: String? = nil,
             targetTags: [String]? = nil,
             trackingFields: [String]? = nil,
             durationMinutes: Int? = nil,
@@ -845,6 +850,7 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
             self.name = name
             self.category = category
             self.activityTypeName = activityTypeName
+            self.activityRole = activityRole
             self.targetTags = targetTags
             self.trackingFields = trackingFields
             self.durationMinutes = durationMinutes
