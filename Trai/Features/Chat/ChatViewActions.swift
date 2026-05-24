@@ -42,6 +42,45 @@ enum ChatWorkoutPlanSuggestionContext {
     }
 }
 
+enum ChatWorkoutStartSuggestionContext {
+    static func isStale(
+        suggestion: SuggestedWorkoutEntry,
+        messageTimestamp: Date,
+        currentPlanUpdatedAt: Date?,
+        currentTemplateIDs: Set<UUID>?
+    ) -> Bool {
+        guard let sourcePlanTemplateID = suggestion.sourcePlanTemplateID else {
+            return false
+        }
+        guard let currentTemplateIDs, currentTemplateIDs.contains(sourcePlanTemplateID) else {
+            return true
+        }
+        return ChatSuggestionFreshness.isStale(
+            messageTimestamp: messageTimestamp,
+            currentPlanUpdatedAt: currentPlanUpdatedAt
+        )
+    }
+}
+
+enum ChatWorkoutStartFreshness {
+    static func isCurrent(_ workout: SuggestedWorkoutEntry, currentPlan: WorkoutPlan?) -> Bool {
+        guard let sourcePlanTemplateID = workout.sourcePlanTemplateID else { return true }
+        guard let template = currentPlan?.templates.first(where: { $0.id == sourcePlanTemplateID }) else {
+            return false
+        }
+
+        let currentBlockIDs = Set(template.displayBlocks.map(\.id))
+        guard !currentBlockIDs.isEmpty else { return false }
+
+        return workout.exercises.allSatisfy { exercise in
+            guard let category = exercise.strictCategory else { return false }
+            let sourceBlockID = category == .strength ? exercise.sourcePlanBlockID : exercise.id
+            guard let sourceBlockID else { return false }
+            return currentBlockIDs.contains(sourceBlockID)
+        }
+    }
+}
+
 enum ChatNutritionPlanSuggestionContext {
     static func latestFreshSuggestion(
         in messages: [ChatMessage],
@@ -684,6 +723,21 @@ extension ChatView {
             HapticManager.error()
             return
         }
+        let currentWorkoutTemplateIDs = profile?.workoutPlan.map { plan in
+            Set(plan.templates.map(\.id))
+        }
+        guard !ChatWorkoutStartSuggestionContext.isStale(
+            suggestion: workout,
+            messageTimestamp: message.timestamp,
+            currentPlanUpdatedAt: profile?.workoutPlanGeneratedAt,
+            currentTemplateIDs: currentWorkoutTemplateIDs
+        ) else {
+            message.suggestedWorkoutDismissed = true
+            message.errorMessage = "This planned workout is no longer current. Ask Trai to start the latest plan session instead."
+            try? modelContext.save()
+            HapticManager.error()
+            return
+        }
         guard !workout.exercises.isEmpty else {
             message.errorMessage = "This workout needs at least one trackable item before it can be started. Ask Trai to regenerate it."
             HapticManager.error()
@@ -701,7 +755,11 @@ extension ChatView {
                 return
             }
         }
-
+        guard ChatWorkoutStartFreshness.isCurrent(workout, currentPlan: profile?.workoutPlan) else {
+            message.errorMessage = "Your workout plan changed since Trai suggested this start. Ask Trai for a fresh planned workout."
+            HapticManager.error()
+            return
+        }
         // Map target muscle groups
         let targetMuscles = workoutType.supportsMuscleTargets
             ? LiveWorkout.MuscleGroup.fromTargetStrings(workout.targetMuscleGroups)

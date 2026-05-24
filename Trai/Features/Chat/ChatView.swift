@@ -461,6 +461,7 @@ struct ChatView: View {
             currentSugar: currentSugarTarget,
             currentNutritionPlanUpdatedAt: profile?.aiPlanGeneratedAt,
             currentWorkoutPlanUpdatedAt: profile?.workoutPlanGeneratedAt,
+            currentWorkoutPlanTemplateIDs: profile?.workoutPlan.map { plan in Set(plan.templates.map(\.id)) },
             enabledMacros: enabledMacrosValue,
             planRecommendation: pendingPlanRecommendation,
             planRecommendationMessage: planRecommendationMessage,
@@ -1287,6 +1288,7 @@ private struct ChatContentSection: View {
     let currentSugar: Int?
     let currentNutritionPlanUpdatedAt: Date?
     let currentWorkoutPlanUpdatedAt: Date?
+    let currentWorkoutPlanTemplateIDs: Set<UUID>?
     let enabledMacros: Set<MacroType>
     let planRecommendation: PlanRecommendation?
     let planRecommendationMessage: String?
@@ -1335,6 +1337,7 @@ private struct ChatContentSection: View {
             currentSugar: currentSugar,
             currentNutritionPlanUpdatedAt: currentNutritionPlanUpdatedAt,
             currentWorkoutPlanUpdatedAt: currentWorkoutPlanUpdatedAt,
+            currentWorkoutPlanTemplateIDs: currentWorkoutPlanTemplateIDs,
             enabledMacros: enabledMacros,
             planRecommendation: planRecommendation,
             planRecommendationMessage: planRecommendationMessage,

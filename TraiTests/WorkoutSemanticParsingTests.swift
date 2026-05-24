@@ -524,6 +524,91 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         ))
     }
 
+    func testChatWorkoutStartSuggestionRejectsCardsOlderThanCurrentPlanUpdate() {
+        let templateID = UUID()
+        let suggestion = SuggestedWorkoutEntry(
+            name: "Plan Pull Day",
+            workoutType: LiveWorkout.WorkoutType.strength.rawValue,
+            targetMuscleGroups: ["back"],
+            exercises: [
+                .init(
+                    name: "Pull Up",
+                    category: Exercise.Category.strength.rawValue,
+                    sets: 4,
+                    reps: 6
+                )
+            ],
+            sourcePlanTemplateID: templateID,
+            durationMinutes: 45,
+            rationale: "From your plan."
+        )
+
+        XCTAssertTrue(ChatWorkoutStartSuggestionContext.isStale(
+            suggestion: suggestion,
+            messageTimestamp: Date(timeIntervalSince1970: 100),
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 101),
+            currentTemplateIDs: [templateID]
+        ))
+    }
+
+    func testChatWorkoutStartSuggestionRejectsMissingSourceTemplate() {
+        let suggestion = SuggestedWorkoutEntry(
+            name: "Plan Pull Day",
+            workoutType: LiveWorkout.WorkoutType.strength.rawValue,
+            targetMuscleGroups: ["back"],
+            exercises: [
+                .init(
+                    name: "Pull Up",
+                    category: Exercise.Category.strength.rawValue,
+                    sets: 4,
+                    reps: 6
+                )
+            ],
+            sourcePlanTemplateID: UUID(),
+            durationMinutes: 45,
+            rationale: "From your plan."
+        )
+
+        XCTAssertTrue(ChatWorkoutStartSuggestionContext.isStale(
+            suggestion: suggestion,
+            messageTimestamp: Date(timeIntervalSince1970: 100),
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 100),
+            currentTemplateIDs: []
+        ))
+        XCTAssertTrue(ChatWorkoutStartSuggestionContext.isStale(
+            suggestion: suggestion,
+            messageTimestamp: Date(timeIntervalSince1970: 100),
+            currentPlanUpdatedAt: nil,
+            currentTemplateIDs: nil
+        ))
+    }
+
+    func testChatWorkoutStartSuggestionAllowsUnlinkedCustomCardsThroughPlanChanges() {
+        let suggestion = SuggestedWorkoutEntry(
+            name: "Custom Strength",
+            workoutType: LiveWorkout.WorkoutType.strength.rawValue,
+            targetMuscleGroups: ["back"],
+            exercises: [
+                .init(
+                    name: "Pull Up",
+                    category: Exercise.Category.strength.rawValue,
+                    sets: 4,
+                    reps: 6
+                )
+            ],
+            sourcePlanTemplateID: nil,
+            durationMinutes: 45,
+            rationale: "Ready to start."
+        )
+
+        XCTAssertFalse(ChatWorkoutStartSuggestionContext.isStale(
+            suggestion: suggestion,
+            messageTimestamp: Date(timeIntervalSince1970: 100),
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 101),
+            currentTemplateIDs: nil
+        ))
+    }
+
     func testChatWorkoutPlanSuggestionContextRejectsExternallyStaleCards() {
         let stalePlan = WorkoutPlan(
             splitType: .custom,

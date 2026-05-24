@@ -524,12 +524,16 @@ extension AIService {
                 )
 
                 let responseType = WorkoutPlanRefinementResponse.ResponseType(rawValue: envelope.responseType) ?? .message
+                let changedTemplateIDs = Self.decodedUUIDSet(from: envelope.changedTemplateIDs)
+                let changedBlockIDs = Self.decodedUUIDSet(from: envelope.changedBlockIDs)
                 let proposedPlan = envelope.proposedPlan.flatMap {
                     validatedRefinedWorkoutPlan(
                         $0,
                         currentPlan: currentPlan,
                         allowsTemplateCountChange: envelope.changesWeeklySchedule == true,
-                        allowsActivitySemanticChange: envelope.changesActivitySemantics == true
+                        allowsActivitySemanticChange: envelope.changesActivitySemantics == true,
+                        changedTemplateIDs: changedTemplateIDs,
+                        changedBlockIDs: changedBlockIDs
                     )
                 }
                 let updatedPlan = envelope.updatedPlan.flatMap {
@@ -537,7 +541,9 @@ extension AIService {
                         $0,
                         currentPlan: currentPlan,
                         allowsTemplateCountChange: envelope.changesWeeklySchedule == true,
-                        allowsActivitySemanticChange: envelope.changesActivitySemantics == true
+                        allowsActivitySemanticChange: envelope.changesActivitySemantics == true,
+                        changedTemplateIDs: changedTemplateIDs,
+                        changedBlockIDs: changedBlockIDs
                     )
                 }
                 return WorkoutPlanRefinementResponse(
@@ -557,8 +563,12 @@ extension AIService {
         _ plan: WorkoutPlan,
         currentPlan: WorkoutPlan,
         allowsTemplateCountChange: Bool,
-        allowsActivitySemanticChange: Bool
+        allowsActivitySemanticChange: Bool,
+        changedTemplateIDs: Set<UUID>,
+        changedBlockIDs: Set<UUID>
     ) -> WorkoutPlan? {
+        let scopedChangedTemplateIDs = allowsActivitySemanticChange ? changedTemplateIDs : []
+        let scopedChangedBlockIDs = allowsActivitySemanticChange ? changedBlockIDs : []
         guard !plan.templates.isEmpty,
               plan.planIntent != nil,
               plan.modalityProgression != nil,
@@ -581,9 +591,11 @@ extension AIService {
             return nil
         }
 
-        guard allowsActivitySemanticChange || plan.preservesDurableActivitySemantics(
+        guard plan.preservesDurableActivitySemantics(
             from: currentPlan,
-            allowsTemplateCountChange: allowsTemplateCountChange
+            allowsTemplateCountChange: allowsTemplateCountChange,
+            changedTemplateIDs: scopedChangedTemplateIDs,
+            changedBlockIDs: scopedChangedBlockIDs
         ) else {
             log("Ignoring workout plan refinement that dropped durable activity semantics from the current plan.", type: .error)
             return nil
@@ -606,8 +618,12 @@ extension AIService {
         _ plan: WorkoutPlan,
         currentPlan: WorkoutPlan,
         allowsTemplateCountChange: Bool = false,
-        allowsActivitySemanticChange: Bool = false
+        allowsActivitySemanticChange: Bool = false,
+        changedTemplateIDs: Set<UUID> = [],
+        changedBlockIDs: Set<UUID> = []
     ) -> WorkoutPlan? {
+        let scopedChangedTemplateIDs = allowsActivitySemanticChange ? changedTemplateIDs : []
+        let scopedChangedBlockIDs = allowsActivitySemanticChange ? changedBlockIDs : []
         guard !plan.templates.isEmpty,
               plan.planIntent != nil,
               plan.modalityProgression != nil,
@@ -618,9 +634,11 @@ extension AIService {
                 from: currentPlan,
                 allowsTemplateCountChange: allowsTemplateCountChange
               ),
-              allowsActivitySemanticChange || plan.preservesDurableActivitySemantics(
+              plan.preservesDurableActivitySemantics(
                 from: currentPlan,
-                allowsTemplateCountChange: allowsTemplateCountChange
+                allowsTemplateCountChange: allowsTemplateCountChange,
+                changedTemplateIDs: scopedChangedTemplateIDs,
+                changedBlockIDs: scopedChangedBlockIDs
               ) else {
             return nil
         }
@@ -636,6 +654,10 @@ extension AIService {
         }
 
         return plan
+    }
+
+    private static func decodedUUIDSet(from rawValues: [String]?) -> Set<UUID> {
+        Set((rawValues ?? []).compactMap { UUID(uuidString: $0.trimmingCharacters(in: .whitespacesAndNewlines)) })
     }
 }
 
@@ -664,6 +686,7 @@ private extension WorkoutPlan {
     ) -> Bool {
         let currentTemplateIDs = Set(currentPlan.templates.map(\.id))
         let nextTemplateIDs = Set(templates.map(\.id))
+        guard nextTemplateIDs.count == templates.count else { return false }
 
         if allowsTemplateCountChange {
             if templates.count >= currentPlan.templates.count {
@@ -680,7 +703,9 @@ private extension WorkoutPlan {
 
     func preservesDurableActivitySemantics(
         from currentPlan: WorkoutPlan,
-        allowsTemplateCountChange: Bool
+        allowsTemplateCountChange: Bool,
+        changedTemplateIDs: Set<UUID>,
+        changedBlockIDs: Set<UUID>
     ) -> Bool {
         if currentPlan.planIntent?.supportiveCardioConstraint != nil,
            planIntent?.supportiveCardioConstraint == nil {
@@ -694,10 +719,13 @@ private extension WorkoutPlan {
         }
 
         let currentTemplatesToPreserve = currentPlan.templates.filter { currentTemplate in
-            trainingTemplate(matching: currentTemplate.id) != nil
+            trainingTemplate(matching: currentTemplate.id) != nil &&
+                !changedTemplateIDs.contains(currentTemplate.id)
         }
 
-        let currentBlocks = currentTemplatesToPreserve.flatMap(\.blocks).filter(\.hasDurableActivitySemanticsToPreserve)
+        let currentBlocks = currentTemplatesToPreserve
+            .flatMap(\.blocks)
+            .filter { $0.hasDurableActivitySemanticsToPreserve && !changedBlockIDs.contains($0.id) }
         if !currentBlocks.isEmpty {
             return currentBlocks.allSatisfy { currentBlock in
                 guard let nextBlock = trainingBlock(matching: currentBlock.id) else {
@@ -707,7 +735,9 @@ private extension WorkoutPlan {
             }
         }
 
-        let currentGroups = currentTemplatesToPreserve.requiredDurableActivityIdentityGroups
+        let currentGroups = currentTemplatesToPreserve.requiredDurableActivityIdentityGroups(
+            excludingBlockIDs: changedBlockIDs
+        )
         guard !currentGroups.isEmpty else { return true }
         return currentGroups.allSatisfy { containsVisibleActivityIdentity(matching: $0) }
     }
@@ -731,15 +761,21 @@ private extension WorkoutPlan {
 
 private extension Array where Element == WorkoutPlan.WorkoutTemplate {
     var requiredDurableActivityIdentityGroups: [[String]] {
+        requiredDurableActivityIdentityGroups(excludingBlockIDs: [])
+    }
+
+    func requiredDurableActivityIdentityGroups(excludingBlockIDs blockIDs: Set<UUID>) -> [[String]] {
         flatMap { template in
             let identityBlocks = template.blocks.isEmpty ? template.displayBlocks : template.blocks
-            let blockGroups: [[String]] = identityBlocks.compactMap { block in
-                let values = ([block.activityTypeName].compactMap { $0 } + block.activityTags + block.exercises.map(\.exerciseName))
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                guard !values.isEmpty else { return nil }
-                return values
-            }
+            let blockGroups: [[String]] = identityBlocks
+                .filter { !blockIDs.contains($0.id) }
+                .compactMap { block in
+                    let values = ([block.activityTypeName].compactMap { $0 } + block.activityTags + block.exercises.map(\.exerciseName))
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    guard !values.isEmpty else { return nil }
+                    return values
+                }
 
             if !blockGroups.isEmpty {
                 return blockGroups

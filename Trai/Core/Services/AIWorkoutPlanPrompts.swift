@@ -584,7 +584,8 @@ extension AIPromptBuilder {
         - If they ask to change exercises or schedule directionally, make a reasonable proposal instead of starting a long clarification chain
         - Set changesWeeklySchedule to true only when the requested change intentionally adds, removes, or changes the number of weekly workout sessions. Otherwise keep the same number of templates as the current plan.
         - Set changesActivitySemantics to true only when the user explicitly asked to add, remove, replace, or materially change a modality/activity family such as cardio, climbing, mobility, sport practice, or recovery. Keep it false for wording, order, duration, or exercise swaps that preserve the same activity intent.
-        - When changesActivitySemantics is false, preserve existing template IDs, block IDs, block kind, block role, activityTypeName, and activityTags. These fields are durable semantic data, not display text.
+        - changedTemplateIDs and changedBlockIDs must list the exact current template/block IDs whose activity semantics were intentionally changed by the user's request. Leave them empty for unchanged sessions. These arrays are durable change data, not explanation text.
+        - Preserve existing template IDs, block IDs, block kind, block role, activityTypeName, and activityTags for every template/block that is not listed in changedTemplateIDs or changedBlockIDs. These fields are durable semantic data, not display text.
         - Preserve and update planIntent, modalityProgression, and template blocks whenever a plan changes
         - Use blocks for modality-specific work: cardio, mobility flows, climbing/sport practice, conditioning, and recovery should not be flattened into fake strength exercises. Use role to describe whether a block is main work, a warmup, an accessory, a finisher, or a cooldown.
         - Preserve specific activity identity with activityTypeName and activityTags. Kind remains a stable behavior primitive, not the user-facing name.
@@ -791,10 +792,20 @@ extension AIPromptBuilder {
                     "type": "boolean",
                     "description": "True only when the user explicitly requested adding, removing, replacing, or materially changing an activity/modality family. False when existing activity semantics should be preserved."
                 ],
+                "changedTemplateIDs": [
+                    "type": "array",
+                    "description": "Exact current template IDs whose activity semantics were intentionally changed by the user's request. Empty when no existing template's activity semantics changed.",
+                    "items": ["type": "string"]
+                ],
+                "changedBlockIDs": [
+                    "type": "array",
+                    "description": "Exact current block IDs whose activity semantics were intentionally changed by the user's request. Empty when no existing block's activity semantics changed.",
+                    "items": ["type": "string"]
+                ],
                 "proposedPlan": planSchema,
                 "updatedPlan": planSchema
             ],
-            "required": ["responseType", "message", "changesWeeklySchedule", "changesActivitySemantics"]
+            "required": ["responseType", "message", "changesWeeklySchedule", "changesActivitySemantics", "changedTemplateIDs", "changedBlockIDs"]
         ]
     }
 }

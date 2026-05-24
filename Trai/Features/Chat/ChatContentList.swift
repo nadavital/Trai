@@ -25,6 +25,7 @@ struct ChatContentList: View {
     let currentSugar: Int?
     let currentNutritionPlanUpdatedAt: Date?
     let currentWorkoutPlanUpdatedAt: Date?
+    let currentWorkoutPlanTemplateIDs: Set<UUID>?
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     var planRecommendation: PlanRecommendation?
     var planRecommendationMessage: String?
@@ -123,6 +124,7 @@ struct ChatContentList: View {
                             currentSugar: currentSugar,
                             currentNutritionPlanUpdatedAt: currentNutritionPlanUpdatedAt,
                             currentWorkoutPlanUpdatedAt: currentWorkoutPlanUpdatedAt,
+                            currentWorkoutPlanTemplateIDs: currentWorkoutPlanTemplateIDs,
                             enabledMacros: enabledMacros,
                             onAcceptMeal: { meal in
                                 onAcceptMeal(meal, message)

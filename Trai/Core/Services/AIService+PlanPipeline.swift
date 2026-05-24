@@ -16,6 +16,8 @@ extension AIService {
         let updatedPlan: Plan?
         let changesWeeklySchedule: Bool?
         let changesActivitySemantics: Bool?
+        let changedTemplateIDs: [String]?
+        let changedBlockIDs: [String]?
     }
 
     func executePlanGenerationPipeline<Plan: Decodable>(
