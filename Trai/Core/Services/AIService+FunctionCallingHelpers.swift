@@ -674,8 +674,7 @@ extension AIService {
 
             completeAIRequest(requestTicket)
 
-            let hasSuggestion = !result.suggestedFoods.isEmpty || result.planUpdate != nil || result.suggestedFoodEdit != nil || result.suggestedFoodComponentEdit != nil || result.suggestedWorkoutPlan != nil || result.suggestedWorkout != nil || result.suggestedWorkoutLog != nil || result.suggestedReminder != nil
-            if !additionalFunctionResults.isEmpty && !hasSuggestion {
+            if !additionalFunctionResults.isEmpty && !result.hasSuggestion {
                 let chainedResult = try await sendParallelFunctionResults(
                     functionResults: additionalFunctionResults,
                     previousMessages: messages,
@@ -685,26 +684,7 @@ extension AIService {
                     onTextChunk: onTextChunk,
                     depth: depth + 1
                 )
-                if !chainedResult.text.isEmpty {
-                    result.text += chainedResult.text
-                }
-                result.suggestedFoods.append(contentsOf: chainedResult.suggestedFoods)
-                if let plan = chainedResult.planUpdate {
-                    result.planUpdate = plan
-                }
-                if let edit = chainedResult.suggestedFoodEdit {
-                    result.suggestedFoodEdit = edit
-                }
-                if let componentEdit = chainedResult.suggestedFoodComponentEdit {
-                    result.suggestedFoodComponentEdit = componentEdit
-                }
-                if let workoutPlan = chainedResult.suggestedWorkoutPlan {
-                    result.suggestedWorkoutPlan = workoutPlan
-                }
-                if let reminder = chainedResult.suggestedReminder {
-                    result.suggestedReminder = reminder
-                }
-                result.savedMemories.append(contentsOf: chainedResult.savedMemories)
+                result.mergeChainedResult(chainedResult)
             }
 
             return result

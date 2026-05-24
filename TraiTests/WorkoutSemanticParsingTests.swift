@@ -524,6 +524,156 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         ))
     }
 
+    func testChatWorkoutPlanSuggestionContextRejectsExternallyStaleCards() {
+        let stalePlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Old Pull",
+                    sessionType: .strength,
+                    targetMuscleGroups: ["back"],
+                    exercises: [],
+                    estimatedDurationMinutes: 45,
+                    order: 0
+                )
+            ],
+            rationale: "Old plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let freshPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Fresh Pull",
+                    sessionType: .strength,
+                    targetMuscleGroups: ["back"],
+                    exercises: [],
+                    estimatedDurationMinutes: 45,
+                    order: 0
+                )
+            ],
+            rationale: "Fresh plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let staleMessage = ChatMessage(content: "", isFromUser: false)
+        staleMessage.timestamp = Date(timeIntervalSince1970: 100)
+        staleMessage.setSuggestedWorkoutPlan(WorkoutPlanSuggestionEntry(plan: stalePlan, message: "Old"))
+        let freshMessage = ChatMessage(content: "", isFromUser: false)
+        freshMessage.timestamp = Date(timeIntervalSince1970: 102)
+        freshMessage.setSuggestedWorkoutPlan(WorkoutPlanSuggestionEntry(plan: freshPlan, message: "Fresh"))
+
+        XCTAssertNil(ChatWorkoutPlanSuggestionContext.latestFreshSuggestion(
+            in: [staleMessage],
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 101)
+        ))
+
+        let suggestion = ChatWorkoutPlanSuggestionContext.latestFreshSuggestion(
+            in: [staleMessage, freshMessage],
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 101)
+        )
+        XCTAssertEqual(suggestion?.plan.templates.first?.name, "Fresh Pull")
+    }
+
+    func testChatWorkoutPlanSuggestionContextCanUseFreshRetiredSuggestionForRetry() {
+        let plan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Retry Pull",
+                    sessionType: .strength,
+                    targetMuscleGroups: ["back"],
+                    exercises: [],
+                    estimatedDurationMinutes: 45,
+                    order: 0
+                )
+            ],
+            rationale: "Fresh retired plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let message = ChatMessage(content: "", isFromUser: false)
+        message.timestamp = Date(timeIntervalSince1970: 102)
+        message.setSuggestedWorkoutPlan(WorkoutPlanSuggestionEntry(plan: plan, message: "Retry"))
+        message.suggestedWorkoutPlanDismissed = true
+
+        XCTAssertNil(ChatWorkoutPlanSuggestionContext.latestFreshSuggestion(
+            in: [message],
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 101)
+        ))
+
+        let retrySuggestion = ChatWorkoutPlanSuggestionContext.latestFreshSuggestion(
+            in: [message],
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 101),
+            includeRetired: true
+        )
+        XCTAssertEqual(retrySuggestion?.plan.templates.first?.name, "Retry Pull")
+
+        message.workoutPlanUpdateApplied = true
+        XCTAssertNil(ChatWorkoutPlanSuggestionContext.latestFreshSuggestion(
+            in: [message],
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 101),
+            includeRetired: true
+        ))
+    }
+
+    func testOnboardingPlanInputInvalidationIncludesGeneratedWorkoutReviewState() {
+        XCTAssertTrue(OnboardingPlanInputInvalidation.shouldResetGeneratedPlanState(
+            oldSignature: "old",
+            newSignature: "new",
+            hasNutritionState: false,
+            hasWorkoutReviewState: true
+        ))
+        XCTAssertFalse(OnboardingPlanInputInvalidation.shouldResetGeneratedPlanState(
+            oldSignature: "old",
+            newSignature: "old",
+            hasNutritionState: true,
+            hasWorkoutReviewState: true
+        ))
+        XCTAssertFalse(OnboardingPlanInputInvalidation.shouldResetGeneratedPlanState(
+            oldSignature: "old",
+            newSignature: "new",
+            hasNutritionState: false,
+            hasWorkoutReviewState: false
+        ))
+    }
+
+    func testFunctionFollowUpMergePreservesChainedWorkoutStartAndLogSuggestions() {
+        var result = AIService.FunctionFollowUpResult()
+        let workout = SuggestedWorkoutEntry(
+            name: "Plan Pull Day",
+            workoutType: "strength",
+            targetMuscleGroups: ["back"],
+            exercises: [],
+            sourcePlanTemplateID: UUID(),
+            durationMinutes: 45,
+            rationale: "From your current plan"
+        )
+        let workoutLog = SuggestedWorkoutLog(
+            name: "Plan Pull Day",
+            workoutType: "strength",
+            sourcePlanTemplateID: UUID(),
+            durationMinutes: 45,
+            exercises: [],
+            notes: nil
+        )
+        var chainedResult = AIService.FunctionFollowUpResult()
+        chainedResult.text = "Ready."
+        chainedResult.suggestedWorkout = workout
+        chainedResult.suggestedWorkoutLog = workoutLog
+
+        result.mergeChainedResult(chainedResult)
+
+        XCTAssertTrue(result.hasSuggestion)
+        XCTAssertEqual(result.text, "Ready.")
+        XCTAssertEqual(result.suggestedWorkout?.id, workout.id)
+        XCTAssertEqual(result.suggestedWorkoutLog?.id, workoutLog.id)
+    }
+
     func testLogWorkoutUsesTopLevelDurationForSingleNonStrengthActivity() async throws {
         let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
             .init(

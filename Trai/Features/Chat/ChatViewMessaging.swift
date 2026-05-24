@@ -144,7 +144,7 @@ extension ChatView {
 
         selectedImage = nil
         selectedPhotoItem = nil
-        let pendingWorkoutPlanSuggestionForContext = pendingWorkoutPlanSuggestion?.suggestion
+        let pendingWorkoutPlanSuggestionForContext = currentPendingWorkoutPlanSuggestionForContext()
 
         if currentSessionMessages.isEmpty && !isPreparingFirstMessageTransition {
             isPreparingFirstMessageTransition = true
@@ -226,7 +226,7 @@ extension ChatView {
         guard currentMessageTask == nil, !isLoading else { return false }
 
         updateLastActivity()
-        let pendingWorkoutPlanSuggestionForContext = pendingWorkoutPlanSuggestion?.suggestion
+        let pendingWorkoutPlanSuggestionForContext = currentPendingWorkoutPlanSuggestionForContext()
         retirePendingPlanSuggestionsInCurrentSession()
         currentActivity = launchLabel ?? "Reviewing with Trai..."
         isLoading = true
@@ -317,7 +317,7 @@ extension ChatView {
                 memoriesContext: memoriesContext,
                 coachContext: coachContext,
                 pendingSuggestion: pendingMealSuggestion?.meal,
-                pendingWorkoutPlanSuggestion: pendingWorkoutPlanSuggestionForContext ?? pendingWorkoutPlanSuggestion?.suggestion,
+                pendingWorkoutPlanSuggestion: pendingWorkoutPlanSuggestionForContext ?? currentPendingWorkoutPlanSuggestionForContext(),
                 isIncognitoMode: isTemporarySession,
                 activeWorkout: workoutContext,
                 activityData: activityData,
@@ -490,11 +490,11 @@ extension ChatView {
         let capturedImage = userMessage.imageData.flatMap { UIImage(data: $0) }
         let text = userMessage.content
         let previousMessages = Array(currentSessionMessages.prefix(messageIndex - 1).suffix(10))
-        let pendingWorkoutPlanSuggestionForContext = currentSessionMessages
-            .prefix(messageIndex)
-            .reversed()
-            .compactMap(\.suggestedWorkoutPlan)
-            .first
+        let pendingWorkoutPlanSuggestionForContext = ChatWorkoutPlanSuggestionContext.latestFreshSuggestion(
+            in: Array(currentSessionMessages.prefix(messageIndex)),
+            currentPlanUpdatedAt: profile?.workoutPlanGeneratedAt,
+            includeRetired: true
+        )
 
         let requestID = UUID()
         currentMessageRequestID = requestID
@@ -632,6 +632,13 @@ extension ChatView {
             in: interval,
             workoutSessions: recentWorkouts,
             liveWorkouts: liveWorkouts
+        )
+    }
+
+    private func currentPendingWorkoutPlanSuggestionForContext() -> WorkoutPlanSuggestionEntry? {
+        ChatWorkoutPlanSuggestionContext.latestFreshSuggestion(
+            in: currentSessionMessages,
+            currentPlanUpdatedAt: profile?.workoutPlanGeneratedAt
         )
     }
 

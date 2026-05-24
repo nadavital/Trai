@@ -37,6 +37,12 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         workout.entries = (workout.entries ?? []) + [entry]
     }
 
+    private func currentPeriodFixtureAnchor() -> Date {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return calendar.date(byAdding: .hour, value: 12, to: today) ?? Date()
+    }
+
     func testRepEditDoesNotInvalidateEntryListObservation() {
         let (workout, entry) = makeWorkout(initialReps: 8)
         context.insert(workout)
@@ -1293,10 +1299,12 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         )
         goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
 
+        let anchor = currentPeriodFixtureAnchor()
         let repeatedWorkouts = (0..<3).map { index in
             let workout = LiveWorkout(name: "Pull Strength", workoutType: .strength)
-            workout.startedAt = Date().addingTimeInterval(TimeInterval(-3_600 + index * 600))
-            workout.completedAt = workout.startedAt.addingTimeInterval(1_800)
+            let completedAt = anchor.addingTimeInterval(TimeInterval(index * 600))
+            workout.startedAt = completedAt.addingTimeInterval(-1_800)
+            workout.completedAt = completedAt
             workout.sourcePlanTemplateID = templates[0].id
             addCompletedStrengthEntry(to: workout)
             return workout
@@ -1577,9 +1585,10 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
     }
 
     func testPeriodDurationGoalSumsMatchingActivityWork() {
+        let anchor = currentPeriodFixtureAnchor()
         let firstWorkout = LiveWorkout(name: "Strength + Bike", workoutType: .mixed)
-        firstWorkout.startedAt = Date().addingTimeInterval(-3_600)
-        firstWorkout.completedAt = Date().addingTimeInterval(-2_400)
+        firstWorkout.startedAt = anchor.addingTimeInterval(-3_600)
+        firstWorkout.completedAt = anchor.addingTimeInterval(-2_400)
         let firstEntry = LiveWorkoutEntry(
             exerciseName: "Easy Bike",
             orderIndex: 0,
@@ -1591,8 +1600,8 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         firstWorkout.entries = [firstEntry]
 
         let secondWorkout = LiveWorkout(name: "Cardio Support", workoutType: .mixed)
-        secondWorkout.startedAt = Date().addingTimeInterval(-1_800)
-        secondWorkout.completedAt = Date().addingTimeInterval(-600)
+        secondWorkout.startedAt = anchor.addingTimeInterval(-1_800)
+        secondWorkout.completedAt = anchor.addingTimeInterval(-600)
         let secondEntry = LiveWorkoutEntry(
             exerciseName: "Incline Walk",
             orderIndex: 0,
@@ -1627,9 +1636,10 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
     }
 
     func testPeriodCountGoalSumsActivityAttemptsInsideMixedWorkouts() {
+        let anchor = currentPeriodFixtureAnchor()
         let firstWorkout = LiveWorkout(name: "Strength + Climbing", workoutType: .mixed)
-        firstWorkout.startedAt = Date().addingTimeInterval(-3_600)
-        firstWorkout.completedAt = Date().addingTimeInterval(-2_400)
+        firstWorkout.startedAt = anchor.addingTimeInterval(-3_600)
+        firstWorkout.completedAt = anchor.addingTimeInterval(-2_400)
         let firstEntry = LiveWorkoutEntry(
             exerciseName: "Limit Bouldering",
             orderIndex: 0,
@@ -1645,8 +1655,8 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         firstWorkout.entries = [firstEntry]
 
         let secondWorkout = LiveWorkout(name: "Climb Practice", workoutType: .mixed)
-        secondWorkout.startedAt = Date().addingTimeInterval(-1_800)
-        secondWorkout.completedAt = Date().addingTimeInterval(-600)
+        secondWorkout.startedAt = anchor.addingTimeInterval(-1_800)
+        secondWorkout.completedAt = anchor.addingTimeInterval(-600)
         let secondEntry = LiveWorkoutEntry(
             exerciseName: "Bouldering Volume",
             orderIndex: 0,

@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `ec94f0a Fix workout plan chat and adherence regressions`
+- Latest pushed fix before current round: `406769a Fix stale chat cards and workout function chaining`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -18,6 +18,10 @@
 - Added auth and pending-prompt guards for Review with Trai entry points from meal/workout/plan sheets.
 - Preserved explicit `daysPerWeek` choices in plan edit save while still reducing impossible counts when workout days are deleted.
 - Normalized generated plan-adherence goals consistently across Profile, Settings, chat save, and onboarding save paths.
+- Preserved recursive AI function-chain workout start/log cards when the model performs multiple context lookups before producing the actionable workout result.
+- Prevented stale workout-plan chat proposals from being reused as follow-up refinement context after the active plan changes elsewhere.
+- Invalidated generated onboarding workout-plan review state when profile/nutrition inputs change after a generated workout plan/goals already exist.
+- Stabilized current-period workout goal tests so they do not fail around a local week/day boundary.
 
 ## Fresh Review Rounds
 
@@ -84,6 +88,13 @@
 - Live workout planned/logged semantics: no new serious issue found in the fresh pass beyond the validated source-template guard.
 - Regression-test coverage: added focused coverage for current-plan `log_workout` template IDs, invalid template ID rejection, and stale-card freshness decisions.
 
+### Round 2026-05-24 After `406769a`
+- AI function contracts: fixed verified recursive context-tool chaining gap where a second-level follow-up could still drop `suggestedWorkout` / `suggestedWorkoutLog` cards.
+- Plan persistence/edit/review flow: fixed verified stale refinement-base gap where an old workout-plan proposal could still be passed to AI as context after an external plan save, while preserving fresh retired proposal context for retries.
+- Chat/review pending state: no additional serious issue found beyond the stale refinement-base fix.
+- Live workout planned/logged semantics: no serious issue found in the fresh pass.
+- Regression-test coverage: added focused coverage for recursive function-result merge, stale workout-plan suggestion context, retrying fresh retired plan suggestions, onboarding workout-review invalidation, and date-stable current-period goal fixtures.
+
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
 - Generated workout plan blocks decoded unknown free-text `kind` values as `.custom`, letting malformed AI payloads store generic behavior data.
@@ -141,6 +152,10 @@
 - `log_workout` accepted arbitrary non-empty `source_plan_template_id` values, letting stale or hallucinated template IDs create saved logs that could never count toward the current generated plan.
 - Older nutrition-plan chat cards stayed saveable after newer nutrition targets were saved elsewhere, so accepting the old card could overwrite current targets.
 - Older workout-plan chat cards stayed saveable after a newer workout plan was saved from Profile, Workouts, Settings, or plan edit flows.
+- Recursive chained context-tool follow-ups could still drop workout start/log cards if the actionable card appeared only after another follow-up depth.
+- Older workout-plan chat proposals could still become the AI refinement base after the active workout plan had been replaced outside that chat.
+- Onboarding generated workout-plan review state was not invalidated when profile/nutrition inputs changed after workout plan/goals generation.
+- Current-period workout goal tests could fail around midnight or the locale week boundary because fixtures used `Date() - 1 hour`.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -175,6 +190,12 @@
 - Result after `ec94f0a` review fix round: 81 selected tests, 0 failures.
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/WorkoutTemplateServiceTests -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests -only-testing:TraiTests/OnboardingFlowPlannerTests`
 - Result after `ec94f0a` review fix round: 215 selected tests, 0 failures.
+- `git diff --check`
+- Result after `406769a` review fix round: no whitespace errors.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidDerived2 CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatWorkoutPlanSuggestionContextCanUseFreshRetiredSuggestionForRetry -only-testing:TraiTests/WorkoutSemanticParsingTests/testFunctionFollowUpMergePreservesChainedWorkoutStartAndLogSuggestions -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests/testGeneratedPlanAdherenceCountsDistinctTemplatesOnly -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests/testPeriodCountGoalSumsActivityAttemptsInsideMixedWorkouts -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests/testPeriodDurationGoalSumsMatchingActivityWork`
+- Result after `406769a` focused rerun: 5 selected tests, 0 failures.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidDerived3 CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/WorkoutTemplateServiceTests -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests -only-testing:TraiTests/OnboardingFlowPlannerTests`
+- Result after `406769a` broad focused rerun: 219 selected tests, 0 failures.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -228,3 +249,6 @@
 - Save/replace a workout plan from Profile, Workouts, Settings, or plan edit after a workout-plan chat card exists, then accept the older card and confirm it is rejected as no longer current.
 - Ask "what should I train today?" in a situation where Trai first checks context/recovery, and confirm the final answer still includes the workout start card.
 - Ask Trai to log a generated-plan workout and confirm a valid current template advances adherence, while an old/stale template cannot be logged against the current plan.
+- Generate chat workout-plan proposal A, save or replace plan B from Profile/Workouts/Settings, return to the old chat and ask for a tweak; confirm Trai uses current plan B or asks for clarification instead of refining proposal A.
+- Generate a workout-plan proposal, ask for a follow-up tweak that fails, then retry; confirm the retry still uses the fresh unsaved proposal as context.
+- During onboarding, generate a workout plan/goals, go back and change profile/nutrition inputs, then continue; confirm the old workout plan/goals are cleared and must be regenerated/reconfirmed.

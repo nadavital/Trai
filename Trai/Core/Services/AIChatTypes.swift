@@ -180,5 +180,45 @@ extension AIService {
         var suggestedReminder: SuggestedReminder?
         var savedMemories: [String] = []
         var accumulatedParts: [TraiAIPart] = []
+
+        var hasSuggestion: Bool {
+            !suggestedFoods.isEmpty ||
+            planUpdate != nil ||
+            suggestedFoodEdit != nil ||
+            suggestedFoodComponentEdit != nil ||
+            suggestedWorkoutPlan != nil ||
+            suggestedWorkout != nil ||
+            suggestedWorkoutLog != nil ||
+            suggestedReminder != nil
+        }
+
+        mutating func mergeChainedResult(_ chainedResult: FunctionFollowUpResult) {
+            if !chainedResult.text.isEmpty {
+                text += chainedResult.text
+            }
+            suggestedFoods.append(contentsOf: chainedResult.suggestedFoods)
+            if let plan = chainedResult.planUpdate {
+                planUpdate = plan
+            }
+            if let edit = chainedResult.suggestedFoodEdit {
+                suggestedFoodEdit = edit
+            }
+            if let componentEdit = chainedResult.suggestedFoodComponentEdit {
+                suggestedFoodComponentEdit = componentEdit
+            }
+            if let workoutPlan = chainedResult.suggestedWorkoutPlan {
+                suggestedWorkoutPlan = workoutPlan
+            }
+            if let workout = chainedResult.suggestedWorkout {
+                suggestedWorkout = workout
+            }
+            if let workoutLog = chainedResult.suggestedWorkoutLog {
+                suggestedWorkoutLog = workoutLog
+            }
+            if let reminder = chainedResult.suggestedReminder {
+                suggestedReminder = reminder
+            }
+            savedMemories.append(contentsOf: chainedResult.savedMemories)
+        }
     }
 }
