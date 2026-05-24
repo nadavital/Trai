@@ -190,7 +190,10 @@ struct LargeWidgetView: View {
     let entry: TraiWidgetEntry
 
     private var workoutURL: URL {
-        AppRoute.workout(templateID: nil, templateName: entry.data.recommendedWorkout).url
+        AppRoute.workout(
+            templateID: entry.data.recommendedWorkoutTemplateID,
+            templateName: entry.data.recommendedWorkout
+        ).url
     }
 
     var body: some View {
@@ -697,6 +700,7 @@ private enum TraiWidgetsPreviewData {
         fatGoal: 65,
         readyMuscleCount: 5,
         recommendedWorkout: "Push Day",
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 3,
         todayWorkoutCompleted: false,
         lastUpdated: Date()
@@ -713,6 +717,7 @@ private enum TraiWidgetsPreviewData {
         fatGoal: 65,
         readyMuscleCount: 5,
         recommendedWorkout: "Push Day",
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 3,
         todayWorkoutCompleted: false,
         lastUpdated: Date()
@@ -729,6 +734,7 @@ private enum TraiWidgetsPreviewData {
         fatGoal: 65,
         readyMuscleCount: 7,
         recommendedWorkout: "Leg Day",
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 5,
         todayWorkoutCompleted: false,
         lastUpdated: Date()

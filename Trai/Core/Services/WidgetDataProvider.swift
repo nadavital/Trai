@@ -117,11 +117,14 @@ nonisolated struct WidgetDataSnapshotBuilder {
         let readyMuscleCount = recoveryInfo.filter { $0.status == .ready }.count
 
         var recommendedWorkout: String?
+        var recommendedWorkoutTemplateID: UUID?
         if let workoutPlan = profile?.workoutPlan {
-            recommendedWorkout = bestTemplateForToday(
+            let recommendation = bestTemplateForToday(
                 plan: workoutPlan,
                 recoveryInfo: recoveryInfo
-            )?.template.name
+            )?.template
+            recommendedWorkout = recommendation?.name
+            recommendedWorkoutTemplateID = recommendation?.id
         }
 
         return WidgetData(
@@ -135,6 +138,7 @@ nonisolated struct WidgetDataSnapshotBuilder {
             fatGoal: fatGoal,
             readyMuscleCount: readyMuscleCount,
             recommendedWorkout: recommendedWorkout,
+            recommendedWorkoutTemplateID: recommendedWorkoutTemplateID,
             workoutStreak: workoutStreak(modelContext: modelContext),
             todayWorkoutCompleted: todayWorkoutCompleted,
             lastUpdated: Date()

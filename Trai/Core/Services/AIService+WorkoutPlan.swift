@@ -652,9 +652,29 @@ private extension WorkoutPlan {
             guard nextSupportBlockCount >= currentSupportBlockCount else { return false }
         }
 
+        let currentBlocks = currentPlan.requiredDurableActivityBlocks
+        if !currentBlocks.isEmpty {
+            return currentBlocks.allSatisfy { currentBlock in
+                guard let nextBlock = trainingBlock(matching: currentBlock.id) else {
+                    return false
+                }
+                return nextBlock.preservesDurableActivitySemantics(from: currentBlock)
+            }
+        }
+
         let currentGroups = currentPlan.requiredDurableActivityIdentityGroups
         guard !currentGroups.isEmpty else { return true }
         return currentGroups.allSatisfy { containsVisibleActivityIdentity(matching: $0) }
+    }
+
+    var requiredDurableActivityBlocks: [WorkoutPlan.TrainingBlock] {
+        templates.flatMap(\.blocks).filter(\.hasDurableActivitySemanticsToPreserve)
+    }
+
+    func trainingBlock(matching id: UUID) -> WorkoutPlan.TrainingBlock? {
+        templates
+            .flatMap(\.blocks)
+            .first { $0.id == id }
     }
 
     var requiredDurableActivityIdentityGroups: [[String]] {
@@ -685,6 +705,35 @@ private extension WorkoutPlan {
                 .filter { !$0.isEmpty }
             return fallbackValues.isEmpty ? [] : [fallbackValues]
         }
+    }
+}
+
+private extension WorkoutPlan.TrainingBlock {
+    var hasDurableActivitySemanticsToPreserve: Bool {
+        guard kind != .strength || role != .main || !activityTags.isEmpty else {
+            return false
+        }
+
+        return activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            || !activityTags.isEmpty
+            || kind != .strength
+    }
+
+    func preservesDurableActivitySemantics(from currentBlock: WorkoutPlan.TrainingBlock) -> Bool {
+        guard kind == currentBlock.kind,
+              role == currentBlock.role else {
+            return false
+        }
+
+        let currentActivityType = currentBlock.activityTypeName?.goalNormalizedKey ?? ""
+        if !currentActivityType.isEmpty,
+           activityTypeName?.goalNormalizedKey != currentActivityType {
+            return false
+        }
+
+        let nextTags = Set(activityTags.map(\.goalNormalizedKey).filter { !$0.isEmpty })
+        let currentTags = Set(currentBlock.activityTags.map(\.goalNormalizedKey).filter { !$0.isEmpty })
+        return currentTags.isSubset(of: nextTags)
     }
 }
 

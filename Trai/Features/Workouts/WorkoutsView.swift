@@ -1307,7 +1307,7 @@ struct WorkoutsView: View {
             template,
             progressionStrategy: workoutPlan?.progressionStrategy ?? .defaultStrategy,
             modelContext: modelContext,
-            prefillStrengthExercises: false
+            prefillStrengthExercises: true
         )
         _ = templateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(

@@ -1094,6 +1094,8 @@ struct OnboardingWorkoutPlanSetupView: View {
     @State private var dynamicProPersonalizationQuestions: [ProPersonalizationQuestion] = []
     @State private var isGeneratingProPersonalizationQuestion = false
     @State private var hasQueuedProPlanGeneration = false
+    @State private var generationTask: Task<Void, Never>?
+    @State private var generationRequestID: UUID?
     @State private var generationStartedAt: Date?
     @State private var generationStatusTitle = "Creating your plan"
     @State private var showingManualDayEditor = false
@@ -1173,6 +1175,9 @@ struct OnboardingWorkoutPlanSetupView: View {
             if !isShowing {
                 generatedPlanChatPrompt = nil
             }
+        }
+        .onDisappear {
+            cancelPlanGeneration(clearReview: false)
         }
     }
 
@@ -3423,6 +3428,10 @@ struct OnboardingWorkoutPlanSetupView: View {
     }
 
     private func goBack() {
+        if isGenerating {
+            cancelPlanGeneration(clearReview: true)
+        }
+
         let steps = self.steps
         guard let index = steps.firstIndex(of: currentStep), index > steps.startIndex else {
             onBack()
@@ -3438,6 +3447,9 @@ struct OnboardingWorkoutPlanSetupView: View {
     private func generatePlan() {
         guard draft.canGenerate, !isGenerating else { return }
 
+        generationTask?.cancel()
+        let requestID = UUID()
+        generationRequestID = requestID
         isGenerating = true
         generationStartedAt = Date()
         generationStatusTitle = "Creating your plan"
@@ -3449,9 +3461,12 @@ struct OnboardingWorkoutPlanSetupView: View {
         }
         let request = planDraft.buildRequest(context: context)
 
-        Task { @MainActor in
+        generationTask = Task { @MainActor in
             guard usesAI else {
+                guard generationRequestID == requestID, !Task.isCancelled else { return }
                 let plan = planDraft.buildManualPlan(context: context)
+                generationTask = nil
+                generationRequestID = nil
                 isGenerating = false
                 generationStartedAt = nil
                 HapticManager.success()
@@ -3469,6 +3484,9 @@ struct OnboardingWorkoutPlanSetupView: View {
                     userIntent: draft.trimmedProCoachingNotes.isEmpty ? request.preferences : draft.trimmedProCoachingNotes,
                     prefersMetricWeight: true
                 )
+                guard generationRequestID == requestID, !Task.isCancelled else { return }
+                generationTask = nil
+                generationRequestID = nil
                 generatedPlanForReview = result.plan
                 generatedPlanGoalsForReview = deduplicatedGoals(
                     result.goalSuggestions
@@ -3479,7 +3497,16 @@ struct OnboardingWorkoutPlanSetupView: View {
                 isGenerating = false
                 generationStartedAt = nil
                 HapticManager.success()
+            } catch is CancellationError {
+                guard generationRequestID == requestID else { return }
+                generationTask = nil
+                generationRequestID = nil
+                isGenerating = false
+                generationStartedAt = nil
             } catch {
+                guard generationRequestID == requestID else { return }
+                generationTask = nil
+                generationRequestID = nil
                 generatedPlanForReview = nil
                 generatedPlanGoalsForReview = []
                 generatedPlanUsedFallback = true
@@ -3492,6 +3519,21 @@ struct OnboardingWorkoutPlanSetupView: View {
                 generationStartedAt = nil
                 HapticManager.error()
             }
+        }
+    }
+
+    private func cancelPlanGeneration(clearReview: Bool) {
+        generationTask?.cancel()
+        generationTask = nil
+        generationRequestID = nil
+        isGenerating = false
+        generationStartedAt = nil
+        generationNote = nil
+        hasQueuedProPlanGeneration = false
+        if clearReview {
+            generatedPlanForReview = nil
+            generatedPlanGoalsForReview = []
+            generatedPlanUsedFallback = false
         }
     }
 

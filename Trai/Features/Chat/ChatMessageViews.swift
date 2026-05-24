@@ -629,6 +629,8 @@ struct ChatBubble: View {
     var currentFat: Int?
     var currentFiber: Int?
     var currentSugar: Int?
+    var currentNutritionPlanUpdatedAt: Date?
+    var currentWorkoutPlanUpdatedAt: Date?
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     var onAcceptMeal: ((SuggestedFoodEntry) -> Void)?
     var isMealLogging: ((SuggestedFoodEntry) -> Bool)? = nil
@@ -728,7 +730,12 @@ struct ChatBubble: View {
             }
 
             // Show plan update suggestion card if pending
-            if message.hasPendingPlanSuggestion, let plan = message.suggestedPlan {
+            if message.hasPendingPlanSuggestion,
+               let plan = message.suggestedPlan,
+               !ChatSuggestionFreshness.isStale(
+                messageTimestamp: message.timestamp,
+                currentPlanUpdatedAt: currentNutritionPlanUpdatedAt
+               ) {
                 PlanUpdateSuggestionCard(
                     suggestion: plan,
                     currentCalories: currentCalories,
@@ -748,7 +755,12 @@ struct ChatBubble: View {
                 ))
             }
 
-            if message.hasPendingWorkoutPlanSuggestion, let suggestion = message.suggestedWorkoutPlan {
+            if message.hasPendingWorkoutPlanSuggestion,
+               let suggestion = message.suggestedWorkoutPlan,
+               !ChatSuggestionFreshness.isStale(
+                messageTimestamp: message.timestamp,
+                currentPlanUpdatedAt: currentWorkoutPlanUpdatedAt
+               ) {
                 SuggestedWorkoutPlanCard(
                     suggestion: suggestion,
                     onAccept: { onAcceptWorkoutPlan?(suggestion) },

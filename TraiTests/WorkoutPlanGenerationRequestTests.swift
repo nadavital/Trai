@@ -1144,6 +1144,88 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutPlanRefinementRejectsDroppedDurableBlockTagsWithoutSemanticChange() {
+        let blockID = UUID()
+        let currentPlan = makePlan(
+            templateName: "Climbing Skill",
+            sessionType: .mixed,
+            focusAreas: ["Climbing"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: blockID,
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Skill work",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing", "Power"],
+                    order: 0
+                )
+            ]
+        )
+        let planWithDroppedTags = makePlan(
+            templateName: "Climbing Skill",
+            sessionType: .mixed,
+            focusAreas: ["Climbing"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: blockID,
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Skill work",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing"],
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertNil(AIService.validateRefinedWorkoutPlanForTesting(planWithDroppedTags, currentPlan: currentPlan))
+        XCTAssertNotNil(
+            AIService.validateRefinedWorkoutPlanForTesting(
+                planWithDroppedTags,
+                currentPlan: currentPlan,
+                allowsActivitySemanticChange: true
+            )
+        )
+    }
+
+    @MainActor
+    func testWorkoutPlanRefinementRejectsChangedDurableBlockIDWithoutSemanticChange() {
+        let currentPlan = makePlan(
+            templateName: "Climbing Skill",
+            sessionType: .mixed,
+            focusAreas: ["Climbing"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Skill work",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing"],
+                    order: 0
+                )
+            ]
+        )
+        let changedIDPlan = makePlan(
+            templateName: "Climbing Skill",
+            sessionType: .mixed,
+            focusAreas: ["Climbing"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Skill work",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing"],
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertNil(AIService.validateRefinedWorkoutPlanForTesting(changedIDPlan, currentPlan: currentPlan))
+    }
+
+    @MainActor
     func testWorkoutPlanRefinementRejectsDroppedManualActivityFocusWithoutAuthoredBlocks() {
         let currentPlan = makePlan(
             templateName: "Bouldering Day",

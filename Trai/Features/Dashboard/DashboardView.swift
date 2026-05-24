@@ -1725,7 +1725,7 @@ struct DashboardView: View {
             template,
             progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
             modelContext: modelContext,
-            prefillStrengthExercises: false
+            prefillStrengthExercises: true
         )
         _ = workoutTemplateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
@@ -1793,7 +1793,7 @@ struct DashboardView: View {
             template,
             progressionStrategy: plan.progressionStrategy,
             modelContext: modelContext,
-            prefillStrengthExercises: false
+            prefillStrengthExercises: true
         )
         _ = workoutTemplateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(

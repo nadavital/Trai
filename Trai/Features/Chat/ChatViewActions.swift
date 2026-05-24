@@ -211,13 +211,14 @@ extension ChatView {
         var retiredAnySuggestion = false
         var seenMessageIds: Set<UUID> = []
         var messagesToRetire = currentSessionMessages
+        let sessionId = currentSessionId
 
         if !isTemporarySession {
             let descriptor = FetchDescriptor<ChatMessage>(
                 sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
             )
             let persistedMessages = (try? modelContext.fetch(descriptor)) ?? allMessages
-            messagesToRetire.append(contentsOf: persistedMessages)
+            messagesToRetire.append(contentsOf: persistedMessages.filter { $0.sessionId == sessionId })
         }
 
         for message in messagesToRetire where seenMessageIds.insert(message.id).inserted {
@@ -241,13 +242,14 @@ extension ChatView {
     func latestPendingWorkoutPlanSuggestionMessageID() -> UUID? {
         var seenMessageIds: Set<UUID> = []
         var messagesToInspect = currentSessionMessages
+        let sessionId = currentSessionId
 
         if !isTemporarySession {
             let descriptor = FetchDescriptor<ChatMessage>(
                 sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
             )
             let persistedMessages = (try? modelContext.fetch(descriptor)) ?? allMessages
-            messagesToInspect.append(contentsOf: persistedMessages)
+            messagesToInspect.append(contentsOf: persistedMessages.filter { $0.sessionId == sessionId })
         }
 
         return messagesToInspect
@@ -261,13 +263,14 @@ extension ChatView {
     func latestPendingPlanSuggestionMessageID() -> UUID? {
         var seenMessageIds: Set<UUID> = []
         var messagesToInspect = currentSessionMessages
+        let sessionId = currentSessionId
 
         if !isTemporarySession {
             let descriptor = FetchDescriptor<ChatMessage>(
                 sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
             )
             let persistedMessages = (try? modelContext.fetch(descriptor)) ?? allMessages
-            messagesToInspect.append(contentsOf: persistedMessages)
+            messagesToInspect.append(contentsOf: persistedMessages.filter { $0.sessionId == sessionId })
         }
 
         return messagesToInspect
@@ -282,13 +285,14 @@ extension ChatView {
         var retiredAnySuggestion = false
         var seenMessageIds: Set<UUID> = []
         var messagesToRetire = currentSessionMessages
+        let sessionId = currentSessionId
 
         if !isTemporarySession {
             let descriptor = FetchDescriptor<ChatMessage>(
                 sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
             )
             let persistedMessages = (try? modelContext.fetch(descriptor)) ?? allMessages
-            messagesToRetire.append(contentsOf: persistedMessages)
+            messagesToRetire.append(contentsOf: persistedMessages.filter { $0.sessionId == sessionId })
         }
 
         for message in messagesToRetire

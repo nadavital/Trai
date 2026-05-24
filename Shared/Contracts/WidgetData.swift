@@ -18,6 +18,7 @@ nonisolated struct WidgetData: Codable {
     var fatGoal: Int
     var readyMuscleCount: Int
     var recommendedWorkout: String?
+    var recommendedWorkoutTemplateID: UUID?
     var workoutStreak: Int
     var todayWorkoutCompleted: Bool
     var lastUpdated: Date
@@ -33,6 +34,7 @@ nonisolated struct WidgetData: Codable {
         fatGoal: 65,
         readyMuscleCount: 0,
         recommendedWorkout: nil,
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 0,
         todayWorkoutCompleted: false,
         lastUpdated: Date()

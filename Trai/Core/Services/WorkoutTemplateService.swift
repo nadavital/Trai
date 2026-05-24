@@ -85,7 +85,7 @@ struct WorkoutTemplateService {
                     template,
                     progressionStrategy: plan.progressionStrategy,
                     modelContext: modelContext,
-                    prefillStrengthExercises: false
+                    prefillStrengthExercises: true
                 )
             }
         }
@@ -159,6 +159,10 @@ struct WorkoutTemplateService {
                     entry.activityRole = block.role
                     entry.activityTypeName = block.displayActivityName
                     entry.targetTags = block.resolvedActivityTags(including: exerciseTemplate.muscleGroup)
+                    entry.sourcePlanBlockID = block.id
+                    entry.plannedIntensity = block.intensity
+                    entry.plannedTarget = block.target
+                    entry.notes = exerciseTemplate.notes ?? ""
 
                     let lastPerformance = getLastPerformance(
                         exerciseName: exerciseTemplate.exerciseName,

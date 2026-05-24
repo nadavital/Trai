@@ -1225,6 +1225,14 @@ struct WorkoutPlanChatFlow: View {
             saveOnboardingPlan(plan)
         } else {
             guard let profile = userProfile else { return }
+            if let currentPlanToEdit,
+               profile.workoutPlan != currentPlanToEdit {
+                saveError = WorkoutPlanChatFlowSaveError(
+                    message: "Your workout plan changed while this edit was open. Reopen the latest plan before saving changes."
+                )
+                HapticManager.error()
+                return
+            }
 
             if currentPlanToEdit == plan {
                 refreshExistingGeneratedPlanAdherenceGoals(for: plan)

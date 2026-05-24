@@ -1076,6 +1076,34 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(suggestion.exercises.first?.sets, 4)
     }
 
+    func testStartLiveWorkoutRejectsMalformedSourcePlanTemplateID() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "start_live_workout",
+                arguments: [
+                    "name": "Start stale plan workout",
+                    "workout_type": "strength",
+                    "source_plan_template_id": "not-a-template-id",
+                    "suggested_exercises": [
+                        [
+                            "name": "Pull Up",
+                            "category": "strength",
+                            "sets": 4,
+                            "reps": 6
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected validation error")
+        }
+
+        XCTAssertEqual(functionResult.name, "start_live_workout")
+        XCTAssertEqual(functionResult.response["error"] as? String, "source_plan_template_id must be an exact template id from the current workout plan.")
+    }
+
     func testStartLiveWorkoutRejectsMissingStableCategory() async throws {
         let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
             .init(

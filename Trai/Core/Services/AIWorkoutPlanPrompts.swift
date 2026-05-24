@@ -527,9 +527,38 @@ extension AIPromptBuilder {
         - Session details:
         \(currentPlan.templates.map { template in
             let blocks = template.displayBlocks.map { block in
-                "\(block.displayActivityName) (\(block.kind.displayName)): \(block.title)\(block.durationMinutes.map { " \($0)m" } ?? "")"
-            }.joined(separator: " | ")
-            return "  - \(template.name): \(blocks)"
+                var fields = [
+                    "blockID=\(block.id.uuidString)",
+                    "kind=\(block.kind.rawValue)",
+                    "role=\(block.role.rawValue)",
+                    "title=\(block.title)",
+                    "detail=\(block.detail)"
+                ]
+                if let activityTypeName = block.activityTypeName {
+                    fields.append("activityTypeName=\(activityTypeName)")
+                }
+                if !block.activityTags.isEmpty {
+                    fields.append("activityTags=\(block.activityTags.joined(separator: ", "))")
+                }
+                if let duration = block.durationMinutes {
+                    fields.append("durationMinutes=\(duration)")
+                }
+                if let intensity = block.intensity {
+                    fields.append("intensity=\(intensity)")
+                }
+                if let target = block.target {
+                    fields.append("target=\(target)")
+                }
+                if !block.exercises.isEmpty {
+                    let exerciseSummary = block.exercises
+                        .sorted { $0.order < $1.order }
+                        .map { "\($0.exerciseName) [id=\($0.id.uuidString), muscle=\($0.muscleGroup), sets=\($0.defaultSets), reps=\($0.defaultReps)]" }
+                        .joined(separator: "; ")
+                    fields.append("exercises=\(exerciseSummary)")
+                }
+                return "{\(fields.joined(separator: " | "))}"
+            }.joined(separator: " ")
+            return "  - templateID=\(template.id.uuidString) name=\(template.name) sessionType=\(template.sessionType.rawValue) focusAreas=\(template.focusAreas.joined(separator: ", ")) blocks=\(blocks)"
         }.joined(separator: "\n"))
 
         """
@@ -555,6 +584,7 @@ extension AIPromptBuilder {
         - If they ask to change exercises or schedule directionally, make a reasonable proposal instead of starting a long clarification chain
         - Set changesWeeklySchedule to true only when the requested change intentionally adds, removes, or changes the number of weekly workout sessions. Otherwise keep the same number of templates as the current plan.
         - Set changesActivitySemantics to true only when the user explicitly asked to add, remove, replace, or materially change a modality/activity family such as cardio, climbing, mobility, sport practice, or recovery. Keep it false for wording, order, duration, or exercise swaps that preserve the same activity intent.
+        - When changesActivitySemantics is false, preserve existing template IDs, block IDs, block kind, block role, activityTypeName, and activityTags. These fields are durable semantic data, not display text.
         - Preserve and update planIntent, modalityProgression, and template blocks whenever a plan changes
         - Use blocks for modality-specific work: cardio, mobility flows, climbing/sport practice, conditioning, and recovery should not be flattened into fake strength exercises. Use role to describe whether a block is main work, a warmup, an accessory, a finisher, or a cooldown.
         - Preserve specific activity identity with activityTypeName and activityTags. Kind remains a stable behavior primitive, not the user-facing name.

@@ -598,7 +598,26 @@ extension AIFunctionExecutor {
         // Parse target muscle groups
         let muscleStrings = args["target_muscle_groups"] as? [String] ?? []
         let requestedActivityFocuses = stringArray(from: args["activity_focuses"])
-        let sourcePlanTemplateID = uuid(from: args["source_plan_template_id"])
+        let sourcePlanTemplateID: UUID?
+        if let rawSourcePlanTemplateID = args["source_plan_template_id"] as? String,
+           !rawSourcePlanTemplateID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let trimmedSourcePlanTemplateID = rawSourcePlanTemplateID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let parsedSourcePlanTemplateID = UUID(uuidString: trimmedSourcePlanTemplateID) else {
+                return .dataResponse(FunctionResult(
+                    name: "start_live_workout",
+                    response: ["error": "source_plan_template_id must be an exact template id from the current workout plan."]
+                ))
+            }
+            guard userProfile?.workoutPlan?.templates.contains(where: { $0.id == parsedSourcePlanTemplateID }) == true else {
+                return .dataResponse(FunctionResult(
+                    name: "start_live_workout",
+                    response: ["error": "source_plan_template_id must match an existing session in the current workout plan."]
+                ))
+            }
+            sourcePlanTemplateID = parsedSourcePlanTemplateID
+        } else {
+            sourcePlanTemplateID = nil
+        }
 
         if let sourcePlanTemplateID {
             guard let template = userProfile?.workoutPlan?.templates.first(where: { $0.id == sourcePlanTemplateID }) else {

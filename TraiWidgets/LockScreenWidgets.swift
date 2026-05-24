@@ -158,6 +158,7 @@ private enum LockScreenWidgetPreviewData {
         fatGoal: 65,
         readyMuscleCount: 5,
         recommendedWorkout: "Push Day",
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 3,
         todayWorkoutCompleted: false,
         lastUpdated: Date()
@@ -174,6 +175,7 @@ private enum LockScreenWidgetPreviewData {
         fatGoal: 65,
         readyMuscleCount: 5,
         recommendedWorkout: "Push Day",
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 3,
         todayWorkoutCompleted: false,
         lastUpdated: Date()
@@ -190,6 +192,7 @@ private enum LockScreenWidgetPreviewData {
         fatGoal: 65,
         readyMuscleCount: 7,
         recommendedWorkout: nil,
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 5,
         todayWorkoutCompleted: true,
         lastUpdated: Date()
