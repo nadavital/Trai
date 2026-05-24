@@ -231,6 +231,7 @@ extension AIService {
         \(sessionPreview)
         - When starting or logging a planned session, pass the exact session id as source_plan_template_id.
         - When logging a planned workout item, pass the exact block id as source_plan_block_id on that exercise item.
+        - When creating or updating a goal for a specific current-plan block, pass the exact block id in generated_plan_block_ids.
 
         """
     }
@@ -382,6 +383,7 @@ extension AIService {
         - Prefer progression, consistency, frequency, distance, duration, or milestone framing over one-off routine completion.
         - If the user asks for something like "work out 3x a week", create a frequency goal with the right cadence fields instead of flattening it into a generic milestone.
         - If the request maps to a specific recurring exercise, it's okay to create an activity-linked goal for that exercise.
+        - If the request maps to a specific block in the current generated workout plan, pass exact generated_plan_block_ids from CURRENT WORKOUT PLAN; do not rely on names or tags for generated-plan block goals.
         - Use soft target dates when they help make the goal concrete, but don't force a hard date on every goal.
         - After updating or creating a workout goal, clearly tell the user what changed.
 

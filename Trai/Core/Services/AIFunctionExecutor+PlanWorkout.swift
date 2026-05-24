@@ -433,6 +433,27 @@ extension AIFunctionExecutor {
         let targetDate = parseDate(args["target_date"] as? String)
         let checkInCadenceDays = numericInt(from: args["check_in_cadence_days"])
         let tracksPlanAdherence = args["tracks_plan_adherence"] as? Bool == true
+        let generatedPlanBlockIDs: [UUID]
+        if args.keys.contains("generated_plan_block_ids") {
+            switch parsedGeneratedPlanBlockIDs(
+                from: args["generated_plan_block_ids"],
+                functionName: "create_workout_goal"
+            ) {
+            case .success(let ids):
+                generatedPlanBlockIDs = ids
+            case .failure(let result):
+                return .dataResponse(result)
+            }
+        } else {
+            generatedPlanBlockIDs = []
+        }
+
+        if tracksPlanAdherence, !generatedPlanBlockIDs.isEmpty {
+            return .dataResponse(FunctionResult(
+                name: "create_workout_goal",
+                response: ["error": "generated_plan_block_ids cannot be used with tracks_plan_adherence."]
+            ))
+        }
 
         if let error = workoutGoalValidationError(
             goalKind: goalKind,
@@ -464,7 +485,8 @@ extension AIFunctionExecutor {
             notes: notes,
             targetDate: targetDate,
             checkInCadenceDays: checkInCadenceDays,
-            tracksGeneratedPlanAdherence: tracksPlanAdherence
+            tracksGeneratedPlanAdherence: tracksPlanAdherence,
+            generatedPlanBlockIDs: generatedPlanBlockIDs
         )
         if tracksPlanAdherence, let plan = userProfile?.workoutPlan {
             goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
@@ -520,6 +542,8 @@ extension AIFunctionExecutor {
         var checkInCadenceDays = goal.checkInCadenceDays
         var notes = goal.trimmedNotes
         var tracksPlanAdherence = goal.tracksGeneratedPlanAdherence
+        var generatedPlanBlockIDs = goal.generatedPlanBlockIDs
+        let updatesGeneratedPlanBlockIDs = args.keys.contains("generated_plan_block_ids")
 
         if let rawTitle = args["title"] as? String {
             let trimmed = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -635,6 +659,25 @@ extension AIFunctionExecutor {
             tracksPlanAdherence = rawTracksPlanAdherence
         }
 
+        if updatesGeneratedPlanBlockIDs {
+            switch parsedGeneratedPlanBlockIDs(
+                from: args["generated_plan_block_ids"],
+                functionName: "update_workout_goal"
+            ) {
+            case .success(let ids):
+                generatedPlanBlockIDs = ids
+            case .failure(let result):
+                return .dataResponse(result)
+            }
+        }
+
+        if tracksPlanAdherence, !generatedPlanBlockIDs.isEmpty {
+            return .dataResponse(FunctionResult(
+                name: "update_workout_goal",
+                response: ["error": "generated_plan_block_ids cannot be used with tracks_plan_adherence."]
+            ))
+        }
+
         if let error = workoutGoalValidationError(
             goalKind: goalKind,
             targetValue: targetValue,
@@ -668,9 +711,15 @@ extension AIFunctionExecutor {
         goal.notes = notes
         goal.tracksGeneratedPlanAdherence = tracksPlanAdherence
         if tracksPlanAdherence, let plan = userProfile?.workoutPlan {
+            goal.generatedPlanBlockIDs = []
+            goal.requiresGeneratedPlanBlockScope = false
             goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
         } else if !tracksPlanAdherence {
             goal.generatedPlanTemplateIDs = []
+            if updatesGeneratedPlanBlockIDs {
+                goal.generatedPlanBlockIDs = generatedPlanBlockIDs
+                goal.requiresGeneratedPlanBlockScope = !generatedPlanBlockIDs.isEmpty
+            }
         }
         goal.updatedAt = Date()
         try? modelContext.save()
@@ -694,6 +743,7 @@ extension AIFunctionExecutor {
             "activity_tags": goal.linkedActivityTags,
             "activity_kind": goal.linkedActivityKind?.rawValue ?? "",
             "activity_role": goal.linkedActivityRole?.rawValue ?? "",
+            "generated_plan_block_ids": goal.generatedPlanBlockIDs.map(\.uuidString),
             "tracks_plan_adherence": goal.tracksGeneratedPlanAdherence,
             "target_value": goal.targetValue as Any,
             "target_unit": goal.targetUnit,
@@ -708,6 +758,52 @@ extension AIFunctionExecutor {
             "tracking_summary": goal.trackingSummary ?? "",
             "horizon_summary": goal.horizonSummary ?? ""
         ]
+    }
+
+    private func parsedGeneratedPlanBlockIDs(
+        from value: Any?,
+        functionName: String
+    ) -> GeneratedPlanBlockIDParseResult {
+        let rawIDs = stringArray(from: value)
+        guard !rawIDs.isEmpty else { return .success([]) }
+
+        var seen: Set<UUID> = []
+        var parsedIDs: [UUID] = []
+        for rawID in rawIDs {
+            guard let id = UUID(uuidString: rawID) else {
+                return .failure(FunctionResult(
+                    name: functionName,
+                    response: ["error": "generated_plan_block_ids must contain exact block ids from the current workout plan."]
+                ))
+            }
+            if seen.insert(id).inserted {
+                parsedIDs.append(id)
+            }
+        }
+
+        guard let plan = userProfile?.workoutPlan else {
+            return .failure(FunctionResult(
+                name: functionName,
+                response: ["error": "generated_plan_block_ids requires a current workout plan."]
+            ))
+        }
+
+        let currentBlockIDs = Set(plan.templates.flatMap { template in
+            template.blocks.map(\.id)
+        })
+        guard parsedIDs.allSatisfy(currentBlockIDs.contains) else {
+            return .failure(FunctionResult(
+                name: functionName,
+                response: ["error": "generated_plan_block_ids must contain only block ids from the current workout plan."]
+            ))
+        }
+
+        return .success(parsedIDs)
+    }
+
+    private enum GeneratedPlanBlockIDParseResult {
+        case success([UUID])
+        case failure(FunctionResult)
     }
 
     private func parseDate(_ rawDate: String?) -> Date? {

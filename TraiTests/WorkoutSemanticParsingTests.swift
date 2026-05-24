@@ -2026,6 +2026,304 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(refetchedGoal["activity_role"] as? String, "warmup")
     }
 
+    func testCreateWorkoutGoalPreservesGeneratedPlanBlockScopeFromNormalChat() async throws {
+        let block = WorkoutPlan.TrainingBlock(
+            kind: .mobility,
+            role: .cooldown,
+            title: "Hip Mobility",
+            detail: "Planned cooldown",
+            activityTypeName: "Mobility Flow",
+            activityTags: ["Mobility", "Hips"],
+            durationMinutes: 15,
+            order: 0
+        )
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Lower + Mobility",
+            sessionType: .mixed,
+            focusAreas: ["Lower", "Mobility"],
+            targetMuscleGroups: ["quads"],
+            exercises: [],
+            blocks: [block],
+            estimatedDurationMinutes: 60,
+            order: 0
+        )
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Mixed plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: profile)
+
+        let createResult = await executor.execute(
+            .init(
+                name: "create_workout_goal",
+                arguments: [
+                    "title": "Complete planned hip mobility",
+                    "goal_kind": "frequency",
+                    "activity_name": "Mobility Flow",
+                    "activity_tags": ["Mobility", "Hips"],
+                    "activity_kind": "mobility",
+                    "activity_role": "cooldown",
+                    "generated_plan_block_ids": [block.id.uuidString],
+                    "target_value": 1,
+                    "target_unit": "blocks",
+                    "period_unit": "week",
+                    "period_count": 1,
+                    "success_criteria": "Complete the planned hip mobility cooldown once per week."
+                ]
+            )
+        )
+
+        guard case .dataResponse(let createFunctionResult) = createResult,
+              let createdGoal = createFunctionResult.response["goal"] as? [String: Any] else {
+            return XCTFail("Expected created workout goal response")
+        }
+
+        XCTAssertEqual(createdGoal["generated_plan_block_ids"] as? [String], [block.id.uuidString])
+        let savedGoal = try XCTUnwrap(try context.fetch(FetchDescriptor<WorkoutGoal>()).first)
+        XCTAssertEqual(savedGoal.generatedPlanBlockIDs, [block.id])
+        XCTAssertTrue(savedGoal.requiresGeneratedPlanBlockScope)
+
+        let sameNamedCustomWorkout = LiveWorkout(
+            name: "Mobility Flow",
+            workoutType: .mixed,
+            focusAreas: ["Mobility", "Hips"]
+        )
+        let sameNamedEntry = LiveWorkoutEntry(
+            exerciseName: "Mobility Flow",
+            orderIndex: 0,
+            exerciseType: Exercise.Category.mobility.rawValue
+        )
+        sameNamedEntry.activityKind = .mobility
+        sameNamedEntry.activityRole = .cooldown
+        sameNamedEntry.targetTags = ["Mobility", "Hips"]
+        sameNamedCustomWorkout.entries = [sameNamedEntry]
+
+        let plannedWorkout = LiveWorkout(
+            name: "Lower + Mobility",
+            workoutType: .mixed,
+            focusAreas: ["Mobility", "Hips"]
+        )
+        plannedWorkout.sourcePlanTemplateID = template.id
+        let plannedEntry = LiveWorkoutEntry(
+            exerciseName: "Mobility Flow",
+            orderIndex: 0,
+            exerciseType: Exercise.Category.mobility.rawValue
+        )
+        plannedEntry.sourcePlanBlockID = block.id
+        plannedWorkout.entries = [plannedEntry]
+
+        XCTAssertFalse(savedGoal.matches(workout: sameNamedCustomWorkout))
+        XCTAssertTrue(savedGoal.matches(workout: plannedWorkout))
+    }
+
+    func testUpdateWorkoutGoalSetsAndClearsGeneratedPlanBlockScope() async throws {
+        let block = WorkoutPlan.TrainingBlock(
+            kind: .sportPractice,
+            role: .main,
+            title: "Limit Bouldering",
+            detail: "Planned climbing block",
+            activityTypeName: "Bouldering",
+            activityTags: ["Climbing"],
+            durationMinutes: 35,
+            order: 0
+        )
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Climb Day",
+            sessionType: .climbing,
+            focusAreas: ["Climbing"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [block],
+            estimatedDurationMinutes: 50,
+            order: 0
+        )
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Climbing plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let goal = WorkoutGoal(
+            title: "Complete climbing",
+            goalKind: .frequency,
+            linkedActivityName: "Bouldering",
+            linkedActivityTags: ["Climbing"],
+            targetValue: 1,
+            targetUnit: "blocks",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "Complete one planned climbing block each week."
+        )
+        context.insert(goal)
+        try context.save()
+
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: profile)
+        let updateResult = await executor.execute(
+            .init(
+                name: "update_workout_goal",
+                arguments: [
+                    "goal_id": goal.id.uuidString,
+                    "generated_plan_block_ids": [block.id.uuidString]
+                ]
+            )
+        )
+
+        guard case .dataResponse(let updateFunctionResult) = updateResult,
+              let updatedGoal = updateFunctionResult.response["goal"] as? [String: Any] else {
+            return XCTFail("Expected updated workout goal response")
+        }
+
+        XCTAssertEqual(updatedGoal["generated_plan_block_ids"] as? [String], [block.id.uuidString])
+        XCTAssertEqual(goal.generatedPlanBlockIDs, [block.id])
+        XCTAssertTrue(goal.requiresGeneratedPlanBlockScope)
+
+        let clearResult = await executor.execute(
+            .init(
+                name: "update_workout_goal",
+                arguments: [
+                    "goal_id": goal.id.uuidString,
+                    "generated_plan_block_ids": []
+                ]
+            )
+        )
+
+        guard case .dataResponse(let clearFunctionResult) = clearResult,
+              let clearedGoal = clearFunctionResult.response["goal"] as? [String: Any] else {
+            return XCTFail("Expected cleared workout goal response")
+        }
+
+        XCTAssertEqual(clearedGoal["generated_plan_block_ids"] as? [String], [])
+        XCTAssertEqual(goal.generatedPlanBlockIDs, [])
+        XCTAssertFalse(goal.requiresGeneratedPlanBlockScope)
+    }
+
+    func testUpdateWorkoutGoalClearsBlockScopeWhenSwitchingToPlanAdherence() async throws {
+        let block = WorkoutPlan.TrainingBlock(
+            kind: .mobility,
+            role: .cooldown,
+            title: "Hip Mobility",
+            detail: "Planned cooldown",
+            activityTypeName: "Mobility Flow",
+            durationMinutes: 15,
+            order: 0
+        )
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Lower + Mobility",
+            sessionType: .mixed,
+            focusAreas: ["Lower", "Mobility"],
+            targetMuscleGroups: ["quads"],
+            exercises: [],
+            blocks: [block],
+            estimatedDurationMinutes: 60,
+            order: 0
+        )
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Mixed plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let goal = WorkoutGoal(
+            title: "Complete mobility block",
+            goalKind: .frequency,
+            linkedActivityName: "Mobility Flow",
+            targetValue: 1,
+            targetUnit: "blocks",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "Complete the planned mobility block.",
+            generatedPlanBlockIDs: [block.id]
+        )
+        context.insert(goal)
+        try context.save()
+
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: profile).execute(
+            .init(
+                name: "update_workout_goal",
+                arguments: [
+                    "goal_id": goal.id.uuidString,
+                    "tracks_plan_adherence": true,
+                    "generated_plan_block_ids": [],
+                    "target_unit": "planned sessions",
+                    "success_criteria": "Complete the generated weekly workout plan."
+                ]
+            )
+        )
+
+        guard case .dataResponse(let functionResult) = result,
+              let updatedGoal = functionResult.response["goal"] as? [String: Any] else {
+            return XCTFail("Expected updated workout goal response")
+        }
+
+        XCTAssertEqual(updatedGoal["generated_plan_block_ids"] as? [String], [])
+        XCTAssertTrue(goal.tracksGeneratedPlanAdherence)
+        XCTAssertEqual(goal.generatedPlanBlockIDs, [])
+        XCTAssertFalse(goal.requiresGeneratedPlanBlockScope)
+        XCTAssertEqual(goal.generatedPlanTemplateIDs, [template.id])
+    }
+
+    func testCreateWorkoutGoalRejectsGeneratedPlanBlockIDOutsideCurrentPlan() async throws {
+        let block = WorkoutPlan.TrainingBlock(
+            kind: .mobility,
+            title: "Hip Mobility",
+            detail: "Planned mobility",
+            activityTypeName: "Mobility Flow",
+            order: 0
+        )
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Mobility",
+            sessionType: .mobility,
+            focusAreas: ["Hips"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [block],
+            estimatedDurationMinutes: 30,
+            order: 0
+        )
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Mobility plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: profile).execute(
+            .init(
+                name: "create_workout_goal",
+                arguments: [
+                    "title": "Complete planned mobility",
+                    "goal_kind": "frequency",
+                    "generated_plan_block_ids": [UUID().uuidString],
+                    "target_value": 1,
+                    "target_unit": "blocks",
+                    "period_unit": "week",
+                    "period_count": 1,
+                    "success_criteria": "Complete the planned mobility block."
+                ]
+            )
+        )
+
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected workout goal error response")
+        }
+
+        XCTAssertEqual(functionResult.response["error"] as? String, "generated_plan_block_ids must contain only block ids from the current workout plan.")
+    }
+
     func testCreateWorkoutGoalNormalizesGeneratedPlanAdherenceScope() async throws {
         let template = WorkoutPlan.WorkoutTemplate(
             name: "Pull + Climb",

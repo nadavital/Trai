@@ -1314,9 +1314,11 @@ struct WorkoutPlanChatFlow: View {
                 return
             }
 
-            if currentPlanToEdit == plan {
-                refreshExistingGeneratedPlanAdherenceGoals(for: plan)
-                insertGeneratedWorkoutGoals(activeGeneratedPlanGoals, for: plan)
+            let durablePlan = plan.normalizedForDurableBlocks()
+
+            if currentPlanToEdit == durablePlan {
+                refreshExistingGeneratedPlanAdherenceGoals(for: durablePlan)
+                insertGeneratedWorkoutGoals(activeGeneratedPlanGoals, for: durablePlan)
                 try? modelContext.save()
                 WidgetDataProvider.shared.scheduleRefresh()
                 HapticManager.success()
@@ -1330,18 +1332,18 @@ struct WorkoutPlanChatFlow: View {
                 profile: profile,
                 reason: .chatAdjustment,
                 modelContext: modelContext,
-                replacingWith: plan
+                replacingWith: durablePlan
             )
 
-            profile.workoutPlan = plan
-            profile.applyStructuredWorkoutPlanPreferences(from: plan)
-            refreshExistingGeneratedPlanAdherenceGoals(for: plan)
+            profile.workoutPlan = durablePlan
+            profile.applyStructuredWorkoutPlanPreferences(from: durablePlan)
+            refreshExistingGeneratedPlanAdherenceGoals(for: durablePlan)
 
-            insertGeneratedWorkoutGoals(activeGeneratedPlanGoals, for: plan)
+            insertGeneratedWorkoutGoals(activeGeneratedPlanGoals, for: durablePlan)
 
             if !hadExistingPlan {
                 WorkoutPlanHistoryService.archivePlan(
-                    plan,
+                    durablePlan,
                     profile: profile,
                     reason: .chatCreate,
                     modelContext: modelContext

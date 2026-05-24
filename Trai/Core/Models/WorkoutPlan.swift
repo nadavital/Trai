@@ -42,6 +42,35 @@ struct WorkoutPlan: Codable, Equatable {
         self.warnings = warnings
     }
 
+    func normalizedForDurableBlocks() -> WorkoutPlan {
+        let durableTemplates = templates.map { template in
+            WorkoutTemplate(
+                id: template.id,
+                name: template.name,
+                sessionType: template.sessionType,
+                focusAreas: template.focusAreas,
+                targetMuscleGroups: template.targetMuscleGroups,
+                exercises: template.exercises,
+                blocks: template.blocks.isEmpty ? template.displayBlocks : template.blocks,
+                estimatedDurationMinutes: template.estimatedDurationMinutes,
+                order: template.order,
+                notes: template.notes
+            )
+        }
+
+        return WorkoutPlan(
+            splitType: splitType,
+            daysPerWeek: daysPerWeek,
+            templates: durableTemplates,
+            planIntent: planIntent,
+            rationale: rationale,
+            guidelines: guidelines,
+            progressionStrategy: progressionStrategy,
+            modalityProgression: modalityProgression,
+            warnings: warnings
+        )
+    }
+
     // MARK: - Plan Intent
 
     struct PlanIntent: Codable, Equatable {

@@ -211,6 +211,10 @@
 - Compile safety: final serial compile validation found and fixed `WorkoutPlanChatFlow.refinementConversationHistory` type inference failure, then cleaned the remaining Swift 6 isolation warnings in the onboarding draft persistence test.
 - Keyword-matching audit: serious generated-plan semantic fallback found and fixed through durable block IDs. Remaining string checks in the audited files are enum/choice parsing, UI copy, explicit numeric parsing, or validation against structured durable plan fields rather than label-based semantic routing.
 
+### Round 2026-05-24 After `03e1a85`
+- Normal-chat goal tools: fixed verified gap where `create_workout_goal` / `update_workout_goal` could see current plan block IDs in prompt context but had no schema field to persist them. Goal tools now accept exact `generated_plan_block_ids`, validate them against the current plan, serialize them back to chat, and use the existing durable block-scope matcher instead of name/tag fallback for those goals.
+- Durable plan save normalization: retained pending fix that normalizes display-only/default workout blocks into persisted blocks before generated plans are saved from onboarding, Profile, Settings, Workouts, chat proposals, and workout-plan chat flow. This prevents later planned starts/logs/goals from depending on synthesized fresh block IDs.
+
 ## Manual Test Queue
 - From Profile, Settings, and Workouts, open standard workout-plan setup, mutate/save a different workout plan elsewhere before tapping Save, and confirm the stale setup is blocked instead of overwriting the newer plan.
 - Run two rapid generated-plan refinements back to back and confirm only the latest result package remains, with no duplicate or stale plan/goals/save rows.
@@ -224,6 +228,8 @@
 - Complete one generated-plan workout, then log an unrelated custom workout and confirm generated plan-adherence goals do not badge the unrelated history row.
 - Create a planned workout log card, change/refine the saved workout plan before accepting it, and confirm the old log card is hidden or rejected instead of counting toward the new plan.
 - Generate a plan with a recurring support/activity block goal, log an unrelated custom workout with the same activity name/tags, and confirm the generated plan activity goal does not progress unless the workout entry carries the matching durable plan block ID.
+- In normal chat, ask Trai to create a goal for a specific generated-plan block such as planned mobility/climbing support, then log an unrelated same-named activity and confirm the goal does not progress until a workout entry carries the matching `sourcePlanBlockID`.
+- Update an existing workout goal in normal chat to target a specific generated-plan block, then clear that block scope and confirm the goal behavior changes intentionally rather than silently keeping stale block IDs.
 - Generate/save a plan-adherence goal with AI wording like `planned sessions`; confirm it stores the generated template IDs and progresses from planned workouts.
 - From the medium widget, tap the workout action beside `Up Next` and confirm it starts the exact recommended planned template. After completing today's workout, confirm the large widget completed row does not start a duplicate workout.
 - On a rest day with no recommendation, confirm the medium/large widget does not expose a generic start-workout action.
@@ -325,6 +331,10 @@
 - A general chat lifecycle/stale-card coverage gap was real as test risk, but the source-level stale-card bugs were fixed directly and covered with focused freshness tests.
 
 ## Validation
+- `git diff --check`
+- Result after `03e1a85` normal-chat generated block goal fix: clean.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedGoalBlocks -skip-testing:TraiUITests -only-testing:TraiTests/WorkoutSemanticParsingTests/testCreateWorkoutGoalPreservesGeneratedPlanBlockScopeFromNormalChat -only-testing:TraiTests/WorkoutSemanticParsingTests/testUpdateWorkoutGoalSetsAndClearsGeneratedPlanBlockScope -only-testing:TraiTests/WorkoutSemanticParsingTests/testCreateWorkoutGoalNormalizesGeneratedPlanAdherenceScope -only-testing:TraiTests/WorkoutSemanticParsingTests/testGeneratedPlanActivityGoalsWithoutDurableBlocksAreNotInserted -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanDurableBlockNormalizationPersistsDefaultBlockIDsForAllSavePaths -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanEditSavePersistsDefaultBlocksWhenSemanticEditClearsAuthoredBlocks`
+- Result after `03e1a85` normal-chat generated block goal fix: 6 selected tests, 0 failures. Initial sandboxed run failed before tests because CoreSimulator was unavailable; escalated rerun passed.
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,id=A7C646DC-750A-4AB4-A28F-0B40813E3D0E' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests`
 - Result after `62ce49e` fix round: 169 selected tests, 0 failures.
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,id=A7C646DC-750A-4AB4-A28F-0B40813E3D0E' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests`

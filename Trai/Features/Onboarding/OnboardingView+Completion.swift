@@ -57,7 +57,8 @@ extension OnboardingView {
         }
 
         // Workout plan (if user created one)
-        if let workoutPlan = generatedWorkoutPlan {
+        let durableGeneratedWorkoutPlan = generatedWorkoutPlan?.normalizedForDurableBlocks()
+        if let workoutPlan = durableGeneratedWorkoutPlan {
             profile.workoutPlan = workoutPlan
             workoutPlanDraft.applyPreferences(to: profile, generatedPlan: workoutPlan)
         }
@@ -65,7 +66,7 @@ extension OnboardingView {
         profile.hasCompletedOnboarding = true
         modelContext.insert(profile)
 
-        if let workoutPlan = generatedWorkoutPlan {
+        if let workoutPlan = durableGeneratedWorkoutPlan {
             for goal in WorkoutGoal.generatedGoalsToInsert(
                 generatedWorkoutGoals,
                 existingGoals: [],
@@ -75,7 +76,7 @@ extension OnboardingView {
             }
         }
 
-        if let workoutPlan = generatedWorkoutPlan {
+        if let workoutPlan = durableGeneratedWorkoutPlan {
             WorkoutPlanHistoryService.archivePlan(
                 workoutPlan,
                 profile: profile,

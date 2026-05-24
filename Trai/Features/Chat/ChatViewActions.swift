@@ -524,21 +524,22 @@ extension ChatView {
         }
 
         let hadExistingPlan = profile.workoutPlan != nil
+        let durablePlan = suggestion.plan.normalizedForDurableBlocks()
 
         WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
             profile: profile,
             reason: .chatAdjustment,
             modelContext: modelContext,
-            replacingWith: suggestion.plan
+            replacingWith: durablePlan
         )
 
-        profile.workoutPlan = suggestion.plan
-        profile.applyStructuredWorkoutPlanPreferences(from: suggestion.plan)
-        refreshGeneratedPlanAdherenceGoals(for: suggestion.plan)
+        profile.workoutPlan = durablePlan
+        profile.applyStructuredWorkoutPlanPreferences(from: durablePlan)
+        refreshGeneratedPlanAdherenceGoals(for: durablePlan)
 
         if !hadExistingPlan {
             WorkoutPlanHistoryService.archivePlan(
-                suggestion.plan,
+                durablePlan,
                 profile: profile,
                 reason: .chatCreate,
                 modelContext: modelContext

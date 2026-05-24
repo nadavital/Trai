@@ -633,7 +633,7 @@ struct WorkoutPlanEditSheet: View {
             progressionStrategy: plan.progressionStrategy,
             modalityProgression: plan.modalityProgression,
             warnings: plan.warnings
-        )
+        ).normalizedForDurableBlocks()
     }
 
 #if DEBUG

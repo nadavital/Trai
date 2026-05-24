@@ -509,6 +509,11 @@ enum AIFunctionDeclarations {
                         "description": "Optional placement role inside a workout, such as warmup, add-on, finish, or cooldown.",
                         "enum": AIPromptBuilder.workoutGoalActivityRoleRawValues
                     ],
+                    "generated_plan_block_ids": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Exact block IDs from CURRENT WORKOUT PLAN when this goal is tied to specific saved/generated plan blocks. Use this instead of relying on activity names or tags for generated-plan block goals."
+                    ],
                     "tracks_plan_adherence": [
                         "type": "boolean",
                         "description": "True only when the goal tracks completion of the user's whole generated weekly workout plan, not a specific activity, modality, exercise, or support block."
@@ -598,6 +603,11 @@ enum AIFunctionDeclarations {
                         "type": "string",
                         "description": "Updated placement role inside a workout; pass empty string to clear it.",
                         "enum": AIPromptBuilder.workoutGoalActivityRoleRawValues + [""]
+                    ],
+                    "generated_plan_block_ids": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Updated exact block IDs from CURRENT WORKOUT PLAN when this goal is tied to specific saved/generated plan blocks. Pass an empty array to clear this durable generated-plan block scope."
                     ],
                     "tracks_plan_adherence": [
                         "type": "boolean",

@@ -2495,6 +2495,36 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(savedBlock.activityTypeName, "Hips")
     }
 
+    func testWorkoutPlanDurableBlockNormalizationPersistsDefaultBlockIDsForAllSavePaths() {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Recovery",
+            sessionType: .recovery,
+            focusAreas: ["Recovery"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [],
+            estimatedDurationMinutes: 25,
+            order: 0
+        )
+        let plan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Recovery plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        let normalizedPlan = plan.normalizedForDurableBlocks()
+        let savedTemplate = try! XCTUnwrap(normalizedPlan.templates.first)
+        let savedBlock = try! XCTUnwrap(savedTemplate.blocks.first)
+
+        XCTAssertFalse(savedTemplate.blocks.isEmpty)
+        XCTAssertEqual(savedTemplate.displayBlocks.map(\.id), [savedBlock.id])
+        XCTAssertEqual(savedBlock.kind, .recovery)
+        XCTAssertEqual(savedBlock.activityTypeName, "Recovery")
+    }
+
     func testWorkoutPlanSetupSaveGuardRejectsPlanChangedWhileOpen() {
         let setupBase = makePlan(
             templateName: "Upper Strength",

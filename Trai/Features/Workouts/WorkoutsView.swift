@@ -1094,25 +1094,26 @@ struct WorkoutsView: View {
             return
         }
         let hadExistingPlan = profile.workoutPlan != nil
+        let durablePlan = plan.normalizedForDurableBlocks()
 
         WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
             profile: profile,
             reason: .chatAdjustment,
             modelContext: modelContext,
-            replacingWith: plan
+            replacingWith: durablePlan
         )
 
-        profile.workoutPlan = plan
-        draftSnapshot.applyPreferences(to: profile, generatedPlan: plan)
-        refreshExistingGeneratedPlanAdherenceGoals(for: plan)
+        profile.workoutPlan = durablePlan
+        draftSnapshot.applyPreferences(to: profile, generatedPlan: durablePlan)
+        refreshExistingGeneratedPlanAdherenceGoals(for: durablePlan)
 
         if mode == .proAI {
-            insertGeneratedWorkoutGoals(generatedGoals, for: plan)
+            insertGeneratedWorkoutGoals(generatedGoals, for: durablePlan)
         }
 
         if !hadExistingPlan {
             WorkoutPlanHistoryService.archivePlan(
-                plan,
+                durablePlan,
                 profile: profile,
                 reason: .chatCreate,
                 modelContext: modelContext
