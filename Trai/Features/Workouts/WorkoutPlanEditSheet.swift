@@ -670,6 +670,13 @@ struct WorkoutPlanEditSheet: View {
         savedPlan == editingBase
     }
 
+    static func canSaveSetupPlan(savedPlan: WorkoutPlan?, setupBase: WorkoutPlan?) -> Bool {
+        guard let setupBase else {
+            return savedPlan == nil
+        }
+        return canSaveCurrentPlan(savedPlan: savedPlan, editingBase: setupBase)
+    }
+
     private func refreshGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
         for goal in workoutGoals where goal.status == .active && goal.tracksGeneratedPlanAdherence {
             goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)

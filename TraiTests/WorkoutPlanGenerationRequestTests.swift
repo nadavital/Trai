@@ -1932,6 +1932,42 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertFalse(WorkoutPlanEditSheet.canSaveCurrentPlan(savedPlan: nil, editingBase: editingBase))
     }
 
+    func testWorkoutPlanSetupSaveGuardRejectsPlanChangedWhileOpen() {
+        let setupBase = makePlan(
+            templateName: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Upper-body lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                )
+            ]
+        )
+        let newerSavedPlan = makePlan(
+            templateName: "Lower Strength",
+            sessionType: .strength,
+            focusAreas: ["Lower"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Lower-body lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertTrue(WorkoutPlanEditSheet.canSaveSetupPlan(savedPlan: setupBase, setupBase: setupBase))
+        XCTAssertTrue(WorkoutPlanEditSheet.canSaveSetupPlan(savedPlan: nil, setupBase: nil))
+        XCTAssertFalse(WorkoutPlanEditSheet.canSaveSetupPlan(savedPlan: newerSavedPlan, setupBase: setupBase))
+        XCTAssertFalse(WorkoutPlanEditSheet.canSaveSetupPlan(savedPlan: newerSavedPlan, setupBase: nil))
+    }
+
     private func makeGoalSuggestion(
         title: String,
         goalKindRaw: String = WorkoutGoal.GoalKind.frequency.rawValue,

@@ -61,6 +61,7 @@ struct WorkoutsView: View {
     @State private var standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
     @State private var standardGeneratedWorkoutPlan: WorkoutPlan?
     @State private var standardGeneratedWorkoutGoals: [WorkoutGoal] = []
+    @State private var standardWorkoutPlanSetupBase: WorkoutPlan?
     @State private var standardWorkoutPlanAIService = AIService()
     @State private var standardWorkoutPlanSaveError: StandardWorkoutPlanSaveError?
 
@@ -402,6 +403,11 @@ struct WorkoutsView: View {
             }
             .onChange(of: pendingWorkoutPlanSetupRequest) { _, _ in
                 consumePendingWorkoutPlanSetupRequest()
+            }
+            .onChange(of: showingStandardPlanSetup) { _, isShowing in
+                if isShowing {
+                    standardWorkoutPlanSetupBase = userProfile?.workoutPlan
+                }
             }
             .onChange(of: workoutPlan) {
                 markRecoveryRefreshNeeded(delayMilliseconds: 140)
@@ -1077,6 +1083,16 @@ struct WorkoutsView: View {
         draftSnapshot: OnboardingWorkoutPlanDraft
     ) {
         guard let profile = userProfile else { return }
+        guard WorkoutPlanEditSheet.canSaveSetupPlan(
+            savedPlan: profile.workoutPlan,
+            setupBase: standardWorkoutPlanSetupBase
+        ) else {
+            standardWorkoutPlanSaveError = StandardWorkoutPlanSaveError(
+                message: "Your workout plan changed while setup was open. Reopen the latest plan before saving changes."
+            )
+            HapticManager.error()
+            return
+        }
         let hadExistingPlan = profile.workoutPlan != nil
 
         WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
@@ -1133,6 +1149,7 @@ struct WorkoutsView: View {
         standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
         standardGeneratedWorkoutPlan = nil
         standardGeneratedWorkoutGoals = []
+        standardWorkoutPlanSetupBase = nil
     }
 
     private func persistCachedGoalSuggestionSnapshot(_ suggestions: [WorkoutGoalSuggestion]) {

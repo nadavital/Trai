@@ -73,6 +73,7 @@ struct WorkoutPlanChatFlow: View {
     @State private var refinementTask: Task<Void, Never>?
     @State private var refinementRequestID: UUID?
     @State private var refinementReviewMessagesBeforeRequest: [WorkoutPlanFlowMessage] = []
+    @State private var generatedResultPresentationID: UUID?
     @State private var saveError: WorkoutPlanChatFlowSaveError?
 
     @FocusState private var isInputFocused: Bool
@@ -852,6 +853,7 @@ struct WorkoutPlanChatFlow: View {
 
     private func generatePlan() {
         isGenerating = true
+        generatedResultPresentationID = nil
 
         Task {
             let request = buildRequest()
@@ -1039,6 +1041,7 @@ struct WorkoutPlanChatFlow: View {
         didRefineGeneratedPlan = true
         let requestID = UUID()
         refinementRequestID = requestID
+        generatedResultPresentationID = nil
         let previousReviewMessages = messages.filter(isGeneratedPlanReviewMessage)
         refinementReviewMessagesBeforeRequest = previousReviewMessages
 
@@ -1143,6 +1146,7 @@ struct WorkoutPlanChatFlow: View {
     private func restoreReviewMessagesAfterRefinementCancel() {
         refinementTask = nil
         refinementRequestID = nil
+        generatedResultPresentationID = nil
         withAnimation(.spring(response: 0.3)) {
             messages.removeAll(where: isGeneratedPlanReviewMessage)
             messages.append(contentsOf: refinementReviewMessagesBeforeRequest)
@@ -1161,6 +1165,8 @@ struct WorkoutPlanChatFlow: View {
         includeSaveAction: Bool,
         presentation: GeneratedPlanPresentation
     ) async {
+        let presentationID = UUID()
+        generatedResultPresentationID = presentationID
         withAnimation(generatedResultAnimation) {
             refinementTask = nil
             refinementRequestID = nil
@@ -1169,7 +1175,11 @@ struct WorkoutPlanChatFlow: View {
         }
 
         if let introText, !introText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            await appendGeneratedResultMessage(.traiMessage(introText), delayMilliseconds: 90)
+            guard await appendGeneratedResultMessage(
+                .traiMessage(introText),
+                delayMilliseconds: 90,
+                presentationID: presentationID
+            ) else { return }
         }
 
         let planMessageType: WorkoutPlanFlowMessage.MessageType = switch presentation {
@@ -1178,34 +1188,59 @@ struct WorkoutPlanChatFlow: View {
         case .current:
             .currentPlan(plan, planMessage)
         }
-        await appendGeneratedResultMessage(planMessageType, delayMilliseconds: 130)
+        guard await appendGeneratedResultMessage(
+            planMessageType,
+            delayMilliseconds: 130,
+            presentationID: presentationID
+        ) else { return }
 
         let goalsToShow = deduplicatedGoals(goals.map { goal in
             goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
             return goal
         })
         if !goalsToShow.isEmpty {
+            guard generatedResultPresentationID == presentationID else { return }
             activeGeneratedPlanGoals = goalsToShow
-            await appendGeneratedResultMessage(.generatedGoals(goalsToShow), delayMilliseconds: 120)
+            guard await appendGeneratedResultMessage(
+                .generatedGoals(goalsToShow),
+                delayMilliseconds: 120,
+                presentationID: presentationID
+            ) else { return }
         }
 
         if includeSaveAction {
-            await appendGeneratedResultMessage(.saveGeneratedPlan, delayMilliseconds: 90)
+            guard await appendGeneratedResultMessage(
+                .saveGeneratedPlan,
+                delayMilliseconds: 90,
+                presentationID: presentationID
+            ) else { return }
+        }
+
+        if generatedResultPresentationID == presentationID {
+            generatedResultPresentationID = nil
         }
     }
 
     @MainActor
+    @discardableResult
     private func appendGeneratedResultMessage(
         _ type: WorkoutPlanFlowMessage.MessageType,
-        delayMilliseconds: UInt64
-    ) async {
+        delayMilliseconds: UInt64,
+        presentationID: UUID
+    ) async -> Bool {
         if delayMilliseconds > 0 {
-            try? await Task.sleep(nanoseconds: delayMilliseconds * 1_000_000)
+            do {
+                try await Task.sleep(nanoseconds: delayMilliseconds * 1_000_000)
+            } catch {
+                return false
+            }
         }
 
+        guard generatedResultPresentationID == presentationID else { return false }
         withAnimation(generatedResultAnimation) {
             messages.append(WorkoutPlanFlowMessage(type: type))
         }
+        return true
     }
 
     private func isGeneratedPlanReviewMessage(_ message: WorkoutPlanFlowMessage) -> Bool {

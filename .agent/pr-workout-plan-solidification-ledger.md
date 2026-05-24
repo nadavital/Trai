@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `984c5ff Cover planned workout freshness checks`
+- Latest pushed fix before current round: `93fea99 Harden workout plan semantic preservation`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -24,6 +24,8 @@
 - Stabilized current-period workout goal tests so they do not fail around a local week/day boundary.
 - Scoped supportive-cardio removal and legacy display-activity preservation to the AI's durable changed IDs, not plan-wide keyword/name presence.
 - Preserved valid planned start cards for legacy exercise-only saved plans by checking durable exercise IDs instead of nondeterministic fallback block IDs.
+- Blocked standard Profile/Settings/Workouts setup saves from overwriting a workout plan that changed while the setup sheet was open.
+- Guarded delayed generated-plan result presentation so stale refinement cards/goals/save rows cannot append after a newer refinement starts.
 
 ## Fresh Review Rounds
 
@@ -140,6 +142,21 @@
 - Planned workout starts: fixed verified legacy exercise-only start-card rejection caused by synthesized fallback block UUIDs; blockless strength templates now validate against durable exercise IDs while block-based generated plans still validate by source block IDs.
 - Regression-test coverage: added focused tests for scoped support-cardio removal, moved legacy/display activity identity rejection, and legacy exercise-only start-card accept/reject freshness.
 - Validation note: focused XCTest pass succeeded for 12 selected semantic and planned-start tests; `git diff --check` is clean.
+
+### Round 2026-05-24 After `93fea99`
+- Fresh agent results: one read-only lifecycle agent found two actual P2 issues; the other attempted local CLI review agents were blocked by approval policy before they could run because they would export private repo context to separate external sessions.
+- Standard setup persistence: fixed verified stale-save gap where Workouts/Profile/Settings setup sheets could silently overwrite a newer saved workout plan because they did not capture and compare the setup base plan before saving.
+- Refinement lifecycle: fixed verified stale presentation window where delayed plan/goals/save rows from a completed refinement presentation could append after a newer refinement started.
+- Regression-test coverage: added focused setup save-guard assertions for existing-plan and no-plan bases.
+- Validation note: focused XCTest pass succeeded for stale edit/setup save guards; `git diff --check` is clean.
+
+## Manual Test Queue
+- From Profile, Settings, and Workouts, open standard workout-plan setup, mutate/save a different workout plan elsewhere before tapping Save, and confirm the stale setup is blocked instead of overwriting the newer plan.
+- Run two rapid generated-plan refinements back to back and confirm only the latest result package remains, with no duplicate or stale plan/goals/save rows.
+- Accept a planned workout start card from an older exercise-only saved plan.
+- Accept a planned workout start card from a new block-based generated plan.
+- Replace the saved plan before accepting an old planned start card and confirm it is rejected as stale.
+- Start a planned workout through Shortcuts/widget/deep link and confirm durable template routing still wins over labels.
 
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.

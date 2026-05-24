@@ -27,6 +27,7 @@ struct ProfileView: View {
     @State var standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
     @State var standardGeneratedWorkoutPlan: WorkoutPlan?
     @State var standardGeneratedWorkoutGoals: [WorkoutGoal] = []
+    @State private var standardWorkoutPlanSetupBase: WorkoutPlan?
     @State var standardWorkoutPlanAIService = AIService()
 
     // Workout plan management sheets
@@ -286,7 +287,9 @@ struct ProfileView: View {
                 }
             }
             .onChange(of: showPlanSetupSheet) { _, isShowing in
-                if !isShowing {
+                if isShowing {
+                    standardWorkoutPlanSetupBase = profile?.workoutPlan
+                } else {
                     markProfileMetricsRefreshNeeded(delayMilliseconds: 180)
                 }
             }
@@ -800,6 +803,16 @@ struct ProfileView: View {
         draftSnapshot: OnboardingWorkoutPlanDraft
     ) {
         guard let profile else { return }
+        guard WorkoutPlanEditSheet.canSaveSetupPlan(
+            savedPlan: profile.workoutPlan,
+            setupBase: standardWorkoutPlanSetupBase
+        ) else {
+            workoutPlanSaveError = WorkoutPlanSaveError(
+                message: "Your workout plan changed while setup was open. Reopen the latest plan before saving changes."
+            )
+            HapticManager.error()
+            return
+        }
         let hadExistingPlan = profile.workoutPlan != nil
 
         WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
@@ -886,6 +899,7 @@ struct ProfileView: View {
         standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
         standardGeneratedWorkoutPlan = nil
         standardGeneratedWorkoutGoals = []
+        standardWorkoutPlanSetupBase = nil
     }
 }
 
