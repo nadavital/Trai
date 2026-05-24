@@ -140,6 +140,18 @@ final class HealthKitService {
         from healthKitWorkouts: [WorkoutSession],
         searchBufferMinutes: Int = 0
     ) -> WorkoutSession? {
+        Self.bestOverlappingWorkout(
+            for: workout,
+            from: healthKitWorkouts,
+            searchBufferMinutes: searchBufferMinutes
+        )
+    }
+
+    static func bestOverlappingWorkout(
+        for workout: LiveWorkout,
+        from healthKitWorkouts: [WorkoutSession],
+        searchBufferMinutes: Int = 0
+    ) -> WorkoutSession? {
         let buffer = Double(searchBufferMinutes) * 60
         let ourStart = workout.startedAt.addingTimeInterval(-buffer)
         let ourEnd = (workout.completedAt ?? Date()).addingTimeInterval(buffer)
@@ -150,12 +162,28 @@ final class HealthKitService {
             return hkStart <= ourEnd && hkEnd >= ourStart
         }
 
-        let strengthWorkouts = overlapping.filter {
-            $0.healthKitWorkoutType?.lowercased().contains("strength") == true ||
-            $0.healthKitWorkoutType?.lowercased().contains("weight") == true
+        let bestMatch = overlapping.max { lhs, rhs in
+            healthKitMergeScore(for: lhs, matching: workout) < healthKitMergeScore(for: rhs, matching: workout)
         }
+        guard let bestMatch,
+              healthKitMergeScore(for: bestMatch, matching: workout).0 > 0 else {
+            return nil
+        }
+        return bestMatch
+    }
 
-        return strengthWorkouts.first ?? overlapping.first
+    private static func healthKitMergeScore(
+        for healthKitWorkout: WorkoutSession,
+        matching workout: LiveWorkout
+    ) -> (TimeInterval, Int, TimeInterval) {
+        let actualStart = workout.startedAt
+        let actualEnd = workout.completedAt ?? Date()
+        let hkStart = healthKitWorkout.loggedAt
+        let hkEnd = healthKitEndDate(for: healthKitWorkout)
+        let overlap = max(0, min(actualEnd, hkEnd).timeIntervalSince(max(actualStart, hkStart)))
+        let typeScore = healthKitWorkout.matchesWorkoutMode(workout.type) ? 1 : 0
+        let startDistance = -abs(hkStart.timeIntervalSince(actualStart))
+        return (overlap, typeScore, startDistance)
     }
 
     // MARK: - Weight
@@ -769,7 +797,7 @@ final class HealthKitService {
         .dedupedHealthKitMetadataValues()
     }
 
-    private func healthKitEndDate(for workout: WorkoutSession) -> Date {
+    private static func healthKitEndDate(for workout: WorkoutSession) -> Date {
         guard let duration = workout.durationMinutes, duration > 0 else {
             return workout.loggedAt.addingTimeInterval(60 * 60)
         }

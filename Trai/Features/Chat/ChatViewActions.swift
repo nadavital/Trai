@@ -500,20 +500,22 @@ extension ChatView {
             HapticManager.error()
             return
         }
-        guard let exercise = workout.exercises.first else {
+        guard !workout.exercises.isEmpty else {
             message.errorMessage = "This workout needs at least one trackable item before it can be started. Ask Trai to regenerate it."
             HapticManager.error()
             return
         }
-        guard let category = exercise.strictCategory else {
-            message.errorMessage = "This workout needs stable activity categories before it can be started. Ask Trai to regenerate it."
-            HapticManager.error()
-            return
-        }
-        if category != .strength, exercise.trimmedActivityTypeName == nil {
-            message.errorMessage = "This workout needs activity names before it can be started. Ask Trai to regenerate it."
-            HapticManager.error()
-            return
+        for exercise in workout.exercises {
+            guard let category = exercise.strictCategory else {
+                message.errorMessage = "This workout needs stable activity categories before it can be started. Ask Trai to regenerate it."
+                HapticManager.error()
+                return
+            }
+            if category != .strength, exercise.trimmedActivityTypeName == nil {
+                message.errorMessage = "This workout needs activity names before it can be started. Ask Trai to regenerate it."
+                HapticManager.error()
+                return
+            }
         }
 
         // Map target muscle groups
@@ -531,54 +533,71 @@ extension ChatView {
             focusAreas: semanticFocus.isEmpty ? focusAreas : semanticFocus
         )
 
-        // Start with one ready exercise. The live workout view will continue
-        // surfacing Trai suggestions instead of dumping the whole plan at once.
         var entries: [LiveWorkoutEntry] = []
-        let entry = LiveWorkoutEntry(
-            exerciseName: exercise.name,
-            orderIndex: 0,
-            exerciseType: category.rawValue
-        )
-        entry.activityTypeName = exercise.resolvedActivityName(category: category)
-        entry.activityKind = category.liveWorkoutActivityKind
-        entry.targetTags = exercise.resolvedTargetTags(category: category)
-        entry.trackingFields = exercise.resolvedTrackingFields(category: category)
-        if category == .strength,
-           let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !notes.isEmpty {
-            entry.notes = notes
-        }
-
-        if category == .strength {
-            let setDefaults = WorkoutTemplateService().suggestedSetDefaults(
+        entries.reserveCapacity(workout.exercises.count)
+        for (index, exercise) in workout.exercises.enumerated() {
+            guard let category = exercise.strictCategory else { continue }
+            let entry = LiveWorkoutEntry(
                 exerciseName: exercise.name,
-                requestedReps: exercise.reps,
-                requestedWeightKg: exercise.weightKg,
-                progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
-                modelContext: modelContext
+                orderIndex: index,
+                exerciseType: category.rawValue
             )
-            entry.addSet(LiveWorkoutEntry.SetData(
-                reps: setDefaults.reps,
-                weight: setDefaults.weight,
-                completed: false,
-                isWarmup: false
-            ))
-        } else {
-            entry.plannedDurationSeconds = exercise.durationMinutes.map { max(0, $0) * 60 }
-            if let distanceMeters = exercise.distanceMeters, distanceMeters > 0 {
-                entry.plannedTarget = String(format: "%.0f m", distanceMeters)
+            entry.activityTypeName = exercise.resolvedActivityName(category: category)
+            entry.activityKind = category.liveWorkoutActivityKind
+            entry.targetTags = exercise.resolvedTargetTags(category: category)
+            entry.trackingFields = exercise.resolvedTrackingFields(category: category)
+            if category == .strength,
+               let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !notes.isEmpty {
+                entry.notes = notes
             }
-            if let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
-                entry.plannedTarget = [entry.plannedTarget, notes]
-                    .compactMap { value in
-                        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                        return trimmed.isEmpty ? nil : trimmed
-                    }
-                    .joined(separator: " • ")
+
+            if category == .strength {
+                let setDefaults = WorkoutTemplateService().suggestedSetDefaults(
+                    exerciseName: exercise.name,
+                    requestedReps: exercise.reps,
+                    requestedWeightKg: exercise.weightKg,
+                    progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
+                    modelContext: modelContext
+                )
+                entry.addSet(LiveWorkoutEntry.SetData(
+                    reps: setDefaults.reps,
+                    weight: setDefaults.weight,
+                    completed: false,
+                    isWarmup: false
+                ))
+            } else {
+                entry.sourcePlanBlockID = exercise.id
+                entry.plannedDurationSeconds = exercise.durationMinutes.map { max(0, $0) * 60 }
+                if let distanceMeters = exercise.distanceMeters, distanceMeters > 0 {
+                    entry.plannedTarget = String(format: "%.0f m", distanceMeters)
+                }
+                if let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+                    entry.plannedTarget = [entry.plannedTarget, notes]
+                        .compactMap { value in
+                            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                            return trimmed.isEmpty ? nil : trimmed
+                        }
+                        .joined(separator: " • ")
+                }
+                entry.plannedActivitySegments = exercise.activitySegments
+                if entry.plannedActivitySegments.isEmpty, entry.plannedDurationSeconds != nil || entry.plannedTarget != nil {
+                    entry.plannedActivitySegments = [
+                        LiveWorkoutEntry.ActivitySegment(
+                            durationSeconds: entry.plannedDurationSeconds,
+                            distanceMeters: exercise.distanceMeters,
+                            notes: entry.plannedTarget ?? ""
+                        )
+                    ]
+                }
             }
-            entry.plannedActivitySegments = exercise.activitySegments
+            entries.append(entry)
         }
-        entries.append(entry)
+        guard !entries.isEmpty else {
+            message.errorMessage = "This workout needs at least one trackable item before it can be started. Ask Trai to regenerate it."
+            HapticManager.error()
+            return
+        }
         liveWorkout.entries = entries
 
         // Save to database
@@ -1190,7 +1209,7 @@ extension ChatView {
             let shouldMarkNutritionReview = storedActionKind == .nutritionPlanReview
             startNewSession(silent: true)
             if let focusedEntryId = UUID(uuidString: pendingFocusedFoodEntryId),
-               let focusedEntry = allFoodEntries.first(where: { $0.id == focusedEntryId }) {
+               let focusedEntry = focusedFoodEntry(with: focusedEntryId) {
                 focusedFoodEntryContext = focusedEntry.focusedChatContext
             }
             guard sendAppInitiatedPrompt(
@@ -1225,6 +1244,15 @@ extension ChatView {
         pendingWorkoutPlanReviewRequest = false
     }
 
+    private func focusedFoodEntry(with id: UUID) -> FoodEntry? {
+        if let entry = allFoodEntries.first(where: { $0.id == id }) {
+            return entry
+        }
+        let descriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate { $0.id == id }
+        )
+        return try? modelContext.fetch(descriptor).first
+    }
 }
 
 // MARK: - Reminder Suggestion Actions

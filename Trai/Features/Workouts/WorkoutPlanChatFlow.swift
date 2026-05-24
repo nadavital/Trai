@@ -524,7 +524,7 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private var shouldShowInputBar: Bool {
-        !isGenerating
+        !isGenerating || (planAccepted && showRefineMode)
     }
 
     private func generatedGoalDetailText(_ goal: WorkoutGoal) -> String {

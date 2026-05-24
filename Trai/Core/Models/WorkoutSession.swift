@@ -134,6 +134,16 @@ extension WorkoutSession {
         }
     }
 
+    func matchesWorkoutMode(_ mode: WorkoutMode) -> Bool {
+        guard let importedMode = WorkoutMode.normalized(from: healthKitWorkoutType) else {
+            return false
+        }
+        if mode == .mixed {
+            return true
+        }
+        return importedMode == mode
+    }
+
     private var semanticActivityTagCandidates: [String] {
         guard let exercise else {
             return [healthKitWorkoutType, displayTypeName].compactMap { $0 }

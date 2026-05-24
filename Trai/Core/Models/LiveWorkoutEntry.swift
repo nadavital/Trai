@@ -763,6 +763,51 @@ extension LiveWorkoutEntry {
         return segments
     }
 
+    func traiWorkoutContextDetail(usesMetricExerciseWeight: Bool) -> String {
+        if isStrength {
+            let completedSets = sets.filter { $0.completed && $0.reps > 0 && !$0.isWarmup }
+            var parts = [exerciseName, "\(completedSets.count) logged sets"]
+            if let bestSet = completedSets.max(by: { $0.volume < $1.volume }) {
+                parts.append("\(WeightUtility.format(bestSet.weightKg, displayUnit: WeightUnit(usesMetric: usesMetricExerciseWeight))) x \(bestSet.reps)")
+            }
+            if !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                parts.append("notes: \(notes)")
+            }
+            return parts.joined(separator: " • ")
+        }
+
+        var parts: [String] = [exerciseName]
+        let activityName = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != exerciseName.goalNormalizedKey {
+            parts.append(activityName)
+        }
+        let loggedSummary = traiActivitySummarySegments(usesMetric: usesMetricExerciseWeight)
+        let plannedSummary = plannedActivitySummarySegments
+        let summary = loggedSummary.isEmpty && !plannedSummary.isEmpty
+            ? plannedSummary
+            : loggedSummary
+        parts.append(contentsOf: summary.filter { segment in
+            segment.goalNormalizedKey != activityName.goalNormalizedKey
+        }.prefix(4))
+        let trackingSummary = trackingFields
+            .map(\.displayName)
+            .filter { !$0.isEmpty }
+            .joined(separator: "/")
+        if !trackingSummary.isEmpty {
+            parts.append("tracks \(trackingSummary)")
+        }
+
+        let tags = targetTags.prefix(3)
+        if !tags.isEmpty {
+            parts.append("targets \(tags.joined(separator: ", "))")
+        }
+
+        if !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append("notes: \(notes)")
+        }
+        return parts.joined(separator: " • ")
+    }
+
     private static func formatPlannedDuration(seconds: Int) -> String {
         let minutes = seconds / 60
         guard minutes > 0 else { return "<1 min" }

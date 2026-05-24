@@ -95,6 +95,40 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertFalse(entry.hasExercisePreferenceSignal)
     }
 
+    func testFinishWorkoutDoesNotAutoCompleteSuggestedStrengthSet() {
+        let (workout, entry) = makeWorkout(initialReps: 8)
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+        XCTAssertEqual(viewModel.completedSets, 0)
+
+        viewModel.finishWorkout()
+
+        XCTAssertNotNil(workout.completedAt)
+        XCTAssertEqual(viewModel.completedSets, 0)
+        XCTAssertEqual(entry.sets.first?.completed, false)
+        XCTAssertFalse(entry.hasExercisePreferenceSignal)
+        XCTAssertTrue(ExerciseHistory.records(from: workout).isEmpty)
+        XCTAssertEqual(
+            entry.traiWorkoutContextDetail(usesMetricExerciseWeight: true),
+            "Bench Press • 0 logged sets"
+        )
+    }
+
+    func testFinishWorkoutPreservesUserCompletedStrengthSet() {
+        let (workout, entry) = makeWorkout(initialReps: 8)
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+        viewModel.updateSet(at: 0, in: entry, reps: 9)
+        viewModel.finishWorkout()
+
+        XCTAssertEqual(viewModel.completedSets, 1)
+        XCTAssertEqual(entry.sets.first?.completed, true)
+        XCTAssertTrue(entry.hasExercisePreferenceSignal)
+        XCTAssertEqual(ExerciseHistory.records(from: workout).count, 1)
+    }
+
     func testFinishWorkoutTimestampsActivityEntryWithLoggedData() {
         let workout = LiveWorkout(name: "Mixed Session", workoutType: .mixed)
         let entry = LiveWorkoutEntry(
@@ -181,6 +215,10 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertFalse(entry.isPlannedActivityGuidance)
         XCTAssertFalse(entry.hasExercisePreferenceSignal)
         XCTAssertEqual(entry.plannedActivitySummarySegments, ["20 min", "Steady aerobic work"])
+        XCTAssertEqual(
+            entry.traiWorkoutContextDetail(usesMetricExerciseWeight: true),
+            "Rowing • 20 min • Steady aerobic work • tracks Duration/Distance"
+        )
     }
 
     func testLiveWorkoutReviewPromptIncludesActivitySegmentMetrics() {
@@ -789,6 +827,59 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         workout.entries = [entry]
 
         XCTAssertEqual(HealthKitService.healthKitActivityType(for: workout), .running)
+    }
+
+    func testHealthKitMergeChoosesGreatestActualOverlap() {
+        let liveWorkout = LiveWorkout(name: "Strength", workoutType: .strength)
+        liveWorkout.startedAt = Date(timeIntervalSince1970: 1_000)
+        liveWorkout.completedAt = Date(timeIntervalSince1970: 2_800)
+
+        let shortStrength = WorkoutSession(
+            healthKitWorkoutID: "short-strength",
+            workoutType: "traditionalStrengthTraining",
+            durationMinutes: 10,
+            caloriesBurned: 100,
+            distanceMeters: nil,
+            loggedAt: Date(timeIntervalSince1970: 2_100)
+        )
+        let longerOverlap = WorkoutSession(
+            healthKitWorkoutID: "longer-overlap",
+            workoutType: "running",
+            durationMinutes: 25,
+            caloriesBurned: 200,
+            distanceMeters: nil,
+            loggedAt: Date(timeIntervalSince1970: 1_200)
+        )
+
+        let match = HealthKitService.bestOverlappingWorkout(
+            for: liveWorkout,
+            from: [shortStrength, longerOverlap],
+            searchBufferMinutes: 15
+        )
+
+        XCTAssertEqual(match?.healthKitWorkoutID, "longer-overlap")
+    }
+
+    func testHealthKitMergeDoesNotUseBufferOnlyCandidate() {
+        let liveWorkout = LiveWorkout(name: "Strength", workoutType: .strength)
+        liveWorkout.startedAt = Date(timeIntervalSince1970: 1_000)
+        liveWorkout.completedAt = Date(timeIntervalSince1970: 2_000)
+        let nearbyWorkout = WorkoutSession(
+            healthKitWorkoutID: "nearby",
+            workoutType: "traditionalStrengthTraining",
+            durationMinutes: 5,
+            caloriesBurned: 50,
+            distanceMeters: nil,
+            loggedAt: Date(timeIntervalSince1970: 2_200)
+        )
+
+        let match = HealthKitService.bestOverlappingWorkout(
+            for: liveWorkout,
+            from: [nearbyWorkout],
+            searchBufferMinutes: 15
+        )
+
+        XCTAssertNil(match)
     }
 
     func testRepsOnlyActivitySegmentCountsAsLoggedData() {
@@ -1478,6 +1569,38 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertFalse(entry.hasExercisePreferenceSignal)
         XCTAssertTrue(WorkoutGoalProgressResolver.matchingCompletedWorkouts(for: frequencyGoal, in: [workout]).isEmpty)
         XCTAssertTrue(WorkoutGoalProgressResolver.matchingCompletedWorkouts(for: durationGoal, in: [workout]).isEmpty)
+    }
+
+    func testActivityScopedGoalIgnoresUnloggedPlannedActivityWithoutPlanBlockID() {
+        let workout = LiveWorkout(name: "Strength + Climb", workoutType: .mixed, focusAreas: ["Climbing"])
+        workout.completedAt = Date()
+        let strengthEntry = LiveWorkoutEntry(exerciseName: "Back Squat", orderIndex: 0)
+        strengthEntry.addSet(LiveWorkoutEntry.SetData(reps: 5, weight: .zero, completed: true))
+        let plannedActivity = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 1,
+            exerciseType: "skill"
+        )
+        plannedActivity.activityTypeName = "Bouldering"
+        plannedActivity.targetTags = ["Climbing"]
+        plannedActivity.plannedDurationSeconds = 1_800
+        workout.entries = [strengthEntry, plannedActivity]
+
+        let goal = WorkoutGoal(
+            title: "Climb weekly",
+            goalKind: .frequency,
+            linkedActivityTags: ["Climbing"],
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You log one climbing session this week."
+        )
+
+        XCTAssertTrue(goal.matches(workout: workout))
+        XCTAssertTrue(goal.matches(entry: plannedActivity))
+        XCTAssertFalse(plannedActivity.hasExercisePreferenceSignal)
+        XCTAssertTrue(WorkoutGoalProgressResolver.matchingCompletedWorkouts(for: goal, in: [workout]).isEmpty)
     }
 
     func testActivityKindGoalMatchesLegacyCardioEntryType() {

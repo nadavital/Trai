@@ -1735,22 +1735,11 @@ final class LiveWorkoutViewModel {
         stopTimer()
         workout.completedAt = Date()
 
-        // Auto-mark all sets with data as completed
-        // (since set checking was removed from UI, we infer completion from having data)
         for entry in entries {
             if (entry.isCardio || entry.isGeneralActivity)
                 && !entry.isPlannedActivityGuidance
                 && entry.hasExercisePreferenceSignal {
                 entry.completedAt = entry.completedAt ?? Date()
-            }
-            for index in entry.sets.indices {
-                let set = entry.sets[index]
-                // Mark as completed if it has reps (user entered data)
-                if set.reps > 0 && !set.completed {
-                    var updatedSet = set
-                    updatedSet.completed = true
-                    entry.updateSet(at: index, with: updatedSet)
-                }
             }
         }
         refreshEntriesAndMetrics()
@@ -1884,8 +1873,8 @@ final class LiveWorkoutViewModel {
         from originalSet: LiveWorkoutEntry.SetData,
         to updatedSet: LiveWorkoutEntry.SetData
     ) -> Bool {
-        let originalHasData = originalSet.reps > 0 && !originalSet.isWarmup
-        let updatedHasData = updatedSet.reps > 0 && !updatedSet.isWarmup
+        let originalHasData = originalSet.completed && originalSet.reps > 0 && !originalSet.isWarmup
+        let updatedHasData = updatedSet.completed && updatedSet.reps > 0 && !updatedSet.isWarmup
         guard originalHasData == updatedHasData else { return true }
 
         let originalVolume = originalSet.completed && !originalSet.isWarmup ? originalSet.volume : 0
@@ -1902,10 +1891,10 @@ final class LiveWorkoutViewModel {
             let sets = entry.sets
             totalSets += sets.count
             for set in sets where !set.isWarmup {
-                if set.reps > 0 {
+                if set.completed && set.reps > 0 {
                     completedSetsWithData += 1
                 }
-                if set.completed {
+                if set.completed && set.reps > 0 {
                     totalVolume += set.volume
                 }
             }

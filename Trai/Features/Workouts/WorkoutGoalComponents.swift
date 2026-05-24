@@ -619,7 +619,8 @@ enum WorkoutGoalProgressResolver {
         in workout: LiveWorkout
     ) -> Bool {
         (workout.entries ?? []).contains {
-            goal.matches(entry: $0) && $0.isPlannedActivityGuidance
+            guard goal.matches(entry: $0), !$0.hasExercisePreferenceSignal else { return false }
+            return $0.isPlannedActivityGuidance || !$0.plannedActivitySummarySegments.isEmpty
         }
     }
 

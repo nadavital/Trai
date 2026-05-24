@@ -699,7 +699,8 @@ struct LiveWorkoutView: View {
                 guard !entry.isPlannedActivityGuidance else { return false }
                 return entry.completedAt != nil || entry.hasExercisePreferenceSignal
             }
-            return !entry.sets.isEmpty && entry.sets.allSatisfy { $0.reps > 0 }
+            let workingSets = entry.sets.filter { !$0.isWarmup }
+            return !workingSets.isEmpty && workingSets.allSatisfy { $0.completed && $0.reps > 0 }
         }.count
 
         let currentExercise = entries.first { entry in
@@ -711,17 +712,18 @@ struct LiveWorkoutView: View {
             if entry.isCardio {
                 return entry.completedAt == nil && !entry.hasExercisePreferenceSignal
             }
-            return entry.sets.isEmpty || entry.sets.contains { $0.reps == 0 }
+            let workingSets = entry.sets.filter { !$0.isWarmup }
+            return workingSets.isEmpty || workingSets.contains { !$0.completed || $0.reps == 0 }
         }?.exerciseName ?? entries.last?.exerciseName
 
         let setsWithData = entries.reduce(0) { total, entry in
             guard entry.isStrength else { return total }
-            return total + entry.sets.filter { $0.reps > 0 && !$0.isWarmup }.count
+            return total + entry.sets.filter { $0.completed && $0.reps > 0 && !$0.isWarmup }.count
         }
 
         let volumeWithData = entries.reduce(0.0) { total, entry in
             guard !entry.isCardio, !entry.isGeneralActivity else { return total }
-            return total + entry.sets.filter { $0.reps > 0 && !$0.isWarmup }.reduce(0.0) { $0 + $1.volume }
+            return total + entry.sets.filter { $0.completed && $0.reps > 0 && !$0.isWarmup }.reduce(0.0) { $0 + $1.volume }
         }
 
         return AIService.WorkoutContext(
@@ -744,47 +746,7 @@ struct LiveWorkoutView: View {
     }
 
     private func workoutContextEntryDetail(_ entry: LiveWorkoutEntry) -> String {
-        if entry.isStrength {
-            let completedSets = entry.sets.filter { $0.reps > 0 && !$0.isWarmup }
-            var parts = [entry.exerciseName, "\(completedSets.count) logged sets"]
-            if let bestSet = completedSets.max(by: { $0.volume < $1.volume }) {
-                parts.append("\(WeightUtility.format(bestSet.weightKg, displayUnit: WeightUnit(usesMetric: usesMetricExerciseWeight))) x \(bestSet.reps)")
-            }
-            if !entry.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                parts.append("notes: \(entry.notes)")
-            }
-            return parts.joined(separator: " • ")
-        }
-
-        var parts: [String] = [entry.exerciseName]
-        let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
-            parts.append(activityName)
-        }
-        let loggedSummary = entry.traiActivitySummarySegments(usesMetric: usesMetricExerciseWeight)
-        let plannedSummary = entry.plannedActivitySummarySegments
-        let summary = loggedSummary.isEmpty && !plannedSummary.isEmpty
-            ? plannedSummary
-            : loggedSummary
-        parts.append(contentsOf: summary.filter { segment in
-            segment.goalNormalizedKey != activityName.goalNormalizedKey
-        }.prefix(4))
-
-        let trackingFields = entry.trackingFields.map(\.displayName)
-        if !trackingFields.isEmpty {
-            parts.append("tracks \(trackingFields.joined(separator: "/"))")
-        }
-
-        let tags = entry.targetTags.prefix(3)
-        if !tags.isEmpty {
-            parts.append("targets \(tags.joined(separator: ", "))")
-        }
-
-        if !entry.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            parts.append("notes: \(entry.notes)")
-        }
-
-        return parts.joined(separator: " • ")
+        entry.traiWorkoutContextDetail(usesMetricExerciseWeight: usesMetricExerciseWeight)
     }
 
     private func toggleGoalCompletion(_ goal: WorkoutGoal) {
