@@ -644,6 +644,7 @@ struct WorkoutPlanEditSheet: View {
             replacingWith: normalizedPlan
         )
         profile.workoutPlan = normalizedPlan
+        profile.applyStructuredWorkoutPlanPreferences(from: normalizedPlan)
         do {
             try modelContext.save()
             return true

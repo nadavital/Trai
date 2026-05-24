@@ -149,9 +149,15 @@ extension ChatView {
     func retirePendingPlanSuggestionsInCurrentSession() -> Bool {
         var retiredAnySuggestion = false
 
-        for message in currentSessionMessages where message.hasPendingPlanSuggestion {
-            message.suggestedPlanDismissed = true
-            retiredAnySuggestion = true
+        for message in currentSessionMessages {
+            if message.hasPendingPlanSuggestion {
+                message.suggestedPlanDismissed = true
+                retiredAnySuggestion = true
+            }
+            if message.hasPendingWorkoutPlanSuggestion {
+                message.suggestedWorkoutPlanDismissed = true
+                retiredAnySuggestion = true
+            }
         }
 
         guard retiredAnySuggestion else { return false }
@@ -280,6 +286,17 @@ extension ChatView {
 extension ChatView {
     func acceptWorkoutPlanSuggestion(_ suggestion: WorkoutPlanSuggestionEntry, for message: ChatMessage) {
         guard let profile else { return }
+        let latestPendingSuggestionID = currentSessionMessages
+            .reversed()
+            .first(where: \.hasPendingWorkoutPlanSuggestion)?
+            .id
+        guard latestPendingSuggestionID == message.id else {
+            message.suggestedWorkoutPlanDismissed = true
+            message.errorMessage = "This workout plan update is no longer current. Use the latest plan card instead."
+            try? modelContext.save()
+            HapticManager.error()
+            return
+        }
 
         let hadExistingPlan = profile.workoutPlan != nil
 
@@ -291,6 +308,7 @@ extension ChatView {
         )
 
         profile.workoutPlan = suggestion.plan
+        profile.applyStructuredWorkoutPlanPreferences(from: suggestion.plan)
 
         if !hadExistingPlan {
             WorkoutPlanHistoryService.archivePlan(
@@ -359,6 +377,7 @@ extension ChatView {
             targetMuscleGroups: [],
             focusAreas: semanticFocus
         )
+        workout.sourcePlanTemplateID = workoutLog.sourcePlanTemplateID
 
         // Add exercises as entries
         var entries: [LiveWorkoutEntry] = []

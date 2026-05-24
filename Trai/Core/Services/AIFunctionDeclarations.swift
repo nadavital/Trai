@@ -694,6 +694,10 @@ enum AIFunctionDeclarations {
                         "items": ["type": "string"],
                         "description": "Semantic activity tags and targets that should be saved with the workout, such as climbing, endurance, mobility, upper body, or running intervals."
                     ],
+                    "source_plan_template_id": [
+                        "type": "string",
+                        "description": "Optional exact template id from CURRENT WORKOUT PLAN when the user says this completed workout corresponds to a saved/generated plan session. Leave empty for open/custom workouts."
+                    ],
                     "duration_minutes": [
                         "type": "integer",
                         "description": "Duration of the workout in minutes"

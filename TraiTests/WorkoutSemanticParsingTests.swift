@@ -390,6 +390,37 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(exercise.weightKg, 80)
     }
 
+    func testLogWorkoutPreservesSourcePlanTemplateID() async throws {
+        let templateID = UUID()
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "name": "Pull + Climb",
+                    "type": "mixed",
+                    "activity_name": "Climbing",
+                    "source_plan_template_id": templateID.uuidString,
+                    "duration_minutes": 50,
+                    "exercises": [
+                        [
+                            "name": "Limit Bouldering",
+                            "category": "sportPractice",
+                            "activity_name": "Bouldering",
+                            "duration_minutes": 35,
+                            "notes": "Finished the planned climbing block."
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutLog(let workoutLog) = result else {
+            return XCTFail("Expected workout log suggestion")
+        }
+
+        XCTAssertEqual(workoutLog.sourcePlanTemplateID, templateID)
+    }
+
     func testSuggestWorkoutUsesActivityFocusesInsteadOfStrengthFallback() async throws {
         let bouldering = Exercise(name: "Limit Bouldering", category: .sportPractice)
         bouldering.activityTypeName = "Bouldering"
@@ -1092,6 +1123,55 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         XCTAssertEqual(refetchedGoal["activity_kind"] as? String, "mobility")
         XCTAssertEqual(refetchedGoal["activity_role"] as? String, "warmup")
+    }
+
+    func testCreateWorkoutGoalNormalizesGeneratedPlanAdherenceScope() async throws {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Pull + Climb",
+            sessionType: .mixed,
+            focusAreas: ["Pull", "Climbing"],
+            targetMuscleGroups: ["back"],
+            exercises: [],
+            estimatedDurationMinutes: 50,
+            order: 0
+        )
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: profile)
+
+        let result = await executor.execute(
+            .init(
+                name: "create_workout_goal",
+                arguments: [
+                    "title": "Complete my generated plan",
+                    "goal_kind": "frequency",
+                    "tracks_plan_adherence": true,
+                    "target_value": 1,
+                    "target_unit": "sessions",
+                    "period_unit": "week",
+                    "period_count": 1,
+                    "success_criteria": "Complete the generated weekly plan."
+                ]
+            )
+        )
+
+        guard case .dataResponse(let functionResult) = result,
+              functionResult.response["success"] as? Bool == true else {
+            return XCTFail("Expected created workout goal response")
+        }
+
+        let goals = try context.fetch(FetchDescriptor<WorkoutGoal>())
+        let goal = try XCTUnwrap(goals.first)
+        XCTAssertEqual(goal.generatedPlanTemplateIDs, [template.id])
+        XCTAssertNil(goal.linkedWorkoutType)
+        XCTAssertFalse(goal.hasActivityScope)
     }
 
     func testCreateWorkoutGoalRejectsFreeTextActivityKindAndRole() async throws {

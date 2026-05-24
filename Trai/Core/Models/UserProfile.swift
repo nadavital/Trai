@@ -501,6 +501,18 @@ extension UserProfile {
             conversationContext: conversationContext
         )
     }
+
+    func applyStructuredWorkoutPlanPreferences(from plan: WorkoutPlan) {
+        preferredWorkoutDays = plan.daysPerWeek
+
+        let durations = plan.templates
+            .map(\.estimatedDurationMinutes)
+            .filter { $0 > 0 }
+        guard !durations.isEmpty else { return }
+
+        let averageDuration = Double(durations.reduce(0, +)) / Double(durations.count)
+        workoutTimePerSession = Int((averageDuration / 5).rounded() * 5)
+    }
 }
 
 // MARK: - Plan Assessment State

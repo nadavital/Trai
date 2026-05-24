@@ -466,6 +466,9 @@ extension AIFunctionExecutor {
             checkInCadenceDays: checkInCadenceDays,
             tracksGeneratedPlanAdherence: tracksPlanAdherence
         )
+        if tracksPlanAdherence, let plan = userProfile?.workoutPlan {
+            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+        }
 
         modelContext.insert(goal)
         try? modelContext.save()
@@ -664,6 +667,11 @@ extension AIFunctionExecutor {
         goal.checkInCadenceDays = checkInCadenceDays
         goal.notes = notes
         goal.tracksGeneratedPlanAdherence = tracksPlanAdherence
+        if tracksPlanAdherence, let plan = userProfile?.workoutPlan {
+            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+        } else if !tracksPlanAdherence {
+            goal.generatedPlanTemplateIDs = []
+        }
         goal.updatedAt = Date()
         try? modelContext.save()
         return .dataResponse(FunctionResult(
@@ -974,6 +982,8 @@ extension AIFunctionExecutor {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty
         let activityTags = stringArray(from: args["activity_tags"])
+        let sourcePlanTemplateID = (args["source_plan_template_id"] as? String)
+            .flatMap { UUID(uuidString: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
 
         let workoutName = args["name"] as? String  // Trai-generated name
         let durationMinutes = numericInt(from: args["duration_minutes"])
@@ -1088,6 +1098,7 @@ extension AIFunctionExecutor {
             workoutType: workoutType,
             activityName: activityName,
             activityTags: semanticActivityTags.isEmpty ? nil : semanticActivityTags,
+            sourcePlanTemplateID: sourcePlanTemplateID,
             durationMinutes: durationMinutes,
             exercises: exercises,
             notes: notes

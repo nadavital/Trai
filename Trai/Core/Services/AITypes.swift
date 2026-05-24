@@ -788,6 +788,7 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
     let workoutType: String
     let activityName: String?
     let activityTags: [String]?
+    let sourcePlanTemplateID: UUID?
     let durationMinutes: Int?
     let exercises: [LoggedExercise]
     let notes: String?
@@ -798,6 +799,7 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
         workoutType: String,
         activityName: String? = nil,
         activityTags: [String]? = nil,
+        sourcePlanTemplateID: UUID? = nil,
         durationMinutes: Int?,
         exercises: [LoggedExercise],
         notes: String?
@@ -807,6 +809,7 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
         self.workoutType = workoutType
         self.activityName = activityName
         self.activityTags = activityTags
+        self.sourcePlanTemplateID = sourcePlanTemplateID
         self.durationMinutes = durationMinutes
         self.exercises = exercises
         self.notes = notes

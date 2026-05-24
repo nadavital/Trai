@@ -200,10 +200,10 @@ extension AIService {
 
         let sessionPreview = plan.templates
             .sorted { $0.order < $1.order }
-            .prefix(5)
             .map { template in
                 let blocks = template.primaryBlockSummary
-                return blocks.isEmpty ? template.name : "\(template.name) (\(blocks))"
+                let title = blocks.isEmpty ? template.name : "\(template.name) (\(blocks))"
+                return "\(template.id.uuidString): \(title)"
             }
             .joined(separator: " | ")
 
@@ -214,6 +214,7 @@ extension AIService {
         - Days per week: \(plan.daysPerWeek)
         \(plan.planIntent.map { "- Intent: \($0.summary)" } ?? "")
         - Sessions: \(sessionPreview)
+        - When logging a completed planned session, pass the exact session id as source_plan_template_id.
 
         """
     }

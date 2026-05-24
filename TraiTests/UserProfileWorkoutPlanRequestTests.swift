@@ -108,6 +108,45 @@ final class UserProfileWorkoutPlanRequestTests: XCTestCase {
         XCTAssertEqual(request.timePerWorkout, 40)
     }
 
+    func testStructuredWorkoutPlanPreferencesUpdateFromPlanShape() {
+        let profile = UserProfile()
+        profile.preferredWorkoutDays = 3
+        profile.workoutTimePerSession = 45
+
+        let plan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 5,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    name: "A",
+                    sessionType: .strength,
+                    focusAreas: [],
+                    targetMuscleGroups: [],
+                    exercises: [],
+                    estimatedDurationMinutes: 50,
+                    order: 0
+                ),
+                WorkoutPlan.WorkoutTemplate(
+                    name: "B",
+                    sessionType: .cardio,
+                    focusAreas: [],
+                    targetMuscleGroups: [],
+                    exercises: [],
+                    estimatedDurationMinutes: 70,
+                    order: 1
+                )
+            ],
+            rationale: "Updated plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        profile.applyStructuredWorkoutPlanPreferences(from: plan)
+
+        XCTAssertEqual(profile.preferredWorkoutDays, 5)
+        XCTAssertEqual(profile.workoutTimePerSession, 60)
+    }
+
     func testOnboardingWorkoutDraftMapsMultipleFocusesToMixedRequest() {
         var draft = OnboardingWorkoutPlanDraft()
         draft.focuses = [.strength, .mobility, .climbing]

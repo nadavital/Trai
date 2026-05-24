@@ -68,6 +68,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.name, "Upper Push")
         XCTAssertEqual(workout.type, .strength)
         XCTAssertEqual(workout.muscleGroups, [.chest, .triceps])
+        XCTAssertEqual(workout.sourcePlanTemplateID, template.id)
     }
 
     func testCreateStartWorkoutFromTemplateInfersMusclesFromBlockExercises() {
@@ -580,6 +581,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.entries?.map(\.exerciseName), ["Shoulder Prep"])
         XCTAssertEqual(workout.entries?.first?.activityKind, .mobility)
         XCTAssertEqual(workout.entries?.first?.isPlannedActivityGuidance, true)
+        XCTAssertEqual(workout.sourcePlanTemplateID, profile.workoutPlan?.templates.first?.id)
     }
 
     func testCreateWorkoutForIntentFallsBackToCustomNamedWorkout() throws {

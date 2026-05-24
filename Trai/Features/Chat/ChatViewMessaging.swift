@@ -434,6 +434,7 @@ extension ChatView {
     }
 
     func retryMessage(_ aiMessage: ChatMessage) {
+        guard !isLoading, currentMessageTask == nil else { return }
         guard let messageIndex = currentSessionMessages.firstIndex(where: { $0.id == aiMessage.id }),
               messageIndex > 0 else { return }
 
@@ -447,7 +448,7 @@ extension ChatView {
         let text = userMessage.content
         let previousMessages = Array(currentSessionMessages.prefix(messageIndex - 1).suffix(10))
 
-        Task {
+        currentMessageTask = Task {
             await performSendMessage(
                 text: text,
                 capturedImage: capturedImage,

@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `9e08620 Fix workout PR review round findings`
+- Latest pushed fix before current round: `fcb8ee2 Fix generated workout plan review findings`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -42,6 +42,13 @@
 - Plan persistence/edit/review flow: fixed verified draft-restore loss of generated workout goals and workout setup preferences.
 - Regression-test coverage: added focused coverage for generated plan template identity, saved-plan suggestion structure, workout draft persistence, and unlogged weight sets.
 
+### Round 2026-05-23 After `fcb8ee2`
+- AI function contracts: fixed verified `log_workout` plan-adherence gap with durable `source_plan_template_id` support and exact template IDs in workout-plan context.
+- Live workout planned/logged semantics: fixed verified generated plan-adherence relevance on unrelated workouts and chat-created plan-adherence goals with empty template IDs.
+- Chat/review pending state: fixed verified retry cancellation handle, stale workout-plan proposal cards, and no-plan refinement response restoring the prior saveable review.
+- Plan persistence/edit/review flow: fixed verified non-onboarding chat plan saves dropping generated goals and structured plan preferences; manual edit/chat plan saves now refresh day count and duration from structured plan data only.
+- Regression-test coverage: added focused coverage for relevant-goal filtering, AI log template IDs, chat-created adherence goal normalization, template source IDs, structured profile preference updates, and legacy ExerciseHistory duplicate suppression.
+
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
 - Generated workout plan blocks decoded unknown free-text `kind` values as `.custom`, letting malformed AI payloads store generic behavior data.
@@ -61,6 +68,13 @@
 - Editing older completed workouts could duplicate `ExerciseHistory` rows because legacy rows without `sourceWorkoutEntryId` were not reused.
 - Generated-plan refinement could leave the user trapped in an in-flight AI request with dismissal disabled and no stop/restore path.
 - Onboarding draft restore persisted the generated workout plan but dropped generated workout goals and workout setup preferences needed at completion.
+- Generated plan-adherence goals still appeared as relevant goals on unrelated workout surfaces even though progress no longer counted them.
+- Chat retry requests were not assigned to `currentMessageTask`, so Stop cleared loading state without cancelling the retry.
+- Older workout-plan proposal cards stayed saveable after a newer chat proposal.
+- Generated-plan refinement responses with no valid updated plan removed the previous proposal/save action instead of restoring it.
+- `log_workout` could not advance generated plan-adherence goals because completed chat logs had no durable source template id.
+- Chat-created or chat-updated plan-adherence goals did not store generated template ids, so they could never accrue progress.
+- Non-onboarding generated plan saves could show `+ Goals` but only save the plan, and chat/manual plan saves left structured day count/duration preferences stale.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -71,6 +85,8 @@
 - Result after `62ce49e` fix round: 169 selected tests, 0 failures.
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,id=A7C646DC-750A-4AB4-A28F-0B40813E3D0E' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests`
 - Result after current fix round: 181 selected tests, 0 failures.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,id=A7C646DC-750A-4AB4-A28F-0B40813E3D0E' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests -only-testing:TraiTests/WorkoutTemplateServiceTests`
+- Result after `fcb8ee2` review fix round: 204 selected tests, 0 failures.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -91,3 +107,9 @@
 - Start a planned strength workout with prefilled/unlogged heavy sets, finish without checking them off, and confirm weight goals/history do not count those planned weights.
 - Restore onboarding after generating a workout plan/goals but before completing onboarding, then finish onboarding and confirm both the workout plan preferences and goals persist.
 - Trigger an onboarding/profile generated-plan refinement, tap Stop while Trai is generating, and confirm the previous plan review returns and the stale plan is not saved as an edited result.
+- Ask chat to log a completed session from the current generated workout plan and confirm the resulting generated plan-adherence goal advances for that template.
+- In chat, get a workout-plan proposal, ask for a newer tweak, then scroll back and confirm the older workout-plan proposal cannot be saved.
+- After a chat retry starts, tap Stop and confirm no late AI response/card appears from the cancelled retry.
+- Ask for a plan refinement that returns explanation only or fails validation and confirm the previous plan review/save card is restored.
+- Save a generated plan with goals from the regular Workouts edit chat path and confirm the goals persist.
+- Save a manual or chat plan edit that changes days/duration and confirm later plan requests use the updated structured day count/duration.

@@ -52,7 +52,10 @@ enum WorkoutGoalProgressResolver {
     ) -> [WorkoutGoal] {
         goals
             .filter { goal in
-                goal.matches(workout: workout) && (includeCompleted || goal.isActive)
+                let matchesWorkout = goal.tracksGeneratedPlanAdherence
+                    ? goal.matchesGeneratedPlanTemplate(workout: workout)
+                    : goal.matches(workout: workout)
+                return matchesWorkout && (includeCompleted || goal.isActive)
             }
             .sorted { lhs, rhs in
                 if lhs.status != rhs.status {

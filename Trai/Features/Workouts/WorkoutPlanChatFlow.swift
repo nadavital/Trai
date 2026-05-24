@@ -15,6 +15,7 @@ struct WorkoutPlanChatFlow: View {
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
 
     @Query private var profiles: [UserProfile]
+    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
     private var userProfile: UserProfile? { profiles.first }
 
     // MARK: - Mode Configuration
@@ -1081,6 +1082,7 @@ struct WorkoutPlanChatFlow: View {
                         messages.append(WorkoutPlanFlowMessage(
                             type: .traiMessage(response.message)
                         ))
+                        messages.append(contentsOf: previousReviewMessages)
                         isRefiningPlan = false
                         isGenerating = false
                     }
@@ -1212,6 +1214,8 @@ struct WorkoutPlanChatFlow: View {
             guard let profile = userProfile else { return }
 
             if currentPlanToEdit == plan {
+                insertGeneratedWorkoutGoals(activeGeneratedPlanGoals, for: plan)
+                try? modelContext.save()
                 HapticManager.success()
                 dismiss()
                 return
@@ -1227,6 +1231,9 @@ struct WorkoutPlanChatFlow: View {
             )
 
             profile.workoutPlan = plan
+            profile.applyStructuredWorkoutPlanPreferences(from: plan)
+
+            insertGeneratedWorkoutGoals(activeGeneratedPlanGoals, for: plan)
 
             if !hadExistingPlan {
                 WorkoutPlanHistoryService.archivePlan(
@@ -1351,6 +1358,17 @@ struct WorkoutPlanChatFlow: View {
             let key = goal.planSetupDeduplicationKey
             guard !key.isEmpty else { return false }
             return seen.insert(key).inserted
+        }
+    }
+
+    private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) {
+        var existingKeys = Set(workoutGoals.map(\.planSetupDeduplicationKey))
+        for goal in deduplicatedGoals(goals) {
+            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+            let key = goal.planSetupDeduplicationKey
+            guard !key.isEmpty, !existingKeys.contains(key) else { continue }
+            modelContext.insert(goal)
+            existingKeys.insert(key)
         }
     }
 

@@ -414,6 +414,28 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(records.first?.sourceWorkoutEntryId, secondEntry.id)
     }
 
+    func testExerciseHistoryRecordsToInsertSkipsLegacySameExerciseHistory() {
+        let workout = LiveWorkout(name: "Legacy Work", workoutType: .strength)
+        let completedAt = Date()
+        workout.completedAt = completedAt
+
+        let entry = LiveWorkoutEntry(exerciseName: "Back Squat", orderIndex: 0, exerciseType: "strength")
+        entry.addSet(.init(reps: 5, weightKg: 60, completed: true, isWarmup: false))
+        entry.workout = workout
+        workout.entries = [entry]
+
+        let legacy = ExerciseHistory(from: entry, performedAt: completedAt)
+        legacy.sourceWorkoutEntryId = nil
+
+        let records = ExerciseHistory.recordsToInsert(
+            from: workout,
+            existingHistories: [legacy],
+            performedAt: completedAt.addingTimeInterval(30)
+        )
+
+        XCTAssertTrue(records.isEmpty)
+    }
+
     func testExerciseHistoryRecordsIgnoreBlankGeneralActivityGuidance() {
         let workout = LiveWorkout(name: "Cardio Guidance", workoutType: .cardio)
         workout.completedAt = Date()
@@ -1199,6 +1221,14 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(
             WorkoutGoalProgressResolver.matchingCompletedWorkouts(for: goal, in: [workout, unrelatedWorkout]).map(\.id),
             [workout.id]
+        )
+        XCTAssertEqual(
+            WorkoutGoalProgressResolver.relevantGoals(for: unrelatedWorkout, goals: [goal]).map(\.id),
+            []
+        )
+        XCTAssertEqual(
+            WorkoutGoalProgressResolver.relevantGoals(for: workout, goals: [goal]).map(\.id),
+            [goal.id]
         )
     }
 
