@@ -600,6 +600,20 @@ extension AIFunctionExecutor {
         let requestedActivityFocuses = stringArray(from: args["activity_focuses"])
         let sourcePlanTemplateID = uuid(from: args["source_plan_template_id"])
 
+        if let sourcePlanTemplateID {
+            guard let template = userProfile?.workoutPlan?.templates.first(where: { $0.id == sourcePlanTemplateID }) else {
+                return .dataResponse(FunctionResult(
+                    name: "start_live_workout",
+                    response: ["error": "source_plan_template_id must match an existing session in the current workout plan."]
+                ))
+            }
+
+            return .suggestedWorkoutStart(workoutStartSuggestion(
+                from: template,
+                recoveryReason: nil
+            ))
+        }
+
         // Parse suggested exercises
         var exercises: [SuggestedWorkoutEntry.SuggestedExercise] = []
         if let suggestedExercises = args["suggested_exercises"] as? [[String: Any]] {

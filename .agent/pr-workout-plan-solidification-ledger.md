@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `2384c04 Fix workout plan semantic retry gaps`
+- Latest pushed fix before current round: `245dcfb Fix workout plan setup and chat edge cases`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -70,6 +70,13 @@
 - Live workout planned/logged semantics: no new serious issue beyond the generated plan-adherence reconciliation already fixed in plan save paths.
 - Regression-test coverage: added focused coverage for top-level single-activity duration inheritance and structured generated-goal deduplication/normalization.
 
+### Round 2026-05-23 After `245dcfb`
+- AI function contracts: fixed verified `start_live_workout` template-ID gap by resolving current-plan template IDs to the stored template instead of requiring or trusting AI-invented exercise payloads.
+- Plan persistence/edit/review flow: no serious issues found in the fresh pass.
+- Chat/review pending state: fixed verified stale request mutations before request-id cleanup, stopped-request pending review prompts, first empty-chat double-send window, stale workout-plan cards across chat history, and durable nutrition-card applied save.
+- Live workout planned/logged semantics: fixed verified generated plan-adherence progress from empty finished planned guidance; generated adherence now requires logged entry data before counting a completed template.
+- Regression-test coverage: added focused coverage for ID-only current-plan workout starts and empty generated-plan guidance not counting as adherence progress.
+
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
 - Generated workout plan blocks decoded unknown free-text `kind` values as `.custom`, letting malformed AI payloads store generic behavior data.
@@ -115,6 +122,14 @@
 - Workouts AI goal sheet plan-adherence goals were not normalized against the current plan before insert.
 - A cancelled chat request's cleanup could clear loading/task state for a newer send or retry.
 - App-initiated chat prompts could retire a pending workout-plan proposal before snapshotting it as context.
+- Stale AI request chunks/results could still mutate message content or apply suggestions before final request-id cleanup.
+- Stopping a busy chat response could leave queued Review-with-Trai startup actions stranded and keep the composer disabled.
+- First send in an empty chat had a transition window where a second send could start before loading/task state was installed.
+- Stale pending workout-plan cards in older chat sessions could be reopened and accepted after a newer plan proposal existed.
+- Accepted nutrition-plan cards were marked applied only after the explicit save, so the applied state could fail to persist.
+- Generated plan-adherence goals counted completed workouts that only contained passive planned guidance and no logged entry data.
+- AI-started strength workout suggestions preserved planned set counts in data but accepted live workouts materialized only one set.
+- `start_live_workout` could receive a current-plan template ID but could not resolve it to the stored template, forcing the AI to invent duplicate workout items.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -137,6 +152,10 @@
 - Result after `2384c04` review fix round: 211 selected tests, 0 failures.
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiUITests/TraiUITests/testOnboardingCriticalFlowCompletesIntoDashboard -only-testing:TraiUITests/TraiUITests/testPostOnboardingChecklistOffersWorkoutAndHealthSetupForExistingPro`
 - Result after `2384c04` review fix round: 2 selected UI tests, 0 failures.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/WorkoutTemplateServiceTests`
+- Result after `245dcfb` review fix round: 200 selected tests, 0 failures.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests -only-testing:TraiTests/OnboardingFlowPlannerTests`
+- Result after `245dcfb` review fix round: 12 selected tests, 0 failures.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -180,3 +199,9 @@
 - Create a plan-adherence goal through the Workouts AI goal sheet and confirm it is tied to the current plan templates.
 - Tap Stop and immediately retry/send in chat, and confirm the cancelled request does not clear the newer loading state or response.
 - Trigger an app-initiated prompt from a pending workout-plan proposal and confirm the proposal remains the context for the answer.
+- Start a saved/generated plan session directly from chat by name and confirm the live workout uses the stored template items and set counts.
+- Accept a chat-suggested strength workout from a plan template and confirm each exercise opens with the planned number of sets.
+- Start a generated plan day, log nothing, finish it, and confirm generated plan-adherence goals do not progress.
+- While a response is streaming, tap a Review with Trai entry point, then Stop; confirm the queued review starts and the composer is not stuck disabled.
+- Generate a plan card in one chat, create a newer plan card in another chat, reopen the old session, and confirm the old card cannot replace the current plan.
+- Accept a nutrition-plan update card, relaunch, and confirm the card remains applied rather than saveable.

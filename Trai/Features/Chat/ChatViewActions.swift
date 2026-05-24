@@ -148,8 +148,18 @@ extension ChatView {
     @discardableResult
     func retirePendingPlanSuggestionsInCurrentSession() -> Bool {
         var retiredAnySuggestion = false
+        var seenMessageIds: Set<UUID> = []
+        var messagesToRetire = currentSessionMessages
 
-        for message in currentSessionMessages {
+        if !isTemporarySession {
+            let descriptor = FetchDescriptor<ChatMessage>(
+                sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
+            )
+            let persistedMessages = (try? modelContext.fetch(descriptor)) ?? allMessages
+            messagesToRetire.append(contentsOf: persistedMessages)
+        }
+
+        for message in messagesToRetire where seenMessageIds.insert(message.id).inserted {
             if message.hasPendingPlanSuggestion {
                 message.suggestedPlanDismissed = true
                 retiredAnySuggestion = true
@@ -165,6 +175,53 @@ extension ChatView {
         try? modelContext.save()
         rebuildSessionMessages(preferLiveQueryData: true)
         return true
+    }
+
+    func latestPendingWorkoutPlanSuggestionMessageID() -> UUID? {
+        var seenMessageIds: Set<UUID> = []
+        var messagesToInspect = currentSessionMessages
+
+        if !isTemporarySession {
+            let descriptor = FetchDescriptor<ChatMessage>(
+                sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
+            )
+            let persistedMessages = (try? modelContext.fetch(descriptor)) ?? allMessages
+            messagesToInspect.append(contentsOf: persistedMessages)
+        }
+
+        return messagesToInspect
+            .sorted { $0.timestamp > $1.timestamp }
+            .first { message in
+                seenMessageIds.insert(message.id).inserted && message.hasPendingWorkoutPlanSuggestion
+            }?
+            .id
+    }
+
+    func retirePendingWorkoutPlanSuggestions(except keptMessageID: UUID) {
+        var retiredAnySuggestion = false
+        var seenMessageIds: Set<UUID> = []
+        var messagesToRetire = currentSessionMessages
+
+        if !isTemporarySession {
+            let descriptor = FetchDescriptor<ChatMessage>(
+                sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
+            )
+            let persistedMessages = (try? modelContext.fetch(descriptor)) ?? allMessages
+            messagesToRetire.append(contentsOf: persistedMessages)
+        }
+
+        for message in messagesToRetire
+        where seenMessageIds.insert(message.id).inserted
+            && message.id != keptMessageID
+            && message.hasPendingWorkoutPlanSuggestion {
+            message.suggestedWorkoutPlanDismissed = true
+            retiredAnySuggestion = true
+        }
+
+        if retiredAnySuggestion {
+            try? modelContext.save()
+            rebuildSessionMessages(preferLiveQueryData: true)
+        }
     }
 
     func acceptPlanSuggestion(_ plan: PlanUpdateSuggestionEntry, for message: ChatMessage) {
@@ -214,6 +271,10 @@ extension ChatView {
             saveImmediately: false
         )
 
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            message.planUpdateApplied = true
+        }
+
         do {
             try modelContext.save()
         } catch {
@@ -221,10 +282,6 @@ extension ChatView {
             message.errorMessage = "We couldn’t save this plan update. Please try again."
             HapticManager.error()
             return
-        }
-
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            message.planUpdateApplied = true
         }
 
         HapticManager.success()
@@ -286,10 +343,7 @@ extension ChatView {
 extension ChatView {
     func acceptWorkoutPlanSuggestion(_ suggestion: WorkoutPlanSuggestionEntry, for message: ChatMessage) {
         guard let profile else { return }
-        let latestPendingSuggestionID = currentSessionMessages
-            .reversed()
-            .first(where: \.hasPendingWorkoutPlanSuggestion)?
-            .id
+        let latestPendingSuggestionID = latestPendingWorkoutPlanSuggestionMessageID()
         guard latestPendingSuggestionID == message.id else {
             message.suggestedWorkoutPlanDismissed = true
             message.errorMessage = "This workout plan update is no longer current. Use the latest plan card instead."
@@ -332,6 +386,7 @@ extension ChatView {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.workoutPlanUpdateApplied = true
         }
+        retirePendingWorkoutPlanSuggestions(except: message.id)
 
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.reviewWorkoutPlan,
@@ -589,12 +644,15 @@ extension ChatView {
                     progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
                     modelContext: modelContext
                 )
-                entry.addSet(LiveWorkoutEntry.SetData(
-                    reps: setDefaults.reps,
-                    weight: setDefaults.weight,
-                    completed: false,
-                    isWarmup: false
-                ))
+                let setCount = max(exercise.sets, 1)
+                for _ in 0..<setCount {
+                    entry.addSet(LiveWorkoutEntry.SetData(
+                        reps: setDefaults.reps,
+                        weight: setDefaults.weight,
+                        completed: false,
+                        isWarmup: false
+                    ))
+                }
             } else {
                 entry.sourcePlanBlockID = exercise.id
                 entry.plannedDurationSeconds = exercise.durationMinutes.map { max(0, $0) * 60 }

@@ -52,9 +52,13 @@ enum WorkoutGoalProgressResolver {
     ) -> [WorkoutGoal] {
         goals
             .filter { goal in
-                let matchesWorkout = goal.tracksGeneratedPlanAdherence
-                    ? goal.matchesGeneratedPlanTemplate(workout: workout)
-                    : goal.matches(workout: workout)
+                let matchesWorkout: Bool
+                if goal.tracksGeneratedPlanAdherence {
+                    matchesWorkout = goal.matchesGeneratedPlanTemplate(workout: workout)
+                        && (workout.completedAt == nil || hasLoggedGeneratedPlanProgress(in: workout))
+                } else {
+                    matchesWorkout = goal.matches(workout: workout)
+                }
                 return matchesWorkout && (includeCompleted || goal.isActive)
             }
             .sorted { lhs, rhs in
@@ -596,6 +600,7 @@ enum WorkoutGoalProgressResolver {
         }
         if goal.tracksGeneratedPlanAdherence {
             return goal.matchesGeneratedPlanTemplate(workout: workout)
+                && hasLoggedGeneratedPlanProgress(in: workout)
         }
         guard goal.matches(workout: workout) else {
             return false
@@ -621,6 +626,10 @@ enum WorkoutGoalProgressResolver {
         (workout.entries ?? []).contains {
             goal.matches(entry: $0) && $0.hasExercisePreferenceSignal
         }
+    }
+
+    private static func hasLoggedGeneratedPlanProgress(in workout: LiveWorkout) -> Bool {
+        (workout.entries ?? []).contains { $0.hasExercisePreferenceSignal }
     }
 
     private static func hasPlannedMatchingEntries(
@@ -794,7 +803,8 @@ enum WorkoutGoalProgressResolver {
             workoutCount = Set(workouts.compactMap { workout -> UUID? in
                 let progressDate = workout.completedAt ?? workout.startedAt
                 guard progressDate >= periodStart,
-                      goal.matchesGeneratedPlanTemplate(workout: workout) else {
+                      goal.matchesGeneratedPlanTemplate(workout: workout),
+                      hasLoggedGeneratedPlanProgress(in: workout) else {
                     return nil
                 }
                 return workout.sourcePlanTemplateID

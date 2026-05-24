@@ -26,6 +26,17 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         try super.tearDownWithError()
     }
 
+    private func addCompletedStrengthEntry(to workout: LiveWorkout, name: String = "Back Squat") {
+        let entry = LiveWorkoutEntry(
+            exerciseName: name,
+            orderIndex: workout.entries?.count ?? 0,
+            exerciseType: Exercise.Category.strength.rawValue
+        )
+        entry.addSet(LiveWorkoutEntry.SetData(reps: 8, completed: true, isWarmup: false))
+        entry.workout = workout
+        workout.entries = (workout.entries ?? []) + [entry]
+    }
+
     func testRepEditDoesNotInvalidateEntryListObservation() {
         let (workout, entry) = makeWorkout(initialReps: 8)
         context.insert(workout)
@@ -1196,6 +1207,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         workout.startedAt = Date().addingTimeInterval(-1_800)
         workout.completedAt = Date()
         workout.sourcePlanTemplateID = plan.templates[0].id
+        addCompletedStrengthEntry(to: workout)
 
         let unrelatedWorkout = LiveWorkout(
             name: "Open Gym",
@@ -1286,6 +1298,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
             workout.startedAt = Date().addingTimeInterval(TimeInterval(-3_600 + index * 600))
             workout.completedAt = workout.startedAt.addingTimeInterval(1_800)
             workout.sourcePlanTemplateID = templates[0].id
+            addCompletedStrengthEntry(to: workout)
             return workout
         }
 
@@ -1298,6 +1311,81 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
 
         XCTAssertEqual(insight?.currentValueText, "1")
         XCTAssertEqual(insight?.progressFraction ?? 0, 1.0 / 3.0, accuracy: 0.001)
+    }
+
+    func testGeneratedPlanAdherenceDoesNotCountEmptyPlannedGuidance() {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Zone 2 Ride",
+            sessionType: .cardio,
+            focusAreas: ["Cycling"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                .init(
+                    kind: .cardio,
+                    role: .main,
+                    title: "Zone 2 Ride",
+                    detail: "Steady cycling",
+                    activityTypeName: "Cycling",
+                    activityTags: ["Cycling"],
+                    durationMinutes: 45,
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let plan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Ride.",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let goal = WorkoutGoal(
+            title: "Complete the plan",
+            goalKind: .frequency,
+            targetValue: 1,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "Complete the planned ride.",
+            tracksGeneratedPlanAdherence: true
+        )
+        goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+
+        let workout = LiveWorkout(name: "Zone 2 Ride", workoutType: .cardio)
+        workout.startedAt = Date().addingTimeInterval(-1_800)
+        workout.completedAt = Date()
+        workout.sourcePlanTemplateID = template.id
+        let plannedEntry = LiveWorkoutEntry(
+            exerciseName: "Zone 2 Ride",
+            orderIndex: 0,
+            exerciseType: Exercise.Category.cardio.rawValue
+        )
+        plannedEntry.activityTypeName = "Cycling"
+        plannedEntry.sourcePlanBlockID = template.blocks[0].id
+        plannedEntry.plannedDurationSeconds = 2_700
+        plannedEntry.workout = workout
+        workout.entries = [plannedEntry]
+
+        let insight = WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: [workout],
+            exerciseHistory: [],
+            useLbs: false
+        ).first
+
+        XCTAssertEqual(insight?.currentValueText, "0")
+        XCTAssertEqual(
+            WorkoutGoalProgressResolver.matchingCompletedWorkouts(for: goal, in: [workout]),
+            []
+        )
+        XCTAssertEqual(
+            WorkoutGoalProgressResolver.relevantGoals(for: workout, goals: [goal]),
+            []
+        )
     }
 
     func testGeneratedPlanAdherenceGoalClearsActivityTagsEvenWhenTemplatesShareBroadType() {
@@ -1360,6 +1448,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         workout.startedAt = Date().addingTimeInterval(-1_800)
         workout.completedAt = Date()
         workout.sourcePlanTemplateID = plan.templates[0].id
+        addCompletedStrengthEntry(to: workout)
 
         XCTAssertNil(goal.linkedWorkoutType)
         XCTAssertFalse(goal.hasActivityScope)

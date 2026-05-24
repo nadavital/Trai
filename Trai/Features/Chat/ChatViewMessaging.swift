@@ -131,7 +131,10 @@ extension ChatView {
 
     @discardableResult
     func sendMessage(_ text: String) -> Bool {
-        guard !isLoading, currentMessageTask == nil, !hasPendingStartupActions else { return false }
+        guard !isLoading,
+              currentMessageTask == nil,
+              !isPreparingFirstMessageTransition,
+              !hasPendingStartupActions else { return false }
 
         let hasText = !text.trimmingCharacters(in: .whitespaces).isEmpty
         let capturedImage = selectedImage
@@ -272,6 +275,7 @@ extension ChatView {
         isLoading = false
         currentActivity = nil
         HapticManager.lightTap()
+        checkForPendingStartupActions()
     }
 
     func performSendMessage(
@@ -328,25 +332,30 @@ extension ChatView {
                 conversationHistory: previousMessages,
                 modelContext: modelContext,
                 onTextChunk: { chunk in
+                    guard currentMessageRequestID == requestID else { return }
                     latestStreamedText = chunk
                     let now = Date()
                     if now.timeIntervalSince(lastStreamRenderAt) >= 0.05 {
                         lastStreamRenderAt = now
                         Task { @MainActor in
+                            guard currentMessageRequestID == requestID else { return }
                             aiMessage.content = latestStreamedText
                         }
                     }
                 },
                 onFunctionCall: { functionName in
+                    guard currentMessageRequestID == requestID else { return }
                     currentActivity = friendlyFunctionName(functionName)
                 }
             )
 
+            guard currentMessageRequestID == requestID else { return }
             if !latestStreamedText.isEmpty {
                 aiMessage.content = latestStreamedText
             }
             handleChatResult(result, aiMessage: aiMessage)
         } catch {
+            guard currentMessageRequestID == requestID else { return }
             if error.isUserCancelledRequest {
                 // User cancelled - don't show an error bubble, just keep whatever streamed so far.
                 aiMessage.wasManuallyStopped = true

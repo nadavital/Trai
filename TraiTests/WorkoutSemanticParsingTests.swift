@@ -688,24 +688,33 @@ final class WorkoutSemanticParsingTests: XCTestCase {
     }
 
     func testStartLiveWorkoutPreservesSourcePlanTemplateID() async throws {
-        let templateID = UUID()
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Plan Pull Day",
+            sessionType: .strength,
+            targetMuscleGroups: ["back"],
+            exercises: [
+                .init(exerciseName: "Pull Up", muscleGroup: "back", defaultSets: 4, defaultReps: 6, order: 0)
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Pull plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
 
-        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: profile).execute(
             .init(
                 name: "start_live_workout",
                 arguments: [
-                    "name": "Plan Pull Day",
+                    "name": "Start my pull day",
                     "workout_type": "strength",
-                    "source_plan_template_id": templateID.uuidString,
-                    "suggested_exercises": [
-                        [
-                            "name": "Pull Up",
-                            "category": "strength",
-                            "activity_name": "Strength",
-                            "sets": 3,
-                            "reps": 5
-                        ]
-                    ]
+                    "source_plan_template_id": template.id.uuidString
                 ]
             )
         )
@@ -714,7 +723,10 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             return XCTFail("Expected start workout suggestion")
         }
 
-        XCTAssertEqual(suggestion.sourcePlanTemplateID, templateID)
+        XCTAssertEqual(suggestion.name, "Plan Pull Day")
+        XCTAssertEqual(suggestion.sourcePlanTemplateID, template.id)
+        XCTAssertEqual(suggestion.exercises.map(\.name), ["Pull Up"])
+        XCTAssertEqual(suggestion.exercises.first?.sets, 4)
     }
 
     func testStartLiveWorkoutRejectsMissingStableCategory() async throws {
