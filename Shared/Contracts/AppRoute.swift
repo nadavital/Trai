@@ -13,9 +13,9 @@ enum AppRoute: Equatable, Codable {
     case workout(templateID: UUID?, templateName: String?)
     case chat
 
-    static let scheme = "trai"
-    private static let workoutTemplateIDQueryName = "template_id"
-    private static let workoutTemplateQueryName = "template"
+    nonisolated static let scheme = "trai"
+    nonisolated private static let workoutTemplateIDQueryName = "template_id"
+    nonisolated private static let workoutTemplateQueryName = "template"
 
     nonisolated static var appURL: URL {
         URL(string: "\(scheme)://")!

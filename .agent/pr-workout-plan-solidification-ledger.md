@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `f28876c Harden generated plan routes and goals`
+- Latest pushed fix before current round: `3fe2783 Harden rest-day widget workout routes`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -177,6 +177,11 @@
 - Local verification of the latest fresh-agent findings found no remaining serious issue in chat/review/edit lifecycle, setup stale-save guards, generated refinement presentation, schedule-reduction semantics, generated plan-adherence goal matching/normalization, or widget workout routing after the rest-day widget action guard.
 - Re-checked fixed issues: Review with Trai startup sends are still gated by pending startup actions; setup/edit saves still compare against the captured base plan; generated refinement presentation is still request/presentation keyed; generated plan-adherence goals now match by durable source template ID; free-form adherence units normalize from `tracksGeneratedPlanAdherence`; widget workout actions use the recommended template route and are disabled after workout completion; removed-template schedule reductions must preserve semantics or mark the removed template changed.
 - Validation note: focused XCTest pass succeeded for 11 selected semantic/stale-save/adherence tests, followed by exact widget/adherence XCTest passes covering recommended-template, completed-workout, and rest-day/no-recommendation route states; `build-for-testing` also succeeded after the shared route isolation fix; `git diff --check` is clean.
+
+### Round 2026-05-24 After `3fe2783`
+- Pushed verification confirmed local `HEAD` matches `origin/codex-workout-plan-pro-generation-polish` at `3fe2783`.
+- Fresh focused sweep found no additional serious issue in Review with Trai startup gating, generated-plan stale save guards, refinement request/presentation ordering, or rest-day widget workout routing.
+- Validation note: escalated iOS simulator XCTest pass succeeded for `testWidgetWorkoutActionUsesRecommendedTemplateRoute`, `testWidgetWorkoutActionIsDisabledAfterWorkoutComplete`, and `testWidgetWorkoutActionIsDisabledOnRestDayWithoutRecommendation`. The sandboxed retry could not access CoreSimulator and failed before running tests.
 
 ## Manual Test Queue
 - From Profile, Settings, and Workouts, open standard workout-plan setup, mutate/save a different workout plan elsewhere before tapping Save, and confirm the stale setup is blocked instead of overwriting the newer plan.

@@ -83,7 +83,12 @@ final class UserProfileNutritionTargetsTests: XCTestCase {
 
         let route = try XCTUnwrap(data.workoutActionRoute)
 
-        XCTAssertEqual(route, .workout(templateID: templateID, templateName: "Upper Strength"))
+        if case .workout(let routeTemplateID, let routeTemplateName) = route {
+            XCTAssertEqual(routeTemplateID, templateID)
+            XCTAssertEqual(routeTemplateName, "Upper Strength")
+        } else {
+            XCTFail("Expected a workout route")
+        }
         XCTAssertEqual(data.workoutActionURLString, route.urlString)
     }
 
