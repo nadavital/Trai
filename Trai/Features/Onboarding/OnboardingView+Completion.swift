@@ -65,11 +65,14 @@ extension OnboardingView {
         profile.hasCompletedOnboarding = true
         modelContext.insert(profile)
 
-        for goal in generatedWorkoutGoals {
-            if let workoutPlan = generatedWorkoutPlan {
-                goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: workoutPlan)
+        if let workoutPlan = generatedWorkoutPlan {
+            for goal in WorkoutGoal.generatedGoalsToInsert(
+                generatedWorkoutGoals,
+                existingGoals: [],
+                for: workoutPlan
+            ) {
+                modelContext.insert(goal)
             }
-            modelContext.insert(goal)
         }
 
         if let workoutPlan = generatedWorkoutPlan {

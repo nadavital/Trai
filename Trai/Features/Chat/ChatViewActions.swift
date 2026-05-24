@@ -647,6 +647,7 @@ extension ChatView {
             entry.activityRole = exercise.resolvedActivityRole
             entry.targetTags = exercise.resolvedTargetTags(category: category)
             entry.trackingFields = exercise.resolvedTrackingFields(category: category)
+            entry.sourcePlanBlockID = exercise.sourcePlanBlockID
             if let exerciseNotes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !exerciseNotes.isEmpty {
                 entry.notes = exerciseNotes
             }

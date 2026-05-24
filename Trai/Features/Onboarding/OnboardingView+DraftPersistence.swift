@@ -58,6 +58,7 @@ extension OnboardingView {
         var tracksGeneratedPlanAdherence: Bool
         var generatedPlanTemplateIDsRaw: String
         var generatedPlanBlockIDsRaw: String?
+        var requiresGeneratedPlanBlockScope: Bool?
         var createdAt: Date
         var updatedAt: Date
         var completedAt: Date?
@@ -85,6 +86,7 @@ extension OnboardingView {
             tracksGeneratedPlanAdherence = goal.tracksGeneratedPlanAdherence
             generatedPlanTemplateIDsRaw = goal.generatedPlanTemplateIDsRaw
             generatedPlanBlockIDsRaw = goal.generatedPlanBlockIDsRaw
+            requiresGeneratedPlanBlockScope = goal.requiresGeneratedPlanBlockScope
             createdAt = goal.createdAt
             updatedAt = goal.updatedAt
             completedAt = goal.completedAt
@@ -115,6 +117,7 @@ extension OnboardingView {
             )
             goal.generatedPlanTemplateIDsRaw = generatedPlanTemplateIDsRaw
             goal.generatedPlanBlockIDsRaw = generatedPlanBlockIDsRaw ?? ""
+            goal.requiresGeneratedPlanBlockScope = requiresGeneratedPlanBlockScope ?? !goal.generatedPlanBlockIDs.isEmpty
             goal.createdAt = createdAt
             goal.updatedAt = updatedAt
             goal.completedAt = completedAt

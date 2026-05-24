@@ -29,6 +29,7 @@ final class WorkoutGoal {
     var tracksGeneratedPlanAdherence: Bool = false
     var generatedPlanTemplateIDsRaw: String = ""
     var generatedPlanBlockIDsRaw: String = ""
+    var requiresGeneratedPlanBlockScope: Bool = false
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var completedAt: Date?
@@ -56,7 +57,8 @@ final class WorkoutGoal {
         checkInCadenceDays: Int? = nil,
         baselineValue: Double? = nil,
         tracksGeneratedPlanAdherence: Bool = false,
-        generatedPlanBlockIDs: [UUID] = []
+        generatedPlanBlockIDs: [UUID] = [],
+        requiresGeneratedPlanBlockScope: Bool = false
     ) {
         self.title = title
         self.goalKindRaw = goalKind.rawValue
@@ -77,6 +79,7 @@ final class WorkoutGoal {
         self.baselineValue = baselineValue
         self.tracksGeneratedPlanAdherence = tracksGeneratedPlanAdherence
         self.generatedPlanBlockIDs = generatedPlanBlockIDs
+        self.requiresGeneratedPlanBlockScope = requiresGeneratedPlanBlockScope || !generatedPlanBlockIDs.isEmpty
     }
 }
 
@@ -314,6 +317,7 @@ extension WorkoutGoal {
             linkedActivityKindRaw?.goalNormalizedKey ?? "",
             linkedActivityRoleRaw?.goalNormalizedKey ?? "",
             tracksGeneratedPlanAdherence ? "planAdherence" : "",
+            requiresGeneratedPlanBlockScope ? "planBlockScope" : "",
             generatedPlanBlockIDs.map(\.uuidString).sorted().joined(separator: ",")
         ]
 
@@ -342,6 +346,7 @@ extension WorkoutGoal {
         targetValue = Double(plan.daysPerWeek)
         generatedPlanTemplateIDs = plan.templates.map(\.id)
         generatedPlanBlockIDs = []
+        requiresGeneratedPlanBlockScope = false
         linkedWorkoutTypeRaw = nil
         linkedActivityName = nil
         linkedActivityTags = []
@@ -351,7 +356,10 @@ extension WorkoutGoal {
     }
 
     func normalizeGeneratedPlanBlockScopeIfNeeded(for plan: WorkoutPlan) {
-        guard !tracksGeneratedPlanAdherence, !generatedPlanBlockIDs.isEmpty else { return }
+        guard !tracksGeneratedPlanAdherence, requiresGeneratedPlanBlockScope || !generatedPlanBlockIDs.isEmpty else { return }
+        if !generatedPlanBlockIDs.isEmpty {
+            requiresGeneratedPlanBlockScope = true
+        }
         let validBlockIDs = Set(plan.templates.flatMap { template in
             template.blocks.map(\.id)
         })
@@ -369,7 +377,7 @@ extension WorkoutGoal {
             .filter(\.tracksGeneratedPlanAdherence)
             .forEach { $0.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan) }
         goals
-            .filter { !$0.tracksGeneratedPlanAdherence && !$0.generatedPlanBlockIDs.isEmpty }
+            .filter { !$0.tracksGeneratedPlanAdherence && ($0.requiresGeneratedPlanBlockScope || !$0.generatedPlanBlockIDs.isEmpty) }
             .forEach { $0.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan) }
     }
 
@@ -431,7 +439,7 @@ extension WorkoutGoal {
     }
 
     func matches(workout: LiveWorkout) -> Bool {
-        if !generatedPlanBlockIDs.isEmpty {
+        if requiresGeneratedPlanBlockScope || !generatedPlanBlockIDs.isEmpty {
             return matchesGeneratedPlanBlock(workout: workout)
         }
 
@@ -475,7 +483,7 @@ extension WorkoutGoal {
     }
 
     func matches(entry: LiveWorkoutEntry) -> Bool {
-        if !generatedPlanBlockIDs.isEmpty {
+        if requiresGeneratedPlanBlockScope || !generatedPlanBlockIDs.isEmpty {
             guard let sourcePlanBlockID = entry.sourcePlanBlockID else { return false }
             return Set(generatedPlanBlockIDs).contains(sourcePlanBlockID)
         }
@@ -512,7 +520,7 @@ extension WorkoutGoal {
     }
 
     func matches(session: WorkoutSession) -> Bool {
-        guard generatedPlanBlockIDs.isEmpty else { return false }
+        guard !requiresGeneratedPlanBlockScope, generatedPlanBlockIDs.isEmpty else { return false }
 
         if let linkedWorkoutType, linkedWorkoutType != session.inferredWorkoutMode {
             return false
@@ -658,6 +666,9 @@ extension WorkoutGoal {
             generatedPlanBlockIDsRaw = newValue
                 .map(\.uuidString)
                 .joined(separator: ",")
+            if !newValue.isEmpty {
+                requiresGeneratedPlanBlockScope = true
+            }
         }
     }
 

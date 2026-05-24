@@ -31,6 +31,18 @@ final class UserProfileWorkoutPlanRequestTests: XCTestCase {
                     focusAreas: ["Pull", "Climbing"],
                     targetMuscleGroups: ["back"],
                     exercises: [],
+                    blocks: [
+                        WorkoutPlan.TrainingBlock(
+                            kind: .sportPractice,
+                            role: .finisher,
+                            title: "Climb",
+                            detail: "Bouldering practice",
+                            activityTypeName: "Bouldering",
+                            activityTags: ["Climbing"],
+                            durationMinutes: 30,
+                            order: 0
+                        )
+                    ],
                     estimatedDurationMinutes: 60,
                     order: 0
                 )
@@ -50,6 +62,17 @@ final class UserProfileWorkoutPlanRequestTests: XCTestCase {
             tracksGeneratedPlanAdherence: true
         )
         goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+        let blockGoal = WorkoutGoal(
+            title: "Complete climbing block",
+            goalKind: .frequency,
+            linkedActivityTags: ["Climbing"],
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "Complete the planned climbing block.",
+            generatedPlanBlockIDs: [plan.templates[0].blocks[0].id]
+        )
 
         let draft = OnboardingView.OnboardingDraft(
             currentStep: 3,
@@ -76,7 +99,10 @@ final class UserProfileWorkoutPlanRequestTests: XCTestCase {
             adjustedFat: "70",
             lastGeneratedPlanInputSignature: nil,
             generatedWorkoutPlan: plan,
-            generatedWorkoutGoals: [OnboardingView.WorkoutGoalDraft(goal: goal)],
+            generatedWorkoutGoals: [
+                OnboardingView.WorkoutGoalDraft(goal: goal),
+                OnboardingView.WorkoutGoalDraft(goal: blockGoal)
+            ],
             workoutPlanDraft: workoutDraft
         )
 
@@ -89,6 +115,9 @@ final class UserProfileWorkoutPlanRequestTests: XCTestCase {
         XCTAssertEqual(restoredGoal.title, goal.title)
         XCTAssertTrue(restoredGoal.tracksGeneratedPlanAdherence)
         XCTAssertEqual(restoredGoal.generatedPlanTemplateIDs, plan.templates.map(\.id))
+        let restoredBlockGoal = try XCTUnwrap(decoded.generatedWorkoutGoals?.last?.workoutGoal())
+        XCTAssertTrue(restoredBlockGoal.requiresGeneratedPlanBlockScope)
+        XCTAssertEqual(restoredBlockGoal.generatedPlanBlockIDs, [plan.templates[0].blocks[0].id])
     }
 
     func testBuildWorkoutPlanRequestFallsBackToStoredSessionDuration() {

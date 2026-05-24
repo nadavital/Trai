@@ -66,6 +66,7 @@ struct WorkoutPlanChatFlow: View {
     @State private var showRefineMode = false
     @State private var isTransitioning = false  // For question transition animation
     @State private var didSubmitInitialRefinementPrompt = false
+    @State private var isPreparingInitialRefinementPrompt = false
     @State private var didRefineGeneratedPlan = false
     @State private var completedRefinementMessages: [String] = []
     @State private var activeGeneratedPlanGoals: [WorkoutGoal] = []
@@ -539,7 +540,15 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private var shouldShowInputBar: Bool {
-        !isGenerating || (planAccepted && showRefineMode)
+        !isPreparingInitialRefinementPrompt && (!isGenerating || (planAccepted && showRefineMode))
+    }
+
+    private var hasUnsubmittedInitialRefinementPrompt: Bool {
+        guard !didSubmitInitialRefinementPrompt,
+              let prompt = initialRefinementPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return false
+        }
+        return !prompt.isEmpty
     }
 
     private func generatedGoalDetailText(_ goal: WorkoutGoal) -> String {
@@ -711,6 +720,7 @@ struct WorkoutPlanChatFlow: View {
         guard let plan = currentPlanToEdit else { return }
 
         generatedPlan = plan
+        isPreparingInitialRefinementPrompt = hasUnsubmittedInitialRefinementPrompt
         planAccepted = true
         showRefineMode = true
 
@@ -755,10 +765,17 @@ struct WorkoutPlanChatFlow: View {
         guard !didSubmitInitialRefinementPrompt,
               let prompt = initialRefinementPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
               !prompt.isEmpty,
-              generatedPlan != nil else { return }
+              generatedPlan != nil else {
+            isPreparingInitialRefinementPrompt = false
+            return
+        }
 
+        guard submitRefineRequest(prompt) else {
+            isPreparingInitialRefinementPrompt = false
+            return
+        }
         didSubmitInitialRefinementPrompt = true
-        submitRefineRequest(prompt)
+        isPreparingInitialRefinementPrompt = false
     }
 
     private func handleContinue() {
@@ -1036,9 +1053,10 @@ struct WorkoutPlanChatFlow: View {
         submitRefineRequest(suggestion.text)
     }
 
-    private func submitRefineRequest(_ text: String) {
+    @discardableResult
+    private func submitRefineRequest(_ text: String) -> Bool {
         let messageText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !messageText.isEmpty, let currentPlan = generatedPlan, !isGenerating, !isRefiningPlan else { return }
+        guard !messageText.isEmpty, let currentPlan = generatedPlan, !isGenerating, !isRefiningPlan else { return false }
 
         let requestID = UUID()
         refinementRequestID = requestID
@@ -1145,6 +1163,7 @@ struct WorkoutPlanChatFlow: View {
                 }
             }
         }
+        return true
     }
 
     private func cancelRefinementRequest() {
@@ -1461,13 +1480,12 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) {
-        var existingKeys = Set(workoutGoals.map(\.planSetupDeduplicationKey))
-        for goal in deduplicatedGoals(goals) {
-            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
-            let key = goal.planSetupDeduplicationKey
-            guard !key.isEmpty, !existingKeys.contains(key) else { continue }
+        for goal in WorkoutGoal.generatedGoalsToInsert(
+            goals,
+            existingGoals: workoutGoals,
+            for: plan
+        ) {
             modelContext.insert(goal)
-            existingKeys.insert(key)
         }
     }
 

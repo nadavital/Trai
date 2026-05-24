@@ -305,6 +305,11 @@
 - Durable workout routes with a stale `template_id` could still create an unlinked named custom workout when no current workout plan existed.
 - Schedule-reduction refinements could be rejected because removed template IDs were treated like retained durable IDs.
 - `changesActivitySemantics=true` could bypass durable template-ID preservation for unrelated retained sessions.
+- Generated workout goals inserted from onboarding/profile generation could bypass the same durable block-ID filter used by the review flow.
+- Block-scoped generated goals could lose their durable block IDs after a plan refinement removed that block, then fall back to keyword/tag matching against unrelated future workouts.
+- Existing stored block-scoped generated goals could have durable block IDs but a default false scope flag after migration, so matching now treats non-empty stored block IDs as durable-scoped too.
+- Planned workout log cards could preserve the source template but drop per-entry source block IDs, so block-scoped generated goals would miss completed chat-logged plan work.
+- The seeded plan-review refinement prompt could be preempted by a manual send while the review package was still being presented.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -379,6 +384,14 @@
 - Result after `b114791` fixes: passed, 9 tests, 0 failures.
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest11 -skip-testing:TraiUITests -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatWorkoutStartSuggestionRejectsCardsOlderThanCurrentPlanUpdate -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatWorkoutStartSuggestionRejectsMissingSourceTemplate -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatWorkoutStartSuggestionAllowsUnlinkedCustomCardsThroughPlanChanges`
 - Result after direct planned-start freshness assertions: passed, 3 tests, 0 failures.
+- `git diff --check`
+- Result after durable generated-goal/log-card fix round: no whitespace errors.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest12 -skip-testing:TraiUITests -only-testing:TraiTests/WorkoutSemanticParsingTests/testGeneratedPlanBlockScopedGoalMatchesOnlyDurableBlockID -only-testing:TraiTests/WorkoutSemanticParsingTests/testGeneratedPlanBlockScopedGoalDoesNotFallbackAfterBlockRemoval -only-testing:TraiTests/WorkoutSemanticParsingTests/testGeneratedPlanActivityGoalsWithoutDurableBlocksAreNotInserted -only-testing:TraiTests/WorkoutSemanticParsingTests/testLogWorkoutPreservesSourcePlanTemplateID -only-testing:TraiTests/WorkoutSemanticParsingTests/testLogWorkoutRejectsSourcePlanBlockIDOutsideTemplate -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutGoalSuggestionPreservesGeneratedPlanBlockIDs -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests/testOnboardingDraftPersistsWorkoutPlanPreferencesAndGeneratedGoals`
+- Result after durable generated-goal/log-card fix round: passed, 7 tests, 0 failures.
+- `git diff --check`
+- Result after durable generated-goal migration edge fix: no whitespace errors.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest13 -skip-testing:TraiUITests -only-testing:TraiTests/WorkoutSemanticParsingTests/testGeneratedPlanBlockScopedGoalMatchesOnlyDurableBlockID -only-testing:TraiTests/WorkoutSemanticParsingTests/testStoredGeneratedPlanBlockIDsRemainDurableScopedAfterMigration -only-testing:TraiTests/WorkoutSemanticParsingTests/testGeneratedPlanBlockScopedGoalDoesNotFallbackAfterBlockRemoval -only-testing:TraiTests/WorkoutSemanticParsingTests/testLogWorkoutPreservesSourcePlanTemplateID -only-testing:TraiTests/WorkoutSemanticParsingTests/testLogWorkoutRejectsSourcePlanBlockIDOutsideTemplate -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests/testOnboardingDraftPersistsWorkoutPlanPreferencesAndGeneratedGoals`
+- Result after durable generated-goal migration edge fix: passed, 6 tests, 0 failures.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -388,6 +401,8 @@
 - Accept a generated workout log for a non-strength activity and confirm it saves with the AI-provided activity identity, not a name-derived guess.
 - Edit a plan to have more training days per week than concrete templates, save, reopen, and confirm the chosen day count persists.
 - Start a generated plan with a support activity, skip that support activity, finish the workout, and confirm activity-scoped goals do not count it as completed.
+- Refine a plan so a block with an existing generated block-scoped goal is removed, then log a same-named/same-tag custom activity and confirm that removed-block goal does not progress.
+- Log a planned workout via a Trai workout-log card and confirm the matching block-scoped generated goal progresses from the saved log.
 - Start an AI-suggested rowing/cycling workout, open Trai during the live workout, and confirm the planned duration/target is available in the conversation.
 - In chat while Trai is generating, open an old logged meal and ask Trai about it; follow up with an edit request and confirm it still targets the exact meal.
 - Accept a mixed AI-suggested live workout with both a strength item and a non-strength activity item; confirm both rows appear and skipped activity rows do not count toward matching goals.

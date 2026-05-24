@@ -730,6 +730,10 @@ enum AIFunctionDeclarations {
                                     "description": "Optional stable planned-block placement role when this item corresponds to a plan block.",
                                     "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom"]
                                 ],
+                                "source_plan_block_id": [
+                                    "type": "string",
+                                    "description": "Optional exact block id from CURRENT WORKOUT PLAN when this completed item corresponds to a specific saved/generated plan block. Only provide this with source_plan_template_id."
+                                ],
                                 "target_tags": [
                                     "type": "array",
                                     "items": ["type": "string"],

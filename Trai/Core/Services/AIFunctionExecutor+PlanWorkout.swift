@@ -1002,6 +1002,9 @@ extension AIFunctionExecutor {
         } else {
             sourcePlanTemplateID = nil
         }
+        let sourcePlanTemplate = sourcePlanTemplateID.flatMap { templateID in
+            userProfile?.workoutPlan?.templates.first(where: { $0.id == templateID })
+        }
 
         let workoutName = args["name"] as? String  // Trai-generated name
         let durationMinutes = numericInt(from: args["duration_minutes"])
@@ -1034,6 +1037,32 @@ extension AIFunctionExecutor {
                     }
                 } else {
                     activityRole = nil
+                }
+                let sourcePlanBlockID: UUID?
+                if let rawSourcePlanBlockID = exerciseData["source_plan_block_id"] as? String,
+                   !rawSourcePlanBlockID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    guard let sourcePlanTemplate else {
+                        return .dataResponse(FunctionResult(
+                            name: "log_workout",
+                            response: ["error": "source_plan_block_id requires source_plan_template_id from the current workout plan."]
+                        ))
+                    }
+                    let trimmedSourcePlanBlockID = rawSourcePlanBlockID.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard let parsedSourcePlanBlockID = UUID(uuidString: trimmedSourcePlanBlockID) else {
+                        return .dataResponse(FunctionResult(
+                            name: "log_workout",
+                            response: ["error": "source_plan_block_id must be an exact block id from the current workout plan."]
+                        ))
+                    }
+                    guard sourcePlanTemplate.blocks.contains(where: { $0.id == parsedSourcePlanBlockID }) else {
+                        return .dataResponse(FunctionResult(
+                            name: "log_workout",
+                            response: ["error": "source_plan_block_id must belong to source_plan_template_id in the current workout plan."]
+                        ))
+                    }
+                    sourcePlanBlockID = parsedSourcePlanBlockID
+                } else {
+                    sourcePlanBlockID = nil
                 }
                 let targetTags = stringArray(from: exerciseData["target_tags"])
                 let trackingFields = stringArray(from: exerciseData["tracking_fields"])
@@ -1106,6 +1135,7 @@ extension AIFunctionExecutor {
                         category: resolvedCategory?.rawValue ?? category,
                         activityTypeName: exerciseActivityName,
                         activityRole: activityRole?.rawValue,
+                        sourcePlanBlockID: sourcePlanBlockID,
                         targetTags: targetTags,
                         trackingFields: normalizedTrackingFields ?? trackingFields,
                         durationMinutes: loggedDurationMinutes,

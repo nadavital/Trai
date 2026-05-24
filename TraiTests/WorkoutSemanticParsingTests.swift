@@ -436,6 +436,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                             "category": "sportPractice",
                             "activity_name": "Bouldering",
                             "activity_role": "finisher",
+                            "source_plan_block_id": template.blocks[0].id.uuidString,
                             "duration_minutes": 35,
                             "notes": "Finished the planned climbing block."
                         ]
@@ -450,6 +451,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         XCTAssertEqual(workoutLog.sourcePlanTemplateID, template.id)
         XCTAssertEqual(workoutLog.exercises.first?.activityRole, "finisher")
+        XCTAssertEqual(workoutLog.exercises.first?.sourcePlanBlockID, template.blocks[0].id)
     }
 
     func testLogWorkoutRejectsSourcePlanTemplateIDOutsideCurrentPlan() async throws {
@@ -499,6 +501,64 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         XCTAssertEqual(functionResult.name, "log_workout")
         XCTAssertEqual(functionResult.response["error"] as? String, "source_plan_template_id must match an existing session in the current workout plan.")
+    }
+
+    func testLogWorkoutRejectsSourcePlanBlockIDOutsideTemplate() async throws {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Plan Mobility Day",
+            sessionType: .mobility,
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .mobility,
+                    role: .cooldown,
+                    title: "Mobility Cooldown",
+                    detail: "Hips and shoulders",
+                    activityTypeName: "Mobility",
+                    durationMinutes: 20,
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 30,
+            order: 0
+        )
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Mobility plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: profile).execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "name": "Plan Mobility",
+                    "type": "mobility",
+                    "source_plan_template_id": template.id.uuidString,
+                    "exercises": [
+                        [
+                            "name": "Mobility Cooldown",
+                            "category": "mobility",
+                            "activity_name": "Mobility",
+                            "source_plan_block_id": UUID().uuidString,
+                            "duration_minutes": 20
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected validation error")
+        }
+
+        XCTAssertEqual(functionResult.name, "log_workout")
+        XCTAssertEqual(functionResult.response["error"] as? String, "source_plan_block_id must belong to source_plan_template_id in the current workout plan.")
     }
 
     func testChatSuggestionFreshnessRejectsCardsOlderThanCurrentPlanUpdate() {
@@ -2138,6 +2198,93 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         XCTAssertTrue(goal.matches(workout: plannedWorkout))
         XCTAssertTrue(goal.matches(entry: plannedEntry))
+        XCTAssertFalse(goal.matches(workout: unrelatedWorkout))
+        XCTAssertFalse(goal.matches(entry: unrelatedEntry))
+    }
+
+    func testStoredGeneratedPlanBlockIDsRemainDurableScopedAfterMigration() {
+        let plannedBlockID = UUID()
+        let goal = WorkoutGoal(
+            title: "Complete mobility finisher",
+            goalKind: .frequency,
+            linkedActivityTags: ["Mobility"],
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete the mobility finisher from your plan."
+        )
+        goal.generatedPlanBlockIDsRaw = plannedBlockID.uuidString
+        goal.requiresGeneratedPlanBlockScope = false
+
+        let plannedEntry = LiveWorkoutEntry(
+            exerciseName: "Mobility Flow",
+            orderIndex: 0,
+            exerciseType: Exercise.Category.mobility.rawValue
+        )
+        plannedEntry.activityTypeName = "Mobility"
+        plannedEntry.targetTags = ["Mobility"]
+        plannedEntry.sourcePlanBlockID = plannedBlockID
+
+        let unrelatedEntry = LiveWorkoutEntry(
+            exerciseName: "Mobility Flow",
+            orderIndex: 0,
+            exerciseType: Exercise.Category.mobility.rawValue
+        )
+        unrelatedEntry.activityTypeName = "Mobility"
+        unrelatedEntry.targetTags = ["Mobility"]
+
+        XCTAssertTrue(goal.matches(entry: plannedEntry))
+        XCTAssertFalse(goal.matches(entry: unrelatedEntry))
+    }
+
+    func testGeneratedPlanBlockScopedGoalDoesNotFallbackAfterBlockRemoval() {
+        let removedBlockID = UUID()
+        let goal = WorkoutGoal(
+            title: "Complete mobility finisher",
+            goalKind: .frequency,
+            linkedActivityTags: ["Mobility"],
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete the mobility finisher from your plan.",
+            generatedPlanBlockIDs: [removedBlockID]
+        )
+        let refinedPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Strength",
+                    sessionType: .strength,
+                    focusAreas: ["Strength"],
+                    targetMuscleGroups: [],
+                    exercises: [],
+                    blocks: [],
+                    estimatedDurationMinutes: 45,
+                    order: 0
+                )
+            ],
+            rationale: "Refined plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        goal.normalizeGeneratedPlanBlockScopeIfNeeded(for: refinedPlan)
+
+        let unrelatedWorkout = LiveWorkout(name: "Mobility Flow", workoutType: .mobility, focusAreas: ["Mobility"])
+        let unrelatedEntry = LiveWorkoutEntry(
+            exerciseName: "Mobility Flow",
+            orderIndex: 0,
+            exerciseType: Exercise.Category.mobility.rawValue
+        )
+        unrelatedEntry.activityTypeName = "Mobility"
+        unrelatedEntry.targetTags = ["Mobility"]
+        unrelatedWorkout.entries = [unrelatedEntry]
+
+        XCTAssertEqual(goal.generatedPlanBlockIDs, [])
+        XCTAssertTrue(goal.requiresGeneratedPlanBlockScope)
         XCTAssertFalse(goal.matches(workout: unrelatedWorkout))
         XCTAssertFalse(goal.matches(entry: unrelatedEntry))
     }
