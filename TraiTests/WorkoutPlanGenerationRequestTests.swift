@@ -1551,6 +1551,77 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutPlanRefinementRejectsChangedTemplateBypassForRetainedBlockSemantics() {
+        let templateID = UUID()
+        let strengthBlockID = UUID()
+        let cardioBlockID = UUID()
+        let currentTemplate = WorkoutPlan.WorkoutTemplate(
+            id: templateID,
+            name: "Upper + Finisher",
+            sessionType: .mixed,
+            focusAreas: ["Upper", "Cardio"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: strengthBlockID,
+                    kind: .strength,
+                    title: "Upper Strength",
+                    detail: "Pressing and pulling",
+                    activityTypeName: "Strength",
+                    activityTags: ["Upper"],
+                    order: 0
+                ),
+                WorkoutPlan.TrainingBlock(
+                    id: cardioBlockID,
+                    kind: .cardio,
+                    role: .finisher,
+                    title: "Bike Finisher",
+                    detail: "Easy conditioning",
+                    activityTypeName: "Cycling",
+                    activityTags: ["Cardio"],
+                    order: 1
+                )
+            ],
+            estimatedDurationMinutes: 55,
+            order: 0
+        )
+        let currentPlan = makePlan(templates: [currentTemplate], daysPerWeek: 1)
+        let mutatedTemplate = WorkoutPlan.WorkoutTemplate(
+            id: templateID,
+            name: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: strengthBlockID,
+                    kind: .mobility,
+                    title: "Mobility Flow",
+                    detail: "Unrequested mutation",
+                    activityTypeName: "Mobility Flow",
+                    activityTags: ["Mobility"],
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let mutatedPlan = makePlan(templates: [mutatedTemplate], daysPerWeek: 1)
+
+        XCTAssertNil(
+            AIService.validateRefinedWorkoutPlanForTesting(
+                mutatedPlan,
+                currentPlan: currentPlan,
+                allowsActivitySemanticChange: true,
+                changedTemplateIDs: [templateID],
+                changedBlockIDs: [cardioBlockID]
+            )
+        )
+    }
+
+    @MainActor
     func testWorkoutPlanRefinementRejectsDroppedLegacyExerciseOnlyActivitySemantics() {
         let exercise = WorkoutPlan.ExerciseTemplate(
             exerciseName: "Limit Bouldering",
@@ -1670,6 +1741,113 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutPlanRefinementRejectsMovedAuthoredBlockToDifferentTemplate() {
+        let climbingTemplateID = UUID()
+        let strengthTemplateID = UUID()
+        let climbingBlockID = UUID()
+        let strengthBlockID = UUID()
+        let climbingTemplate = WorkoutPlan.WorkoutTemplate(
+            id: climbingTemplateID,
+            name: "Climbing Skill",
+            sessionType: .mixed,
+            focusAreas: ["Climbing"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: climbingBlockID,
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Board climbing",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing", "Power"],
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let strengthTemplate = WorkoutPlan.WorkoutTemplate(
+            id: strengthTemplateID,
+            name: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: strengthBlockID,
+                    kind: .strength,
+                    title: "Upper Strength",
+                    detail: "Pressing volume",
+                    activityTypeName: "Strength",
+                    activityTags: ["Upper"],
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 1
+        )
+        let currentPlan = makePlan(templates: [climbingTemplate, strengthTemplate], daysPerWeek: 2)
+        let mutatedClimbingTemplate = WorkoutPlan.WorkoutTemplate(
+            id: climbingTemplateID,
+            name: "Generic Strength",
+            sessionType: .strength,
+            focusAreas: ["Strength"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Generic Strength",
+                    detail: "Unrequested replacement",
+                    activityTypeName: "Strength",
+                    activityTags: ["Strength"],
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let mutatedStrengthTemplate = WorkoutPlan.WorkoutTemplate(
+            id: strengthTemplateID,
+            name: "Upper Strength + Climbing",
+            sessionType: .mixed,
+            focusAreas: ["Upper", "Climbing"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: strengthBlockID,
+                    kind: .strength,
+                    title: "Upper Strength",
+                    detail: "Pressing volume",
+                    activityTypeName: "Strength",
+                    activityTags: ["Upper"],
+                    order: 0
+                ),
+                WorkoutPlan.TrainingBlock(
+                    id: climbingBlockID,
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Board climbing",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing", "Power"],
+                    order: 1
+                )
+            ],
+            estimatedDurationMinutes: 60,
+            order: 1
+        )
+        let mutatedPlan = makePlan(
+            templates: [mutatedClimbingTemplate, mutatedStrengthTemplate],
+            daysPerWeek: 2
+        )
+
+        XCTAssertNil(AIService.validateRefinedWorkoutPlanForTesting(mutatedPlan, currentPlan: currentPlan))
+    }
+
+    @MainActor
     func testWorkoutPlanRefinementRejectsDroppedExplicitStrengthMainActivityNameWithoutTags() {
         let templateID = UUID()
         let blockID = UUID()
@@ -1780,7 +1958,8 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
                 mobilityPlan,
                 currentPlan: currentPlan,
                 allowsActivitySemanticChange: true,
-                changedTemplateIDs: [templateID]
+                changedTemplateIDs: [templateID],
+                changedBlockIDs: [blockID]
             )
         )
     }

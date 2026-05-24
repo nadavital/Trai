@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `93fea99 Harden workout plan semantic preservation`
+- Latest pushed fix before current round: `c6db78a Harden workout plan setup saves`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -26,6 +26,7 @@
 - Preserved valid planned start cards for legacy exercise-only saved plans by checking durable exercise IDs instead of nondeterministic fallback block IDs.
 - Blocked standard Profile/Settings/Workouts setup saves from overwriting a workout plan that changed while the setup sheet was open.
 - Guarded delayed generated-plan result presentation so stale refinement cards/goals/save rows cannot append after a newer refinement starts.
+- Required retained durable activity blocks to stay inside their original template and preserve semantics unless the exact block ID is listed in `changedBlockIDs`.
 
 ## Fresh Review Rounds
 
@@ -150,6 +151,13 @@
 - Regression-test coverage: added focused setup save-guard assertions for existing-plan and no-plan bases.
 - Validation note: focused XCTest pass succeeded for stale edit/setup save guards; `git diff --check` is clean.
 
+### Round 2026-05-24 After `c6db78a`
+- Fresh agent results: chat lifecycle, routing/adherence, and setup/persistence passes found no additional serious issues. Semantic durability pass found two actual P1 validator gaps.
+- Durable block ownership: fixed verified plan-wide block lookup where an unchanged authored block could be moved to a different template and still satisfy semantic preservation.
+- Scoped semantic changes: fixed verified `changedTemplateIDs` bypass where marking a retained template as changed could skip preservation for other unchanged block IDs inside that same template.
+- Regression-test coverage: added focused tests for moved authored blocks and retained-block mutation inside a changed template; updated explicit semantic-change coverage to require the changed block ID.
+- Validation note: focused XCTest pass succeeded for 7 semantic refinement tests; `git diff --check` is clean.
+
 ## Manual Test Queue
 - From Profile, Settings, and Workouts, open standard workout-plan setup, mutate/save a different workout plan elsewhere before tapping Save, and confirm the stale setup is blocked instead of overwriting the newer plan.
 - Run two rapid generated-plan refinements back to back and confirm only the latest result package remains, with no duplicate or stale plan/goals/save rows.
@@ -157,6 +165,8 @@
 - Accept a planned workout start card from a new block-based generated plan.
 - Replace the saved plan before accepting an old planned start card and confirm it is rejected as stale.
 - Start a planned workout through Shortcuts/widget/deep link and confirm durable template routing still wins over labels.
+- Refine a mixed template by removing only a cardio finisher and confirm unchanged strength/climbing blocks keep their original activity identity.
+- Try moving a durable activity block into a different template and confirm validation rejects it.
 
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
