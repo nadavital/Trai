@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed code fix before current round: `d7e34b8 Cover duplicate refinement block IDs`
+- Latest pushed review/ledger state: `fdbae09 Record clean workout PR review round`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
