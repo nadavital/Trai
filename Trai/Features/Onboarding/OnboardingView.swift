@@ -152,11 +152,13 @@ struct OnboardingView: View {
             OnboardingAmbientBackground()
 
             if showingWorkoutSetup {
-                OnboardingWorkoutPlanSetupView(
+                WorkoutPlanSetupChoiceFlow(
                     draft: $workoutPlanDraft,
                     context: workoutPlanUserContext,
                     aiService: aiService,
-                    onComplete: { plan, goals in
+                    canAccessAIFeatures: monetizationService?.canAccessAIFeatures ?? false,
+                    onComplete: { plan, goals, _, draft in
+                        workoutPlanDraft = draft
                         generatedWorkoutPlan = plan
                         generatedWorkoutGoals = goals
                         withAnimation(.smooth(duration: 0.4)) {
@@ -319,7 +321,18 @@ struct OnboardingView: View {
                     adjustedFat: $adjustedFat,
                     onRetry: generatePlan
                 )
-            case .macroPreferences, .account, .health, .workoutSetup:
+            case .workoutSetup:
+                WorkoutPlanDecisionView(
+                    hasWorkoutPlan: generatedWorkoutPlan != nil,
+                    workoutPlan: generatedWorkoutPlan,
+                    onCreatePlan: {
+                        withAnimation(.smooth(duration: 0.4)) {
+                            showingWorkoutSetup = true
+                        }
+                    },
+                    onSkipPlan: completeOnboarding
+                )
+            case .macroPreferences, .account, .health:
                 EmptyView()
             }
         }
@@ -391,7 +404,7 @@ struct OnboardingView: View {
             return (monetizationService?.canAccessAIFeatures ?? true) ? "Build My Plan" : "See Trai Pro"
         case .activity:
             return "Build My Plan"
-        case .nutritionPlan: return "Start Using Trai"
+        case .nutritionPlan: return "Set Up Workouts"
         case .workoutSetup: return "Start Using Trai"
         default: return "Continue"
         }
@@ -553,7 +566,8 @@ enum OnboardingFlowPlanner {
             .goals,
             .biometrics,
             .activity,
-            .nutritionPlan
+            .nutritionPlan,
+            .workoutSetup
         ]
     }
 }

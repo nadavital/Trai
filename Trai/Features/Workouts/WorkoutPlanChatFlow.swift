@@ -71,6 +71,7 @@ struct WorkoutPlanChatFlow: View {
     @State private var selectedGeneratedGoal: WorkoutGoal?
     @State private var isRefiningPlan = false
     @State private var refinementTask: Task<Void, Never>?
+    @State private var refinementRequestID: UUID?
     @State private var refinementReviewMessagesBeforeRequest: [WorkoutPlanFlowMessage] = []
     @State private var saveError: WorkoutPlanChatFlowSaveError?
 
@@ -1036,6 +1037,8 @@ struct WorkoutPlanChatFlow: View {
         guard !messageText.isEmpty, let currentPlan = generatedPlan, !isGenerating, !isRefiningPlan else { return }
 
         didRefineGeneratedPlan = true
+        let requestID = UUID()
+        refinementRequestID = requestID
         let previousReviewMessages = messages.filter(isGeneratedPlanReviewMessage)
         refinementReviewMessagesBeforeRequest = previousReviewMessages
 
@@ -1069,6 +1072,7 @@ struct WorkoutPlanChatFlow: View {
                 try Task.checkCancellation()
 
                 await MainActor.run {
+                    guard refinementRequestID == requestID else { return }
                     refinementTask = nil
                     if let newPlan = updatedPlan {
                         messages.removeAll(where: isGeneratedPlanReviewMessage)
@@ -1078,6 +1082,7 @@ struct WorkoutPlanChatFlow: View {
                         generatedPlan = newPlan
                         activeGeneratedPlanGoals = refreshedGoals
                     } else {
+                        refinementRequestID = nil
                         messages.removeAll(where: isGeneratedPlanReviewMessage)
                         messages.append(WorkoutPlanFlowMessage(
                             type: .traiMessage(response.message)
@@ -1090,6 +1095,10 @@ struct WorkoutPlanChatFlow: View {
 
                 if let newPlan = updatedPlan {
                     try Task.checkCancellation()
+                    let shouldPresent = await MainActor.run {
+                        refinementRequestID == requestID
+                    }
+                    guard shouldPresent else { return }
                     await presentGeneratedResultPackage(
                         plan: newPlan,
                         introText: isOnboarding ? (response.message.isEmpty ? "I updated the plan and goals. Review the changes, then save when it looks right." : response.message) : nil,
@@ -1101,13 +1110,15 @@ struct WorkoutPlanChatFlow: View {
                 }
             } catch is CancellationError {
                 await MainActor.run {
-                    if refinementTask != nil {
+                    if refinementRequestID == requestID {
                         restoreReviewMessagesAfterRefinementCancel()
                     }
                 }
             } catch {
                 await MainActor.run {
+                    guard refinementRequestID == requestID else { return }
                     refinementTask = nil
+                    refinementRequestID = nil
                     withAnimation(.spring(response: 0.3)) {
                         messages.removeAll(where: isGeneratedPlanReviewMessage)
                         messages.append(WorkoutPlanFlowMessage(
@@ -1131,6 +1142,7 @@ struct WorkoutPlanChatFlow: View {
 
     private func restoreReviewMessagesAfterRefinementCancel() {
         refinementTask = nil
+        refinementRequestID = nil
         withAnimation(.spring(response: 0.3)) {
             messages.removeAll(where: isGeneratedPlanReviewMessage)
             messages.append(contentsOf: refinementReviewMessagesBeforeRequest)
@@ -1151,6 +1163,7 @@ struct WorkoutPlanChatFlow: View {
     ) async {
         withAnimation(generatedResultAnimation) {
             refinementTask = nil
+            refinementRequestID = nil
             isRefiningPlan = false
             isGenerating = false
         }
@@ -1214,6 +1227,7 @@ struct WorkoutPlanChatFlow: View {
             guard let profile = userProfile else { return }
 
             if currentPlanToEdit == plan {
+                refreshExistingGeneratedPlanAdherenceGoals(for: plan)
                 insertGeneratedWorkoutGoals(activeGeneratedPlanGoals, for: plan)
                 try? modelContext.save()
                 HapticManager.success()
@@ -1232,6 +1246,7 @@ struct WorkoutPlanChatFlow: View {
 
             profile.workoutPlan = plan
             profile.applyStructuredWorkoutPlanPreferences(from: plan)
+            refreshExistingGeneratedPlanAdherenceGoals(for: plan)
 
             insertGeneratedWorkoutGoals(activeGeneratedPlanGoals, for: plan)
 
@@ -1270,6 +1285,12 @@ struct WorkoutPlanChatFlow: View {
             }
             HapticManager.success()
             dismiss()
+        }
+    }
+
+    private func refreshExistingGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
+        for goal in workoutGoals where goal.status == .active && goal.tracksGeneratedPlanAdherence {
+            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
         }
     }
 

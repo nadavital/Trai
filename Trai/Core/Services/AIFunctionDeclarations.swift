@@ -860,6 +860,10 @@ enum AIFunctionDeclarations {
                         "items": ["type": "string"],
                         "description": "User-facing activity names or targets this live workout should start with, such as climbing, rowing, mobility, basketball, upper body, or endurance."
                     ],
+                    "source_plan_template_id": [
+                        "type": "string",
+                        "description": "Optional exact template id from CURRENT WORKOUT PLAN when the user is starting a saved/generated plan session. Leave empty for open/custom workouts."
+                    ],
                     "target_muscle_groups": [
                         "type": "array",
                         "items": ["type": "string"],

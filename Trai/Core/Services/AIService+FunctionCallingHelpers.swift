@@ -214,7 +214,7 @@ extension AIService {
         - Days per week: \(plan.daysPerWeek)
         \(plan.planIntent.map { "- Intent: \($0.summary)" } ?? "")
         - Sessions: \(sessionPreview)
-        - When logging a completed planned session, pass the exact session id as source_plan_template_id.
+        - When starting or logging a planned session, pass the exact session id as source_plan_template_id.
 
         """
     }

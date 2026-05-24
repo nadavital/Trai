@@ -309,6 +309,7 @@ extension ChatView {
 
         profile.workoutPlan = suggestion.plan
         profile.applyStructuredWorkoutPlanPreferences(from: suggestion.plan)
+        refreshGeneratedPlanAdherenceGoals(for: suggestion.plan)
 
         if !hadExistingPlan {
             WorkoutPlanHistoryService.archivePlan(
@@ -343,6 +344,12 @@ extension ChatView {
         try? modelContext.save()
 
         HapticManager.success()
+    }
+
+    private func refreshGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
+        for goal in activeWorkoutGoals where goal.tracksGeneratedPlanAdherence {
+            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+        }
     }
 
     func dismissWorkoutPlanSuggestion(for message: ChatMessage) {

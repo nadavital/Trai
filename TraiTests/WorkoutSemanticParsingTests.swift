@@ -651,6 +651,36 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(exercise.startSummarySegments, ["Bouldering", "30 min", "2 segments", "7 attempts"])
     }
 
+    func testStartLiveWorkoutPreservesSourcePlanTemplateID() async throws {
+        let templateID = UUID()
+
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "start_live_workout",
+                arguments: [
+                    "name": "Plan Pull Day",
+                    "workout_type": "strength",
+                    "source_plan_template_id": templateID.uuidString,
+                    "suggested_exercises": [
+                        [
+                            "name": "Pull Up",
+                            "category": "strength",
+                            "activity_name": "Strength",
+                            "sets": 3,
+                            "reps": 5
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutStart(let suggestion) = result else {
+            return XCTFail("Expected start workout suggestion")
+        }
+
+        XCTAssertEqual(suggestion.sourcePlanTemplateID, templateID)
+    }
+
     func testStartLiveWorkoutRejectsMissingStableCategory() async throws {
         let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
             .init(
@@ -1170,6 +1200,84 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         let goals = try context.fetch(FetchDescriptor<WorkoutGoal>())
         let goal = try XCTUnwrap(goals.first)
         XCTAssertEqual(goal.generatedPlanTemplateIDs, [template.id])
+        XCTAssertNil(goal.linkedWorkoutType)
+        XCTAssertFalse(goal.hasActivityScope)
+    }
+
+    func testGeneratedPlanAdherenceGoalReconcilesWhenPlanTemplateIDsChange() {
+        let originalTemplate = WorkoutPlan.WorkoutTemplate(
+            name: "Original Strength",
+            sessionType: .strength,
+            targetMuscleGroups: ["Back"],
+            exercises: [],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let originalPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [originalTemplate],
+            rationale: "Original plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let revisedTemplates = [
+            WorkoutPlan.WorkoutTemplate(
+                name: "Revised Strength",
+                sessionType: .strength,
+                targetMuscleGroups: ["Back"],
+                exercises: [],
+                estimatedDurationMinutes: 45,
+                order: 0
+            ),
+            WorkoutPlan.WorkoutTemplate(
+                name: "New Conditioning",
+                sessionType: .hiit,
+                targetMuscleGroups: [],
+                exercises: [],
+                blocks: [
+                    .init(
+                        kind: .conditioning,
+                        role: .main,
+                        title: "Bike",
+                        detail: "Intervals",
+                        activityTypeName: "Cycling",
+                        durationMinutes: 25,
+                        order: 0
+                    )
+                ],
+                estimatedDurationMinutes: 30,
+                order: 1
+            )
+        ]
+        let revisedPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 2,
+            templates: revisedTemplates,
+            rationale: "Revised plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let goal = WorkoutGoal(
+            title: "Complete my generated plan",
+            goalKind: .frequency,
+            linkedWorkoutType: .strength,
+            linkedActivityTags: ["old"],
+            targetValue: 1,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "Complete all planned sessions.",
+            tracksGeneratedPlanAdherence: true
+        )
+
+        goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: originalPlan)
+        XCTAssertEqual(goal.generatedPlanTemplateIDs, [originalTemplate.id])
+
+        goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: revisedPlan)
+
+        XCTAssertEqual(goal.targetValue, 2.0)
+        XCTAssertEqual(goal.generatedPlanTemplateIDs, revisedPlan.templates.map { $0.id })
         XCTAssertNil(goal.linkedWorkoutType)
         XCTAssertFalse(goal.hasActivityScope)
     }

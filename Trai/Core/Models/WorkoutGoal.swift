@@ -331,6 +331,7 @@ extension WorkoutGoal {
     func normalizeGeneratedPlanAdherenceScopeIfNeeded(for plan: WorkoutPlan) {
         guard isGeneratedPlanAdherenceGoal(for: plan) else { return }
 
+        targetValue = Double(plan.daysPerWeek)
         generatedPlanTemplateIDs = plan.templates.map(\.id)
         linkedWorkoutTypeRaw = nil
         linkedActivityName = nil
@@ -354,11 +355,6 @@ extension WorkoutGoal {
 
         let normalizedUnit = targetUnit.goalNormalizedKey
         guard Self.planAdherenceTargetUnits.contains(normalizedUnit) else {
-            return false
-        }
-
-        let targetSessions = Int(targetValue.rounded())
-        guard targetSessions == plan.daysPerWeek else {
             return false
         }
 

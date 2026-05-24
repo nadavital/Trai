@@ -141,22 +141,35 @@ extension ChatView {
 
         selectedImage = nil
         selectedPhotoItem = nil
+        let pendingWorkoutPlanSuggestionForContext = pendingWorkoutPlanSuggestion?.suggestion
 
         if currentSessionMessages.isEmpty && !isPreparingFirstMessageTransition {
             isPreparingFirstMessageTransition = true
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(170))
-                sendMessageAfterFirstFrameTransition(text, capturedImage: capturedImage)
+                sendMessageAfterFirstFrameTransition(
+                    text,
+                    capturedImage: capturedImage,
+                    pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext
+                )
                 isPreparingFirstMessageTransition = false
             }
             return true
         }
 
-        sendMessageAfterFirstFrameTransition(text, capturedImage: capturedImage)
+        sendMessageAfterFirstFrameTransition(
+            text,
+            capturedImage: capturedImage,
+            pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext
+        )
         return true
     }
 
-    private func sendMessageAfterFirstFrameTransition(_ text: String, capturedImage: UIImage?) {
+    private func sendMessageAfterFirstFrameTransition(
+        _ text: String,
+        capturedImage: UIImage?,
+        pendingWorkoutPlanSuggestionForContext: WorkoutPlanSuggestionEntry?
+    ) {
         updateLastActivity()
         retirePendingPlanSuggestionsInCurrentSession()
 
@@ -190,6 +203,7 @@ extension ChatView {
                 text: text,
                 capturedImage: capturedImage,
                 previousMessages: previousMessages,
+                pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext,
                 aiMessage: aiMessage
             )
         }
@@ -230,6 +244,7 @@ extension ChatView {
                 text: trimmedText,
                 capturedImage: nil,
                 previousMessages: previousMessages,
+                pendingWorkoutPlanSuggestionForContext: nil,
                 aiMessage: aiMessage
             )
         }
@@ -248,6 +263,7 @@ extension ChatView {
         text: String,
         capturedImage: UIImage?,
         previousMessages: [ChatMessage],
+        pendingWorkoutPlanSuggestionForContext: WorkoutPlanSuggestionEntry?,
         aiMessage: ChatMessage
     ) async {
         isLoading = true
@@ -281,7 +297,7 @@ extension ChatView {
                 memoriesContext: memoriesContext,
                 coachContext: coachContext,
                 pendingSuggestion: pendingMealSuggestion?.meal,
-                pendingWorkoutPlanSuggestion: pendingWorkoutPlanSuggestion?.suggestion,
+                pendingWorkoutPlanSuggestion: pendingWorkoutPlanSuggestionForContext ?? pendingWorkoutPlanSuggestion?.suggestion,
                 isIncognitoMode: isTemporarySession,
                 activeWorkout: workoutContext,
                 activityData: activityData,
@@ -453,6 +469,7 @@ extension ChatView {
                 text: text,
                 capturedImage: capturedImage,
                 previousMessages: previousMessages,
+                pendingWorkoutPlanSuggestionForContext: nil,
                 aiMessage: aiMessage
             )
         }

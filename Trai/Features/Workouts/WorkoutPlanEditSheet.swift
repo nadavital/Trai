@@ -15,6 +15,7 @@ struct WorkoutPlanEditSheet: View {
     @AppStorage("pendingWorkoutPlanSetupRequest") private var pendingWorkoutPlanSetupRequest = false
 
     @Query private var profiles: [UserProfile]
+    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
     private var userProfile: UserProfile? { profiles.first }
 
     let currentPlan: WorkoutPlan
@@ -645,6 +646,7 @@ struct WorkoutPlanEditSheet: View {
         )
         profile.workoutPlan = normalizedPlan
         profile.applyStructuredWorkoutPlanPreferences(from: normalizedPlan)
+        refreshGeneratedPlanAdherenceGoals(for: normalizedPlan)
         do {
             try modelContext.save()
             return true
@@ -653,6 +655,12 @@ struct WorkoutPlanEditSheet: View {
             saveError = WorkoutPlanEditSaveError(message: error.localizedDescription)
             HapticManager.error()
             return false
+        }
+    }
+
+    private func refreshGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
+        for goal in workoutGoals where goal.status == .active && goal.tracksGeneratedPlanAdherence {
+            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
         }
     }
 }

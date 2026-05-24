@@ -10,11 +10,11 @@ final class OnboardingFlowPlannerTests: XCTestCase {
             .goals,
             .biometrics,
             .activity,
-            .nutritionPlan
+            .nutritionPlan,
+            .workoutSetup
         ])
         XCTAssertFalse(steps.contains(.macroPreferences))
         XCTAssertFalse(steps.contains(.health))
-        XCTAssertFalse(steps.contains(.workoutSetup))
-        XCTAssertEqual(steps.last, .nutritionPlan)
+        XCTAssertEqual(steps.last, .workoutSetup)
     }
 }

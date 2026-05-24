@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `fcb8ee2 Fix generated workout plan review findings`
+- Latest pushed fix before current round: `1c4afbc Fix workout plan chat state regressions`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -49,6 +49,13 @@
 - Plan persistence/edit/review flow: fixed verified non-onboarding chat plan saves dropping generated goals and structured plan preferences; manual edit/chat plan saves now refresh day count and duration from structured plan data only.
 - Regression-test coverage: added focused coverage for relevant-goal filtering, AI log template IDs, chat-created adherence goal normalization, template source IDs, structured profile preference updates, and legacy ExerciseHistory duplicate suppression.
 
+### Round 2026-05-23 After `1c4afbc`
+- AI function contracts: fixed verified direct `start_live_workout` plan-adherence gap by adding durable `source_plan_template_id` support and prompt guidance.
+- Plan persistence/edit/review flow: fixed verified first-run onboarding workout setup reachability and pending proposal follow-up edit context preservation.
+- Chat/review pending state: fixed verified cancelled-refinement race with per-request refinement identity.
+- Live workout planned/logged semantics: fixed verified generated plan-adherence detachment after plan edits by reconciling active adherence goals to revised template IDs and day count.
+- Regression-test coverage: added focused coverage for direct start source IDs, onboarding workout setup flow inclusion, and plan-adherence goal reconciliation.
+
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
 - Generated workout plan blocks decoded unknown free-text `kind` values as `.custom`, letting malformed AI payloads store generic behavior data.
@@ -75,6 +82,11 @@
 - `log_workout` could not advance generated plan-adherence goals because completed chat logs had no durable source template id.
 - Chat-created or chat-updated plan-adherence goals did not store generated template ids, so they could never accrue progress.
 - Non-onboarding generated plan saves could show `+ Goals` but only save the plan, and chat/manual plan saves left structured day count/duration preferences stale.
+- Direct chat `start_live_workout` could not carry `source_plan_template_id`, so starting a named generated-plan session from chat lost plan-adherence identity.
+- First-run onboarding could persist generated workout plans, but the user-facing workout setup decision step was unreachable from the current onboarding flow.
+- Follow-up edits to an unsaved workout-plan proposal in main chat retired the pending proposal before building AI context, causing revisions to fall back to the saved plan.
+- Cancelled generated-plan refinement tasks could restore old review cards over a newer refinement request.
+- Existing generated plan-adherence goals could detach from the current plan after manual/chat plan edits because their stored template IDs were not reconciled to the revised plan.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -87,6 +99,8 @@
 - Result after current fix round: 181 selected tests, 0 failures.
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,id=A7C646DC-750A-4AB4-A28F-0B40813E3D0E' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests -only-testing:TraiTests/WorkoutTemplateServiceTests`
 - Result after `fcb8ee2` review fix round: 204 selected tests, 0 failures.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests -only-testing:TraiTests/WorkoutTemplateServiceTests -only-testing:TraiTests/OnboardingFlowPlannerTests`
+- Result after `1c4afbc` review fix round: 207 selected tests, 0 failures.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -113,3 +127,8 @@
 - Ask for a plan refinement that returns explanation only or fails validation and confirm the previous plan review/save card is restored.
 - Save a generated plan with goals from the regular Workouts edit chat path and confirm the goals persist.
 - Save a manual or chat plan edit that changes days/duration and confirm later plan requests use the updated structured day count/duration.
+- From first-run onboarding, complete nutrition-plan review, continue to workout setup, create or skip a workout plan, and confirm completion behaves correctly.
+- In main chat, get an unsaved workout-plan proposal, ask for a follow-up tweak before saving, and confirm the tweak applies to the pending proposal rather than the previously saved plan.
+- Start a specific generated plan session directly from chat and confirm the accepted live workout advances the generated plan-adherence goal for that template.
+- Start a generated-plan refinement, tap Stop, immediately submit a new refinement, and confirm the cancelled request does not restore old review cards over the new request.
+- Save a generated plan with an adherence goal, edit the plan manually or through chat to change days/templates, then confirm the adherence goal tracks the revised template IDs and updated session count.

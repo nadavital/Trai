@@ -596,6 +596,7 @@ extension AIFunctionExecutor {
         // Parse target muscle groups
         let muscleStrings = args["target_muscle_groups"] as? [String] ?? []
         let requestedActivityFocuses = stringArray(from: args["activity_focuses"])
+        let sourcePlanTemplateID = uuid(from: args["source_plan_template_id"])
 
         // Parse suggested exercises
         var exercises: [SuggestedWorkoutEntry.SuggestedExercise] = []
@@ -682,6 +683,7 @@ extension AIFunctionExecutor {
             targetMuscleGroups: muscleStrings,
             activityFocuses: activityFocuses,
             exercises: exercises,
+            sourcePlanTemplateID: sourcePlanTemplateID,
             durationMinutes: numericInt(from: args["duration_minutes"]) ?? 45,
             rationale: rationale
         )
@@ -777,6 +779,11 @@ extension AIFunctionExecutor {
         default:
             return []
         }
+    }
+
+    private func uuid(from value: Any?) -> UUID? {
+        guard let rawValue = value as? String else { return nil }
+        return UUID(uuidString: rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 }
 
