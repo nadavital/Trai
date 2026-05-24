@@ -199,6 +199,7 @@
 - Refined-plan ID durability: fixed verified duplicate block ID acceptance in workout-plan refinements.
 - Name-only workout routes: tightened name-only `template=` deep links and legacy named workout intents so they cannot create planned-looking custom workouts.
 - Refinement lifecycle: fixed verified canceled/failed refinement context so only successful refinement prompts can drive regenerated saved goals.
+- Compile safety: fixed verified Swift type-inference failure in workout-plan refinement conversation history by replacing a brittle `compactMap` with an explicit typed accumulator.
 - Regression-test coverage: added focused coverage that widget workout actions are disabled when the payload lacks a durable recommended template ID.
 
 ### Round 2026-05-24 After `d7e34b8`
@@ -206,7 +207,9 @@
 - Local final audit: found one actual P2 where stale planned `log_workout` cards could remain accept-able after a plan change even though start cards were gated.
 - Chat workout-log freshness: fixed verified stale-card gap by hiding and reject-on-accepting planned workout log cards whose source template is missing or whose message predates the current plan update.
 - Generated plan-adherence safety: planned workout logs now only attach/count against the current plan when their durable `sourcePlanTemplateID` still belongs to the current plan snapshot.
-- Keyword-matching audit: no new serious semantic fallback found in current workout-plan routing/adherence/refinement paths. Remaining string checks in the audited files are enum/choice parsing, UI copy, explicit numeric parsing, or validation against structured durable plan fields rather than label-based semantic routing.
+- Generated plan activity-goal durability: fixed verified semantic fallback where generated plan goals for specific activities/support blocks only stored names/tags/kind/role. AI goal suggestions now carry durable generated-plan block IDs, plan session context exposes those IDs, generated plan activity goals without durable block IDs are not inserted, and progress matching uses `sourcePlanBlockID` instead of keyword/name/tag matches.
+- Compile safety: final serial compile validation found and fixed `WorkoutPlanChatFlow.refinementConversationHistory` type inference failure, then cleaned the remaining Swift 6 isolation warnings in the onboarding draft persistence test.
+- Keyword-matching audit: serious generated-plan semantic fallback found and fixed through durable block IDs. Remaining string checks in the audited files are enum/choice parsing, UI copy, explicit numeric parsing, or validation against structured durable plan fields rather than label-based semantic routing.
 
 ## Manual Test Queue
 - From Profile, Settings, and Workouts, open standard workout-plan setup, mutate/save a different workout plan elsewhere before tapping Save, and confirm the stale setup is blocked instead of overwriting the newer plan.
@@ -220,6 +223,7 @@
 - Reduce a mixed plan from two modalities to one day; confirm unchanged modalities are merged/preserved or the edit is rejected unless the removed template is explicitly changed.
 - Complete one generated-plan workout, then log an unrelated custom workout and confirm generated plan-adherence goals do not badge the unrelated history row.
 - Create a planned workout log card, change/refine the saved workout plan before accepting it, and confirm the old log card is hidden or rejected instead of counting toward the new plan.
+- Generate a plan with a recurring support/activity block goal, log an unrelated custom workout with the same activity name/tags, and confirm the generated plan activity goal does not progress unless the workout entry carries the matching durable plan block ID.
 - Generate/save a plan-adherence goal with AI wording like `planned sessions`; confirm it stores the generated template IDs and progresses from planned workouts.
 - From the medium widget, tap the workout action beside `Up Next` and confirm it starts the exact recommended planned template. After completing today's workout, confirm the large widget completed row does not start a duplicate workout.
 - On a rest day with no recommendation, confirm the medium/large widget does not expose a generic start-workout action.

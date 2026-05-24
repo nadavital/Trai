@@ -814,6 +814,19 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(goal.trackingSummary, "Complete the defined plan milestone with the criteria Trai can verify.")
     }
 
+    func testWorkoutGoalSuggestionPreservesGeneratedPlanBlockIDs() throws {
+        let blockID = UUID()
+        var suggestion = makeGoalSuggestion(
+            title: "Complete the planned mobility block",
+            successCriteria: "You complete the planned mobility block each week."
+        )
+        suggestion.generatedPlanBlockIDs = [blockID]
+
+        let goal = try XCTUnwrap(WorkoutGoalSuggestion.validatedUnique([suggestion]).first?.asWorkoutGoal())
+
+        XCTAssertEqual(goal.generatedPlanBlockIDs, [blockID])
+    }
+
     func testWorkoutGoalPlanSetupDeduplicationUsesStructuredTrackingFields() {
         let first = WorkoutGoal(
             title: "Hit the weekly rhythm",

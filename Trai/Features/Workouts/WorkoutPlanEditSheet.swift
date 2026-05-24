@@ -679,9 +679,10 @@ struct WorkoutPlanEditSheet: View {
     }
 
     private func refreshGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
-        for goal in workoutGoals where goal.status == .active && goal.tracksGeneratedPlanAdherence {
-            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
-        }
+        WorkoutGoal.refreshGeneratedPlanAdherenceGoals(
+            workoutGoals.filter { $0.status == .active },
+            for: plan
+        )
     }
 }
 

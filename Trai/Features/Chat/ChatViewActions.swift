@@ -574,9 +574,7 @@ extension ChatView {
     }
 
     private func refreshGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
-        for goal in activeWorkoutGoals where goal.tracksGeneratedPlanAdherence {
-            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
-        }
+        WorkoutGoal.refreshGeneratedPlanAdherenceGoals(activeWorkoutGoals, for: plan)
     }
 
     func dismissWorkoutPlanSuggestion(for message: ChatMessage) {

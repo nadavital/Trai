@@ -23,18 +23,26 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
     let targetDateISO8601: String?
     let checkInCadenceDays: Int?
     var tracksGeneratedPlanAdherence: Bool? = nil
+    var generatedPlanBlockIDs: [UUID]? = nil
 
     var id: String {
-        [
+        let tagKey = linkedActivityTags?.joined(separator: ",") ?? ""
+        let blockKey = generatedPlanBlockIDs?
+            .map(\.uuidString)
+            .sorted()
+            .joined(separator: ",") ?? ""
+        let parts: [String] = [
             title,
             goalKindRaw,
             linkedWorkoutTypeRaw ?? "",
             linkedActivityName ?? "",
-            linkedActivityTags?.joined(separator: ",") ?? "",
+            tagKey,
             linkedActivityKindRaw ?? "",
             linkedActivityRoleRaw ?? "",
-            tracksGeneratedPlanAdherence == true ? "planAdherence" : ""
-        ].joined(separator: "|")
+            tracksGeneratedPlanAdherence == true ? "planAdherence" : "",
+            blockKey
+        ]
+        return parts.joined(separator: "|")
     }
 
     var goalKind: WorkoutGoal.GoalKind {
@@ -79,7 +87,8 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
             notes: notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? rationale,
             targetDate: targetDate,
             checkInCadenceDays: checkInCadenceDays,
-            tracksGeneratedPlanAdherence: tracksGeneratedPlanAdherence == true
+            tracksGeneratedPlanAdherence: tracksGeneratedPlanAdherence == true,
+            generatedPlanBlockIDs: generatedPlanBlockIDs ?? []
         )
     }
 }
@@ -454,6 +463,8 @@ extension AIService {
             - Do not create vague progression goals unless the structured target and successCriteria make the exact achievement verifiable from app data.
             - Broad goals are allowed, but the intent must be accurate: title, target fields, linkedWorkoutType/linkedActivityName/linkedActivityTags/linkedActivityKindRaw/linkedActivityRoleRaw, and successCriteria should all describe the same behavior Trai can track.
             - Set tracksGeneratedPlanAdherence true only when the goal tracks completion of the whole generated weekly plan structure, not a specific activity family, support block, exercise, or modality.
+            - If a goal is tied to a specific activity, exercise, modality, or support block from Current plan sessions, set generatedPlanBlockIDs to the matching blockID values from that plan context. These durable IDs are required for plan-specific activity goals so Trai does not guess from names or tags later.
+            - Leave generatedPlanBlockIDs empty for whole-plan adherence goals, goals based only on recent history, or goals that are not tied to a specific current-plan block.
             - If the current plan includes a personalized constraint, habit, or recurring support block, prefer a goal for that specific plan behavior over generic progression.
             - For a brand-new workout plan with little history, use goals that establish the plan: weekly structure adherence, named-day/session-type completion across several weeks, requested recurring habits, check-in cadence, or logging enough sessions for Trai to personalize the next revision.
             - Every frequency, duration, distance, count, or weight goal must have a targetValue greater than 0 and a clear targetUnit.
@@ -553,16 +564,26 @@ extension WorkoutGoalSuggestion {
     }
 
     var normalizedDeduplicationKey: String {
-        [
+        let tagKey = linkedActivityTags?
+            .map(\.goalNormalizedKey)
+            .sorted()
+            .joined(separator: ",") ?? ""
+        let blockKey = generatedPlanBlockIDs?
+            .map(\.uuidString)
+            .sorted()
+            .joined(separator: ",") ?? ""
+        let parts: [String] = [
             title.goalNormalizedKey,
             goalKind.rawValue,
             linkedWorkoutTypeRaw?.goalNormalizedKey ?? "",
             linkedActivityName?.goalNormalizedKey ?? "",
-            linkedActivityTags?.map(\.goalNormalizedKey).sorted().joined(separator: ",") ?? "",
+            tagKey,
             linkedActivityKindRaw ?? "",
             linkedActivityRoleRaw ?? "",
-            tracksGeneratedPlanAdherence == true ? "planAdherence" : ""
-        ].joined(separator: "|")
+            tracksGeneratedPlanAdherence == true ? "planAdherence" : "",
+            blockKey
+        ]
+        return parts.joined(separator: "|")
     }
 
     var isTrackableAndSpecific: Bool {
@@ -611,6 +632,10 @@ extension WorkoutGoalSuggestion {
 
     private var hasTrackableScope: Bool {
         if tracksGeneratedPlanAdherence == true {
+            return true
+        }
+
+        if generatedPlanBlockIDs?.isEmpty == false {
             return true
         }
 

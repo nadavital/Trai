@@ -408,6 +408,12 @@ extension AIPromptBuilder {
                     "nullable": true,
                     "description": "True only when this goal tracks completion of the whole generated weekly plan structure rather than a specific activity, modality, exercise, or support block."
                 ],
+                "generatedPlanBlockIDs": [
+                    "type": "array",
+                    "items": ["type": "string"],
+                    "nullable": true,
+                    "description": "Durable training block UUIDs from the current/generated plan when this goal tracks a specific plan activity, exercise, modality, or support block. Empty for whole-plan adherence or non-plan goals."
+                ],
                 "targetValue": [
                     "type": "number",
                     "nullable": true

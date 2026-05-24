@@ -46,13 +46,21 @@ struct WorkoutGoalAISheet: View {
 
     private var plannedSessionSummaries: [String] {
         (workoutPlan?.templates ?? []).prefix(6).map { template in
+            let blockDetail = template.blocks
+                .sorted { $0.order < $1.order }
+                .prefix(4)
+                .map { block in
+                    "\(block.title) [blockID=\(block.id.uuidString), kind=\(block.kind.rawValue), role=\(block.role.rawValue)]"
+                }
+                .joined(separator: ", ")
             let detail = [
                 template.focusAreasDisplay.isEmpty ? template.sessionType.displayName : template.focusAreasDisplay,
-                template.primaryBlockSummary
+                template.primaryBlockSummary,
+                blockDetail
             ]
             .filter { !$0.isEmpty }
             .joined(separator: " • ")
-            return "\(template.name) (\(template.sessionType.displayName) • \(detail))"
+            return "\(template.name) [templateID=\(template.id.uuidString)] (\(template.sessionType.displayName) • \(detail))"
         }
     }
 

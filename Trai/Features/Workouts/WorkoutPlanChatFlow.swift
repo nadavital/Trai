@@ -74,6 +74,7 @@ struct WorkoutPlanChatFlow: View {
     @State private var refinementTask: Task<Void, Never>?
     @State private var refinementRequestID: UUID?
     @State private var refinementReviewMessagesBeforeRequest: [WorkoutPlanFlowMessage] = []
+    @State private var pendingRefinementMessageIDs: Set<UUID> = []
     @State private var generatedResultPresentationID: UUID?
     @State private var saveError: WorkoutPlanChatFlowSaveError?
 
@@ -1044,12 +1045,16 @@ struct WorkoutPlanChatFlow: View {
         generatedResultPresentationID = nil
         let previousReviewMessages = messages.filter(isGeneratedPlanReviewMessage)
         refinementReviewMessagesBeforeRequest = previousReviewMessages
+        let conversationHistory = refinementConversationHistory
+        let progressMessage = WorkoutPlanFlowMessage(type: .planUpdateInProgress(currentPlan))
+        let userMessage = WorkoutPlanFlowMessage(type: .userAnswer([messageText]))
+        pendingRefinementMessageIDs = [progressMessage.id, userMessage.id]
 
         // Add user message
         withAnimation(.spring(response: 0.3)) {
             messages.removeAll(where: isGeneratedPlanReviewMessage)
-            messages.append(WorkoutPlanFlowMessage(type: .planUpdateInProgress(currentPlan)))
-            messages.append(WorkoutPlanFlowMessage(type: .userAnswer([messageText])))
+            messages.append(progressMessage)
+            messages.append(userMessage)
             isRefiningPlan = true
             isGenerating = true
         }
@@ -1063,7 +1068,7 @@ struct WorkoutPlanChatFlow: View {
                     currentPlan: currentPlan,
                     request: request,
                     userMessage: messageText,
-                    conversationHistory: refinementConversationHistory
+                    conversationHistory: conversationHistory
                 )
                 try Task.checkCancellation()
                 let updatedPlan = response.proposedPlan ?? response.updatedPlan
@@ -1085,10 +1090,12 @@ struct WorkoutPlanChatFlow: View {
                         generatedPlan = newPlan
                         activeGeneratedPlanGoals = refreshedGoals
                         completedRefinementMessages.append(messageText)
+                        pendingRefinementMessageIDs = []
                         didRefineGeneratedPlan = true
                     } else {
                         refinementRequestID = nil
-                        messages.removeAll(where: isGeneratedPlanReviewMessage)
+                        messages.removeAll(where: isGeneratedPlanReviewOrPendingRefinementMessage)
+                        pendingRefinementMessageIDs = []
                         messages.append(WorkoutPlanFlowMessage(
                             type: .traiMessage(response.message)
                         ))
@@ -1125,7 +1132,8 @@ struct WorkoutPlanChatFlow: View {
                     refinementTask = nil
                     refinementRequestID = nil
                     withAnimation(.spring(response: 0.3)) {
-                        messages.removeAll(where: isGeneratedPlanReviewMessage)
+                        messages.removeAll(where: isGeneratedPlanReviewOrPendingRefinementMessage)
+                        pendingRefinementMessageIDs = []
                         messages.append(WorkoutPlanFlowMessage(
                             type: .error("Trai couldn't update your plan. Please try again.")
                         ))
@@ -1150,7 +1158,8 @@ struct WorkoutPlanChatFlow: View {
         refinementRequestID = nil
         generatedResultPresentationID = nil
         withAnimation(.spring(response: 0.3)) {
-            messages.removeAll(where: isGeneratedPlanReviewMessage)
+            messages.removeAll(where: isGeneratedPlanReviewOrPendingRefinementMessage)
+            pendingRefinementMessageIDs = []
             messages.append(contentsOf: refinementReviewMessagesBeforeRequest)
             isRefiningPlan = false
             isGenerating = false
@@ -1254,6 +1263,10 @@ struct WorkoutPlanChatFlow: View {
         }
     }
 
+    private func isGeneratedPlanReviewOrPendingRefinementMessage(_ message: WorkoutPlanFlowMessage) -> Bool {
+        isGeneratedPlanReviewMessage(message) || pendingRefinementMessageIDs.contains(message.id)
+    }
+
     private func savePlan() {
         guard !isGenerating, !isRefiningPlan else { return }
         guard let plan = generatedPlan else { return }
@@ -1343,9 +1356,10 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private func refreshExistingGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
-        for goal in workoutGoals where goal.status == .active && goal.tracksGeneratedPlanAdherence {
-            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
-        }
+        WorkoutGoal.refreshGeneratedPlanAdherenceGoals(
+            workoutGoals.filter { $0.status == .active },
+            for: plan
+        )
     }
 
     private func saveOnboardingPlan(_ plan: WorkoutPlan) {
@@ -1389,6 +1403,7 @@ struct WorkoutPlanChatFlow: View {
             let goals = deduplicatedGoals(suggestions.map { suggestion in
                 let goal = suggestion.asWorkoutGoal()
                 goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+                goal.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan)
                 return goal
             })
             return goals.isEmpty ? normalizedGeneratedPlanGoals(currentGoals, for: plan) : goals
@@ -1398,21 +1413,32 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private func normalizedGeneratedPlanGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) -> [WorkoutGoal] {
-        goals.forEach { $0.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan) }
+        goals.forEach {
+            $0.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+            $0.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan)
+        }
         return goals
     }
 
     private func plannedSessionSummaries(for plan: WorkoutPlan) -> [String] {
         plan.templates.prefix(6).map { template in
+            let blockDetail = template.blocks
+                .sorted { $0.order < $1.order }
+                .prefix(4)
+                .map { block in
+                    "\(block.title) [blockID=\(block.id.uuidString), kind=\(block.kind.rawValue), role=\(block.role.rawValue)]"
+                }
+                .joined(separator: ", ")
             let detail = [
                 template.sessionType.displayName,
                 template.focusAreasDisplay,
                 template.primaryBlockSummary,
+                blockDetail,
                 template.structuredExercises.prefix(3).map(\.exerciseName).joined(separator: ", ")
             ]
             .filter { !$0.isEmpty }
             .joined(separator: " • ")
-            return "\(template.name) (\(detail))"
+            return "\(template.name) [templateID=\(template.id.uuidString)] (\(detail))"
         }
     }
 
@@ -1522,21 +1548,32 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private var refinementConversationHistory: [WorkoutPlanChatMessage] {
-        messages.compactMap { message in
+        let completedMessages: Set<String> = Set(
+            completedRefinementMessages.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        )
+        var history: [WorkoutPlanChatMessage] = []
+
+        for message in messages {
             switch message.type {
             case .userAnswer(let answers):
-                return WorkoutPlanChatMessage(role: .user, content: answers.joined(separator: ", "))
+                let content = answers
+                    .joined(separator: ", ")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard completedMessages.contains(content) else { continue }
+                history.append(WorkoutPlanChatMessage(role: .user, content: content))
             case .traiMessage(let text):
-                return WorkoutPlanChatMessage(role: .assistant, content: text)
+                history.append(WorkoutPlanChatMessage(role: .assistant, content: text))
             case .planProposal(_, let message), .currentPlan(_, let message):
-                guard !message.isEmpty else { return nil }
-                return WorkoutPlanChatMessage(role: .assistant, content: message)
-            case .error(let text):
-                return WorkoutPlanChatMessage(role: .assistant, content: text)
+                guard !message.isEmpty else { continue }
+                history.append(WorkoutPlanChatMessage(role: .assistant, content: message))
+            case .error:
+                continue
             case .question(_), .thinking(_), .generatedGoals(_), .saveGeneratedPlan, .planUpdateInProgress(_), .planAccepted, .planUpdated(_):
-                return nil
+                continue
             }
         }
+
+        return history
     }
 
     private func buildEditingRequest() -> WorkoutPlanGenerationRequest {

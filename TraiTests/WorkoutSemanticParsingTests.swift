@@ -2016,11 +2016,28 @@ final class WorkoutSemanticParsingTests: XCTestCase {
     }
 
     func testGeneratedGoalsToInsertUsesStructuredDeduplicationAndNormalizesPlanAdherence() {
+        let mainBlock = WorkoutPlan.TrainingBlock(
+            kind: .conditioning,
+            role: .main,
+            title: "Main Conditioning",
+            detail: "Intervals",
+            activityTypeName: "Conditioning",
+            order: 0
+        )
+        let finisherBlock = WorkoutPlan.TrainingBlock(
+            kind: .conditioning,
+            role: .finisher,
+            title: "Finisher Conditioning",
+            detail: "Short intervals",
+            activityTypeName: "Conditioning",
+            order: 1
+        )
         let template = WorkoutPlan.WorkoutTemplate(
             name: "Generated Strength",
             sessionType: .strength,
             targetMuscleGroups: ["Back"],
             exercises: [],
+            blocks: [mainBlock, finisherBlock],
             estimatedDurationMinutes: 45,
             order: 0
         )
@@ -2060,7 +2077,8 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             targetValue: 1,
             targetUnit: "session",
             periodUnit: .week,
-            periodCount: 1
+            periodCount: 1,
+            generatedPlanBlockIDs: [finisherBlock.id]
         )
         let adherenceGoal = WorkoutGoal(
             title: "Complete plan",
@@ -2081,6 +2099,108 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(goalsToInsert.map(\.id), [distinctFinisherGoal.id, adherenceGoal.id])
         XCTAssertEqual(adherenceGoal.generatedPlanTemplateIDs, [template.id])
         XCTAssertEqual(adherenceGoal.targetValue, 1.0)
+    }
+
+    func testGeneratedPlanBlockScopedGoalMatchesOnlyDurableBlockID() {
+        let plannedBlockID = UUID()
+        let goal = WorkoutGoal(
+            title: "Complete mobility finisher",
+            goalKind: .frequency,
+            linkedActivityTags: ["Mobility"],
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete the mobility finisher from your plan.",
+            generatedPlanBlockIDs: [plannedBlockID]
+        )
+
+        let plannedWorkout = LiveWorkout(name: "Strength + Mobility", workoutType: .mixed, focusAreas: ["Mobility"])
+        let plannedEntry = LiveWorkoutEntry(
+            exerciseName: "Mobility Flow",
+            orderIndex: 0,
+            exerciseType: Exercise.Category.mobility.rawValue
+        )
+        plannedEntry.activityTypeName = "Mobility"
+        plannedEntry.targetTags = ["Mobility"]
+        plannedEntry.sourcePlanBlockID = plannedBlockID
+        plannedWorkout.entries = [plannedEntry]
+
+        let unrelatedWorkout = LiveWorkout(name: "Mobility Flow", workoutType: .mobility, focusAreas: ["Mobility"])
+        let unrelatedEntry = LiveWorkoutEntry(
+            exerciseName: "Mobility Flow",
+            orderIndex: 0,
+            exerciseType: Exercise.Category.mobility.rawValue
+        )
+        unrelatedEntry.activityTypeName = "Mobility"
+        unrelatedEntry.targetTags = ["Mobility"]
+        unrelatedWorkout.entries = [unrelatedEntry]
+
+        XCTAssertTrue(goal.matches(workout: plannedWorkout))
+        XCTAssertTrue(goal.matches(entry: plannedEntry))
+        XCTAssertFalse(goal.matches(workout: unrelatedWorkout))
+        XCTAssertFalse(goal.matches(entry: unrelatedEntry))
+    }
+
+    func testGeneratedPlanActivityGoalsWithoutDurableBlocksAreNotInserted() {
+        let planBlock = WorkoutPlan.TrainingBlock(
+            kind: .mobility,
+            role: .finisher,
+            title: "Mobility Finisher",
+            detail: "Hips",
+            activityTypeName: "Mobility",
+            order: 0
+        )
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Strength + Mobility",
+            sessionType: .mixed,
+            focusAreas: ["Mobility"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [planBlock],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let plan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let keywordScopedGoal = WorkoutGoal(
+            title: "Complete mobility finisher",
+            goalKind: .frequency,
+            linkedActivityTags: ["Mobility"],
+            linkedActivityRole: .finisher,
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete the mobility finisher from your plan."
+        )
+        let durableScopedGoal = WorkoutGoal(
+            title: "Complete mobility finisher",
+            goalKind: .frequency,
+            linkedActivityTags: ["Mobility"],
+            linkedActivityRole: .finisher,
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete the mobility finisher from your plan.",
+            generatedPlanBlockIDs: [planBlock.id]
+        )
+
+        let goalsToInsert = WorkoutGoal.generatedGoalsToInsert(
+            [keywordScopedGoal, durableScopedGoal],
+            existingGoals: [],
+            for: plan
+        )
+
+        XCTAssertEqual(goalsToInsert.map(\.id), [durableScopedGoal.id])
+        XCTAssertEqual(durableScopedGoal.generatedPlanBlockIDs, [planBlock.id])
     }
 
     func testCreateWorkoutGoalRejectsFreeTextActivityKindAndRole() async throws {

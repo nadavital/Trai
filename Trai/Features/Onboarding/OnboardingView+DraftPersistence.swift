@@ -57,6 +57,7 @@ extension OnboardingView {
         var baselineValue: Double?
         var tracksGeneratedPlanAdherence: Bool
         var generatedPlanTemplateIDsRaw: String
+        var generatedPlanBlockIDsRaw: String?
         var createdAt: Date
         var updatedAt: Date
         var completedAt: Date?
@@ -83,6 +84,7 @@ extension OnboardingView {
             baselineValue = goal.baselineValue
             tracksGeneratedPlanAdherence = goal.tracksGeneratedPlanAdherence
             generatedPlanTemplateIDsRaw = goal.generatedPlanTemplateIDsRaw
+            generatedPlanBlockIDsRaw = goal.generatedPlanBlockIDsRaw
             createdAt = goal.createdAt
             updatedAt = goal.updatedAt
             completedAt = goal.completedAt
@@ -112,6 +114,7 @@ extension OnboardingView {
                 tracksGeneratedPlanAdherence: tracksGeneratedPlanAdherence
             )
             goal.generatedPlanTemplateIDsRaw = generatedPlanTemplateIDsRaw
+            goal.generatedPlanBlockIDsRaw = generatedPlanBlockIDsRaw ?? ""
             goal.createdAt = createdAt
             goal.updatedAt = updatedAt
             goal.completedAt = completedAt

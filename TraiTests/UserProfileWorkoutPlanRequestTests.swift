@@ -2,6 +2,7 @@ import XCTest
 @testable import Trai
 
 final class UserProfileWorkoutPlanRequestTests: XCTestCase {
+    @MainActor
     func testOnboardingDraftPersistsWorkoutPlanPreferencesAndGeneratedGoals() throws {
         var workoutDraft = OnboardingWorkoutPlanDraft()
         workoutDraft.focuses = [.strength, .climbing]

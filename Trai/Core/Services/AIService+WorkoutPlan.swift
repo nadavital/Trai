@@ -337,6 +337,8 @@ extension AIService {
         - Do not create vague progression goals unless the structured target and successCriteria make the exact achievement verifiable from app data.
         - Broad goals are allowed, but the intent must be accurate: goal title, target fields, linkedWorkoutType/linkedActivityName/linkedActivityTags/linkedActivityKindRaw/linkedActivityRoleRaw, and successCriteria should all describe the same behavior Trai can track.
         - Set tracksGeneratedPlanAdherence true only when the goal tracks completion of the whole generated weekly plan structure, not a specific activity family, support block, exercise, or modality.
+        - If a goal is tied to a specific activity, exercise, modality, or support block from the plan you create, set generatedPlanBlockIDs to the matching block id values from that plan. These durable IDs are required for plan-specific activity goals so Trai does not guess from names or tags later.
+        - Leave generatedPlanBlockIDs empty for whole-plan adherence goals or goals that are not tied to a specific plan block.
         - If the plan includes a personalized constraint, habit, or recurring support block, prefer a goal for that specific plan behavior over generic progression.
         - Every goal must include successCriteria: one concise sentence that says how Trai and the person using the app will know the goal is achieved.
         - Write rationale, successCriteria, and notes directly to the person using the app with "you" and "your"; do not say "the user".

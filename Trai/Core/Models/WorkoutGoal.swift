@@ -28,6 +28,7 @@ final class WorkoutGoal {
     var baselineValue: Double?
     var tracksGeneratedPlanAdherence: Bool = false
     var generatedPlanTemplateIDsRaw: String = ""
+    var generatedPlanBlockIDsRaw: String = ""
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var completedAt: Date?
@@ -54,7 +55,8 @@ final class WorkoutGoal {
         targetDate: Date? = nil,
         checkInCadenceDays: Int? = nil,
         baselineValue: Double? = nil,
-        tracksGeneratedPlanAdherence: Bool = false
+        tracksGeneratedPlanAdherence: Bool = false,
+        generatedPlanBlockIDs: [UUID] = []
     ) {
         self.title = title
         self.goalKindRaw = goalKind.rawValue
@@ -74,6 +76,7 @@ final class WorkoutGoal {
         self.checkInCadenceDays = checkInCadenceDays
         self.baselineValue = baselineValue
         self.tracksGeneratedPlanAdherence = tracksGeneratedPlanAdherence
+        self.generatedPlanBlockIDs = generatedPlanBlockIDs
     }
 }
 
@@ -206,7 +209,11 @@ extension WorkoutGoal {
     }
 
     var hasActivityScope: Bool {
-        trimmedActivityName != nil || !linkedActivityTags.isEmpty || linkedActivityKind != nil || linkedActivityRole != nil
+        trimmedActivityName != nil
+            || !linkedActivityTags.isEmpty
+            || linkedActivityKind != nil
+            || linkedActivityRole != nil
+            || !generatedPlanBlockIDs.isEmpty
     }
 
     var trimmedNotes: String {
@@ -306,7 +313,8 @@ extension WorkoutGoal {
             linkedActivityTags.map(\.goalNormalizedKey).filter { !$0.isEmpty }.sorted().joined(separator: ","),
             linkedActivityKindRaw?.goalNormalizedKey ?? "",
             linkedActivityRoleRaw?.goalNormalizedKey ?? "",
-            tracksGeneratedPlanAdherence ? "planAdherence" : ""
+            tracksGeneratedPlanAdherence ? "planAdherence" : "",
+            generatedPlanBlockIDs.map(\.uuidString).sorted().joined(separator: ",")
         ]
 
         let targetParts: [String] = [
@@ -333,11 +341,23 @@ extension WorkoutGoal {
 
         targetValue = Double(plan.daysPerWeek)
         generatedPlanTemplateIDs = plan.templates.map(\.id)
+        generatedPlanBlockIDs = []
         linkedWorkoutTypeRaw = nil
         linkedActivityName = nil
         linkedActivityTags = []
         linkedActivityKindRaw = nil
         linkedActivityRoleRaw = nil
+        updatedAt = Date()
+    }
+
+    func normalizeGeneratedPlanBlockScopeIfNeeded(for plan: WorkoutPlan) {
+        guard !tracksGeneratedPlanAdherence, !generatedPlanBlockIDs.isEmpty else { return }
+        let validBlockIDs = Set(plan.templates.flatMap { template in
+            template.blocks.map(\.id)
+        })
+        let normalizedIDs = generatedPlanBlockIDs.filter { validBlockIDs.contains($0) }
+        guard normalizedIDs != generatedPlanBlockIDs else { return }
+        generatedPlanBlockIDs = normalizedIDs
         updatedAt = Date()
     }
 
@@ -348,6 +368,9 @@ extension WorkoutGoal {
         goals
             .filter(\.tracksGeneratedPlanAdherence)
             .forEach { $0.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan) }
+        goals
+            .filter { !$0.tracksGeneratedPlanAdherence && !$0.generatedPlanBlockIDs.isEmpty }
+            .forEach { $0.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan) }
     }
 
     static func generatedGoalsToInsert(
@@ -359,6 +382,12 @@ extension WorkoutGoal {
         var result: [WorkoutGoal] = []
         for goal in goals {
             goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+            goal.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan)
+            guard goal.tracksGeneratedPlanAdherence
+                || !goal.hasActivityScope
+                || !goal.generatedPlanBlockIDs.isEmpty else {
+                continue
+            }
             let key = goal.planSetupDeduplicationKey
             guard !key.isEmpty, existingKeys.insert(key).inserted else { continue }
             result.append(goal)
@@ -402,6 +431,10 @@ extension WorkoutGoal {
     }
 
     func matches(workout: LiveWorkout) -> Bool {
+        if !generatedPlanBlockIDs.isEmpty {
+            return matchesGeneratedPlanBlock(workout: workout)
+        }
+
         if tracksGeneratedPlanAdherence {
             return matchesGeneratedPlanTemplate(workout: workout)
         }
@@ -442,6 +475,11 @@ extension WorkoutGoal {
     }
 
     func matches(entry: LiveWorkoutEntry) -> Bool {
+        if !generatedPlanBlockIDs.isEmpty {
+            guard let sourcePlanBlockID = entry.sourcePlanBlockID else { return false }
+            return Set(generatedPlanBlockIDs).contains(sourcePlanBlockID)
+        }
+
         let entryTokens = Set(
             ([entry.exerciseName, entry.activityTypeName] + entry.targetTags)
                 .map(\.goalNormalizedKey)
@@ -474,6 +512,8 @@ extension WorkoutGoal {
     }
 
     func matches(session: WorkoutSession) -> Bool {
+        guard generatedPlanBlockIDs.isEmpty else { return false }
+
         if let linkedWorkoutType, linkedWorkoutType != session.inferredWorkoutMode {
             return false
         }
@@ -608,10 +648,32 @@ extension WorkoutGoal {
         }
     }
 
+    var generatedPlanBlockIDs: [UUID] {
+        get {
+            generatedPlanBlockIDsRaw
+                .split(separator: ",")
+                .compactMap { UUID(uuidString: String($0)) }
+        }
+        set {
+            generatedPlanBlockIDsRaw = newValue
+                .map(\.uuidString)
+                .joined(separator: ",")
+        }
+    }
+
     func matchesGeneratedPlanTemplate(workout: LiveWorkout) -> Bool {
         guard tracksGeneratedPlanAdherence else { return false }
         guard let sourceID = workout.sourcePlanTemplateID else { return false }
         return Set(generatedPlanTemplateIDs).contains(sourceID)
+    }
+
+    func matchesGeneratedPlanBlock(workout: LiveWorkout) -> Bool {
+        let blockIDs = Set(generatedPlanBlockIDs)
+        guard !blockIDs.isEmpty else { return false }
+        return (workout.entries ?? []).contains { entry in
+            guard let sourcePlanBlockID = entry.sourcePlanBlockID else { return false }
+            return blockIDs.contains(sourcePlanBlockID)
+        }
     }
 }
 
