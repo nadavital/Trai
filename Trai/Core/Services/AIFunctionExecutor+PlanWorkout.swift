@@ -1062,7 +1062,8 @@ extension AIFunctionExecutor {
                     }
                     sourcePlanBlockID = parsedSourcePlanBlockID
                 } else {
-                    sourcePlanBlockID = nil
+                    let persistedBlocks = sourcePlanTemplate?.blocks ?? []
+                    sourcePlanBlockID = persistedBlocks.count == 1 ? persistedBlocks[0].id : nil
                 }
                 let targetTags = stringArray(from: exerciseData["target_tags"])
                 let trackingFields = stringArray(from: exerciseData["tracking_fields"])

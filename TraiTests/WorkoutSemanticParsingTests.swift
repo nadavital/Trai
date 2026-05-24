@@ -454,6 +454,153 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(workoutLog.exercises.first?.sourcePlanBlockID, template.blocks[0].id)
     }
 
+    func testFunctionCallingPromptIncludesWorkoutPlanBlockIDsForPlannedLogs() {
+        let block = WorkoutPlan.TrainingBlock(
+            kind: .sportPractice,
+            role: .finisher,
+            title: "Limit Bouldering",
+            detail: "Planned climbing block",
+            activityTypeName: "Bouldering",
+            activityTags: ["Climbing"],
+            durationMinutes: 35,
+            order: 0
+        )
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Pull + Climb",
+            sessionType: .mixed,
+            focusAreas: ["Pull", "Climbing"],
+            targetMuscleGroups: ["back"],
+            exercises: [],
+            blocks: [block],
+            estimatedDurationMinutes: 50,
+            order: 0
+        )
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Mixed climbing plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        let prompt = AIService.workoutPlanPromptSectionForTesting(profile: profile)
+
+        XCTAssertTrue(prompt.contains(template.id.uuidString))
+        XCTAssertTrue(prompt.contains(block.id.uuidString))
+        XCTAssertTrue(prompt.contains("source_plan_block_id"))
+        XCTAssertTrue(prompt.contains("Bouldering [kind: sportPractice, role: finisher]"))
+    }
+
+    func testLogWorkoutInfersSinglePersistedPlanBlockID() async throws {
+        let block = WorkoutPlan.TrainingBlock(
+            kind: .sportPractice,
+            title: "Limit Bouldering",
+            detail: "Planned climbing block",
+            activityTypeName: "Bouldering",
+            activityTags: ["Climbing"],
+            durationMinutes: 35,
+            order: 0
+        )
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Pull + Climb",
+            sessionType: .mixed,
+            focusAreas: ["Pull", "Climbing"],
+            targetMuscleGroups: ["back"],
+            exercises: [],
+            blocks: [block],
+            estimatedDurationMinutes: 50,
+            order: 0
+        )
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Mixed climbing plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: profile).execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "name": "Pull + Climb",
+                    "type": "mixed",
+                    "source_plan_template_id": template.id.uuidString,
+                    "duration_minutes": 50,
+                    "exercises": [
+                        [
+                            "name": "Limit Bouldering",
+                            "category": "sportPractice",
+                            "activity_name": "Bouldering",
+                            "duration_minutes": 35
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutLog(let workoutLog) = result else {
+            return XCTFail("Expected workout log suggestion")
+        }
+
+        XCTAssertEqual(workoutLog.sourcePlanTemplateID, template.id)
+        XCTAssertEqual(workoutLog.exercises.first?.sourcePlanBlockID, block.id)
+    }
+
+    func testAcceptedWorkoutLogMappingPreservesBlockIDForGeneratedGoalMatching() throws {
+        let templateID = UUID()
+        let blockID = UUID()
+        let workoutLog = SuggestedWorkoutLog(
+            name: "Pull + Climb",
+            workoutType: WorkoutMode.mixed.rawValue,
+            activityName: "Climbing",
+            activityTags: ["Climbing"],
+            sourcePlanTemplateID: templateID,
+            durationMinutes: 50,
+            exercises: [
+                SuggestedWorkoutLog.LoggedExercise(
+                    name: "Limit Bouldering",
+                    category: Exercise.Category.sportPractice.rawValue,
+                    activityTypeName: "Bouldering",
+                    activityRole: WorkoutPlan.TrainingBlock.Role.finisher.rawValue,
+                    sourcePlanBlockID: blockID,
+                    targetTags: ["Climbing"],
+                    trackingFields: [Exercise.TrackingField.duration.rawValue],
+                    durationMinutes: 35,
+                    notes: "Finished the planned block.",
+                    sets: []
+                )
+            ],
+            notes: nil
+        )
+
+        let workout = try ChatWorkoutLogSuggestionMapper.makeWorkout(
+            from: workoutLog,
+            now: Date(timeIntervalSince1970: 100)
+        )
+        let entry = try XCTUnwrap(workout.entries?.first)
+        let goal = WorkoutGoal(
+            title: "Complete planned bouldering",
+            goalKind: .frequency,
+            linkedActivityKind: .sportPractice,
+            targetValue: 1,
+            targetUnit: "blocks",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "Complete the planned bouldering block.",
+            generatedPlanBlockIDs: [blockID],
+            requiresGeneratedPlanBlockScope: true
+        )
+
+        XCTAssertEqual(workout.sourcePlanTemplateID, templateID)
+        XCTAssertEqual(entry.sourcePlanBlockID, blockID)
+        XCTAssertTrue(goal.matches(workout: workout))
+    }
+
     func testLogWorkoutRejectsSourcePlanTemplateIDOutsideCurrentPlan() async throws {
         let template = WorkoutPlan.WorkoutTemplate(
             name: "Plan Pull Day",

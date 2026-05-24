@@ -2463,6 +2463,38 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertFalse(WorkoutPlanEditSheet.canSaveCurrentPlan(savedPlan: nil, editingBase: editingBase))
     }
 
+    @MainActor
+    func testWorkoutPlanEditSavePersistsDefaultBlocksWhenSemanticEditClearsAuthoredBlocks() {
+        let editedTemplate = WorkoutPlan.WorkoutTemplate(
+            name: "Mobility",
+            sessionType: .mobility,
+            focusAreas: ["hips"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [],
+            estimatedDurationMinutes: 30,
+            order: 0
+        )
+        let editedPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [editedTemplate],
+            rationale: "Manual edit",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        let normalizedPlan = WorkoutPlanEditSheet(currentPlan: editedPlan)
+            .normalizedPlanForSaveForTesting(editedPlan)
+        let savedTemplate = try! XCTUnwrap(normalizedPlan.templates.first)
+        let savedBlock = try! XCTUnwrap(savedTemplate.blocks.first)
+
+        XCTAssertFalse(savedTemplate.blocks.isEmpty)
+        XCTAssertEqual(savedTemplate.displayBlocks.map(\.id), [savedBlock.id])
+        XCTAssertEqual(savedBlock.kind, .mobility)
+        XCTAssertEqual(savedBlock.activityTypeName, "Hips")
+    }
+
     func testWorkoutPlanSetupSaveGuardRejectsPlanChangedWhileOpen() {
         let setupBase = makePlan(
             templateName: "Upper Strength",

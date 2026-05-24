@@ -619,7 +619,8 @@ struct WorkoutPlanEditSheet: View {
                     dayIndex: index + 1
                 )
                 : trimmedName
-            return copyTemplate(template, name: finalName, order: index)
+            let durableBlocks = template.blocks.isEmpty ? template.displayBlocks : template.blocks
+            return copyTemplate(template, name: finalName, blocks: durableBlocks, order: index)
         }
 
         return WorkoutPlan(
@@ -634,6 +635,12 @@ struct WorkoutPlanEditSheet: View {
             warnings: plan.warnings
         )
     }
+
+#if DEBUG
+    func normalizedPlanForSaveForTesting(_ plan: WorkoutPlan) -> WorkoutPlan {
+        normalizedPlanForSave(plan)
+    }
+#endif
 
     private func savePlan(_ plan: WorkoutPlan) -> Bool {
         guard let profile = userProfile else { return false }

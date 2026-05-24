@@ -594,48 +594,42 @@ extension ChatView {
 
 // MARK: - Workout Log Suggestion Actions
 
-extension ChatView {
-    func acceptWorkoutLogSuggestion(_ workoutLog: SuggestedWorkoutLog, for message: ChatMessage) {
-        guard !ChatWorkoutLogSuggestionContext.isStale(
-            suggestion: workoutLog,
-            messageTimestamp: message.timestamp,
-            currentPlanUpdatedAt: profile?.workoutPlanGeneratedAt,
-            currentTemplateIDs: profile?.workoutPlan.map { Set($0.templates.map(\.id)) }
-        ) else {
-            message.suggestedWorkoutLogDismissed = true
-            message.errorMessage = "This planned workout log is no longer current. Ask Trai to log the latest plan session instead."
-            try? modelContext.save()
-            HapticManager.error()
-            return
+enum ChatWorkoutLogSuggestionMapper {
+    enum MappingError: Error {
+        case invalidWorkoutType
+        case invalidCategory
+        case missingActivityName
+
+        var userMessage: String {
+            switch self {
+            case .invalidWorkoutType, .invalidCategory:
+                return "This workout log needs stable activity data before it can be saved. Ask Trai to regenerate it."
+            case .missingActivityName:
+                return "This workout log needs activity names before it can be saved. Ask Trai to regenerate it."
+            }
+        }
+    }
+
+    static func makeWorkout(from workoutLog: SuggestedWorkoutLog, now: Date = Date()) throws -> LiveWorkout {
+        guard let workoutType = LiveWorkout.WorkoutType(rawValue: workoutLog.workoutType) else {
+            throw MappingError.invalidWorkoutType
         }
 
-        // Create a LiveWorkout with proper exercise details
-        guard let workoutType = LiveWorkout.WorkoutType(rawValue: workoutLog.workoutType) else {
-            message.errorMessage = "This workout log needs stable activity data before it can be saved. Ask Trai to regenerate it."
-            HapticManager.error()
-            return
-        }
-        let semanticFocus = workoutLog.semanticFocusAreas
         let workout = LiveWorkout(
             name: workoutLog.displayName,
             workoutType: workoutType,
             targetMuscleGroups: [],
-            focusAreas: semanticFocus
+            focusAreas: workoutLog.semanticFocusAreas
         )
         workout.sourcePlanTemplateID = workoutLog.sourcePlanTemplateID
 
-        // Add exercises as entries
         var entries: [LiveWorkoutEntry] = []
         for (index, exercise) in workoutLog.exercises.enumerated() {
             guard let category = exercise.strictCategory else {
-                message.errorMessage = "This workout log needs stable activity categories before it can be saved. Ask Trai to regenerate it."
-                HapticManager.error()
-                return
+                throw MappingError.invalidCategory
             }
             if category != .strength, exercise.trimmedActivityTypeName == nil {
-                message.errorMessage = "This workout log needs activity names before it can be saved. Ask Trai to regenerate it."
-                HapticManager.error()
-                return
+                throw MappingError.missingActivityName
             }
             let entry = LiveWorkoutEntry(
                 exerciseName: exercise.name,
@@ -652,7 +646,6 @@ extension ChatView {
                 entry.notes = exerciseNotes
             }
 
-            // Add each set with its specific reps/weight
             for setData in exercise.sets where category == .strength {
                 let cleanWeight = WeightUtility.cleanWeightFromKg(setData.weightKg ?? 0)
                 entry.addSet(LiveWorkoutEntry.SetData(
@@ -684,7 +677,7 @@ extension ChatView {
                     segments.forEach { entry.addActivitySegment($0) }
                 }
                 if entry.hasExercisePreferenceSignal {
-                    entry.completedAt = Date()
+                    entry.completedAt = now
                 }
             }
 
@@ -692,16 +685,45 @@ extension ChatView {
         }
         workout.entries = entries
 
-        // Set duration by adjusting start time
         if let duration = workoutLog.resolvedDurationMinutes {
-            workout.startedAt = Date().addingTimeInterval(-Double(duration) * 60)
+            workout.startedAt = now.addingTimeInterval(-Double(duration) * 60)
         }
-
-        // Mark as completed
-        workout.completedAt = Date()
+        workout.completedAt = now
 
         if let notes = workoutLog.notes {
             workout.notes = notes
+        }
+
+        return workout
+    }
+}
+
+extension ChatView {
+    func acceptWorkoutLogSuggestion(_ workoutLog: SuggestedWorkoutLog, for message: ChatMessage) {
+        guard !ChatWorkoutLogSuggestionContext.isStale(
+            suggestion: workoutLog,
+            messageTimestamp: message.timestamp,
+            currentPlanUpdatedAt: profile?.workoutPlanGeneratedAt,
+            currentTemplateIDs: profile?.workoutPlan.map { Set($0.templates.map(\.id)) }
+        ) else {
+            message.suggestedWorkoutLogDismissed = true
+            message.errorMessage = "This planned workout log is no longer current. Ask Trai to log the latest plan session instead."
+            try? modelContext.save()
+            HapticManager.error()
+            return
+        }
+
+        let workout: LiveWorkout
+        do {
+            workout = try ChatWorkoutLogSuggestionMapper.makeWorkout(from: workoutLog)
+        } catch let error as ChatWorkoutLogSuggestionMapper.MappingError {
+            message.errorMessage = error.userMessage
+            HapticManager.error()
+            return
+        } catch {
+            message.errorMessage = "This workout log needs stable activity data before it can be saved. Ask Trai to regenerate it."
+            HapticManager.error()
+            return
         }
 
         // Save to database

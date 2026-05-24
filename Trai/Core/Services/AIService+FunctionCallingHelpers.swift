@@ -55,7 +55,7 @@ extension AIService {
 
         if let profile = context.profile {
             prompt += buildUserInfoSection(profile: profile, hasWorkoutToday: context.hasWorkoutToday)
-            prompt += buildWorkoutPlanSection(profile: profile)
+            prompt += Self.workoutPlanPromptSection(profile: profile)
         }
 
         prompt += buildTodaysFoodSection(entries: context.todaysFoodEntries)
@@ -199,7 +199,7 @@ extension AIService {
         return String(format: "%.1f", value)
     }
 
-    private func buildWorkoutPlanSection(profile: UserProfile) -> String {
+    private static func workoutPlanPromptSection(profile: UserProfile) -> String {
         guard let plan = profile.workoutPlan else { return "" }
 
         let sessionPreview = plan.templates
@@ -207,9 +207,19 @@ extension AIService {
             .map { template in
                 let blocks = template.primaryBlockSummary
                 let title = blocks.isEmpty ? template.name : "\(template.name) (\(blocks))"
-                return "\(template.id.uuidString): \(title)"
+                let blockPreview = template.blocks
+                    .sorted { $0.order < $1.order }
+                    .map { block in
+                        let activity = block.displayActivityName
+                        return "\(block.id.uuidString): \(activity) [kind: \(block.kind.rawValue), role: \(block.role.rawValue)]"
+                    }
+                    .joined(separator: "; ")
+                if blockPreview.isEmpty {
+                    return "- \(template.id.uuidString): \(title)"
+                }
+                return "- \(template.id.uuidString): \(title)\n  Blocks: \(blockPreview)"
             }
-            .joined(separator: " | ")
+            .joined(separator: "\n")
 
         return """
 
@@ -217,11 +227,19 @@ extension AIService {
         - Split: \(plan.splitType.displayName)
         - Days per week: \(plan.daysPerWeek)
         \(plan.planIntent.map { "- Intent: \($0.summary)" } ?? "")
-        - Sessions: \(sessionPreview)
+        - Sessions:
+        \(sessionPreview)
         - When starting or logging a planned session, pass the exact session id as source_plan_template_id.
+        - When logging a planned workout item, pass the exact block id as source_plan_block_id on that exercise item.
 
         """
     }
+
+#if DEBUG
+    static func workoutPlanPromptSectionForTesting(profile: UserProfile) -> String {
+        workoutPlanPromptSection(profile: profile)
+    }
+#endif
 
     private func buildMemoriesSection(memoriesContext: String) -> String {
         """

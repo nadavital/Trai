@@ -314,6 +314,9 @@
 - The seeded plan-review refinement flow could briefly show an enabled save action before the queued refinement started, allowing the old plan to be saved.
 - Non-strength planned start cards relied on `SuggestedExercise.id` as an implicit block ID instead of carrying `sourcePlanBlockID` directly.
 - Onboarding/profile generated-plan review could briefly expose a live save action before the queued initial refinement prompt started.
+- Manual plan edits that changed a day's semantic focus could save `blocks: []`, causing later default display blocks to get fresh non-durable UUIDs.
+- Normal chat workout-plan context exposed template IDs but not block IDs, so planned workout logs could not reliably attach `sourcePlanBlockID` for block-scoped goals.
+- Accepted planned workout-log mapping had no direct regression coverage for carrying source template/block IDs into saved `LiveWorkout` rows.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -402,6 +405,12 @@
 - Result after durable workout-scope gap fix: passed, 6 tests, 0 failures; the intended `WorkoutTemplateServiceTests` selector was corrected and rerun below.
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest16 -skip-testing:TraiUITests -only-testing:TraiTests/WorkoutTemplateServiceTests/testCreateWorkoutForIntentDoesNotUseNameOnlyRouteSemantics`
 - Result after durable workout-scope gap fix template rerun: passed, 1 test, 0 failures.
+- `git diff --check`
+- Result after durable planned-log/block-context fix: no whitespace errors.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest18 -skip-testing:TraiUITests -only-testing:TraiTests/WorkoutSemanticParsingTests/testFunctionCallingPromptIncludesWorkoutPlanBlockIDsForPlannedLogs -only-testing:TraiTests/WorkoutSemanticParsingTests/testLogWorkoutInfersSinglePersistedPlanBlockID -only-testing:TraiTests/WorkoutSemanticParsingTests/testAcceptedWorkoutLogMappingPreservesBlockIDForGeneratedGoalMatching -only-testing:TraiTests/WorkoutSemanticParsingTests/testLogWorkoutPreservesSourcePlanTemplateID -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanEditSavePersistsDefaultBlocksWhenSemanticEditClearsAuthoredBlocks`
+- Result after durable planned-log/block-context fix: passed, 5 tests, 0 failures.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest19 -skip-testing:TraiUITests -only-testing:TraiTests/WorkoutSemanticParsingTests/testFunctionCallingPromptIncludesWorkoutPlanBlockIDsForPlannedLogs`
+- Result after prompt actor-warning cleanup: passed, 1 test, 0 failures.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -458,6 +467,8 @@
 - Save/replace a workout plan from Profile, Workouts, Settings, or plan edit after a workout-plan chat card exists, then accept the older card and confirm it is rejected as no longer current.
 - Ask "what should I train today?" in a situation where Trai first checks context/recovery, and confirm the final answer still includes the workout start card.
 - Ask Trai to log a generated-plan workout and confirm a valid current template advances adherence, while an old/stale template cannot be logged against the current plan.
+- In normal chat, ask Trai to log a completed generated-plan session with a support/cardio/mobility block and confirm the block-scoped goal advances.
+- Manually edit a saved plan day's focus or modality, save, reopen, and confirm planned starts/logs still use stable block IDs for that day.
 - Generate chat workout-plan proposal A, save or replace plan B from Profile/Workouts/Settings, return to the old chat and ask for a tweak; confirm Trai uses current plan B or asks for clarification instead of refining proposal A.
 - Generate a workout-plan proposal, ask for a follow-up tweak that fails, then retry; confirm the retry still uses the fresh unsaved proposal as context.
 - During onboarding, generate a workout plan/goals, go back and change profile/nutrition inputs, then continue; confirm the old workout plan/goals are cleared and must be regenerated/reconfirmed.
