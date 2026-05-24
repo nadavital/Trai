@@ -82,6 +82,18 @@ nonisolated struct WidgetData: Codable {
     var calorieProgress: Double { progress(for: .calories) }
     var proteinProgress: Double { progress(for: .protein) }
 
+    var workoutActionRoute: AppRoute? {
+        guard !todayWorkoutCompleted else { return nil }
+        return .workout(
+            templateID: recommendedWorkoutTemplateID,
+            templateName: recommendedWorkout
+        )
+    }
+
+    var workoutActionURLString: String? {
+        workoutActionRoute?.urlString
+    }
+
     nonisolated enum Macro {
         case calories
         case protein

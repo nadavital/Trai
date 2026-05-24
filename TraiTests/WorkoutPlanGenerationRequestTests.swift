@@ -1336,7 +1336,67 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
     }
 
     @MainActor
-    func testWorkoutPlanRefinementAllowsScheduleReductionToDropRemovedTemplateIDs() {
+    func testWorkoutPlanRefinementRejectsScheduleReductionThatDropsUnchangedTemplateSemantics() {
+        let keptTemplateID = UUID()
+        let removedTemplateID = UUID()
+        let keptBlockID = UUID()
+        let removedBlockID = UUID()
+        let keptTemplate = WorkoutPlan.WorkoutTemplate(
+            id: keptTemplateID,
+            name: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: keptBlockID,
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Upper-body lifting",
+                    activityTypeName: "Strength",
+                    activityTags: ["Upper"],
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let removedTemplate = WorkoutPlan.WorkoutTemplate(
+            id: removedTemplateID,
+            name: "Lower Strength",
+            sessionType: .strength,
+            focusAreas: ["Lower"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: removedBlockID,
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Lower-body lifting",
+                    activityTypeName: "Strength",
+                    activityTags: ["Lower"],
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 1
+        )
+        let currentPlan = makePlan(templates: [keptTemplate, removedTemplate], daysPerWeek: 2)
+        let reducedPlan = makePlan(templates: [keptTemplate], daysPerWeek: 2)
+
+        XCTAssertNil(
+            AIService.validateRefinedWorkoutPlanForTesting(
+                reducedPlan,
+                currentPlan: currentPlan,
+                allowsTemplateCountChange: true
+            )
+        )
+    }
+
+    @MainActor
+    func testWorkoutPlanRefinementAllowsExplicitScheduleReductionToDropChangedTemplate() {
         let keptTemplateID = UUID()
         let removedTemplateID = UUID()
         let keptBlockID = UUID()
@@ -1389,11 +1449,95 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         let validated = AIService.validateRefinedWorkoutPlanForTesting(
             reducedPlan,
             currentPlan: currentPlan,
-            allowsTemplateCountChange: true
+            allowsTemplateCountChange: true,
+            allowsActivitySemanticChange: true,
+            changedTemplateIDs: [removedTemplateID]
         )
 
         XCTAssertEqual(validated?.templates.map(\.id), [keptTemplateID])
         XCTAssertEqual(validated?.daysPerWeek, 1)
+    }
+
+    @MainActor
+    func testWorkoutPlanRefinementAllowsScheduleReductionThatMovesRemovedTemplateBlock() {
+        let keptTemplateID = UUID()
+        let removedTemplateID = UUID()
+        let keptBlockID = UUID()
+        let movedBlockID = UUID()
+        let keptTemplate = WorkoutPlan.WorkoutTemplate(
+            id: keptTemplateID,
+            name: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: keptBlockID,
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Upper-body lifting",
+                    activityTypeName: "Strength",
+                    activityTags: ["Upper"],
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let removedTemplate = WorkoutPlan.WorkoutTemplate(
+            id: removedTemplateID,
+            name: "Bouldering Skill",
+            sessionType: .climbing,
+            focusAreas: ["Climbing"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: movedBlockID,
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Climbing skill work",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing"],
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 1
+        )
+        let mergedTemplate = WorkoutPlan.WorkoutTemplate(
+            id: keptTemplateID,
+            name: "Upper Strength + Bouldering",
+            sessionType: .mixed,
+            focusAreas: ["Upper", "Climbing"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: keptTemplate.blocks + [
+                WorkoutPlan.TrainingBlock(
+                    id: movedBlockID,
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Climbing skill work",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing"],
+                    order: 1
+                )
+            ],
+            estimatedDurationMinutes: 60,
+            order: 0
+        )
+        let currentPlan = makePlan(templates: [keptTemplate, removedTemplate], daysPerWeek: 2)
+        let reducedPlan = makePlan(templates: [mergedTemplate], daysPerWeek: 1)
+
+        let validated = AIService.validateRefinedWorkoutPlanForTesting(
+            reducedPlan,
+            currentPlan: currentPlan,
+            allowsTemplateCountChange: true
+        )
+
+        XCTAssertEqual(validated?.templates.map(\.id), [keptTemplateID])
+        XCTAssertEqual(validated?.templates.first?.blocks.map(\.id), [keptBlockID, movedBlockID])
     }
 
     @MainActor

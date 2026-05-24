@@ -378,22 +378,8 @@ extension WorkoutGoal {
             return false
         }
 
-        let normalizedUnit = targetUnit.goalNormalizedKey
-        guard Self.planAdherenceTargetUnits.contains(normalizedUnit) else {
-            return false
-        }
-
         return true
     }
-
-    private static let planAdherenceTargetUnits: Set<String> = [
-        "day",
-        "days",
-        "session",
-        "sessions",
-        "workout",
-        "workouts"
-    ]
 
     var hasValidTrackingCriteria: Bool {
         guard !trimmedSuccessCriteria.isEmpty else { return false }
@@ -416,6 +402,10 @@ extension WorkoutGoal {
     }
 
     func matches(workout: LiveWorkout) -> Bool {
+        if tracksGeneratedPlanAdherence {
+            return matchesGeneratedPlanTemplate(workout: workout)
+        }
+
         guard hasActivityScope else {
             if let linkedWorkoutType {
                 return linkedWorkoutType == workout.type

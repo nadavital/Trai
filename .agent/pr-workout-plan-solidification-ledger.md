@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `c6db78a Harden workout plan setup saves`
+- Latest pushed fix before current round: `048a4be Keep workout plan block semantics scoped`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -27,6 +27,10 @@
 - Blocked standard Profile/Settings/Workouts setup saves from overwriting a workout plan that changed while the setup sheet was open.
 - Guarded delayed generated-plan result presentation so stale refinement cards/goals/save rows cannot append after a newer refinement starts.
 - Required retained durable activity blocks to stay inside their original template and preserve semantics unless the exact block ID is listed in `changedBlockIDs`.
+- Required schedule reductions to explicitly mark removed templates as semantically changed or preserve their durable activity blocks elsewhere in the reduced plan.
+- Made generated plan-adherence goals match workout history rows by durable source template ID instead of falling through to broad unscoped goal matching.
+- Normalized generated plan-adherence goals from the durable `tracksGeneratedPlanAdherence` flag instead of a fixed target-unit vocabulary.
+- Routed widget workout actions through the recommended durable template ID and disabled completed workout rows so they cannot start duplicate sessions.
 
 ## Fresh Review Rounds
 
@@ -158,6 +162,15 @@
 - Regression-test coverage: added focused tests for moved authored blocks and retained-block mutation inside a changed template; updated explicit semantic-change coverage to require the changed block ID.
 - Validation note: focused XCTest pass succeeded for 7 semantic refinement tests; `git diff --check` is clean.
 
+### Round 2026-05-24 After `048a4be`
+- Fresh agent results: chat lifecycle and setup/persistence passes found no serious issues. Semantic durability, routing/adherence, and persistence passes found one actual P1 and three actual P2s.
+- Schedule-reduction semantics: fixed verified P1 where reducing weekly days could silently remove an unchanged modality/template because validation only checked retained template pairs.
+- Generated goal relevance: fixed verified P2 where generated plan-adherence goals could badge unrelated workout history rows because `matches(workout:)` treated unscoped generated goals as matching every workout.
+- Generated goal normalization: fixed verified P2 where AI-produced plan-adherence goals with durable `tracksGeneratedPlanAdherence` but free-form units such as `planned sessions` validated yet never attached to generated template IDs.
+- Widget routing: fixed verified P2 where medium widget workout actions ignored `recommendedWorkoutTemplateID`, and completed large widget rows could still deep-link into another workout.
+- Regression-test coverage: added focused tests for unscoped schedule reduction rejection, explicit/merged reduction allowance, generated-goal history matching, free-form adherence units, and widget workout route state.
+- Validation note: focused XCTest pass succeeded for 7 selected tests; `git diff --check` is clean.
+
 ## Manual Test Queue
 - From Profile, Settings, and Workouts, open standard workout-plan setup, mutate/save a different workout plan elsewhere before tapping Save, and confirm the stale setup is blocked instead of overwriting the newer plan.
 - Run two rapid generated-plan refinements back to back and confirm only the latest result package remains, with no duplicate or stale plan/goals/save rows.
@@ -167,6 +180,10 @@
 - Start a planned workout through Shortcuts/widget/deep link and confirm durable template routing still wins over labels.
 - Refine a mixed template by removing only a cardio finisher and confirm unchanged strength/climbing blocks keep their original activity identity.
 - Try moving a durable activity block into a different template and confirm validation rejects it.
+- Reduce a mixed plan from two modalities to one day; confirm unchanged modalities are merged/preserved or the edit is rejected unless the removed template is explicitly changed.
+- Complete one generated-plan workout, then log an unrelated custom workout and confirm generated plan-adherence goals do not badge the unrelated history row.
+- Generate/save a plan-adherence goal with AI wording like `planned sessions`; confirm it stores the generated template IDs and progresses from planned workouts.
+- From the medium widget, tap the workout action beside `Up Next` and confirm it starts the exact recommended planned template. After completing today's workout, confirm the large widget completed row does not start a duplicate workout.
 
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.

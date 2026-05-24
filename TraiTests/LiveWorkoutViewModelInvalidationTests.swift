@@ -1244,10 +1244,12 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
             WorkoutGoalProgressResolver.relevantGoals(for: unrelatedWorkout, goals: [goal]).map(\.id),
             []
         )
+        XCTAssertFalse(goal.matches(workout: unrelatedWorkout))
         XCTAssertEqual(
             WorkoutGoalProgressResolver.relevantGoals(for: workout, goals: [goal]).map(\.id),
             [goal.id]
         )
+        XCTAssertTrue(goal.matches(workout: workout))
     }
 
     func testGeneratedPlanAdherenceCountsDistinctTemplatesOnly() {

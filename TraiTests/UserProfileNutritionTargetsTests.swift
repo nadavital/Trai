@@ -73,6 +73,31 @@ final class UserProfileNutritionTargetsTests: XCTestCase {
         XCTAssertEqual(snapshot.calorieGoal, 2_500)
     }
 
+    func testWidgetWorkoutActionUsesRecommendedTemplateRoute() throws {
+        let templateID = UUID()
+        let data = WidgetData.empty.updatingWorkoutAction(
+            recommendedWorkout: "Upper Strength",
+            recommendedWorkoutTemplateID: templateID,
+            todayWorkoutCompleted: false
+        )
+
+        let route = try XCTUnwrap(data.workoutActionRoute)
+
+        XCTAssertEqual(route, .workout(templateID: templateID, templateName: "Upper Strength"))
+        XCTAssertEqual(data.workoutActionURLString, route.urlString)
+    }
+
+    func testWidgetWorkoutActionIsDisabledAfterWorkoutComplete() {
+        let data = WidgetData.empty.updatingWorkoutAction(
+            recommendedWorkout: "Upper Strength",
+            recommendedWorkoutTemplateID: UUID(),
+            todayWorkoutCompleted: true
+        )
+
+        XCTAssertNil(data.workoutActionRoute)
+        XCTAssertNil(data.workoutActionURLString)
+    }
+
     private func makeWidgetSnapshotContext() throws -> ModelContext {
         let schema = Schema([
             UserProfile.self,
@@ -100,5 +125,30 @@ final class UserProfileNutritionTargetsTests: XCTestCase {
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         )
         return ModelContext(container)
+    }
+}
+
+private extension WidgetData {
+    func updatingWorkoutAction(
+        recommendedWorkout: String?,
+        recommendedWorkoutTemplateID: UUID?,
+        todayWorkoutCompleted: Bool
+    ) -> WidgetData {
+        WidgetData(
+            caloriesConsumed: caloriesConsumed,
+            calorieGoal: calorieGoal,
+            proteinConsumed: proteinConsumed,
+            proteinGoal: proteinGoal,
+            carbsConsumed: carbsConsumed,
+            carbsGoal: carbsGoal,
+            fatConsumed: fatConsumed,
+            fatGoal: fatGoal,
+            readyMuscleCount: readyMuscleCount,
+            recommendedWorkout: recommendedWorkout,
+            recommendedWorkoutTemplateID: recommendedWorkoutTemplateID,
+            workoutStreak: workoutStreak,
+            todayWorkoutCompleted: todayWorkoutCompleted,
+            lastUpdated: lastUpdated
+        )
     }
 }

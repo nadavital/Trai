@@ -174,7 +174,11 @@ struct MediumWidgetView: View {
             // Right: Action buttons column
             VStack(spacing: 6) {
                 MediumActionButton(icon: "fork.knife", url: AppRoute.logFood.urlString, color: .green)
-                MediumActionButton(icon: "figure.run", url: AppRoute.workout(templateID: nil, templateName: nil).urlString, color: .orange)
+                if let workoutURLString = entry.data.workoutActionURLString {
+                    MediumActionButton(icon: "figure.run", url: workoutURLString, color: .orange)
+                } else {
+                    MediumStatusIcon(icon: "checkmark.circle.fill", color: .green)
+                }
                 MediumActionButton(icon: "circle.hexagongrid.circle", url: AppRoute.chat.urlString, color: .calorieColor)
             }
             .frame(width: 40)
@@ -188,13 +192,6 @@ struct MediumWidgetView: View {
 
 struct LargeWidgetView: View {
     let entry: TraiWidgetEntry
-
-    private var workoutURL: URL {
-        AppRoute.workout(
-            templateID: entry.data.recommendedWorkoutTemplateID,
-            templateName: entry.data.recommendedWorkout
-        ).url
-    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -224,55 +221,15 @@ struct LargeWidgetView: View {
             }
 
             // Workout section (no background, cleaner)
-            Link(destination: workoutURL) {
-                HStack {
-                    if entry.data.todayWorkoutCompleted {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.green)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Workout Complete")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                            Text("Great job today!")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else if let workout = entry.data.recommendedWorkout {
-                        Image(systemName: "figure.run")
-                            .font(.title2)
-                            .foregroundStyle(.orange)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Up Next: \(workout)")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                            Text("Tap to start")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Image(systemName: "moon.zzz.fill")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Rest Day")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.secondary)
-                            Text("Tap to start a workout")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+            if let workoutURLString = entry.data.workoutActionURLString,
+               let workoutURL = URL(string: workoutURLString) {
+                Link(destination: workoutURL) {
+                    largeWorkoutStatusRow(showsDisclosure: true)
                 }
+                .buttonStyle(.plain)
+            } else {
+                largeWorkoutStatusRow(showsDisclosure: false)
             }
-            .buttonStyle(.plain)
 
             // Action buttons (clean, no heavy backgrounds)
             HStack(spacing: 10) {
@@ -282,6 +239,58 @@ struct LargeWidgetView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func largeWorkoutStatusRow(showsDisclosure: Bool) -> some View {
+        HStack {
+            if entry.data.todayWorkoutCompleted {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Workout Complete")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Text("Great job today!")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else if let workout = entry.data.recommendedWorkout {
+                Image(systemName: "figure.run")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Up Next: \(workout)")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Text("Tap to start")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Image(systemName: "moon.zzz.fill")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Rest Day")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                    Text("Tap to start a workout")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
     }
 }
 
@@ -606,6 +615,20 @@ struct MediumActionButton: View {
                 .background(color.opacity(0.12))
                 .clipShape(.circle)
         }
+    }
+}
+
+struct MediumStatusIcon: View {
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        Image(systemName: icon)
+            .font(.callout)
+            .foregroundStyle(color)
+            .frame(width: 38, height: 38)
+            .background(color.opacity(0.12))
+            .clipShape(.circle)
     }
 }
 

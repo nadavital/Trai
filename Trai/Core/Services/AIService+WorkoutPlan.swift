@@ -725,6 +725,14 @@ private extension WorkoutPlan {
             guard let nextTemplate = trainingTemplate(matching: currentTemplate.id) else { return nil }
             return (currentTemplate, nextTemplate)
         }
+        let removedTemplates = currentPlan.templates.filter { trainingTemplate(matching: $0.id) == nil }
+
+        guard removedTemplates.allSatisfy({ currentTemplate in
+            guard !changedTemplateIDs.contains(currentTemplate.id) else { return true }
+            return preservesRemovedTemplateSemantics(currentTemplate, changedBlockIDs: changedBlockIDs)
+        }) else {
+            return false
+        }
 
         for (currentTemplate, nextTemplate) in retainedTemplatePairs {
             let supportBlockIDsToPreserve = Set(currentTemplate.displayBlocks
@@ -760,6 +768,30 @@ private extension WorkoutPlan {
         }
     }
 
+    func preservesRemovedTemplateSemantics(
+        _ currentTemplate: WorkoutPlan.WorkoutTemplate,
+        changedBlockIDs: Set<UUID>
+    ) -> Bool {
+        let currentBlocks = currentTemplate.blocks
+            .filter { $0.hasDurableActivitySemanticsToPreserve && !changedBlockIDs.contains($0.id) }
+        if !currentBlocks.isEmpty {
+            return currentBlocks.allSatisfy { currentBlock in
+                guard let nextBlock = trainingBlockAcrossTemplates(matching: currentBlock.id) else {
+                    return false
+                }
+                return nextBlock.preservesDurableActivitySemantics(from: currentBlock)
+            }
+        }
+
+        let currentGroups = currentTemplate.requiredDurableActivityIdentityGroups(
+            excludingBlockIDs: changedBlockIDs
+        )
+        guard !currentGroups.isEmpty else { return true }
+        return currentGroups.allSatisfy { group in
+            templates.contains { $0.containsVisibleActivityIdentity(matching: group) }
+        }
+    }
+
     var requiredDurableActivityBlocks: [WorkoutPlan.TrainingBlock] {
         templates.flatMap(\.blocks).filter(\.hasDurableActivitySemanticsToPreserve)
     }
@@ -769,6 +801,10 @@ private extension WorkoutPlan {
 private extension WorkoutPlan {
     func trainingTemplate(matching id: UUID) -> WorkoutPlan.WorkoutTemplate? {
         templates.first { $0.id == id }
+    }
+
+    func trainingBlockAcrossTemplates(matching id: UUID) -> WorkoutPlan.TrainingBlock? {
+        templates.lazy.compactMap { $0.trainingBlock(matching: id) }.first
     }
 }
 

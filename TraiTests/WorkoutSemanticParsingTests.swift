@@ -1898,6 +1898,41 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertNil(goal.linkedWorkoutType)
     }
 
+    func testGeneratedPlanAdherenceGoalUsesDurableFlagForFreeFormUnits() {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Generated Strength",
+            sessionType: .strength,
+            targetMuscleGroups: ["Back"],
+            exercises: [],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let plan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let goal = WorkoutGoal(
+            title: "Complete the planned session",
+            goalKind: .frequency,
+            targetValue: 1,
+            targetUnit: "planned sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "Complete the generated plan session.",
+            tracksGeneratedPlanAdherence: true
+        )
+
+        goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+
+        XCTAssertEqual(goal.generatedPlanTemplateIDs, [template.id])
+        XCTAssertNil(goal.linkedWorkoutType)
+        XCTAssertFalse(goal.hasActivityScope)
+    }
+
     func testGeneratedGoalsToInsertUsesStructuredDeduplicationAndNormalizesPlanAdherence() {
         let template = WorkoutPlan.WorkoutTemplate(
             name: "Generated Strength",
