@@ -308,8 +308,12 @@
 - Generated workout goals inserted from onboarding/profile generation could bypass the same durable block-ID filter used by the review flow.
 - Block-scoped generated goals could lose their durable block IDs after a plan refinement removed that block, then fall back to keyword/tag matching against unrelated future workouts.
 - Existing stored block-scoped generated goals could have durable block IDs but a default false scope flag after migration, so matching now treats non-empty stored block IDs as durable-scoped too.
+- Generated plan goals scoped only by `linkedWorkoutType` could still be inserted without durable block IDs and later match unrelated workouts of the same type.
 - Planned workout log cards could preserve the source template but drop per-entry source block IDs, so block-scoped generated goals would miss completed chat-logged plan work.
 - The seeded plan-review refinement prompt could be preempted by a manual send while the review package was still being presented.
+- The seeded plan-review refinement flow could briefly show an enabled save action before the queued refinement started, allowing the old plan to be saved.
+- Non-strength planned start cards relied on `SuggestedExercise.id` as an implicit block ID instead of carrying `sourcePlanBlockID` directly.
+- Onboarding/profile generated-plan review could briefly expose a live save action before the queued initial refinement prompt started.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -392,6 +396,12 @@
 - Result after durable generated-goal migration edge fix: no whitespace errors.
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest13 -skip-testing:TraiUITests -only-testing:TraiTests/WorkoutSemanticParsingTests/testGeneratedPlanBlockScopedGoalMatchesOnlyDurableBlockID -only-testing:TraiTests/WorkoutSemanticParsingTests/testStoredGeneratedPlanBlockIDsRemainDurableScopedAfterMigration -only-testing:TraiTests/WorkoutSemanticParsingTests/testGeneratedPlanBlockScopedGoalDoesNotFallbackAfterBlockRemoval -only-testing:TraiTests/WorkoutSemanticParsingTests/testLogWorkoutPreservesSourcePlanTemplateID -only-testing:TraiTests/WorkoutSemanticParsingTests/testLogWorkoutRejectsSourcePlanBlockIDOutsideTemplate -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests/testOnboardingDraftPersistsWorkoutPlanPreferencesAndGeneratedGoals`
 - Result after durable generated-goal migration edge fix: passed, 6 tests, 0 failures.
+- `git diff --check`
+- Result after durable workout-scope gap fix: no whitespace errors.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest15 -skip-testing:TraiUITests -only-testing:TraiTests/WorkoutSemanticParsingTests/testGeneratedPlanActivityGoalsWithoutDurableBlocksAreNotInserted -only-testing:TraiTests/WorkoutSemanticParsingTests/testSuggestWorkoutUsesStructuredPlanBlocksForStartSuggestion -only-testing:TraiTests/WorkoutSemanticParsingTests/testGeneratedPlanBlockScopedGoalMatchesOnlyDurableBlockID -only-testing:TraiTests/WorkoutSemanticParsingTests/testStoredGeneratedPlanBlockIDsRemainDurableScopedAfterMigration -only-testing:TraiTests/WorkoutSemanticParsingTests/testGeneratedPlanBlockScopedGoalDoesNotFallbackAfterBlockRemoval -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutGoalSuggestionPreservesGeneratedPlanBlockIDs -only-testing:TraiTests/WorkoutTemplateServiceTests/testCreateWorkoutForIntentUsesTemplateBlockSemantics -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests/testOnboardingDraftPersistsWorkoutPlanPreferencesAndGeneratedGoals`
+- Result after durable workout-scope gap fix: passed, 6 tests, 0 failures; the intended `WorkoutTemplateServiceTests` selector was corrected and rerun below.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest16 -skip-testing:TraiUITests -only-testing:TraiTests/WorkoutTemplateServiceTests/testCreateWorkoutForIntentDoesNotUseNameOnlyRouteSemantics`
+- Result after durable workout-scope gap fix template rerun: passed, 1 test, 0 failures.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -414,6 +424,7 @@
 - Start a planned strength workout with prefilled/unlogged heavy sets, finish without checking them off, and confirm weight goals/history do not count those planned weights.
 - Restore onboarding after generating a workout plan/goals but before completing onboarding, then finish onboarding and confirm both the workout plan preferences and goals persist.
 - Trigger an onboarding/profile generated-plan refinement, tap Stop while Trai is generating, and confirm the previous plan review returns and the stale plan is not saved as an edited result.
+- Trigger an onboarding/profile generated-plan refinement and confirm no save action can accept the old proposal before Trai submits the queued refinement.
 - Ask chat to log a completed session from the current generated workout plan and confirm the resulting generated plan-adherence goal advances for that template.
 - In chat, get a workout-plan proposal, ask for a newer tweak, then scroll back and confirm the older workout-plan proposal cannot be saved.
 - After a chat retry starts, tap Stop and confirm no late AI response/card appears from the cancelled retry.

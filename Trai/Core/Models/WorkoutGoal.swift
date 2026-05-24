@@ -219,6 +219,10 @@ extension WorkoutGoal {
             || !generatedPlanBlockIDs.isEmpty
     }
 
+    var requiresDurableGeneratedPlanScope: Bool {
+        hasActivityScope || linkedWorkoutType != nil
+    }
+
     var trimmedNotes: String {
         notes.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -392,7 +396,7 @@ extension WorkoutGoal {
             goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
             goal.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan)
             guard goal.tracksGeneratedPlanAdherence
-                || !goal.hasActivityScope
+                || !goal.requiresDurableGeneratedPlanScope
                 || !goal.generatedPlanBlockIDs.isEmpty else {
                 continue
             }

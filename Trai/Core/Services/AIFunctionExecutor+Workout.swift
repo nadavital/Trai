@@ -201,6 +201,7 @@ extension AIFunctionExecutor {
                     category: category.rawValue,
                     activityTypeName: block.displayActivityName,
                     activityRole: block.role.rawValue,
+                    sourcePlanBlockID: block.id,
                     targetTags: block.resolvedStartSuggestionTags(),
                     trackingFields: Exercise.defaultTrackingFields(for: category).map(\.rawValue),
                     sets: 0,

@@ -584,6 +584,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.entries?.map(\.activityKind), [.strength, .mobility])
         XCTAssertEqual(workout.entries?.map(\.isPlannedActivityGuidance), [false, true])
         XCTAssertEqual(workout.entries?.first?.sourcePlanBlockID, profile.workoutPlan?.templates.first?.blocks.first?.id)
+        XCTAssertEqual(workout.entries?.last?.sourcePlanBlockID, profile.workoutPlan?.templates.first?.blocks.last?.id)
         XCTAssertEqual(workout.sourcePlanTemplateID, profile.workoutPlan?.templates.first?.id)
     }
 

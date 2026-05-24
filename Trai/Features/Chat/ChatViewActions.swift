@@ -104,7 +104,7 @@ enum ChatWorkoutStartFreshness {
 
         return workout.exercises.allSatisfy { exercise in
             guard let category = exercise.strictCategory else { return false }
-            let sourceBlockID = category == .strength ? exercise.sourcePlanBlockID : exercise.id
+            let sourceBlockID = exercise.sourcePlanBlockID ?? (category == .strength ? nil : exercise.id)
             guard let sourceBlockID else { return false }
             return currentBlockIDs.contains(sourceBlockID)
         }
@@ -860,7 +860,7 @@ extension ChatView {
                     ))
                 }
             } else {
-                entry.sourcePlanBlockID = exercise.id
+                entry.sourcePlanBlockID = exercise.sourcePlanBlockID ?? exercise.id
                 entry.plannedDurationSeconds = exercise.durationMinutes.map { max(0, $0) * 60 }
                 if let distanceMeters = exercise.distanceMeters, distanceMeters > 0 {
                     entry.plannedTarget = String(format: "%.0f m", distanceMeters)

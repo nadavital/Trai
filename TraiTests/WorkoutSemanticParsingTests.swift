@@ -1289,7 +1289,8 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(suggestion.exercises.map(\.activityRole), ["main", "main", "finisher"])
         XCTAssertEqual(suggestion.exercises[0].sourcePlanBlockID, template.blocks[0].id)
         XCTAssertEqual(suggestion.exercises[1].sourcePlanBlockID, template.blocks[0].id)
-        XCTAssertEqual(suggestion.exercises[2].sourcePlanBlockID, nil)
+        XCTAssertEqual(suggestion.exercises[2].id, template.blocks[1].id)
+        XCTAssertEqual(suggestion.exercises[2].sourcePlanBlockID, template.blocks[1].id)
         XCTAssertEqual(suggestion.exercises[2].activityTypeName, "Cycling")
         XCTAssertEqual(suggestion.exercises[2].targetTags, ["Conditioning", "Cycling"])
         XCTAssertEqual(suggestion.exercises[2].durationMinutes, 12)
@@ -2327,6 +2328,16 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             periodCount: 1,
             successCriteria: "You complete the mobility finisher from your plan."
         )
+        let workoutTypeScopedGoal = WorkoutGoal(
+            title: "Complete strength day",
+            goalKind: .frequency,
+            linkedWorkoutType: .strength,
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete the strength work from your plan."
+        )
         let durableScopedGoal = WorkoutGoal(
             title: "Complete mobility finisher",
             goalKind: .frequency,
@@ -2341,7 +2352,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         )
 
         let goalsToInsert = WorkoutGoal.generatedGoalsToInsert(
-            [keywordScopedGoal, durableScopedGoal],
+            [keywordScopedGoal, workoutTypeScopedGoal, durableScopedGoal],
             existingGoals: [],
             for: plan
         )

@@ -527,8 +527,12 @@ struct WorkoutPlanChatFlow: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.traiPrimary(color: .accentColor, size: .compact, fullWidth: true, height: 42))
-        .disabled(isGenerating || isRefiningPlan)
+        .disabled(isPlanSaveUnavailable)
         .accessibilityLabel(saveGeneratedPlanTitle)
+    }
+
+    private var isPlanSaveUnavailable: Bool {
+        isGenerating || isRefiningPlan || isPreparingInitialRefinementPrompt
     }
 
     private var saveGeneratedPlanTitle: String {
@@ -1287,7 +1291,7 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private func savePlan() {
-        guard !isGenerating, !isRefiningPlan else { return }
+        guard !isPlanSaveUnavailable else { return }
         guard let plan = generatedPlan else { return }
 
         if isOnboarding {
