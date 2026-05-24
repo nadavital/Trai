@@ -111,7 +111,7 @@ struct SmallWidgetView: View {
             // Larger icon-only action buttons
             HStack(spacing: 12) {
                 SmallWidgetActionButton(icon: "fork.knife", url: AppRoute.logFood.urlString, color: .green)
-                SmallWidgetActionButton(icon: "figure.run", url: AppRoute.workout(templateName: nil).urlString, color: .orange)
+                SmallWidgetActionButton(icon: "figure.run", url: AppRoute.workout(templateID: nil, templateName: nil).urlString, color: .orange)
                 SmallWidgetActionButton(icon: "circle.hexagongrid.circle", url: AppRoute.chat.urlString, color: .calorieColor)
             }
         }
@@ -174,7 +174,7 @@ struct MediumWidgetView: View {
             // Right: Action buttons column
             VStack(spacing: 6) {
                 MediumActionButton(icon: "fork.knife", url: AppRoute.logFood.urlString, color: .green)
-                MediumActionButton(icon: "figure.run", url: AppRoute.workout(templateName: nil).urlString, color: .orange)
+                MediumActionButton(icon: "figure.run", url: AppRoute.workout(templateID: nil, templateName: nil).urlString, color: .orange)
                 MediumActionButton(icon: "circle.hexagongrid.circle", url: AppRoute.chat.urlString, color: .calorieColor)
             }
             .frame(width: 40)
@@ -190,7 +190,7 @@ struct LargeWidgetView: View {
     let entry: TraiWidgetEntry
 
     private var workoutURL: URL {
-        AppRoute.workout(templateName: entry.data.recommendedWorkout).url
+        AppRoute.workout(templateID: nil, templateName: entry.data.recommendedWorkout).url
     }
 
     var body: some View {

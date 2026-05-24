@@ -61,7 +61,7 @@ struct TraiWidgetsLiveActivity: Widget {
                     .font(.caption)
                     .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
             }
-            .widgetURL(AppRoute.workout(templateName: nil).url)
+            .widgetURL(AppRoute.workout(templateID: nil, templateName: nil).url)
         }
         .supplementalActivityFamilies([.small])
     }

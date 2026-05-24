@@ -876,7 +876,7 @@ private enum HomeScreenQuickAction: String, CaseIterable {
         case .logWeight:
             return .logWeight
         case .workout:
-            return .workout(templateName: nil)
+            return .workout(templateID: nil, templateName: nil)
         case .chat:
             return .chat
         }

@@ -102,6 +102,12 @@
 - Plan persistence/edit/review flow and live workout planned/logged semantics: no additional serious issue was part of this verified fix.
 - Regression-test coverage: added focused coverage for stale nutrition cards, retrying fresh retired nutrition proposals, and prompt inclusion of pending nutrition-plan targets.
 
+### Round 2026-05-24 After Durable Route Review
+- Live workout planned/logged semantics: fixed verified Start Workout routing gap where AppIntents/deep links carried only display names and `WorkoutTemplateService` matched saved templates by partial name, so overlapping generated-plan names could start the wrong stored template and attach the wrong `sourcePlanTemplateID`.
+- Intent/deep-link contracts: added durable `template_id` route data, switched `StartWorkoutIntent` to use the existing `WorkoutNameEntity` ID, and resolved workouts by template ID first.
+- Legacy compatibility: kept old name-only routes working through exact case-insensitive name matches only; ambiguous partial names now create a custom named workout instead of guessing a generated-plan template.
+- Regression-test coverage: added focused route parsing coverage for `template_id` and service coverage proving durable IDs win over labels while partial names do not bind to saved templates.
+
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
 - Generated workout plan blocks decoded unknown free-text `kind` values as `.custom`, letting malformed AI payloads store generic behavior data.
@@ -164,6 +170,7 @@
 - Onboarding generated workout-plan review state was not invalidated when profile/nutrition inputs changed after workout plan/goals generation.
 - Current-period workout goal tests could fail around midnight or the locale week boundary because fixtures used `Date() - 1 hour`.
 - Follow-up edits to an unsaved nutrition-plan proposal in chat retired the pending card before building AI context, so revisions could fall back to the saved nutrition targets.
+- Start Workout intents/deep links used name-only, partial template matching, so generated plans with overlapping names could launch the wrong stored template and corrupt generated plan-adherence identity.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -212,6 +219,12 @@
 - Result after `cae67dd` nutrition-context fix round: app/tests compiled, but XCTest runner exited before establishing its connection; no XCTest assertions ran or failed.
 - `xcodebuild build -project Trai.xcodeproj -scheme Trai -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/TraiPRSolidBuild CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO`
 - Result after `cae67dd` nutrition-context fix round: build succeeded.
+- `git diff --check`
+- Result after durable workout-route fix round: no whitespace errors.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRRouteFixDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/AppRouteTests -only-testing:TraiTests/WorkoutTemplateServiceTests -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatNutritionPlanSuggestionContextRejectsExternallyStaleCards -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatNutritionPlanSuggestionContextCanUseFreshRetiredSuggestionForRetry -only-testing:TraiTests/WorkoutSemanticParsingTests/testFunctionCallingPromptIncludesPendingNutritionPlanSuggestion -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatWorkoutPlanSuggestionContextRejectsExternallyStaleCards -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatWorkoutPlanSuggestionContextCanUseFreshRetiredSuggestionForRetry -only-testing:TraiTests/WorkoutSemanticParsingTests/testFunctionFollowUpMergePreservesChainedWorkoutStartAndLogSuggestions`
+- Result after durable workout-route fix round: app/tests compiled, but XCTest runner exited before establishing its connection; no XCTest assertions ran or failed.
+- `xcodebuild build -project Trai.xcodeproj -scheme Trai -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/TraiRouteFixBuild CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO`
+- Result after durable workout-route fix round: build succeeded.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -270,3 +283,4 @@
 - During onboarding, generate a workout plan/goals, go back and change profile/nutrition inputs, then continue; confirm the old workout plan/goals are cleared and must be regenerated/reconfirmed.
 - In chat, get a nutrition-plan proposal, type a follow-up like "before applying, keep calories but raise carbs and reduce fat," and confirm the old card retires while the new AI proposal is based on the pending card's full structured targets, not the saved plan.
 - Retry a failed nutrition-plan follow-up edit and confirm the retry still uses the fresh retired unsaved proposal when building the next AI response.
+- Create or keep two generated plan templates with overlapping names, invoke Start Workout from Shortcuts/Siri/widget/deep link for one template, and confirm the live workout uses that exact template's items plus `sourcePlanTemplateID`; a legacy partial-name route like "upper body" should open a custom named workout rather than a generated-plan template.

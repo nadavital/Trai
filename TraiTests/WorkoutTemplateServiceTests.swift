@@ -517,7 +517,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.focusAreas, ["Push", "Mobility Flow", "Shoulder prep"])
     }
 
-    func testCreateWorkoutForIntentMatchesTemplateByCaseInsensitiveContains() throws {
+    func testCreateWorkoutForIntentMatchesTemplateByDurableID() throws {
         let context = try makeInMemoryContext()
         let lift = WorkoutPlan.ExerciseTemplate(
             exerciseName: "Bench Press",
@@ -569,8 +569,10 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         context.insert(profile)
         try context.save()
 
+        let templateID = try XCTUnwrap(profile.workoutPlan?.templates.first?.id)
         let workout = service.createWorkoutForIntent(
-            name: "upper body",
+            templateID: templateID,
+            name: "renamed shortcut label",
             modelContext: context
         )
 
@@ -582,6 +584,53 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.entries?.first?.activityKind, .mobility)
         XCTAssertEqual(workout.entries?.first?.isPlannedActivityGuidance, true)
         XCTAssertEqual(workout.sourcePlanTemplateID, profile.workoutPlan?.templates.first?.id)
+    }
+
+    func testCreateWorkoutForIntentUsesExactNameOnlyForLegacyRoutes() throws {
+        let context = try makeInMemoryContext()
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .upperLower,
+            daysPerWeek: 2,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Upper Body Strength",
+                    sessionType: .strength,
+                    targetMuscleGroups: ["chest"],
+                    exercises: [],
+                    estimatedDurationMinutes: 45,
+                    order: 0
+                ),
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Upper Body Hypertrophy",
+                    sessionType: .strength,
+                    targetMuscleGroups: ["back"],
+                    exercises: [],
+                    estimatedDurationMinutes: 45,
+                    order: 1
+                )
+            ],
+            rationale: "Test",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy,
+            warnings: nil
+        )
+        context.insert(profile)
+        try context.save()
+
+        let exact = service.createWorkoutForIntent(
+            name: "upper body strength",
+            modelContext: context
+        )
+        XCTAssertEqual(exact.name, "Upper Body Strength")
+        XCTAssertEqual(exact.sourcePlanTemplateID, profile.workoutPlan?.templates[0].id)
+
+        let partial = service.createWorkoutForIntent(
+            name: "upper body",
+            modelContext: context
+        )
+        XCTAssertEqual(partial.name, "upper body")
+        XCTAssertNil(partial.sourcePlanTemplateID)
     }
 
     func testCreateWorkoutForIntentFallsBackToCustomNamedWorkout() throws {

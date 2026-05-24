@@ -57,25 +57,46 @@ struct WorkoutTemplateService {
     }
 
     /// Resolve app-intent/deep-link workout names into concrete workout instances.
-    func createWorkoutForIntent(name: String, modelContext: ModelContext) -> LiveWorkout {
-        if name == "custom" {
+    func createWorkoutForIntent(
+        templateID: UUID? = nil,
+        name: String?,
+        modelContext: ModelContext
+    ) -> LiveWorkout {
+        let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if templateID == nil,
+           trimmedName == nil || trimmedName?.localizedCaseInsensitiveCompare("custom") == .orderedSame {
             return createCustomWorkout()
         }
 
         let profileDescriptor = FetchDescriptor<UserProfile>()
         if let profile = try? modelContext.fetch(profileDescriptor).first,
-           let plan = profile.workoutPlan,
-           let template = plan.templates.first(where: { $0.name.localizedCaseInsensitiveContains(name) }) {
-            return createWorkoutFromTemplate(
-                template,
-                progressionStrategy: plan.progressionStrategy,
-                modelContext: modelContext,
-                prefillStrengthExercises: false
-            )
+           let plan = profile.workoutPlan {
+            let template = templateID.flatMap { id in
+                plan.templates.first(where: { $0.id == id })
+            } ?? trimmedName.flatMap { name in
+                plan.templates.first(where: { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame })
+            }
+
+            if let template {
+                return createWorkoutFromTemplate(
+                    template,
+                    progressionStrategy: plan.progressionStrategy,
+                    modelContext: modelContext,
+                    prefillStrengthExercises: false
+                )
+            }
         }
 
-        // Preserve prior fallback behavior for unmatched names.
-        return createCustomWorkout(name: name)
+        guard let trimmedName, !trimmedName.isEmpty else {
+            return createCustomWorkout()
+        }
+
+        return createCustomWorkout(name: trimmedName)
+    }
+
+    /// Resolve app-intent/deep-link workout names into concrete workout instances.
+    func createWorkoutForIntent(name: String, modelContext: ModelContext) -> LiveWorkout {
+        createWorkoutForIntent(templateID: nil, name: name, modelContext: modelContext)
     }
 
     /// Persist a newly created workout in SwiftData.

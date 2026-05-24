@@ -10,10 +10,11 @@ import Foundation
 enum AppRoute: Equatable, Codable {
     case logFood
     case logWeight
-    case workout(templateName: String?)
+    case workout(templateID: UUID?, templateName: String?)
     case chat
 
     static let scheme = "trai"
+    private static let workoutTemplateIDQueryName = "template_id"
     private static let workoutTemplateQueryName = "template"
 
     static var appURL: URL {
@@ -29,10 +30,17 @@ enum AppRoute: Equatable, Codable {
             components.host = "logfood"
         case .logWeight:
             components.host = "logweight"
-        case .workout(let templateName):
+        case .workout(let templateID, let templateName):
             components.host = "workout"
+            var queryItems: [URLQueryItem] = []
+            if let templateID {
+                queryItems.append(URLQueryItem(name: Self.workoutTemplateIDQueryName, value: templateID.uuidString))
+            }
             if let templateName, !templateName.isEmpty {
-                components.queryItems = [URLQueryItem(name: Self.workoutTemplateQueryName, value: templateName)]
+                queryItems.append(URLQueryItem(name: Self.workoutTemplateQueryName, value: templateName))
+            }
+            if !queryItems.isEmpty {
+                components.queryItems = queryItems
             }
         case .chat:
             components.host = "chat"
@@ -62,10 +70,14 @@ enum AppRoute: Equatable, Codable {
             self = .logWeight
         case "workout":
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let templateID = components?.queryItems?
+                .first(where: { $0.name == Self.workoutTemplateIDQueryName })?
+                .value
+                .flatMap(UUID.init(uuidString:))
             let templateName = components?.queryItems?
                 .first(where: { $0.name == Self.workoutTemplateQueryName })?
                 .value
-            self = .workout(templateName: templateName)
+            self = .workout(templateID: templateID, templateName: templateName)
         case "chat":
             self = .chat
         default:
@@ -98,7 +110,7 @@ enum PendingAppRouteStore {
 
         if let workoutName = defaults.string(forKey: SharedStorageKeys.LegacyLaunchIntents.startWorkout) {
             defaults.removeObject(forKey: SharedStorageKeys.LegacyLaunchIntents.startWorkout)
-            return .workout(templateName: workoutName == "custom" ? nil : workoutName)
+            return .workout(templateID: nil, templateName: workoutName == "custom" ? nil : workoutName)
         }
 
         return nil

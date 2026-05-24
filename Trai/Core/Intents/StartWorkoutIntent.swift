@@ -13,20 +13,24 @@ struct StartWorkoutIntent: AppIntent {
     static var title: LocalizedStringResource = "Start Workout"
     static var description = IntentDescription("Start a new workout session")
 
-    @Parameter(title: "Workout Name", default: nil)
-    var workoutName: String?
+    @Parameter(title: "Workout", default: nil)
+    var workout: WorkoutNameEntity?
 
     /// This intent opens the app UI
     static var openAppWhenRun: Bool = true
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Start \(\.$workoutName) workout")
+        Summary("Start \(\.$workout) workout")
     }
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        let templateName = workoutName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let route = AppRoute.workout(templateName: (templateName?.isEmpty == false) ? templateName : nil)
+        let templateID = workout.flatMap { UUID(uuidString: $0.id) }
+        let templateName = workout?.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let route = AppRoute.workout(
+            templateID: templateID,
+            templateName: (templateName?.isEmpty == false) ? templateName : nil
+        )
         PendingAppRouteStore.setPendingRoute(route)
 
         if let container = TraiApp.sharedModelContainer {

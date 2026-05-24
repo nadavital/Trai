@@ -533,8 +533,8 @@ struct MainTabView: View {
                 outcome: .opened,
                 metadata: ["source": "deep_link"]
             )
-        case .workout(let templateName):
-            startWorkoutFromIntent(name: templateName ?? "custom")
+        case .workout(let templateID, let templateName):
+            startWorkoutFromIntent(templateID: templateID, name: templateName)
         case .chat:
             selectTab(.trai)
         }
@@ -552,7 +552,7 @@ struct MainTabView: View {
         handleRoute(route)
     }
 
-    private func startWorkoutFromIntent(name: String) {
+    private func startWorkoutFromIntent(templateID: UUID?, name: String?) {
         // Guard: Don't start a new workout if one is already active
         guard activeWorkout == nil else {
             // Show the existing workout instead
@@ -561,6 +561,7 @@ struct MainTabView: View {
         }
 
         let workout = workoutTemplateService.createWorkoutForIntent(
+            templateID: templateID,
             name: name,
             modelContext: modelContext
         )
