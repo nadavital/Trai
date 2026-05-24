@@ -1,0 +1,7 @@
+{
+  "title": "Evaluation harness for Trai",
+  "problem": "Project maintainers need a repeatable way to tell whether changes improve real outcomes.",
+  "target_user": "Maintainers and contributors",
+  "mvp_concept": "A small evaluation harness with fixture inputs, metrics, and before/after comparison reports.",
+  "generated_by": "forge_non_ui_smoke"
+}
