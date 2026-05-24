@@ -532,6 +532,7 @@ extension ChatView {
             targetMuscleGroups: targetMuscles,
             focusAreas: semanticFocus.isEmpty ? focusAreas : semanticFocus
         )
+        liveWorkout.sourcePlanTemplateID = workout.sourcePlanTemplateID
 
         var entries: [LiveWorkoutEntry] = []
         entries.reserveCapacity(workout.exercises.count)

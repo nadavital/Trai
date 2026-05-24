@@ -516,10 +516,71 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(suggestion.workoutType, "climbing")
         XCTAssertEqual(suggestion.targetMuscleGroups, [])
         XCTAssertEqual(suggestion.activityFocuses, ["Bouldering", "Climbing", "Technique"])
+        XCTAssertEqual(suggestion.sourcePlanTemplateID, template.id)
         XCTAssertEqual(exercise.name, "Bouldering")
         XCTAssertEqual(exercise.category, "sportPractice")
         XCTAssertEqual(exercise.durationMinutes, 35)
         XCTAssertTrue(suggestion.rationale.contains("from your plan"))
+    }
+
+    func testSuggestWorkoutPreservesAllSavedPlanBlocksWhenNoExplicitPreference() async throws {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Strength + Conditioning",
+            sessionType: .mixed,
+            focusAreas: ["Full Body", "Conditioning"],
+            targetMuscleGroups: ["fullBody"],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Primary lifts",
+                    exercises: [
+                        .init(exerciseName: "Back Squat", muscleGroup: "quads", defaultSets: 3, defaultReps: 5, order: 0),
+                        .init(exerciseName: "Bench Press", muscleGroup: "chest", defaultSets: 3, defaultReps: 5, order: 1)
+                    ],
+                    activityTypeName: "Strength",
+                    activityTags: ["Full Body"],
+                    order: 0
+                ),
+                WorkoutPlan.TrainingBlock(
+                    kind: .conditioning,
+                    title: "Finisher",
+                    detail: "Bike intervals",
+                    activityTypeName: "Cycling",
+                    activityTags: ["Conditioning"],
+                    durationMinutes: 12,
+                    order: 1,
+                    notes: "Easy warmup, then short hard intervals."
+                )
+            ],
+            estimatedDurationMinutes: 55,
+            order: 0
+        )
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Mixed plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: profile).execute(
+            .init(name: "suggest_workout", arguments: [:])
+        )
+
+        guard case .suggestedWorkoutStart(let suggestion) = result else {
+            return XCTFail("Expected start workout suggestion")
+        }
+
+        XCTAssertEqual(suggestion.sourcePlanTemplateID, template.id)
+        XCTAssertEqual(suggestion.exercises.map(\.name), ["Back Squat", "Bench Press", "Cycling"])
+        XCTAssertEqual(suggestion.exercises.map(\.category), ["strength", "strength", "conditioning"])
+        XCTAssertEqual(suggestion.exercises[2].activityTypeName, "Cycling")
+        XCTAssertEqual(suggestion.exercises[2].targetTags, ["Conditioning", "Cycling"])
+        XCTAssertEqual(suggestion.exercises[2].durationMinutes, 12)
     }
 
     func testStartLiveWorkoutPreservesAIProvidedActivityCategory() async throws {

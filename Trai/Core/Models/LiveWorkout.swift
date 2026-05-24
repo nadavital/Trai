@@ -30,6 +30,9 @@ final class LiveWorkout {
     /// HealthKit workout ID if merged with Apple Watch data
     var mergedHealthKitWorkoutID: String?
 
+    /// Source workout-plan template ID when this workout was started from a saved plan.
+    var sourcePlanTemplateIDRaw: String?
+
     /// Calories from HealthKit (if available)
     var healthKitCalories: Double?
 
@@ -64,12 +67,22 @@ extension LiveWorkout {
         get { WorkoutType(rawValue: workoutType) ?? .strength }
         set { workoutType = newValue.rawValue }
     }
+
+    var sourcePlanTemplateID: UUID? {
+        get {
+            guard let raw = sourcePlanTemplateIDRaw else { return nil }
+            return UUID(uuidString: raw)
+        }
+        set {
+            sourcePlanTemplateIDRaw = newValue?.uuidString
+        }
+    }
 }
 
 // MARK: - Muscle Groups
 
 extension LiveWorkout {
-    nonisolated enum MuscleGroup: String, CaseIterable, Identifiable {
+    nonisolated enum MuscleGroup: String, Codable, CaseIterable, Identifiable {
         case chest = "chest"
         case back = "back"
         case shoulders = "shoulders"

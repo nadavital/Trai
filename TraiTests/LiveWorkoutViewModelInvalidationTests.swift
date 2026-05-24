@@ -1173,19 +1173,33 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         )
         workout.startedAt = Date().addingTimeInterval(-1_800)
         workout.completedAt = Date()
+        workout.sourcePlanTemplateID = plan.templates[0].id
+
+        let unrelatedWorkout = LiveWorkout(
+            name: "Open Gym",
+            workoutType: .strength,
+            focusAreas: ["Back", "Pull Ups"]
+        )
+        unrelatedWorkout.startedAt = Date().addingTimeInterval(-900)
+        unrelatedWorkout.completedAt = Date()
 
         XCTAssertNil(goal.linkedWorkoutType)
         XCTAssertFalse(goal.hasActivityScope)
+        XCTAssertEqual(goal.generatedPlanTemplateIDs, plan.templates.map(\.id))
 
         let insight = WorkoutGoalProgressResolver.insights(
             goals: [goal],
-            workouts: [workout],
+            workouts: [workout, unrelatedWorkout],
             exerciseHistory: [],
             useLbs: false
         ).first
 
         XCTAssertEqual(insight?.currentValueText, "1")
         XCTAssertEqual(insight?.progressFraction ?? 0, 1.0 / 3.0, accuracy: 0.001)
+        XCTAssertEqual(
+            WorkoutGoalProgressResolver.matchingCompletedWorkouts(for: goal, in: [workout, unrelatedWorkout]).map(\.id),
+            [workout.id]
+        )
     }
 
     func testGeneratedPlanAdherenceGoalClearsActivityTagsEvenWhenTemplatesShareBroadType() {
@@ -1247,6 +1261,7 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         )
         workout.startedAt = Date().addingTimeInterval(-1_800)
         workout.completedAt = Date()
+        workout.sourcePlanTemplateID = plan.templates[0].id
 
         XCTAssertNil(goal.linkedWorkoutType)
         XCTAssertFalse(goal.hasActivityScope)
@@ -1260,6 +1275,41 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
 
         XCTAssertEqual(insight?.currentValueText, "1")
         XCTAssertEqual(insight?.progressFraction ?? 0, 1.0 / 3.0, accuracy: 0.001)
+    }
+
+    func testWeightGoalIgnoresUncompletedPlannedSetWeights() {
+        let workout = LiveWorkout(name: "Leg Strength", workoutType: .strength)
+        workout.startedAt = Date().addingTimeInterval(-1_800)
+        workout.completedAt = Date()
+
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Back Squat",
+            orderIndex: 0,
+            exerciseType: "strength"
+        )
+        entry.addSet(.init(reps: 5, weightKg: 40, completed: true, isWarmup: false))
+        entry.addSet(.init(reps: 5, weightKg: 100, completed: false, isWarmup: false))
+        entry.workout = workout
+        workout.entries = [entry]
+
+        let goal = WorkoutGoal(
+            title: "Squat 80 kg",
+            goalKind: .weight,
+            linkedActivityName: "Back Squat",
+            targetValue: 80,
+            targetUnit: "kg",
+            successCriteria: "Back squat 80 kg.",
+            baselineValue: 0
+        )
+
+        let insight = WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: [workout],
+            exerciseHistory: [],
+            useLbs: false
+        ).first
+
+        XCTAssertEqual(insight?.progressFraction ?? 0, 0.5, accuracy: 0.001)
     }
 
     func testPlankGoalDoesNotNormalizeAsPlanAdherenceGoal() {

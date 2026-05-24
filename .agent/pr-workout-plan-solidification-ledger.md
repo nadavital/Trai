@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `62ce49e Fix workout PR solidification findings`
+- Latest pushed fix before current round: `9e08620 Fix workout PR review round findings`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -35,6 +35,13 @@
 - Live workout planned/logged semantics: fixed verified planned-strength-set and HealthKit merge issues.
 - Regression-test coverage: fixed verified active workout chat context coverage gap.
 
+### Round 2026-05-23 After `9e08620`
+- AI function contracts: fixed verified generated plan-adherence overcount and saved-plan chat suggestion truncation.
+- Live workout planned/logged semantics: fixed verified weight-goal progress from unlogged planned set weights and legacy ExerciseHistory duplicate risk.
+- Chat/review pending state: fixed verified generated-plan refinement trap by adding cancellation/restore controls for toolbar and embedded surfaces.
+- Plan persistence/edit/review flow: fixed verified draft-restore loss of generated workout goals and workout setup preferences.
+- Regression-test coverage: added focused coverage for generated plan template identity, saved-plan suggestion structure, workout draft persistence, and unlogged weight sets.
+
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
 - Generated workout plan blocks decoded unknown free-text `kind` values as `.custom`, letting malformed AI payloads store generic behavior data.
@@ -48,6 +55,12 @@
 - Dashboard meal "Ask Trai" could lose focused meal context for older/crowded logs because pending chat resolution only searched the capped recent food query.
 - Workout plan refinement hid the composer while Trai was updating a generated plan.
 - Active workout chat context fallback for AI-started planned activities was not directly covered by tests.
+- Generated plan-adherence goals counted unrelated completed workouts because plan-level goals had no durable template identity check.
+- Chat `suggest_workout` recommendations from a saved plan only exposed the first strength exercise or first activity block, dropping the rest of the saved plan structure before acceptance.
+- Weight-goal progress counted unlogged planned set weights and auto-baselines could read those planned weights too.
+- Editing older completed workouts could duplicate `ExerciseHistory` rows because legacy rows without `sourceWorkoutEntryId` were not reused.
+- Generated-plan refinement could leave the user trapped in an in-flight AI request with dismissal disabled and no stop/restore path.
+- Onboarding draft restore persisted the generated workout plan but dropped generated workout goals and workout setup preferences needed at completion.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -56,6 +69,8 @@
 ## Validation
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,id=A7C646DC-750A-4AB4-A28F-0B40813E3D0E' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests`
 - Result after `62ce49e` fix round: 169 selected tests, 0 failures.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,id=A7C646DC-750A-4AB4-A28F-0B40813E3D0E' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests`
+- Result after current fix round: 181 selected tests, 0 failures.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -71,3 +86,8 @@
 - Start a suggested strength workout, do not edit/check the prefilled first set, finish, and confirm it does not appear as completed history or goal progress.
 - Finish a Trai workout near multiple Apple Watch workouts and confirm the merged calories/HR come from the actually overlapping Watch workout.
 - While a workout-plan refinement response is generating, confirm the composer remains visible and typing is possible even though sending is disabled until the response finishes.
+- Start/complete one generated plan template, then complete an unrelated custom workout, and confirm generated plan-adherence goals only count the generated template workout.
+- Ask Trai to suggest a workout when a saved plan has multiple exercises plus a conditioning/cardio block; confirm the start card/live workout includes every planned item.
+- Start a planned strength workout with prefilled/unlogged heavy sets, finish without checking them off, and confirm weight goals/history do not count those planned weights.
+- Restore onboarding after generating a workout plan/goals but before completing onboarding, then finish onboarding and confirm both the workout plan preferences and goals persist.
+- Trigger an onboarding/profile generated-plan refinement, tap Stop while Trai is generating, and confirm the previous plan review returns and the stale plan is not saved as an edited result.

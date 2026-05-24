@@ -2,6 +2,94 @@ import XCTest
 @testable import Trai
 
 final class UserProfileWorkoutPlanRequestTests: XCTestCase {
+    func testOnboardingDraftPersistsWorkoutPlanPreferencesAndGeneratedGoals() throws {
+        var workoutDraft = OnboardingWorkoutPlanDraft()
+        workoutDraft.focuses = [.strength, .climbing]
+        workoutDraft.schedule = .fourDays
+        workoutDraft.duration = .sixtyMinutes
+        workoutDraft.equipment = .homeBasic
+        workoutDraft.experience = .intermediate
+        workoutDraft.goalPresets = [.getStronger, .stayConsistent]
+        workoutDraft.manualDays = [
+            ManualWorkoutPlanDayDraft(
+                name: "Pull + Climb",
+                sessionType: .mixed,
+                focusAreasText: "Climbing",
+                selectedMuscles: [.back, .biceps]
+            )
+        ]
+        workoutDraft.proCoachingNotes = "Keep climbing visible."
+
+        let plan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 4,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Pull + Climb",
+                    sessionType: .mixed,
+                    focusAreas: ["Pull", "Climbing"],
+                    targetMuscleGroups: ["back"],
+                    exercises: [],
+                    estimatedDurationMinutes: 60,
+                    order: 0
+                )
+            ],
+            rationale: "Keep climbing visible.",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let goal = WorkoutGoal(
+            title: "Complete the weekly plan",
+            goalKind: .frequency,
+            targetValue: 4,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "Complete all planned sessions.",
+            tracksGeneratedPlanAdherence: true
+        )
+        goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+
+        let draft = OnboardingView.OnboardingDraft(
+            currentStep: 3,
+            userName: "Sam",
+            dateOfBirth: Date(timeIntervalSince1970: 0),
+            genderRawValue: UserProfile.Gender.notSpecified.rawValue,
+            heightValue: "180",
+            weightValue: "80",
+            targetWeightValue: "",
+            usesMetricHeight: true,
+            usesMetricWeight: true,
+            activityLevelRawValue: UserProfile.ActivityLevel.moderate.rawValue,
+            activityNotes: "",
+            selectedGoalRawValue: UserProfile.GoalType.recomposition.rawValue,
+            additionalGoalNotes: "",
+            enabledMacros: Set(MacroType.allCases),
+            syncFoodToHealthKit: false,
+            syncWeightToHealthKit: false,
+            healthSyncError: nil,
+            generatedPlan: nil,
+            adjustedCalories: "2200",
+            adjustedProtein: "160",
+            adjustedCarbs: "220",
+            adjustedFat: "70",
+            lastGeneratedPlanInputSignature: nil,
+            generatedWorkoutPlan: plan,
+            generatedWorkoutGoals: [OnboardingView.WorkoutGoalDraft(goal: goal)],
+            workoutPlanDraft: workoutDraft
+        )
+
+        let data = try JSONEncoder().encode(draft)
+        let decoded = try JSONDecoder().decode(OnboardingView.OnboardingDraft.self, from: data)
+
+        XCTAssertEqual(decoded.workoutPlanDraft, workoutDraft)
+        XCTAssertEqual(decoded.generatedWorkoutPlan, plan)
+        let restoredGoal = try XCTUnwrap(decoded.generatedWorkoutGoals?.first?.workoutGoal())
+        XCTAssertEqual(restoredGoal.title, goal.title)
+        XCTAssertTrue(restoredGoal.tracksGeneratedPlanAdherence)
+        XCTAssertEqual(restoredGoal.generatedPlanTemplateIDs, plan.templates.map(\.id))
+    }
+
     func testBuildWorkoutPlanRequestFallsBackToStoredSessionDuration() {
         let profile = UserProfile()
         profile.workoutTimePerSession = 55

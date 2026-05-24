@@ -129,6 +129,7 @@ extension AIFunctionExecutor {
             targetMuscleGroups: targetMuscles,
             activityFocuses: activityFocuses,
             exercises: exercises,
+            sourcePlanTemplateID: template.id,
             durationMinutes: template.estimatedDurationMinutes,
             rationale: rationale
         )
@@ -159,42 +160,55 @@ extension AIFunctionExecutor {
     private func suggestedStartExercises(
         from template: WorkoutPlan.WorkoutTemplate
     ) -> [SuggestedWorkoutEntry.SuggestedExercise] {
-        if let exercise = template.structuredExercises.sorted(by: { $0.order < $1.order }).first,
-           template.sessionType.supportsMuscleTargets {
-            return [
-                SuggestedWorkoutEntry.SuggestedExercise(
-                    name: exercise.exerciseName,
-                    category: Exercise.Category.strength.rawValue,
-                    activityTypeName: Exercise.defaultActivityTypeName(for: exercise.exerciseName, category: .strength),
-                    targetTags: [exercise.muscleGroup].filter { !$0.isEmpty },
-                    trackingFields: Exercise.defaultTrackingFields(for: .strength).map(\.rawValue),
-                    sets: exercise.defaultSets,
-                    reps: exercise.defaultReps,
-                    weightKg: nil
-                )
-            ]
+        var suggestions: [SuggestedWorkoutEntry.SuggestedExercise] = []
+        let displayBlocks = template.displayBlocks.sorted { $0.order < $1.order }
+        let hasBlockLevelExercises = displayBlocks.contains { !$0.exercises.isEmpty }
+        var usedTopLevelExerciseFallback = false
+
+        for block in displayBlocks {
+            var blockExercises = block.exercises.sorted { $0.order < $1.order }
+            if blockExercises.isEmpty,
+               block.kind == .strength,
+               !hasBlockLevelExercises,
+               !usedTopLevelExerciseFallback {
+                blockExercises = template.structuredExercises.sorted { $0.order < $1.order }
+                usedTopLevelExerciseFallback = !blockExercises.isEmpty
+            }
+
+            if block.kind == .strength, !blockExercises.isEmpty {
+                for exercise in blockExercises {
+                    suggestions.append(SuggestedWorkoutEntry.SuggestedExercise(
+                        id: exercise.id,
+                        name: exercise.exerciseName,
+                        category: Exercise.Category.strength.rawValue,
+                        activityTypeName: Exercise.defaultActivityTypeName(for: exercise.exerciseName, category: .strength),
+                        targetTags: block.resolvedStartSuggestionTags(including: exercise.muscleGroup),
+                        trackingFields: Exercise.defaultTrackingFields(for: .strength).map(\.rawValue),
+                        sets: exercise.defaultSets,
+                        reps: exercise.defaultReps,
+                        weightKg: nil,
+                        notes: block.notes
+                    ))
+                }
+            } else if block.shouldCreateStartSuggestionItem {
+                let category = exerciseCategory(for: block.kind)
+                let activityName = block.liveWorkoutSuggestionName
+                suggestions.append(SuggestedWorkoutEntry.SuggestedExercise(
+                    id: block.id,
+                    name: activityName,
+                    category: category.rawValue,
+                    activityTypeName: block.displayActivityName,
+                    targetTags: block.resolvedStartSuggestionTags(),
+                    trackingFields: Exercise.defaultTrackingFields(for: category).map(\.rawValue),
+                    sets: 0,
+                    reps: 0,
+                    durationMinutes: block.durationMinutes ?? template.estimatedDurationMinutes,
+                    notes: block.notes
+                ))
+            }
         }
 
-        guard let block = template.displayBlocks.sorted(by: { $0.order < $1.order }).first else {
-            return []
-        }
-
-        let category = exerciseCategory(for: block.kind)
-        let activityName = block.displayActivityName
-        let tags = activityFocuses(from: template, including: block)
-        return [
-            SuggestedWorkoutEntry.SuggestedExercise(
-                name: activityName,
-                category: category.rawValue,
-                activityTypeName: activityName,
-                targetTags: tags,
-                trackingFields: Exercise.defaultTrackingFields(for: category).map(\.rawValue),
-                sets: 0,
-                reps: 0,
-                durationMinutes: block.durationMinutes ?? template.estimatedDurationMinutes,
-                notes: block.notes
-            )
-        ]
+        return suggestions
     }
 
     private func activityFocuses(
@@ -777,6 +791,52 @@ private extension Array where Element == String {
             result.append(trimmed)
         }
         return result
+    }
+}
+
+private extension WorkoutPlan.TrainingBlock {
+    var shouldCreateStartSuggestionItem: Bool {
+        switch kind {
+        case .cardio, .conditioning, .skill, .mobility, .recovery, .sportPractice, .custom:
+            true
+        case .strength:
+            false
+        }
+    }
+
+    func resolvedStartSuggestionTags(including additionalTag: String? = nil) -> [String] {
+        var seen: Set<String> = []
+        return (activityTags + [additionalTag, displayActivityName])
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { seen.insert($0.goalNormalizedKey).inserted }
+    }
+
+    var liveWorkoutSuggestionName: String {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let activityName = displayActivityName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !activityName.isEmpty else {
+            return trimmedTitle.isEmpty ? kind.displayName : trimmedTitle
+        }
+
+        let genericTitleKeys = (
+            WorkoutPlan.TrainingBlock.BlockKind.allCases.flatMap { [$0.displayName, $0.rawValue] }
+            + WorkoutPlan.TrainingBlock.Role.allCases.flatMap { [$0.displayName, $0.rawValue] }
+            + [
+                "Activity",
+                "Block",
+                "Session",
+                "Sport"
+            ]
+        )
+        .map(\.goalNormalizedKey)
+
+        if trimmedTitle.isEmpty || genericTitleKeys.contains(trimmedTitle.goalNormalizedKey) {
+            return activityName
+        }
+
+        return trimmedTitle
     }
 }
 

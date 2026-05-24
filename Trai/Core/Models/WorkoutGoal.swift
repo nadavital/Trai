@@ -27,6 +27,7 @@ final class WorkoutGoal {
     var checkInCadenceDays: Int?
     var baselineValue: Double?
     var tracksGeneratedPlanAdherence: Bool = false
+    var generatedPlanTemplateIDsRaw: String = ""
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var completedAt: Date?
@@ -330,6 +331,7 @@ extension WorkoutGoal {
     func normalizeGeneratedPlanAdherenceScopeIfNeeded(for plan: WorkoutPlan) {
         guard isGeneratedPlanAdherenceGoal(for: plan) else { return }
 
+        generatedPlanTemplateIDs = plan.templates.map(\.id)
         linkedWorkoutTypeRaw = nil
         linkedActivityName = nil
         linkedActivityTags = []
@@ -357,14 +359,6 @@ extension WorkoutGoal {
 
         let targetSessions = Int(targetValue.rounded())
         guard targetSessions == plan.daysPerWeek else {
-            return false
-        }
-
-        let planSessionTypes = Set(plan.templates.map(\.sessionType))
-        let generatedScopeIsNarrowerThanPlan = hasActivityScope || (linkedWorkoutType.map { linkedType in
-            planSessionTypes.contains { $0 != linkedType }
-        } ?? false)
-        guard generatedScopeIsNarrowerThanPlan else {
             return false
         }
 
@@ -584,6 +578,27 @@ extension WorkoutGoal {
             return String(Int(value.rounded()))
         }
         return String(format: "%.2f", value)
+    }
+}
+
+extension WorkoutGoal {
+    var generatedPlanTemplateIDs: [UUID] {
+        get {
+            generatedPlanTemplateIDsRaw
+                .split(separator: ",")
+                .compactMap { UUID(uuidString: String($0)) }
+        }
+        set {
+            generatedPlanTemplateIDsRaw = newValue
+                .map(\.uuidString)
+                .joined(separator: ",")
+        }
+    }
+
+    func matchesGeneratedPlanTemplate(workout: LiveWorkout) -> Bool {
+        guard tracksGeneratedPlanAdherence else { return false }
+        guard let sourceID = workout.sourcePlanTemplateID else { return false }
+        return Set(generatedPlanTemplateIDs).contains(sourceID)
     }
 }
 

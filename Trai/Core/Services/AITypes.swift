@@ -519,6 +519,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
     let targetMuscleGroups: [String]
     let activityFocuses: [String]?
     let exercises: [SuggestedExercise]
+    let sourcePlanTemplateID: UUID?
     let durationMinutes: Int
     let rationale: String
 
@@ -529,6 +530,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
         targetMuscleGroups: [String],
         activityFocuses: [String]? = nil,
         exercises: [SuggestedExercise],
+        sourcePlanTemplateID: UUID? = nil,
         durationMinutes: Int,
         rationale: String
     ) {
@@ -538,6 +540,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
         self.targetMuscleGroups = targetMuscleGroups
         self.activityFocuses = activityFocuses
         self.exercises = exercises
+        self.sourcePlanTemplateID = sourcePlanTemplateID
         self.durationMinutes = durationMinutes
         self.rationale = rationale
     }

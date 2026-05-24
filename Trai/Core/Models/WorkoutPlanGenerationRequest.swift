@@ -398,7 +398,7 @@ struct WorkoutPlanGenerationRequest {
 
     // MARK: - Equipment Access
 
-    enum EquipmentAccess: String, CaseIterable, Identifiable {
+    enum EquipmentAccess: String, Codable, CaseIterable, Identifiable {
         case fullGym = "fullGym"
         case homeAdvanced = "homeAdvanced"
         case homeBasic = "homeBasic"
@@ -436,7 +436,7 @@ struct WorkoutPlanGenerationRequest {
 
     // MARK: - Experience Level
 
-    enum ExperienceLevel: String, CaseIterable, Identifiable {
+    enum ExperienceLevel: String, Codable, CaseIterable, Identifiable {
         case beginner = "beginner"
         case intermediate = "intermediate"
         case advanced = "advanced"

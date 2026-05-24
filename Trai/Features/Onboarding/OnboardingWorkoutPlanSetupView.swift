@@ -111,7 +111,7 @@ enum WorkoutPlanSetupMode: Equatable {
     }
 }
 
-enum OnboardingWorkoutFocus: String, CaseIterable, Identifiable, Hashable {
+enum OnboardingWorkoutFocus: String, Codable, CaseIterable, Identifiable, Hashable {
     case strength
     case cardio
     case climbing
@@ -183,7 +183,7 @@ enum OnboardingWorkoutFocus: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-enum OnboardingWorkoutSchedule: String, CaseIterable, Identifiable, Hashable {
+enum OnboardingWorkoutSchedule: String, Codable, CaseIterable, Identifiable, Hashable {
     case twoDays
     case threeDays
     case fourDays
@@ -223,7 +223,7 @@ enum OnboardingWorkoutSchedule: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-enum OnboardingWorkoutDuration: Int, CaseIterable, Identifiable, Hashable {
+enum OnboardingWorkoutDuration: Int, Codable, CaseIterable, Identifiable, Hashable {
     case thirtyMinutes = 30
     case fortyFiveMinutes = 45
     case sixtyMinutes = 60
@@ -242,7 +242,7 @@ enum OnboardingWorkoutDuration: Int, CaseIterable, Identifiable, Hashable {
     }
 }
 
-enum OnboardingWorkoutConstraint: String, CaseIterable, Identifiable, Hashable {
+enum OnboardingWorkoutConstraint: String, Codable, CaseIterable, Identifiable, Hashable {
     case includeCardio
     case lowImpact
     case variety
@@ -286,7 +286,7 @@ enum OnboardingWorkoutConstraint: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-enum WorkoutPlanGoalPreset: String, CaseIterable, Identifiable, Hashable {
+enum WorkoutPlanGoalPreset: String, Codable, CaseIterable, Identifiable, Hashable {
     case buildMuscle
     case getStronger
     case improveEndurance
@@ -347,7 +347,7 @@ enum WorkoutPlanGoalPreset: String, CaseIterable, Identifiable, Hashable {
 
 }
 
-enum WorkoutPlanGenerationPriority: String, CaseIterable, Identifiable, Hashable {
+enum WorkoutPlanGenerationPriority: String, Codable, CaseIterable, Identifiable, Hashable {
     case muscle
     case strength
     case conditioning
@@ -395,7 +395,7 @@ enum WorkoutPlanGenerationPriority: String, CaseIterable, Identifiable, Hashable
     }
 }
 
-enum WorkoutPlanGenerationStyle: String, CaseIterable, Identifiable, Hashable {
+enum WorkoutPlanGenerationStyle: String, Codable, CaseIterable, Identifiable, Hashable {
     case soreness
     case jointPain
     case missedWorkouts
@@ -439,7 +439,7 @@ enum WorkoutPlanGenerationStyle: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-struct ManualWorkoutPlanDayDraft: Identifiable, Equatable {
+struct ManualWorkoutPlanDayDraft: Codable, Identifiable, Equatable {
     var id = UUID()
     var name: String
     var sessionType: WorkoutMode
@@ -461,7 +461,7 @@ struct ManualWorkoutPlanDayDraft: Identifiable, Equatable {
     }
 }
 
-struct OnboardingWorkoutPlanDraft: Equatable {
+struct OnboardingWorkoutPlanDraft: Codable, Equatable {
     var focuses: Set<OnboardingWorkoutFocus> = []
     var customFocus = ""
     var schedule: OnboardingWorkoutSchedule = .threeDays

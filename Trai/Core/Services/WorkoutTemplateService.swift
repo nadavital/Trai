@@ -46,12 +46,14 @@ struct WorkoutTemplateService {
         let muscleGroups = template.sessionType.supportsMuscleTargets
             ? LiveWorkout.MuscleGroup.fromTargetStrings(template.resolvedTargetMuscleGroups)
             : []
-        return LiveWorkout(
+        let workout = LiveWorkout(
             name: template.name,
             workoutType: template.sessionType,
             targetMuscleGroups: muscleGroups,
             focusAreas: focusAreasPreservingBlockActivities(from: template)
         )
+        workout.sourcePlanTemplateID = template.id
+        return workout
     }
 
     /// Resolve app-intent/deep-link workout names into concrete workout instances.
@@ -105,6 +107,7 @@ struct WorkoutTemplateService {
             targetMuscleGroups: template.sessionType.supportsMuscleTargets ? muscleGroups : [],
             focusAreas: focusAreasPreservingBlockActivities(from: template)
         )
+        workout.sourcePlanTemplateID = template.id
 
         var entries: [LiveWorkoutEntry] = []
         var nextOrderIndex = 0

@@ -69,6 +69,8 @@ struct WorkoutPlanChatFlow: View {
     @State private var activeGeneratedPlanGoals: [WorkoutGoal] = []
     @State private var selectedGeneratedGoal: WorkoutGoal?
     @State private var isRefiningPlan = false
+    @State private var refinementTask: Task<Void, Never>?
+    @State private var refinementReviewMessagesBeforeRequest: [WorkoutPlanFlowMessage] = []
     @State private var saveError: WorkoutPlanChatFlowSaveError?
 
     @FocusState private var isInputFocused: Bool
@@ -110,6 +112,10 @@ struct WorkoutPlanChatFlow: View {
 
     private var shouldShowRefinementSuggestions: Bool {
         isEditingExistingPlan && showRefineMode && generatedPlan != nil && !isGenerating
+    }
+
+    private var hasCancellableRefinement: Bool {
+        refinementTask != nil
     }
 
     private var refinementSuggestions: [TraiSuggestion] {
@@ -167,7 +173,11 @@ struct WorkoutPlanChatFlow: View {
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
-                                if !isOnboarding && !isGenerating {
+                                if hasCancellableRefinement {
+                                    Button("Stop", systemImage: "stop.fill") {
+                                        cancelRefinementRequest()
+                                    }
+                                } else if !isOnboarding && !isGenerating {
                                     Button("Cancel", systemImage: "xmark") {
                                         dismiss()
                                     }
@@ -595,6 +605,13 @@ struct WorkoutPlanChatFlow: View {
                     if shouldShowRefinementSuggestions {
                         refinementSuggestionView
                     }
+                    if hasCancellableRefinement {
+                        Button("Stop", systemImage: "stop.fill") {
+                            cancelRefinementRequest()
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.accentColor)
+                    }
 
                     SimpleChatInputBar(
                         text: $inputText,
@@ -1019,6 +1036,7 @@ struct WorkoutPlanChatFlow: View {
 
         didRefineGeneratedPlan = true
         let previousReviewMessages = messages.filter(isGeneratedPlanReviewMessage)
+        refinementReviewMessagesBeforeRequest = previousReviewMessages
 
         // Add user message
         withAnimation(.spring(response: 0.3)) {
@@ -1029,7 +1047,7 @@ struct WorkoutPlanChatFlow: View {
             isGenerating = true
         }
 
-        Task {
+        refinementTask = Task {
             let request = buildRequest()
             let service = AIService()
 
@@ -1040,14 +1058,17 @@ struct WorkoutPlanChatFlow: View {
                     userMessage: messageText,
                     conversationHistory: refinementConversationHistory
                 )
+                try Task.checkCancellation()
                 let updatedPlan = response.proposedPlan ?? response.updatedPlan
                 let refreshedGoals = if isOnboarding, let updatedPlan {
                     await finalGeneratedGoals(for: updatedPlan)
                 } else {
                     activeGeneratedPlanGoals
                 }
+                try Task.checkCancellation()
 
                 await MainActor.run {
+                    refinementTask = nil
                     if let newPlan = updatedPlan {
                         messages.removeAll(where: isGeneratedPlanReviewMessage)
                         if !isOnboarding, newPlan != currentPlan {
@@ -1066,6 +1087,7 @@ struct WorkoutPlanChatFlow: View {
                 }
 
                 if let newPlan = updatedPlan {
+                    try Task.checkCancellation()
                     await presentGeneratedResultPackage(
                         plan: newPlan,
                         introText: isOnboarding ? (response.message.isEmpty ? "I updated the plan and goals. Review the changes, then save when it looks right." : response.message) : nil,
@@ -1075,19 +1097,45 @@ struct WorkoutPlanChatFlow: View {
                         presentation: .proposal
                     )
                 }
-            } catch {
-                withAnimation(.spring(response: 0.3)) {
-                    messages.removeAll(where: isGeneratedPlanReviewMessage)
-                    messages.append(WorkoutPlanFlowMessage(
-                        type: .error("Trai couldn't update your plan. Please try again.")
-                    ))
-                    messages.append(contentsOf: previousReviewMessages)
-                    isRefiningPlan = false
-                    isGenerating = false
+            } catch is CancellationError {
+                await MainActor.run {
+                    if refinementTask != nil {
+                        restoreReviewMessagesAfterRefinementCancel()
+                    }
                 }
-                HapticManager.error()
+            } catch {
+                await MainActor.run {
+                    refinementTask = nil
+                    withAnimation(.spring(response: 0.3)) {
+                        messages.removeAll(where: isGeneratedPlanReviewMessage)
+                        messages.append(WorkoutPlanFlowMessage(
+                            type: .error("Trai couldn't update your plan. Please try again.")
+                        ))
+                        messages.append(contentsOf: previousReviewMessages)
+                        isRefiningPlan = false
+                        isGenerating = false
+                    }
+                    HapticManager.error()
+                }
             }
         }
+    }
+
+    private func cancelRefinementRequest() {
+        refinementTask?.cancel()
+        restoreReviewMessagesAfterRefinementCancel()
+        HapticManager.selectionChanged()
+    }
+
+    private func restoreReviewMessagesAfterRefinementCancel() {
+        refinementTask = nil
+        withAnimation(.spring(response: 0.3)) {
+            messages.removeAll(where: isGeneratedPlanReviewMessage)
+            messages.append(contentsOf: refinementReviewMessagesBeforeRequest)
+            isRefiningPlan = false
+            isGenerating = false
+        }
+        refinementReviewMessagesBeforeRequest = []
     }
 
     @MainActor
@@ -1100,6 +1148,7 @@ struct WorkoutPlanChatFlow: View {
         presentation: GeneratedPlanPresentation
     ) async {
         withAnimation(generatedResultAnimation) {
+            refinementTask = nil
             isRefiningPlan = false
             isGenerating = false
         }

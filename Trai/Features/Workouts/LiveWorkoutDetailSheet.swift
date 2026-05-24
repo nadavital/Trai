@@ -745,6 +745,7 @@ struct LiveWorkoutDetailSheet: View {
     private func syncExerciseHistory() {
         guard let entries = workout.entries else { return }
         let currentEntryIDs = Set(entries.map(\.id))
+        let performedAt = workout.completedAt ?? workout.startedAt
 
         // Remove stale history for entries deleted in this sheet.
         let removedEntryIDs = originalEntryIDs.subtracting(currentEntryIDs)
@@ -765,11 +766,29 @@ struct LiveWorkoutDetailSheet: View {
                     continue
                 }
 
-                history.update(from: entry, performedAt: workout.completedAt ?? workout.startedAt)
+                history.update(from: entry, performedAt: performedAt)
+            } else if let legacyHistory = legacyHistory(for: entry, performedAt: performedAt) {
+                guard entry.hasExercisePreferenceSignal else {
+                    modelContext.delete(legacyHistory)
+                    continue
+                }
+
+                legacyHistory.update(from: entry, performedAt: performedAt)
             } else if entry.hasExercisePreferenceSignal {
-                let newHistory = ExerciseHistory(from: entry, performedAt: workout.completedAt ?? workout.startedAt)
+                let newHistory = ExerciseHistory(from: entry, performedAt: performedAt)
                 modelContext.insert(newHistory)
             }
+        }
+    }
+
+    private func legacyHistory(for entry: LiveWorkoutEntry, performedAt: Date) -> ExerciseHistory? {
+        allExerciseHistory.first { history in
+            guard history.sourceWorkoutEntryId == nil,
+                  history.exerciseName == entry.exerciseName else {
+                return false
+            }
+
+            return abs(history.performedAt.timeIntervalSince(performedAt)) <= 60
         }
     }
 }
