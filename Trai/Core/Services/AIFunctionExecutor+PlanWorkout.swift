@@ -374,7 +374,22 @@ extension AIFunctionExecutor {
             ))
         }
 
-        let workoutType = WorkoutMode.normalized(from: args["workout_type"] as? String)
+        let workoutType: WorkoutMode?
+        if let rawWorkoutType = args["workout_type"] as? String {
+            let trimmedWorkoutType = rawWorkoutType.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedWorkoutType.isEmpty {
+                workoutType = nil
+            } else if let stableWorkoutType = WorkoutMode(rawValue: trimmedWorkoutType) {
+                workoutType = stableWorkoutType
+            } else {
+                return .dataResponse(FunctionResult(
+                    name: "create_workout_goal",
+                    response: ["error": "workout_type must be a stable workout mode enum. Put user-facing activity names in activity_name or activity_tags."]
+                ))
+            }
+        } else {
+            workoutType = nil
+        }
         let activityName = (args["activity_name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let activityTags = stringArray(from: args["activity_tags"])
         let activityKind = (args["activity_kind"] as? String)
@@ -502,7 +517,16 @@ extension AIFunctionExecutor {
 
         if let rawWorkoutType = args["workout_type"] as? String {
             let trimmedType = rawWorkoutType.trimmingCharacters(in: .whitespacesAndNewlines)
-            linkedWorkoutType = trimmedType.isEmpty ? nil : WorkoutMode.normalized(from: trimmedType)
+            if trimmedType.isEmpty {
+                linkedWorkoutType = nil
+            } else if let stableWorkoutType = WorkoutMode(rawValue: trimmedType) {
+                linkedWorkoutType = stableWorkoutType
+            } else {
+                return .dataResponse(FunctionResult(
+                    name: "update_workout_goal",
+                    response: ["error": "workout_type must be a stable workout mode enum. Put user-facing activity names in activity_name or activity_tags."]
+                ))
+            }
         }
 
         if let rawActivityName = args["activity_name"] as? String {
@@ -892,8 +916,14 @@ extension AIFunctionExecutor {
                 response: ["error": "Missing workout type"]
             ))
         }
-        let workoutType = WorkoutMode.normalized(from: type)?.rawValue
-            ?? type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let trimmedType = type.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let workoutMode = WorkoutMode(rawValue: trimmedType) else {
+            return .dataResponse(FunctionResult(
+                name: "log_workout",
+                response: ["error": "Workout type must be a stable enum value. Put activity names like Running or Bouldering in activity_name."]
+            ))
+        }
+        let workoutType = workoutMode.rawValue
         let activityName = (args["activity_name"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty
@@ -964,7 +994,7 @@ extension AIFunctionExecutor {
                 }
                 let resolvedCategory = explicitCategory
                     ?? (!sets.isEmpty && !hasActivityMetrics ? .strength : nil)
-                if hasActivityMetrics, resolvedCategory != .strength, exerciseActivityName == nil {
+                if (hasActivityMetrics || hasLoggedSetMetrics), resolvedCategory != .strength, exerciseActivityName == nil {
                     return .dataResponse(FunctionResult(
                         name: "log_workout",
                         response: ["error": "Non-strength activity logs need activity_name so Trai can preserve the activity identity."]
@@ -993,17 +1023,6 @@ extension AIFunctionExecutor {
                 }
             }
         }
-        if exercises.isEmpty,
-           let fallbackExercise = Self.topLevelLoggedActivity(
-            workoutName: workoutName,
-            workoutType: workoutType,
-            activityName: activityName,
-            activityTags: activityTags,
-            durationMinutes: durationMinutes,
-            notes: notes
-            ) {
-            exercises.append(fallbackExercise)
-        }
         guard !exercises.isEmpty else {
             return .dataResponse(FunctionResult(
                 name: "log_workout",
@@ -1012,7 +1031,6 @@ extension AIFunctionExecutor {
                 ]
             ))
         }
-
         let semanticActivityTags = Self.loggedWorkoutActivityTags(
             requested: activityTags,
             exercises: exercises
@@ -1048,62 +1066,6 @@ extension AIFunctionExecutor {
                     .compactMap { $0 }
             }
         return derived.dedupedByGoalKey()
-    }
-
-    private static func topLevelLoggedActivity(
-        workoutName: String?,
-        workoutType: String,
-        activityName: String?,
-        activityTags: [String],
-        durationMinutes: Int?,
-        notes: String?
-    ) -> SuggestedWorkoutLog.LoggedExercise? {
-        guard let mode = WorkoutMode(rawValue: workoutType),
-              mode != .strength,
-              durationMinutes != nil || notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-            return nil
-        }
-
-        let category = loggedActivityCategory(for: mode)
-        let resolvedActivityName = activityName
-            ?? workoutName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-            ?? mode.displayName
-        let resolvedName = workoutName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-            ?? resolvedActivityName
-        let trackingFields = Exercise.normalizedTrackingFields(
-            [.duration, .notes],
-            for: category
-        ).map(\.rawValue)
-
-        return SuggestedWorkoutLog.LoggedExercise(
-            name: resolvedName,
-            category: category.rawValue,
-            activityTypeName: resolvedActivityName,
-            targetTags: activityTags.isEmpty ? nil : activityTags,
-            trackingFields: trackingFields,
-            durationMinutes: durationMinutes,
-            notes: notes?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-            sets: []
-        )
-    }
-
-    private static func loggedActivityCategory(for mode: WorkoutMode) -> Exercise.Category {
-        switch mode {
-        case .cardio:
-            return .cardio
-        case .hiit:
-            return .conditioning
-        case .climbing:
-            return .sportPractice
-        case .yoga, .pilates, .flexibility, .mobility:
-            return .mobility
-        case .recovery:
-            return .recovery
-        case .mixed, .custom:
-            return .custom
-        case .strength:
-            return .strength
-        }
     }
 
     private func parseLoggedActivitySegments(_ value: Any?) -> [SuggestedWorkoutLog.LoggedExercise.ActivitySegment] {

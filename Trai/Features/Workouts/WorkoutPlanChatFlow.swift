@@ -1239,7 +1239,7 @@ struct WorkoutPlanChatFlow: View {
     private func finalGeneratedGoals(for plan: WorkoutPlan) async -> [WorkoutGoal] {
         let currentGoals = deduplicatedGeneratedPlanGoals
         guard didRefineGeneratedPlan || currentGoals.isEmpty else {
-            return currentGoals
+            return normalizedGeneratedPlanGoals(currentGoals, for: plan)
         }
 
         do {
@@ -1260,10 +1260,15 @@ struct WorkoutPlanChatFlow: View {
                 goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
                 return goal
             })
-            return goals.isEmpty ? currentGoals : goals
+            return goals.isEmpty ? normalizedGeneratedPlanGoals(currentGoals, for: plan) : goals
         } catch {
-            return currentGoals
+            return normalizedGeneratedPlanGoals(currentGoals, for: plan)
         }
+    }
+
+    private func normalizedGeneratedPlanGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) -> [WorkoutGoal] {
+        goals.forEach { $0.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan) }
+        return goals
     }
 
     private func plannedSessionSummaries(for plan: WorkoutPlan) -> [String] {

@@ -568,13 +568,30 @@ struct ChatView: View {
         prompt: String,
         focusedContext: AIService.FocusedFoodEntryContext
     ) {
+        let launchLabel = "Opening this meal with Trai..."
+        guard !isLoading, currentMessageTask == nil else {
+            queuePendingLoggedMealPrompt(prompt, launchLabel: launchLabel)
+            HapticManager.selectionChanged()
+            return
+        }
         startNewSession(silent: true)
         focusedFoodEntryContext = focusedContext
-        sendAppInitiatedPrompt(
+        guard sendAppInitiatedPrompt(
             prompt,
-            launchLabel: "Opening this meal with Trai..."
-        )
+            launchLabel: launchLabel
+        ) else {
+            queuePendingLoggedMealPrompt(prompt, launchLabel: launchLabel)
+            return
+        }
         HapticManager.selectionChanged()
+    }
+
+    private func queuePendingLoggedMealPrompt(_ prompt: String, launchLabel: String) {
+        guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        pendingChatPrompt = prompt
+        pendingChatLaunchLabel = launchLabel
+        pendingFocusedFoodEntryId = ""
+        pendingChatActionKind = ""
     }
 
     func mealSuggestionKey(for meal: SuggestedFoodEntry, in message: ChatMessage) -> MealSuggestionKey {

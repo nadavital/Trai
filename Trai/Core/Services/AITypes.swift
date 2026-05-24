@@ -758,7 +758,7 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
     }
 
     var iconName: String {
-        if let mode = WorkoutMode.normalized(from: workoutType),
+        if let mode = WorkoutMode(rawValue: workoutType.trimmingCharacters(in: .whitespacesAndNewlines)),
            mode != .mixed,
            mode != .custom {
             return mode.iconName
@@ -772,7 +772,6 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
         }
         return nonStrength?.iconName
             ?? categories.first?.iconName
-            ?? WorkoutMode.normalized(from: workoutType)?.iconName
             ?? "figure.mixed.cardio"
     }
 }
@@ -1097,7 +1096,7 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
     }
 
     var iconName: String {
-        if let mode = WorkoutMode.normalized(from: workoutType),
+        if let mode = WorkoutMode(rawValue: workoutType.trimmingCharacters(in: .whitespacesAndNewlines)),
            mode != .mixed,
            mode != .custom {
             return mode.iconName
@@ -1111,16 +1110,15 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
         }
         return nonStrength?.iconName
             ?? categories.first?.iconName
-            ?? WorkoutMode.normalized(from: workoutType)?.iconName
             ?? "figure.mixed.cardio"
     }
 
     /// Whether this is a strength workout
     var isStrength: Bool {
-        if let mode = WorkoutMode.normalized(from: workoutType) {
+        if let mode = WorkoutMode(rawValue: workoutType.trimmingCharacters(in: .whitespacesAndNewlines)) {
             return mode.supportsMuscleTargets
         }
-        return ["strength", "weights", "lifting"].contains(workoutType.lowercased())
+        return false
     }
 }
 

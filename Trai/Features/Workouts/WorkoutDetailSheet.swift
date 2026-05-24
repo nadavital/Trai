@@ -14,6 +14,7 @@ struct WorkoutDetailSheet: View {
     @Environment(\.appTabSelection) private var appTabSelection
     @Environment(\.modelContext) private var modelContext
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
@@ -22,6 +23,7 @@ struct WorkoutDetailSheet: View {
     @Query private var profiles: [UserProfile]
     @State private var isEditingNotes = false
     @State private var noteDraft = ""
+    @State private var presentedAccountSetupContext: AccountSetupContext?
 
     private struct WorkoutStatItem: Identifiable {
         let id = UUID()
@@ -214,6 +216,9 @@ struct WorkoutDetailSheet: View {
                     .labelStyle(.iconOnly)
                 }
             }
+        }
+        .sheet(item: $presentedAccountSetupContext) { context in
+            AccountSetupView(context: context)
         }
     }
 
@@ -516,6 +521,19 @@ struct WorkoutDetailSheet: View {
         guard canAccessTraiChat else {
             proUpsellCoordinator?.present(source: .chat)
             HapticManager.lightTap()
+            return
+        }
+        guard accountSessionService?.isAuthenticated != false else {
+            presentedAccountSetupContext = .aiFeatures
+            HapticManager.lightTap()
+            return
+        }
+        guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            dismiss()
+            DispatchQueue.main.async {
+                appTabSelection.wrappedValue = .trai
+            }
+            HapticManager.selectionChanged()
             return
         }
 

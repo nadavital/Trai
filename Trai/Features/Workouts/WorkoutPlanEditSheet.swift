@@ -623,7 +623,7 @@ struct WorkoutPlanEditSheet: View {
 
         return WorkoutPlan(
             splitType: plan.splitType,
-            daysPerWeek: templates.count,
+            daysPerWeek: max(plan.daysPerWeek, templates.count),
             templates: templates,
             planIntent: plan.planIntent,
             rationale: plan.rationale,

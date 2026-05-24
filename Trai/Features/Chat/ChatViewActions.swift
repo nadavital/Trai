@@ -347,8 +347,11 @@ extension ChatView {
 extension ChatView {
     func acceptWorkoutLogSuggestion(_ workoutLog: SuggestedWorkoutLog, for message: ChatMessage) {
         // Create a LiveWorkout with proper exercise details
-        let workoutType = LiveWorkout.WorkoutType.normalized(from: workoutLog.workoutType)
-            ?? (workoutLog.isStrength ? .strength : .cardio)
+        guard let workoutType = LiveWorkout.WorkoutType(rawValue: workoutLog.workoutType) else {
+            message.errorMessage = "This workout log needs stable activity data before it can be saved. Ask Trai to regenerate it."
+            HapticManager.error()
+            return
+        }
         let semanticFocus = workoutLog.semanticFocusAreas
         let workout = LiveWorkout(
             name: workoutLog.displayName,
@@ -360,7 +363,16 @@ extension ChatView {
         // Add exercises as entries
         var entries: [LiveWorkoutEntry] = []
         for (index, exercise) in workoutLog.exercises.enumerated() {
-            let category = exercise.resolvedCategory(fallbackWorkoutType: workoutType)
+            guard let category = exercise.strictCategory else {
+                message.errorMessage = "This workout log needs stable activity categories before it can be saved. Ask Trai to regenerate it."
+                HapticManager.error()
+                return
+            }
+            if category != .strength, exercise.trimmedActivityTypeName == nil {
+                message.errorMessage = "This workout log needs activity names before it can be saved. Ask Trai to regenerate it."
+                HapticManager.error()
+                return
+            }
             let entry = LiveWorkoutEntry(
                 exerciseName: exercise.name,
                 orderIndex: index,
@@ -483,7 +495,26 @@ extension ChatView {
 extension ChatView {
     func acceptWorkoutSuggestion(_ workout: SuggestedWorkoutEntry, for message: ChatMessage) {
         // Map workout type string to enum
-        let workoutType = LiveWorkout.WorkoutType.normalized(from: workout.workoutType) ?? .strength
+        guard let workoutType = LiveWorkout.WorkoutType(rawValue: workout.workoutType) else {
+            message.errorMessage = "This workout needs stable activity data before it can be started. Ask Trai to regenerate it."
+            HapticManager.error()
+            return
+        }
+        guard let exercise = workout.exercises.first else {
+            message.errorMessage = "This workout needs at least one trackable item before it can be started. Ask Trai to regenerate it."
+            HapticManager.error()
+            return
+        }
+        guard let category = exercise.strictCategory else {
+            message.errorMessage = "This workout needs stable activity categories before it can be started. Ask Trai to regenerate it."
+            HapticManager.error()
+            return
+        }
+        if category != .strength, exercise.trimmedActivityTypeName == nil {
+            message.errorMessage = "This workout needs activity names before it can be started. Ask Trai to regenerate it."
+            HapticManager.error()
+            return
+        }
 
         // Map target muscle groups
         let targetMuscles = workoutType.supportsMuscleTargets
@@ -503,54 +534,51 @@ extension ChatView {
         // Start with one ready exercise. The live workout view will continue
         // surfacing Trai suggestions instead of dumping the whole plan at once.
         var entries: [LiveWorkoutEntry] = []
-        if let exercise = workout.exercises.first {
-            let category = exercise.resolvedCategory(fallbackWorkoutType: workoutType)
-            let entry = LiveWorkoutEntry(
-                exerciseName: exercise.name,
-                orderIndex: 0,
-                exerciseType: category.rawValue
-            )
-            entry.activityTypeName = exercise.resolvedActivityName(category: category)
-            entry.activityKind = category.liveWorkoutActivityKind
-            entry.targetTags = exercise.resolvedTargetTags(category: category)
-            entry.trackingFields = exercise.resolvedTrackingFields(category: category)
-            if category == .strength,
-               let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !notes.isEmpty {
-                entry.notes = notes
-            }
-
-            if category == .strength {
-                let setDefaults = WorkoutTemplateService().suggestedSetDefaults(
-                    exerciseName: exercise.name,
-                    requestedReps: exercise.reps,
-                    requestedWeightKg: exercise.weightKg,
-                    progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
-                    modelContext: modelContext
-                )
-                entry.addSet(LiveWorkoutEntry.SetData(
-                    reps: setDefaults.reps,
-                    weight: setDefaults.weight,
-                    completed: false,
-                    isWarmup: false
-                ))
-            } else {
-                entry.plannedDurationSeconds = exercise.durationMinutes.map { max(0, $0) * 60 }
-                if let distanceMeters = exercise.distanceMeters, distanceMeters > 0 {
-                    entry.plannedTarget = String(format: "%.0f m", distanceMeters)
-                }
-                if let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
-                    entry.plannedTarget = [entry.plannedTarget, notes]
-                        .compactMap { value in
-                            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                            return trimmed.isEmpty ? nil : trimmed
-                        }
-                        .joined(separator: " • ")
-                }
-                entry.plannedActivitySegments = exercise.activitySegments
-            }
-            entries.append(entry)
+        let entry = LiveWorkoutEntry(
+            exerciseName: exercise.name,
+            orderIndex: 0,
+            exerciseType: category.rawValue
+        )
+        entry.activityTypeName = exercise.resolvedActivityName(category: category)
+        entry.activityKind = category.liveWorkoutActivityKind
+        entry.targetTags = exercise.resolvedTargetTags(category: category)
+        entry.trackingFields = exercise.resolvedTrackingFields(category: category)
+        if category == .strength,
+           let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !notes.isEmpty {
+            entry.notes = notes
         }
+
+        if category == .strength {
+            let setDefaults = WorkoutTemplateService().suggestedSetDefaults(
+                exerciseName: exercise.name,
+                requestedReps: exercise.reps,
+                requestedWeightKg: exercise.weightKg,
+                progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
+                modelContext: modelContext
+            )
+            entry.addSet(LiveWorkoutEntry.SetData(
+                reps: setDefaults.reps,
+                weight: setDefaults.weight,
+                completed: false,
+                isWarmup: false
+            ))
+        } else {
+            entry.plannedDurationSeconds = exercise.durationMinutes.map { max(0, $0) * 60 }
+            if let distanceMeters = exercise.distanceMeters, distanceMeters > 0 {
+                entry.plannedTarget = String(format: "%.0f m", distanceMeters)
+            }
+            if let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+                entry.plannedTarget = [entry.plannedTarget, notes]
+                    .compactMap { value in
+                        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                        return trimmed.isEmpty ? nil : trimmed
+                    }
+                    .joined(separator: " • ")
+            }
+            entry.plannedActivitySegments = exercise.activitySegments
+        }
+        entries.append(entry)
         liveWorkout.entries = entries
 
         // Save to database
@@ -636,25 +664,15 @@ private extension SuggestedWorkoutLog {
 }
 
 private extension SuggestedWorkoutLog.LoggedExercise {
-    func resolvedCategory(fallbackWorkoutType: LiveWorkout.WorkoutType) -> Exercise.Category {
-        if let rawCategory = category,
-           let resolved = Exercise.Category(rawValue: rawCategory.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            return resolved.userFacingEquivalent
-        }
-        if !sets.isEmpty && !hasActivityMetrics {
-            return .strength
-        }
-        if let activityTypeName,
-           !activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .custom
-        }
-        if fallbackWorkoutType == .mixed || fallbackWorkoutType == .custom {
-            return .custom
-        }
-        if fallbackWorkoutType.supportsMuscleTargets {
-            return .strength
-        }
-        return .cardio
+    var strictCategory: Exercise.Category? {
+        guard let rawCategory = category else { return nil }
+        return Exercise.Category(rawValue: rawCategory.trimmingCharacters(in: .whitespacesAndNewlines))?.userFacingEquivalent
+    }
+
+    var trimmedActivityTypeName: String? {
+        guard let activityTypeName else { return nil }
+        let trimmed = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     func resolvedActivityName(category: Exercise.Category) -> String {
@@ -693,22 +711,15 @@ private extension SuggestedWorkoutLog.LoggedExercise {
 }
 
 private extension SuggestedWorkoutEntry.SuggestedExercise {
-    func resolvedCategory(fallbackWorkoutType: LiveWorkout.WorkoutType) -> Exercise.Category {
-        if let rawCategory = category,
-           let resolved = Exercise.Category(rawValue: rawCategory.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            return resolved.userFacingEquivalent
-        }
-        if hasActivityMetrics {
-            return fallbackWorkoutType.supportsMuscleTargets ? .custom : .cardio
-        }
-        if let activityTypeName,
-           !activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .custom
-        }
-        if fallbackWorkoutType.supportsMuscleTargets {
-            return .strength
-        }
-        return .cardio
+    var strictCategory: Exercise.Category? {
+        guard let rawCategory = category else { return nil }
+        return Exercise.Category(rawValue: rawCategory.trimmingCharacters(in: .whitespacesAndNewlines))?.userFacingEquivalent
+    }
+
+    var trimmedActivityTypeName: String? {
+        guard let activityTypeName else { return nil }
+        let trimmed = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     func resolvedActivityName(category: Exercise.Category) -> String {

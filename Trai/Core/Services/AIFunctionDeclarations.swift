@@ -863,6 +863,7 @@ enum AIFunctionDeclarations {
                     ],
                     "suggested_exercises": [
                         "type": "array",
+                        "minItems": 1,
                         "items": [
                             "type": "object",
                             "properties": [
@@ -908,10 +909,10 @@ enum AIFunctionDeclarations {
                             ],
                             "required": ["name", "category", "activity_name"]
                         ],
-                        "description": "Pre-populated strength exercises or activity items for the workout (optional)"
+                        "description": "Pre-populated strength exercises or activity items for the workout."
                     ]
                 ],
-                "required": ["name", "workout_type"]
+                "required": ["name", "workout_type", "suggested_exercises"]
             ]
         ]
     }

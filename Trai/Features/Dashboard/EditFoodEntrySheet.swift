@@ -14,12 +14,14 @@ struct EditFoodEntrySheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appTabSelection) private var appTabSelection
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingFocusedFoodEntryId) private var pendingFocusedFoodEntryId: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingActionKind) private var pendingChatActionKind: String = ""
     @Query private var profiles: [UserProfile]
+    @State private var presentedAccountSetupContext: AccountSetupContext?
 
     let onAskTrai: ((String, AIService.FocusedFoodEntryContext) -> Void)?
 
@@ -171,6 +173,9 @@ struct EditFoodEntrySheet: View {
             }
         }
         .proUpsellPresenter()
+        .sheet(item: $presentedAccountSetupContext) { context in
+            AccountSetupView(context: context)
+        }
         .traiSheetBranding()
     }
 
@@ -264,6 +269,11 @@ struct EditFoodEntrySheet: View {
             HapticManager.lightTap()
             return
         }
+        guard accountSessionService?.isAuthenticated != false else {
+            presentedAccountSetupContext = .aiFeatures
+            HapticManager.lightTap()
+            return
+        }
 
         let prompt = entry.traiMealReviewPrompt
         if let onAskTrai {
@@ -272,6 +282,14 @@ struct EditFoodEntrySheet: View {
                 onAskTrai(prompt, entry.focusedChatContext)
             }
         } else {
+            guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                dismiss()
+                DispatchQueue.main.async {
+                    appTabSelection.wrappedValue = .trai
+                }
+                HapticManager.selectionChanged()
+                return
+            }
             pendingChatPrompt = prompt
             pendingChatLaunchLabel = "Opening this meal with Trai..."
             pendingFocusedFoodEntryId = entry.id.uuidString

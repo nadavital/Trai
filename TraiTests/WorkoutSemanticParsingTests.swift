@@ -584,6 +584,26 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertNotNil(functionResult.response["error"])
     }
 
+    func testStartLiveWorkoutRejectsMissingSuggestedExercises() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "start_live_workout",
+                arguments: [
+                    "name": "Bouldering Session",
+                    "workout_type": "climbing",
+                    "activity_focuses": ["Bouldering"],
+                    "duration_minutes": 45
+                ]
+            )
+        )
+
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected validation error")
+        }
+
+        XCTAssertEqual(functionResult.response["error"] as? String, "start_live_workout needs at least one suggested exercise/activity item with stable category and activity_name.")
+    }
+
     func testStartLiveWorkoutUsesCustomCategoryForUnknownNamedActivity() async throws {
         let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
             .init(
@@ -649,7 +669,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                 name: "start_live_workout",
                 arguments: [
                     "name": "Run Intervals",
-                    "workout_type": "running",
+                    "workout_type": "cardio",
                     "suggested_exercises": [
                         [
                             "name": "Run Intervals",
@@ -887,7 +907,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         )
     }
 
-    func testCreateWorkoutGoalNormalizesRunningToCardio() async throws {
+    func testCreateWorkoutGoalRejectsFreeTextWorkoutType() async throws {
         let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
         let result = await executor.execute(
             .init(
@@ -905,13 +925,11 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             )
         )
 
-        guard case .dataResponse(let functionResult) = result,
-              let goal = functionResult.response["goal"] as? [String: Any] else {
-            return XCTFail("Expected workout goal response")
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected workout goal error response")
         }
 
-        XCTAssertEqual(goal["workout_type"] as? String, WorkoutMode.cardio.rawValue)
-        XCTAssertEqual(goal["success_criteria"] as? String, "Complete three cardio sessions in one week.")
+        XCTAssertEqual(functionResult.response["error"] as? String, "workout_type must be a stable workout mode enum. Put user-facing activity names in activity_name or activity_tags.")
     }
 
     func testWorkoutGoalFunctionsPreserveActivityKindAndRoleScope() async throws {
@@ -1002,7 +1020,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(functionResult.response["error"] as? String, "period_unit is required for duration goals")
     }
 
-    func testUpdateWorkoutGoalNormalizesWeightLiftingToStrength() async throws {
+    func testUpdateWorkoutGoalRejectsFreeTextWorkoutType() async throws {
         let goal = WorkoutGoal(
             title: "Move more",
             goalKind: .frequency,
@@ -1027,13 +1045,12 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             )
         )
 
-        guard case .dataResponse(let functionResult) = result,
-              let updatedGoal = functionResult.response["goal"] as? [String: Any] else {
-            return XCTFail("Expected updated workout goal response")
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected workout goal error response")
         }
 
-        XCTAssertEqual(updatedGoal["workout_type"] as? String, WorkoutMode.strength.rawValue)
-        XCTAssertEqual(goal.linkedWorkoutType, .strength)
+        XCTAssertEqual(functionResult.response["error"] as? String, "workout_type must be a stable workout mode enum. Put user-facing activity names in activity_name or activity_tags.")
+        XCTAssertEqual(goal.linkedWorkoutType, .cardio)
     }
 
     func testUpdateWorkoutGoalRejectsDistanceGoalWithoutPeriod() async throws {
@@ -1076,7 +1093,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(goal.periodCount, 1)
     }
 
-    func testLogWorkoutNormalizesRunningType() async {
+    func testLogWorkoutRejectsFreeTextWorkoutType() async {
         let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
         let result = await executor.execute(
             .init(
@@ -1089,13 +1106,11 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             )
         )
 
-        guard case .suggestedWorkoutLog(let workoutLog) = result else {
-            return XCTFail("Expected suggested workout log")
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected log workout error response")
         }
 
-        XCTAssertEqual(workoutLog.workoutType, WorkoutMode.cardio.rawValue)
-        XCTAssertEqual(workoutLog.exercises.first?.category, Exercise.Category.cardio.rawValue)
-        XCTAssertEqual(workoutLog.exercises.first?.durationMinutes, 35)
+        XCTAssertEqual(functionResult.response["error"] as? String, "Workout type must be a stable enum value. Put activity names like Running or Bouldering in activity_name.")
     }
 
     func testLogWorkoutRejectsStrengthItemWithoutCompletedSets() async {
@@ -1256,7 +1271,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             .init(
                 name: "log_workout",
                 arguments: [
-                    "type": "sports",
+                    "type": "climbing",
                     "name": "Bouldering session",
                     "activity_name": "Bouldering",
                     "activity_tags": ["Climbing", "Grip"],
@@ -1338,6 +1353,34 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertNotNil(functionResult.response["error"])
     }
 
+    func testLogWorkoutRejectsNonStrengthSetStyleActivityWithoutActivityName() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "name": "Padel drills",
+                    "type": "mixed",
+                    "exercises": [
+                        [
+                            "name": "Padel rallies",
+                            "category": "sportPractice",
+                            "tracking_fields": ["reps", "notes"],
+                            "sets": [
+                                ["reps": 30]
+                            ]
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected validation error")
+        }
+
+        XCTAssertEqual(functionResult.response["error"] as? String, "Non-strength activity logs need activity_name so Trai can preserve the activity identity.")
+    }
+
     func testLogWorkoutRejectsFreeTextCategoryIdentity() async throws {
         let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
             .init(
@@ -1414,6 +1457,12 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         let startLiveWorkoutCategories = try exerciseCategoryEnum(in: AIFunctionDeclarations.startLiveWorkout, exercisesKey: "suggested_exercises")
         XCTAssertTrue(expected.isSubset(of: Set(startLiveWorkoutCategories)))
+
+        let startParameters = try XCTUnwrap(AIFunctionDeclarations.startLiveWorkout["parameters"] as? [String: Any])
+        XCTAssertEqual(startParameters["required"] as? [String], ["name", "workout_type", "suggested_exercises"])
+        let startProperties = try XCTUnwrap(startParameters["properties"] as? [String: Any])
+        let suggestedExercises = try XCTUnwrap(startProperties["suggested_exercises"] as? [String: Any])
+        XCTAssertEqual(suggestedExercises["minItems"] as? Int, 1)
     }
 
     func testPlanBlockSchemasUseRoleForPlacementNotKind() throws {

@@ -34,8 +34,19 @@ extension AIFunctionExecutor {
         let hasExplicitWorkoutType = workoutTypeString?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty == false
-        let workoutType = LiveWorkout.WorkoutType.normalized(from: workoutTypeString)
-            ?? (requestedActivityFocuses.isEmpty ? .strength : .custom)
+        let workoutType: LiveWorkout.WorkoutType
+        if let workoutTypeString, hasExplicitWorkoutType {
+            let trimmedWorkoutType = workoutTypeString.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let stableWorkoutType = LiveWorkout.WorkoutType(rawValue: trimmedWorkoutType) else {
+                return .dataResponse(FunctionResult(
+                    name: "suggest_workout",
+                    response: ["error": "workout_type must be a stable workout mode enum. Put user-facing activity names in activity_focuses."]
+                ))
+            }
+            workoutType = stableWorkoutType
+        } else {
+            workoutType = requestedActivityFocuses.isEmpty ? .strength : .custom
+        }
         let durationMinutes = numericInt(from: args["duration_minutes"]) ?? 45
 
         if !hasExplicitWorkoutType,
@@ -560,7 +571,13 @@ extension AIFunctionExecutor {
                 response: ["error": "Missing required parameters: name and workout_type"]
             ))
         }
-        let workoutType = LiveWorkout.WorkoutType.normalized(from: rawWorkoutType) ?? .strength
+        let trimmedWorkoutType = rawWorkoutType.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let workoutType = LiveWorkout.WorkoutType(rawValue: trimmedWorkoutType) else {
+            return .dataResponse(FunctionResult(
+                name: "start_live_workout",
+                response: ["error": "workout_type must be a stable workout mode enum. Put user-facing activity names in activity_focuses or activity_name."]
+            ))
+        }
 
         // Parse target muscle groups
         let muscleStrings = args["target_muscle_groups"] as? [String] ?? []
@@ -620,6 +637,12 @@ extension AIFunctionExecutor {
                     segments: segments
                 ))
             }
+        }
+        guard !exercises.isEmpty else {
+            return .dataResponse(FunctionResult(
+                name: "start_live_workout",
+                response: ["error": "start_live_workout needs at least one suggested exercise/activity item with stable category and activity_name."]
+            ))
         }
 
         let activityFocuses = Self.suggestionActivityFocuses(
