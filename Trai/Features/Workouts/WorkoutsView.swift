@@ -447,7 +447,7 @@ struct WorkoutsView: View {
             .sheet(isPresented: $showingWorkoutPlanEdit) {
                 workoutPlanEditSheet
             }
-            .sheet(isPresented: $showingStandardPlanSetup) {
+            .sheet(isPresented: $showingStandardPlanSetup, onDismiss: resetStandardWorkoutPlanSetupState) {
                 WorkoutPlanSetupChoiceFlow(
                     draft: $standardWorkoutPlanDraft,
                     generatedPlanForReview: $standardGeneratedWorkoutPlan,
@@ -518,7 +518,14 @@ struct WorkoutsView: View {
                         persistCachedGoalSuggestionSnapshot(suggestions)
                     }
                 ) { goals in
-                    for goal in goals {
+                    let goalsToInsert = workoutPlan.map {
+                        WorkoutGoal.generatedGoalsToInsert(
+                            goals,
+                            existingGoals: activeWorkoutGoals,
+                            for: $0
+                        )
+                    } ?? goals
+                    for goal in goalsToInsert {
                         modelContext.insert(goal)
                     }
                     try? modelContext.save()
@@ -1081,6 +1088,7 @@ struct WorkoutsView: View {
 
         profile.workoutPlan = plan
         draftSnapshot.applyPreferences(to: profile, generatedPlan: plan)
+        refreshExistingGeneratedPlanAdherenceGoals(for: plan)
 
         if mode == .proAI {
             insertGeneratedWorkoutGoals(generatedGoals, for: plan)
@@ -1097,9 +1105,7 @@ struct WorkoutsView: View {
 
         do {
             try modelContext.save()
-            standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
-            standardGeneratedWorkoutPlan = nil
-            standardGeneratedWorkoutGoals = []
+            resetStandardWorkoutPlanSetupState()
             showingStandardPlanSetup = false
             HapticManager.success()
         } catch {
@@ -1110,14 +1116,23 @@ struct WorkoutsView: View {
     }
 
     private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) {
-        var existingTitles = Set(activeWorkoutGoals.map { $0.trimmedTitle.lowercased() })
-        for goal in goals {
-            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
-            let titleKey = goal.trimmedTitle.lowercased()
-            guard !titleKey.isEmpty, !existingTitles.contains(titleKey) else { continue }
+        for goal in WorkoutGoal.generatedGoalsToInsert(
+            goals,
+            existingGoals: activeWorkoutGoals,
+            for: plan
+        ) {
             modelContext.insert(goal)
-            existingTitles.insert(titleKey)
         }
+    }
+
+    private func refreshExistingGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
+        WorkoutGoal.refreshGeneratedPlanAdherenceGoals(activeWorkoutGoals, for: plan)
+    }
+
+    private func resetStandardWorkoutPlanSetupState() {
+        standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+        standardGeneratedWorkoutPlan = nil
+        standardGeneratedWorkoutGoals = []
     }
 
     private func persistCachedGoalSuggestionSnapshot(_ suggestions: [WorkoutGoalSuggestion]) {

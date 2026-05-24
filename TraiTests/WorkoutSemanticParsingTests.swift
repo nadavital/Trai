@@ -423,6 +423,36 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(workoutLog.exercises.first?.activityRole, "finisher")
     }
 
+    func testLogWorkoutUsesTopLevelDurationForSingleNonStrengthActivity() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "name": "Easy Run",
+                    "type": "cardio",
+                    "duration_minutes": 35,
+                    "exercises": [
+                        [
+                            "name": "Easy Run",
+                            "category": "cardio",
+                            "activity_name": "Running"
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .suggestedWorkoutLog(let workoutLog) = result,
+              let exercise = workoutLog.exercises.first else {
+            return XCTFail("Expected workout log suggestion")
+        }
+
+        XCTAssertEqual(workoutLog.durationMinutes, 35)
+        XCTAssertEqual(exercise.category, "cardio")
+        XCTAssertEqual(exercise.activityTypeName, "Running")
+        XCTAssertEqual(exercise.durationMinutes, 35)
+    }
+
     func testSuggestWorkoutUsesActivityFocusesInsteadOfStrengthFallback() async throws {
         let bouldering = Exercise(name: "Limit Bouldering", category: .sportPractice)
         bouldering.activityTypeName = "Bouldering"
@@ -1321,6 +1351,74 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(goal.generatedPlanTemplateIDs, [template.id])
         XCTAssertEqual(goal.targetValue, 1.0)
         XCTAssertNil(goal.linkedWorkoutType)
+    }
+
+    func testGeneratedGoalsToInsertUsesStructuredDeduplicationAndNormalizesPlanAdherence() {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Generated Strength",
+            sessionType: .strength,
+            targetMuscleGroups: ["Back"],
+            exercises: [],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let plan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+        let existingMainGoal = WorkoutGoal(
+            title: "Train conditioning",
+            goalKind: .frequency,
+            linkedActivityKind: .conditioning,
+            linkedActivityRole: .main,
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            periodCount: 1
+        )
+        let duplicateMainGoal = WorkoutGoal(
+            title: "Train conditioning",
+            goalKind: .frequency,
+            linkedActivityKind: .conditioning,
+            linkedActivityRole: .main,
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            periodCount: 1
+        )
+        let distinctFinisherGoal = WorkoutGoal(
+            title: "Train conditioning",
+            goalKind: .frequency,
+            linkedActivityKind: .conditioning,
+            linkedActivityRole: .finisher,
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            periodCount: 1
+        )
+        let adherenceGoal = WorkoutGoal(
+            title: "Complete plan",
+            goalKind: .frequency,
+            targetValue: 1,
+            targetUnit: "days",
+            periodUnit: .week,
+            periodCount: 1,
+            tracksGeneratedPlanAdherence: true
+        )
+
+        let goalsToInsert = WorkoutGoal.generatedGoalsToInsert(
+            [duplicateMainGoal, distinctFinisherGoal, adherenceGoal],
+            existingGoals: [existingMainGoal],
+            for: plan
+        )
+
+        XCTAssertEqual(goalsToInsert.map(\.id), [distinctFinisherGoal.id, adherenceGoal.id])
+        XCTAssertEqual(adherenceGoal.generatedPlanTemplateIDs, [template.id])
+        XCTAssertEqual(adherenceGoal.targetValue, 1.0)
     }
 
     func testCreateWorkoutGoalRejectsFreeTextActivityKindAndRole() async throws {

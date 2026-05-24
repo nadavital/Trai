@@ -198,13 +198,16 @@ extension ChatView {
             rebuildSessionMessages(preferLiveQueryData: true)
         }
 
+        let requestID = UUID()
+        currentMessageRequestID = requestID
         currentMessageTask = Task {
             await performSendMessage(
                 text: text,
                 capturedImage: capturedImage,
                 previousMessages: previousMessages,
                 pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext,
-                aiMessage: aiMessage
+                aiMessage: aiMessage,
+                requestID: requestID
             )
         }
     }
@@ -220,6 +223,7 @@ extension ChatView {
         guard currentMessageTask == nil, !isLoading else { return false }
 
         updateLastActivity()
+        let pendingWorkoutPlanSuggestionForContext = pendingWorkoutPlanSuggestion?.suggestion
         retirePendingPlanSuggestionsInCurrentSession()
         currentActivity = launchLabel ?? "Reviewing with Trai..."
         isLoading = true
@@ -246,13 +250,16 @@ extension ChatView {
         }
         rebuildSessionMessages(preferLiveQueryData: true)
 
+        let requestID = UUID()
+        currentMessageRequestID = requestID
         currentMessageTask = Task {
             await performSendMessage(
                 text: trimmedText,
                 capturedImage: nil,
                 previousMessages: previousMessages,
-                pendingWorkoutPlanSuggestionForContext: nil,
-                aiMessage: aiMessage
+                pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext,
+                aiMessage: aiMessage,
+                requestID: requestID
             )
         }
         return true
@@ -261,6 +268,7 @@ extension ChatView {
     func stopGenerating() {
         currentMessageTask?.cancel()
         currentMessageTask = nil
+        currentMessageRequestID = nil
         isLoading = false
         currentActivity = nil
         HapticManager.lightTap()
@@ -271,7 +279,8 @@ extension ChatView {
         capturedImage: UIImage?,
         previousMessages: [ChatMessage],
         pendingWorkoutPlanSuggestionForContext: WorkoutPlanSuggestionEntry?,
-        aiMessage: ChatMessage
+        aiMessage: ChatMessage,
+        requestID: UUID
     ) async {
         isLoading = true
         var latestStreamedText = ""
@@ -352,9 +361,11 @@ extension ChatView {
             nutritionPlanReviewMessageIds.remove(aiMessage.id)
         }
 
+        guard currentMessageRequestID == requestID else { return }
         isLoading = false
         currentActivity = nil
         currentMessageTask = nil
+        currentMessageRequestID = nil
         checkForPendingStartupActions()
     }
 
@@ -476,13 +487,16 @@ extension ChatView {
             .compactMap(\.suggestedWorkoutPlan)
             .first
 
+        let requestID = UUID()
+        currentMessageRequestID = requestID
         currentMessageTask = Task {
             await performSendMessage(
                 text: text,
                 capturedImage: capturedImage,
                 previousMessages: previousMessages,
                 pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext,
-                aiMessage: aiMessage
+                aiMessage: aiMessage,
+                requestID: requestID
             )
         }
     }

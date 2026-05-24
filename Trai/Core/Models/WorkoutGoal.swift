@@ -341,6 +341,31 @@ extension WorkoutGoal {
         updatedAt = Date()
     }
 
+    static func refreshGeneratedPlanAdherenceGoals(
+        _ goals: [WorkoutGoal],
+        for plan: WorkoutPlan
+    ) {
+        goals
+            .filter(\.tracksGeneratedPlanAdherence)
+            .forEach { $0.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan) }
+    }
+
+    static func generatedGoalsToInsert(
+        _ goals: [WorkoutGoal],
+        existingGoals: [WorkoutGoal],
+        for plan: WorkoutPlan
+    ) -> [WorkoutGoal] {
+        var existingKeys = Set(existingGoals.map(\.planSetupDeduplicationKey))
+        var result: [WorkoutGoal] = []
+        for goal in goals {
+            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+            let key = goal.planSetupDeduplicationKey
+            guard !key.isEmpty, existingKeys.insert(key).inserted else { continue }
+            result.append(goal)
+        }
+        return result
+    }
+
     private func isGeneratedPlanAdherenceGoal(for plan: WorkoutPlan) -> Bool {
         guard goalKind == .frequency,
               let targetValue,

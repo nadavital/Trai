@@ -114,6 +114,7 @@ struct ChatView: View {
 
     // Task tracking for cancellation
     @State var currentMessageTask: Task<Void, Never>?
+    @State var currentMessageRequestID: UUID?
 
     let sessionTimeoutHours: Double = 1.5
 

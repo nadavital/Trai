@@ -992,6 +992,7 @@ extension AIFunctionExecutor {
         // Parse exercises with per-set data
         var exercises: [SuggestedWorkoutLog.LoggedExercise] = []
         if let exercisesData = args["exercises"] as? [[String: Any]] {
+            let shouldApplyWorkoutDurationToSingleActivity = exercisesData.count == 1
             for exerciseData in exercisesData {
                 guard let name = exerciseData["name"] as? String else { continue }
                 let category = (exerciseData["category"] as? String)?
@@ -1019,6 +1020,8 @@ extension AIFunctionExecutor {
                 let targetTags = stringArray(from: exerciseData["target_tags"])
                 let trackingFields = stringArray(from: exerciseData["tracking_fields"])
                 let exerciseDurationMinutes = numericInt(from: exerciseData["duration_minutes"])
+                let loggedDurationMinutes = exerciseDurationMinutes
+                    ?? (shouldApplyWorkoutDurationToSingleActivity ? durationMinutes : nil)
                 let distanceMeters = numericDouble(from: exerciseData["distance_meters"])
                 let exerciseNotes = (exerciseData["notes"] as? String)?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1050,7 +1053,7 @@ extension AIFunctionExecutor {
                     }
                 }
 
-                let hasActivityMetrics = exerciseDurationMinutes != nil
+                let hasActivityMetrics = loggedDurationMinutes != nil
                     || distanceMeters != nil
                     || exerciseNotes != nil
                     || !segments.isEmpty
@@ -1087,7 +1090,7 @@ extension AIFunctionExecutor {
                         activityRole: activityRole?.rawValue,
                         targetTags: targetTags,
                         trackingFields: normalizedTrackingFields ?? trackingFields,
-                        durationMinutes: exerciseDurationMinutes,
+                        durationMinutes: loggedDurationMinutes,
                         distanceMeters: distanceMeters,
                         notes: exerciseNotes,
                         segments: segments,

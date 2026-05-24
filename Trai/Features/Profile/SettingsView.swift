@@ -364,7 +364,7 @@ struct SettingsView: View {
                 secondaryButton: .cancel(Text("Keep Target"))
             )
         }
-        .sheet(isPresented: $showWorkoutPlanSetup) {
+        .sheet(isPresented: $showWorkoutPlanSetup, onDismiss: resetStandardWorkoutPlanSetupState) {
             WorkoutPlanSetupChoiceFlow(
                 draft: $standardWorkoutPlanDraft,
                 generatedPlanForReview: $standardGeneratedWorkoutPlan,
@@ -433,6 +433,7 @@ struct SettingsView: View {
 
         profile.workoutPlan = plan
         draftSnapshot.applyPreferences(to: profile, generatedPlan: plan)
+        refreshExistingGeneratedPlanAdherenceGoals(for: plan)
 
         if mode == .proAI {
             insertGeneratedWorkoutGoals(generatedGoals, for: plan)
@@ -455,9 +456,7 @@ struct SettingsView: View {
             HapticManager.error()
             return
         }
-        standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
-        standardGeneratedWorkoutPlan = nil
-        standardGeneratedWorkoutGoals = []
+        resetStandardWorkoutPlanSetupState()
         showWorkoutPlanSetup = false
         HapticManager.success()
     }
@@ -492,14 +491,23 @@ struct SettingsView: View {
     }
 
     private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) {
-        var existingTitles = Set(activeWorkoutGoalsForPlanSetup().map { $0.trimmedTitle.lowercased() })
-        for goal in goals {
-            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
-            let titleKey = goal.trimmedTitle.lowercased()
-            guard !titleKey.isEmpty, !existingTitles.contains(titleKey) else { continue }
+        for goal in WorkoutGoal.generatedGoalsToInsert(
+            goals,
+            existingGoals: activeWorkoutGoalsForPlanSetup(),
+            for: plan
+        ) {
             modelContext.insert(goal)
-            existingTitles.insert(titleKey)
         }
+    }
+
+    private func refreshExistingGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
+        WorkoutGoal.refreshGeneratedPlanAdherenceGoals(activeWorkoutGoalsForPlanSetup(), for: plan)
+    }
+
+    private func resetStandardWorkoutPlanSetupState() {
+        standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+        standardGeneratedWorkoutPlan = nil
+        standardGeneratedWorkoutGoals = []
     }
 
 }
