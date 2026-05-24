@@ -996,6 +996,100 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         XCTAssertEqual(updatedGoal["activity_kind"] as? String, "mobility")
         XCTAssertEqual(updatedGoal["activity_role"] as? String, "warmup")
+
+        let invalidUpdateResult = await executor.execute(
+            .init(
+                name: "update_workout_goal",
+                arguments: [
+                    "goal_id": goalId,
+                    "activity_role": "stretch-break"
+                ]
+            )
+        )
+
+        guard case .dataResponse(let invalidUpdateFunctionResult) = invalidUpdateResult else {
+            return XCTFail("Expected invalid workout goal response")
+        }
+
+        XCTAssertEqual(
+            invalidUpdateFunctionResult.response["error"] as? String,
+            "activity_role must be a stable training block role enum."
+        )
+
+        let refetchResult = await executor.execute(
+            .init(
+                name: "get_workout_goals",
+                arguments: ["status": "active"]
+            )
+        )
+
+        guard case .dataResponse(let refetchFunctionResult) = refetchResult,
+              let refetchedGoals = refetchFunctionResult.response["goals"] as? [[String: Any]],
+              let refetchedGoal = refetchedGoals.first(where: { $0["id"] as? String == goalId }) else {
+            return XCTFail("Expected refetched workout goal response")
+        }
+
+        XCTAssertEqual(refetchedGoal["activity_kind"] as? String, "mobility")
+        XCTAssertEqual(refetchedGoal["activity_role"] as? String, "warmup")
+    }
+
+    func testCreateWorkoutGoalRejectsFreeTextActivityKindAndRole() async throws {
+        let executor = AIFunctionExecutor(modelContext: context, userProfile: nil)
+        let invalidKindResult = await executor.execute(
+            .init(
+                name: "create_workout_goal",
+                arguments: [
+                    "title": "Complete weekly bouldering warmups",
+                    "goal_kind": "frequency",
+                    "workout_type": "mixed",
+                    "activity_name": "Bouldering",
+                    "activity_kind": "warmup",
+                    "activity_role": "warmup",
+                    "target_value": 1,
+                    "target_unit": "blocks",
+                    "period_unit": "week",
+                    "period_count": 1,
+                    "success_criteria": "Complete one bouldering warmup each week."
+                ]
+            )
+        )
+
+        guard case .dataResponse(let invalidKindFunctionResult) = invalidKindResult else {
+            return XCTFail("Expected invalid activity kind response")
+        }
+
+        XCTAssertEqual(
+            invalidKindFunctionResult.response["error"] as? String,
+            "activity_kind must be a stable training block kind enum."
+        )
+
+        let invalidRoleResult = await executor.execute(
+            .init(
+                name: "create_workout_goal",
+                arguments: [
+                    "title": "Complete weekly bouldering warmups",
+                    "goal_kind": "frequency",
+                    "workout_type": "mixed",
+                    "activity_name": "Bouldering",
+                    "activity_kind": "skill",
+                    "activity_role": "bouldering",
+                    "target_value": 1,
+                    "target_unit": "blocks",
+                    "period_unit": "week",
+                    "period_count": 1,
+                    "success_criteria": "Complete one bouldering warmup each week."
+                ]
+            )
+        )
+
+        guard case .dataResponse(let invalidRoleFunctionResult) = invalidRoleResult else {
+            return XCTFail("Expected invalid activity role response")
+        }
+
+        XCTAssertEqual(
+            invalidRoleFunctionResult.response["error"] as? String,
+            "activity_role must be a stable training block role enum."
+        )
     }
 
     func testCreateWorkoutGoalRejectsDurationGoalWithoutPeriod() async throws {

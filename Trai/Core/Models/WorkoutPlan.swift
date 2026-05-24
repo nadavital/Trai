@@ -574,16 +574,24 @@ struct WorkoutPlan: Codable, Equatable {
             let rawKind = try container.decode(String.self, forKey: .kind)
             let decodedKind = BlockKind(rawValue: rawKind)
             let legacyPlacementRole = Role(rawValue: rawKind)
-            kind = decodedKind ?? {
+            if let decodedKind {
+                kind = decodedKind
+            } else if let legacyPlacementRole {
                 switch legacyPlacementRole {
                 case .warmup:
-                    return .mobility
+                    kind = .mobility
                 case .cooldown:
-                    return .recovery
+                    kind = .recovery
                 default:
-                    return .custom
+                    kind = .custom
                 }
-            }()
+            } else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .kind,
+                    in: container,
+                    debugDescription: "Training block kind must be a stable enum value."
+                )
+            }
             role = try container.decodeIfPresent(Role.self, forKey: .role)
                 ?? legacyPlacementRole
                 ?? Role.defaultRole(for: kind)

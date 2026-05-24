@@ -392,10 +392,38 @@ extension AIFunctionExecutor {
         }
         let activityName = (args["activity_name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let activityTags = stringArray(from: args["activity_tags"])
-        let activityKind = (args["activity_kind"] as? String)
-            .flatMap { WorkoutPlan.TrainingBlock.BlockKind(rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-        let activityRole = (args["activity_role"] as? String)
-            .flatMap { WorkoutPlan.TrainingBlock.Role(rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        let activityKind: WorkoutPlan.TrainingBlock.BlockKind?
+        if let rawActivityKind = args["activity_kind"] as? String {
+            let trimmedKind = rawActivityKind.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedKind.isEmpty {
+                activityKind = nil
+            } else if let stableKind = WorkoutPlan.TrainingBlock.BlockKind(rawValue: trimmedKind) {
+                activityKind = stableKind
+            } else {
+                return .dataResponse(FunctionResult(
+                    name: "create_workout_goal",
+                    response: ["error": "activity_kind must be a stable training block kind enum."]
+                ))
+            }
+        } else {
+            activityKind = nil
+        }
+        let activityRole: WorkoutPlan.TrainingBlock.Role?
+        if let rawActivityRole = args["activity_role"] as? String {
+            let trimmedRole = rawActivityRole.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedRole.isEmpty {
+                activityRole = nil
+            } else if let stableRole = WorkoutPlan.TrainingBlock.Role(rawValue: trimmedRole) {
+                activityRole = stableRole
+            } else {
+                return .dataResponse(FunctionResult(
+                    name: "create_workout_goal",
+                    response: ["error": "activity_role must be a stable training block role enum."]
+                ))
+            }
+        } else {
+            activityRole = nil
+        }
         let notes = (args["notes"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let targetValue = numericDouble(from: args["target_value"])
         let targetUnit = (args["target_unit"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -540,12 +568,30 @@ extension AIFunctionExecutor {
 
         if let rawActivityKind = args["activity_kind"] as? String {
             let trimmedKind = rawActivityKind.trimmingCharacters(in: .whitespacesAndNewlines)
-            linkedActivityKind = trimmedKind.isEmpty ? nil : WorkoutPlan.TrainingBlock.BlockKind(rawValue: trimmedKind)
+            if trimmedKind.isEmpty {
+                linkedActivityKind = nil
+            } else if let stableKind = WorkoutPlan.TrainingBlock.BlockKind(rawValue: trimmedKind) {
+                linkedActivityKind = stableKind
+            } else {
+                return .dataResponse(FunctionResult(
+                    name: "update_workout_goal",
+                    response: ["error": "activity_kind must be a stable training block kind enum."]
+                ))
+            }
         }
 
         if let rawActivityRole = args["activity_role"] as? String {
             let trimmedRole = rawActivityRole.trimmingCharacters(in: .whitespacesAndNewlines)
-            linkedActivityRole = trimmedRole.isEmpty ? nil : WorkoutPlan.TrainingBlock.Role(rawValue: trimmedRole)
+            if trimmedRole.isEmpty {
+                linkedActivityRole = nil
+            } else if let stableRole = WorkoutPlan.TrainingBlock.Role(rawValue: trimmedRole) {
+                linkedActivityRole = stableRole
+            } else {
+                return .dataResponse(FunctionResult(
+                    name: "update_workout_goal",
+                    response: ["error": "activity_role must be a stable training block role enum."]
+                ))
+            }
         }
 
         if args.keys.contains("target_value") {

@@ -435,6 +435,26 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(firstDecode.modalityProgression?.targets.first?.id, secondDecode.modalityProgression?.targets.first?.id)
     }
 
+    func testWorkoutPlanJSONRejectsFreeTextBlockKind() throws {
+        let json = workoutPlanJSON(blockKind: "bouldering", blockRole: "main")
+
+        XCTAssertNil(WorkoutPlan.fromJSON(json))
+    }
+
+    func testWorkoutPlanJSONKeepsLegacyPlacementKindCompatibility() throws {
+        let warmupPlan = try XCTUnwrap(WorkoutPlan.fromJSON(workoutPlanJSON(blockKind: "warmup", blockRole: nil)))
+        let warmupBlock = try XCTUnwrap(warmupPlan.templates.first?.displayBlocks.first)
+
+        XCTAssertEqual(warmupBlock.kind, .mobility)
+        XCTAssertEqual(warmupBlock.role, .warmup)
+
+        let cooldownPlan = try XCTUnwrap(WorkoutPlan.fromJSON(workoutPlanJSON(blockKind: "cooldown", blockRole: nil)))
+        let cooldownBlock = try XCTUnwrap(cooldownPlan.templates.first?.displayBlocks.first)
+
+        XCTAssertEqual(cooldownBlock.kind, .recovery)
+        XCTAssertEqual(cooldownBlock.role, .cooldown)
+    }
+
     func testWorkoutPlanRefinementSchemaRequiresModalityFields() throws {
         let schema = AIPromptBuilder.workoutPlanRefinementSchema
         let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
@@ -1124,6 +1144,32 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutPlanRefinementRejectsDroppedManualActivityFocusWithoutAuthoredBlocks() {
+        let currentPlan = makePlan(
+            templateName: "Bouldering Day",
+            sessionType: .climbing,
+            focusAreas: ["Bouldering", "Climbing"],
+            blocks: []
+        )
+        let genericPlan = makePlan(
+            templateName: "Strength",
+            sessionType: .strength,
+            focusAreas: ["Strength"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Generic lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertNil(AIService.validateRefinedWorkoutPlanForTesting(genericPlan, currentPlan: currentPlan))
+    }
+
+    @MainActor
     func testWorkoutPlanRefinementAllowsExplicitActivitySemanticChange() {
         let currentPlan = makePlan(
             templateName: "Climbing Skill",
@@ -1231,6 +1277,65 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             ),
             warnings: nil
         )
+    }
+
+    private func workoutPlanJSON(blockKind: String, blockRole: String?) -> String {
+        let roleLine = blockRole.map { #""role": "\#($0)","# } ?? ""
+        return """
+        {
+          "splitType": "custom",
+          "daysPerWeek": 1,
+          "templates": [
+            {
+              "id": "activity-day",
+              "name": "Activity Day",
+              "sessionType": "mixed",
+              "focusAreas": ["Bouldering"],
+              "targetMuscleGroups": [],
+              "exercises": [],
+              "blocks": [
+                {
+                  "id": "activity-block",
+                  "kind": "\(blockKind)",
+                  \(roleLine)
+                  "title": "Bouldering",
+                  "detail": "Limit bouldering session",
+                  "exercises": [],
+                  "activityTypeName": "Bouldering",
+                  "activityTags": ["Climbing"],
+                  "durationMinutes": 45,
+                  "intensity": "moderate",
+                  "target": "Technique",
+                  "order": 0,
+                  "notes": null
+                }
+              ],
+              "estimatedDurationMinutes": 45,
+              "order": 0,
+              "notes": "Test template"
+            }
+          ],
+          "planIntent": {
+            "primaryFocus": "Bouldering",
+            "supportingFocuses": [],
+            "sessionAllocation": "One activity day",
+            "honoredInputs": ["Bouldering"],
+            "avoided": [],
+            "supportiveCardioConstraint": null,
+            "summary": "Activity plan"
+          },
+          "rationale": "Test rationale",
+          "guidelines": [],
+          "progressionStrategy": {
+            "type": "doubleProgression",
+            "weightIncrementKg": 2.5,
+            "repsTrigger": 12,
+            "description": "Progress gradually."
+          },
+          "modalityProgression": null,
+          "warnings": []
+        }
+        """
     }
 
     private func makeRequest(

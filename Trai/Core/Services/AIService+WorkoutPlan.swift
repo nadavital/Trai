@@ -659,7 +659,7 @@ private extension WorkoutPlan {
 
     var requiredDurableActivityIdentityGroups: [[String]] {
         templates.flatMap { template in
-            template.blocks.compactMap { block in
+            let blockGroups: [[String]] = template.blocks.compactMap { block in
                 let values = ([block.activityTypeName].compactMap { $0 } + block.activityTags + block.exercises.map(\.exerciseName))
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
@@ -669,6 +669,21 @@ private extension WorkoutPlan {
                 }
                 return values
             }
+
+            if !blockGroups.isEmpty {
+                return blockGroups
+            }
+
+            guard template.blocks.isEmpty,
+                  template.exercises.isEmpty,
+                  !template.sessionType.supportsMuscleTargets || template.targetMuscleGroups.isEmpty else {
+                return []
+            }
+
+            let fallbackValues = template.focusAreas
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            return fallbackValues.isEmpty ? [] : [fallbackValues]
         }
     }
 }

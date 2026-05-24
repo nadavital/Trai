@@ -570,7 +570,7 @@ struct ChatView: View {
     ) {
         let launchLabel = "Opening this meal with Trai..."
         guard !isLoading, currentMessageTask == nil else {
-            queuePendingLoggedMealPrompt(prompt, launchLabel: launchLabel)
+            queuePendingLoggedMealPrompt(prompt, launchLabel: launchLabel, focusedEntryId: focusedContext.entryId)
             HapticManager.selectionChanged()
             return
         }
@@ -580,17 +580,17 @@ struct ChatView: View {
             prompt,
             launchLabel: launchLabel
         ) else {
-            queuePendingLoggedMealPrompt(prompt, launchLabel: launchLabel)
+            queuePendingLoggedMealPrompt(prompt, launchLabel: launchLabel, focusedEntryId: focusedContext.entryId)
             return
         }
         HapticManager.selectionChanged()
     }
 
-    private func queuePendingLoggedMealPrompt(_ prompt: String, launchLabel: String) {
+    private func queuePendingLoggedMealPrompt(_ prompt: String, launchLabel: String, focusedEntryId: UUID) {
         guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         pendingChatPrompt = prompt
         pendingChatLaunchLabel = launchLabel
-        pendingFocusedFoodEntryId = ""
+        pendingFocusedFoodEntryId = focusedEntryId.uuidString
         pendingChatActionKind = ""
     }
 

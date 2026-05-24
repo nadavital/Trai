@@ -164,6 +164,25 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(entry.plannedActivitySummarySegments, ["Bouldering", "2 planned segments"])
     }
 
+    func testAIStartedPlannedActivityDetailsRemainAvailableBeforeLogging() {
+        let workout = LiveWorkout(name: "Rowing Session", workoutType: .cardio)
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Rowing",
+            orderIndex: 0,
+            exerciseType: "cardio"
+        )
+        entry.activityTypeName = "Rowing"
+        entry.plannedDurationSeconds = 1_200
+        entry.plannedTarget = "Steady aerobic work"
+        entry.workout = workout
+        workout.entries = [entry]
+        context.insert(workout)
+
+        XCTAssertFalse(entry.isPlannedActivityGuidance)
+        XCTAssertFalse(entry.hasExercisePreferenceSignal)
+        XCTAssertEqual(entry.plannedActivitySummarySegments, ["20 min", "Steady aerobic work"])
+    }
+
     func testLiveWorkoutReviewPromptIncludesActivitySegmentMetrics() {
         let workout = LiveWorkout(name: "Strength + Climbing", workoutType: .mixed)
         workout.completedAt = Date()
@@ -1419,7 +1438,8 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
     }
 
     func testActivityScopedGoalIgnoresPlannedGuidanceWithoutLoggedData() {
-        let workout = LiveWorkout(name: "Planned Climb", workoutType: .climbing)
+        let workout = LiveWorkout(name: "Planned Climb", workoutType: .climbing, focusAreas: ["Climbing"])
+        workout.startedAt = Date().addingTimeInterval(-1_800)
         workout.completedAt = Date()
         let entry = LiveWorkoutEntry(
             exerciseName: "Limit Bouldering",
@@ -1429,9 +1449,10 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         entry.activityTypeName = "Bouldering"
         entry.targetTags = ["Climbing"]
         entry.sourcePlanBlockID = UUID()
+        entry.plannedDurationSeconds = 1_800
         workout.entries = [entry]
 
-        let goal = WorkoutGoal(
+        let frequencyGoal = WorkoutGoal(
             title: "Climb weekly",
             goalKind: .frequency,
             linkedActivityTags: ["Climbing"],
@@ -1441,11 +1462,22 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
             periodCount: 1,
             successCriteria: "You log one climbing session this week."
         )
+        let durationGoal = WorkoutGoal(
+            title: "Climb 30 minutes",
+            goalKind: .duration,
+            linkedActivityTags: ["Climbing"],
+            targetValue: 30,
+            targetUnit: "min",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You log 30 minutes of climbing this week."
+        )
 
-        XCTAssertTrue(goal.matches(workout: workout))
-        XCTAssertTrue(goal.matches(entry: entry))
+        XCTAssertTrue(frequencyGoal.matches(workout: workout))
+        XCTAssertTrue(frequencyGoal.matches(entry: entry))
         XCTAssertFalse(entry.hasExercisePreferenceSignal)
-        XCTAssertTrue(WorkoutGoalProgressResolver.matchingCompletedWorkouts(for: goal, in: [workout]).isEmpty)
+        XCTAssertTrue(WorkoutGoalProgressResolver.matchingCompletedWorkouts(for: frequencyGoal, in: [workout]).isEmpty)
+        XCTAssertTrue(WorkoutGoalProgressResolver.matchingCompletedWorkouts(for: durationGoal, in: [workout]).isEmpty)
     }
 
     func testActivityKindGoalMatchesLegacyCardioEntryType() {

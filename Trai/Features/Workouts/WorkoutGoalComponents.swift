@@ -596,8 +596,13 @@ enum WorkoutGoalProgressResolver {
             return true
         }
 
-        return hasLoggedMatchingEntries(for: goal, in: workout)
-            || workoutLevelMatchesActivityScope(for: goal, in: workout)
+        if hasLoggedMatchingEntries(for: goal, in: workout) {
+            return true
+        }
+        if hasPlannedMatchingEntries(for: goal, in: workout) {
+            return false
+        }
+        return workoutLevelMatchesActivityScope(for: goal, in: workout)
     }
 
     private static func hasLoggedMatchingEntries(
@@ -606,6 +611,15 @@ enum WorkoutGoalProgressResolver {
     ) -> Bool {
         (workout.entries ?? []).contains {
             goal.matches(entry: $0) && $0.hasExercisePreferenceSignal
+        }
+    }
+
+    private static func hasPlannedMatchingEntries(
+        for goal: WorkoutGoal,
+        in workout: LiveWorkout
+    ) -> Bool {
+        (workout.entries ?? []).contains {
+            goal.matches(entry: $0) && $0.isPlannedActivityGuidance
         }
     }
 
@@ -782,6 +796,7 @@ enum WorkoutGoalProgressResolver {
 
                 let progressDate = workout.completedAt ?? workout.startedAt
                 guard progressDate >= periodStart,
+                      !hasPlannedMatchingEntries(for: goal, in: workout),
                       workoutLevelMatchesActivityScope(for: goal, in: workout) else {
                     return count
                 }
