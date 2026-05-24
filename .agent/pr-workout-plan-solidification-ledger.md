@@ -107,6 +107,7 @@
 - Intent/deep-link contracts: added durable `template_id` route data, switched `StartWorkoutIntent` to use the existing `WorkoutNameEntity` ID, and resolved workouts by template ID first.
 - Legacy compatibility: kept old name-only routes working through exact case-insensitive name matches only; ambiguous partial names now create a custom named workout instead of guessing a generated-plan template.
 - Regression-test coverage: added focused route parsing coverage for `template_id` and service coverage proving durable IDs win over labels while partial names do not bind to saved templates.
+- Fresh verification follow-up: fixed stale durable-ID fallback where a route with an obsolete `template_id` could still bind to a different current template with the same display name; name matching is now only used for ID-less legacy routes.
 
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
@@ -171,6 +172,7 @@
 - Current-period workout goal tests could fail around midnight or the locale week boundary because fixtures used `Date() - 1 hour`.
 - Follow-up edits to an unsaved nutrition-plan proposal in chat retired the pending card before building AI context, so revisions could fall back to the saved nutrition targets.
 - Start Workout intents/deep links used name-only, partial template matching, so generated plans with overlapping names could launch the wrong stored template and corrupt generated plan-adherence identity.
+- Start Workout routes with a stale durable template ID could still fall back to an exact display-name match, binding to a different current template after plan replacement.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -225,6 +227,10 @@
 - Result after durable workout-route fix round: app/tests compiled, but XCTest runner exited before establishing its connection; no XCTest assertions ran or failed.
 - `xcodebuild build -project Trai.xcodeproj -scheme Trai -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/TraiRouteFixBuild CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO`
 - Result after durable workout-route fix round: build succeeded.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiRouteFixTests2 CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/AppRouteTests -only-testing:TraiTests/WorkoutTemplateServiceTests`
+- Result after stale durable-ID fallback fix: CoreSimulator stopped listing simulator devices; no app code assertions ran.
+- `xcodebuild build -project Trai.xcodeproj -scheme Trai -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/TraiRouteFixBuild2 CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO`
+- Result after stale durable-ID fallback fix: blocked by CoreSimulator/actool runtime failure before useful Swift diagnostics; earlier route-fix app build had succeeded before CoreSimulator entered this bad state.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.

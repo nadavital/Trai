@@ -707,14 +707,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             goal: "build_muscle",
             rationale: "Fuel the current training block"
         )
-        let prompt = AIService().buildFunctionCallingSystemPrompt(context: .init(
-            profile: nil,
-            todaysFoodEntries: [],
-            currentDateTime: "Sunday, May 24, 2026 at 12:30 AM",
-            conversationHistory: "",
-            memoriesContext: "",
-            pendingNutritionPlanSuggestion: suggestion
-        ))
+        let prompt = AIService.pendingNutritionPlanPromptSection(suggestion: suggestion)
 
         XCTAssertTrue(prompt.contains("PENDING NUTRITION PLAN PROPOSAL"))
         XCTAssertTrue(prompt.contains("Calories: 2300 kcal"))

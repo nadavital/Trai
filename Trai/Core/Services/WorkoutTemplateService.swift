@@ -71,10 +71,13 @@ struct WorkoutTemplateService {
         let profileDescriptor = FetchDescriptor<UserProfile>()
         if let profile = try? modelContext.fetch(profileDescriptor).first,
            let plan = profile.workoutPlan {
-            let template = templateID.flatMap { id in
-                plan.templates.first(where: { $0.id == id })
-            } ?? trimmedName.flatMap { name in
-                plan.templates.first(where: { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame })
+            let template: WorkoutPlan.WorkoutTemplate?
+            if let templateID {
+                template = plan.templates.first(where: { $0.id == templateID })
+            } else if let trimmedName {
+                template = plan.templates.first(where: { $0.name.localizedCaseInsensitiveCompare(trimmedName) == .orderedSame })
+            } else {
+                template = nil
             }
 
             if let template {

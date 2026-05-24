@@ -77,7 +77,7 @@ extension AIService {
         }
 
         if let pendingNutritionPlan = context.pendingNutritionPlanSuggestion {
-            prompt += buildPendingNutritionPlanSection(suggestion: pendingNutritionPlan)
+            prompt += Self.pendingNutritionPlanPromptSection(suggestion: pendingNutritionPlan)
         }
 
         if let pendingWorkoutPlan = context.pendingWorkoutPlanSuggestion {
@@ -261,7 +261,7 @@ extension AIService {
         """
     }
 
-    private func buildPendingNutritionPlanSection(suggestion: PlanUpdateSuggestionEntry) -> String {
+    nonisolated static func pendingNutritionPlanPromptSection(suggestion: PlanUpdateSuggestionEntry) -> String {
         let proposedValues: [String] = [
             suggestion.calories.map { "Calories: \($0) kcal" },
             suggestion.proteinGrams.map { "Protein: \($0)g" },

@@ -633,6 +633,40 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertNil(partial.sourcePlanTemplateID)
     }
 
+    func testCreateWorkoutForIntentDoesNotNameFallbackWhenDurableIDIsStale() throws {
+        let context = try makeInMemoryContext()
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .upperLower,
+            daysPerWeek: 2,
+            templates: [
+                WorkoutPlan.WorkoutTemplate(
+                    name: "Upper Body Strength",
+                    sessionType: .strength,
+                    targetMuscleGroups: ["chest"],
+                    exercises: [],
+                    estimatedDurationMinutes: 45,
+                    order: 0
+                )
+            ],
+            rationale: "Test",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy,
+            warnings: nil
+        )
+        context.insert(profile)
+        try context.save()
+
+        let workout = service.createWorkoutForIntent(
+            templateID: UUID(uuidString: "22222222-2222-2222-2222-222222222222"),
+            name: "Upper Body Strength",
+            modelContext: context
+        )
+
+        XCTAssertEqual(workout.name, "Upper Body Strength")
+        XCTAssertNil(workout.sourcePlanTemplateID)
+    }
+
     func testCreateWorkoutForIntentFallsBackToCustomNamedWorkout() throws {
         let context = try makeInMemoryContext()
         let workout = service.createWorkoutForIntent(
