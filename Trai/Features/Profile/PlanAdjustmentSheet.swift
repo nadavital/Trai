@@ -356,6 +356,7 @@ struct PlanAdjustmentSheet: View {
         profile.dailyFatGoal = fat
         profile.trainingDayCalories = trainingDayCalories
         profile.restDayCalories = restDayCalories
+        profile.aiPlanGeneratedAt = Date()
         HapticManager.success()
     }
 }

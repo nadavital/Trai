@@ -8,6 +8,13 @@
 import SwiftUI
 import SwiftData
 
+enum ChatSuggestionFreshness {
+    static func isStale(messageTimestamp: Date, currentPlanUpdatedAt: Date?) -> Bool {
+        guard let currentPlanUpdatedAt else { return false }
+        return currentPlanUpdatedAt > messageTimestamp
+    }
+}
+
 // MARK: - Suggestion Tracking
 
 extension ChatView {
@@ -197,6 +204,26 @@ extension ChatView {
             .id
     }
 
+    func latestPendingPlanSuggestionMessageID() -> UUID? {
+        var seenMessageIds: Set<UUID> = []
+        var messagesToInspect = currentSessionMessages
+
+        if !isTemporarySession {
+            let descriptor = FetchDescriptor<ChatMessage>(
+                sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
+            )
+            let persistedMessages = (try? modelContext.fetch(descriptor)) ?? allMessages
+            messagesToInspect.append(contentsOf: persistedMessages)
+        }
+
+        return messagesToInspect
+            .sorted { $0.timestamp > $1.timestamp }
+            .first { message in
+                seenMessageIds.insert(message.id).inserted && message.hasPendingPlanSuggestion
+            }?
+            .id
+    }
+
     func retirePendingWorkoutPlanSuggestions(except keptMessageID: UUID) {
         var retiredAnySuggestion = false
         var seenMessageIds: Set<UUID> = []
@@ -226,6 +253,18 @@ extension ChatView {
 
     func acceptPlanSuggestion(_ plan: PlanUpdateSuggestionEntry, for message: ChatMessage) {
         guard let profile else { return }
+        let latestPendingSuggestionID = latestPendingPlanSuggestionMessageID()
+        guard latestPendingSuggestionID == message.id,
+              !ChatSuggestionFreshness.isStale(
+                messageTimestamp: message.timestamp,
+                currentPlanUpdatedAt: profile.aiPlanGeneratedAt
+              ) else {
+            message.suggestedPlanDismissed = true
+            message.errorMessage = "This nutrition plan update is no longer current. Use the latest plan card instead."
+            try? modelContext.save()
+            HapticManager.error()
+            return
+        }
 
         let currentWeight = weightEntries.first?.weightKg
 
@@ -261,6 +300,7 @@ extension ChatView {
 
         // Update assessment state - marks plan as reviewed with current weight as new baseline
         planAssessmentService.markPlanReviewed(profile: profile, currentWeightKg: currentWeight)
+        profile.aiPlanGeneratedAt = Date()
 
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.applyPlanUpdate,
@@ -344,7 +384,11 @@ extension ChatView {
     func acceptWorkoutPlanSuggestion(_ suggestion: WorkoutPlanSuggestionEntry, for message: ChatMessage) {
         guard let profile else { return }
         let latestPendingSuggestionID = latestPendingWorkoutPlanSuggestionMessageID()
-        guard latestPendingSuggestionID == message.id else {
+        guard latestPendingSuggestionID == message.id,
+              !ChatSuggestionFreshness.isStale(
+                messageTimestamp: message.timestamp,
+                currentPlanUpdatedAt: profile.workoutPlanGeneratedAt
+              ) else {
             message.suggestedWorkoutPlanDismissed = true
             message.errorMessage = "This workout plan update is no longer current. Use the latest plan card instead."
             try? modelContext.save()

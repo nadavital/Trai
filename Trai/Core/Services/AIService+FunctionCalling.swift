@@ -306,6 +306,12 @@ extension AIService {
                 if let workoutPlan = followUp.suggestedWorkoutPlan {
                     suggestedWorkoutPlan = workoutPlan
                 }
+                if let workout = followUp.suggestedWorkout {
+                    suggestedWorkout = workout
+                }
+                if let workoutLog = followUp.suggestedWorkoutLog {
+                    suggestedWorkoutLog = workoutLog
+                }
                 if textResponse.isEmpty && !followUp.text.isEmpty {
                     textResponse = followUp.text
                 }

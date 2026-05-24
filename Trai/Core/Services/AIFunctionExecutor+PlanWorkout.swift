@@ -982,8 +982,26 @@ extension AIFunctionExecutor {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty
         let activityTags = stringArray(from: args["activity_tags"])
-        let sourcePlanTemplateID = (args["source_plan_template_id"] as? String)
-            .flatMap { UUID(uuidString: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        let sourcePlanTemplateID: UUID?
+        if let rawSourcePlanTemplateID = args["source_plan_template_id"] as? String,
+           !rawSourcePlanTemplateID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let trimmedSourcePlanTemplateID = rawSourcePlanTemplateID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let parsedSourcePlanTemplateID = UUID(uuidString: trimmedSourcePlanTemplateID) else {
+                return .dataResponse(FunctionResult(
+                    name: "log_workout",
+                    response: ["error": "source_plan_template_id must be an exact template id from the current workout plan."]
+                ))
+            }
+            guard userProfile?.workoutPlan?.templates.contains(where: { $0.id == parsedSourcePlanTemplateID }) == true else {
+                return .dataResponse(FunctionResult(
+                    name: "log_workout",
+                    response: ["error": "source_plan_template_id must match an existing session in the current workout plan."]
+                ))
+            }
+            sourcePlanTemplateID = parsedSourcePlanTemplateID
+        } else {
+            sourcePlanTemplateID = nil
+        }
 
         let workoutName = args["name"] as? String  // Trai-generated name
         let durationMinutes = numericInt(from: args["duration_minutes"])

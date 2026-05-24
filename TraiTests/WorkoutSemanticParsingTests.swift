@@ -391,15 +391,44 @@ final class WorkoutSemanticParsingTests: XCTestCase {
     }
 
     func testLogWorkoutPreservesSourcePlanTemplateID() async throws {
-        let templateID = UUID()
-        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Pull + Climb",
+            sessionType: .mixed,
+            focusAreas: ["Pull", "Climbing"],
+            targetMuscleGroups: ["back"],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .sportPractice,
+                    title: "Limit Bouldering",
+                    detail: "Planned climbing block",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing"],
+                    durationMinutes: 35,
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 50,
+            order: 0
+        )
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Mixed climbing plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: profile).execute(
             .init(
                 name: "log_workout",
                 arguments: [
                     "name": "Pull + Climb",
                     "type": "mixed",
                     "activity_name": "Climbing",
-                    "source_plan_template_id": templateID.uuidString,
+                    "source_plan_template_id": template.id.uuidString,
                     "duration_minutes": 50,
                     "exercises": [
                         [
@@ -419,8 +448,80 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             return XCTFail("Expected workout log suggestion")
         }
 
-        XCTAssertEqual(workoutLog.sourcePlanTemplateID, templateID)
+        XCTAssertEqual(workoutLog.sourcePlanTemplateID, template.id)
         XCTAssertEqual(workoutLog.exercises.first?.activityRole, "finisher")
+    }
+
+    func testLogWorkoutRejectsSourcePlanTemplateIDOutsideCurrentPlan() async throws {
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Plan Pull Day",
+            sessionType: .strength,
+            targetMuscleGroups: ["back"],
+            exercises: [
+                .init(exerciseName: "Pull Up", muscleGroup: "back", defaultSets: 4, defaultReps: 6, order: 0)
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let profile = UserProfile()
+        profile.workoutPlan = WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: 1,
+            templates: [template],
+            rationale: "Pull plan",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy
+        )
+
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: profile).execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "name": "Stale plan workout",
+                    "type": "strength",
+                    "source_plan_template_id": UUID().uuidString,
+                    "exercises": [
+                        [
+                            "name": "Pull Up",
+                            "category": "strength",
+                            "sets": [
+                                ["reps": 6]
+                            ]
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected validation error")
+        }
+
+        XCTAssertEqual(functionResult.name, "log_workout")
+        XCTAssertEqual(functionResult.response["error"] as? String, "source_plan_template_id must match an existing session in the current workout plan.")
+    }
+
+    func testChatSuggestionFreshnessRejectsCardsOlderThanCurrentPlanUpdate() {
+        let messageTimestamp = Date(timeIntervalSince1970: 100)
+        let currentPlanUpdatedAt = Date(timeIntervalSince1970: 101)
+
+        XCTAssertTrue(ChatSuggestionFreshness.isStale(
+            messageTimestamp: messageTimestamp,
+            currentPlanUpdatedAt: currentPlanUpdatedAt
+        ))
+    }
+
+    func testChatSuggestionFreshnessAllowsCurrentOrUnversionedCards() {
+        let messageTimestamp = Date(timeIntervalSince1970: 100)
+
+        XCTAssertFalse(ChatSuggestionFreshness.isStale(
+            messageTimestamp: messageTimestamp,
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 100)
+        ))
+        XCTAssertFalse(ChatSuggestionFreshness.isStale(
+            messageTimestamp: messageTimestamp,
+            currentPlanUpdatedAt: nil
+        ))
     }
 
     func testLogWorkoutUsesTopLevelDurationForSingleNonStrengthActivity() async throws {
