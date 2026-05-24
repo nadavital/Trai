@@ -505,7 +505,9 @@ nonisolated struct WorkoutPlanSuggestionEntry: Codable, Sendable, Identifiable {
 
 nonisolated private enum AIWorkoutCategoryNormalizer {
     static func key(from rawValue: String?) -> String? {
-        Exercise.Category.normalized(from: rawValue)?.userFacingEquivalent.rawValue
+        guard let rawValue else { return nil }
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Exercise.Category(rawValue: trimmed)?.userFacingEquivalent.rawValue
     }
 }
 
@@ -615,7 +617,8 @@ nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
         }
 
         var displayCategory: Exercise.Category? {
-            if let category = Exercise.Category.normalized(from: category)?.userFacingEquivalent {
+            if let rawCategory = category,
+               let category = Exercise.Category(rawValue: rawCategory.trimmingCharacters(in: .whitespacesAndNewlines))?.userFacingEquivalent {
                 return category
             }
             return nil
@@ -893,7 +896,8 @@ nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
         }
 
         var displayCategory: Exercise.Category? {
-            if let category = Exercise.Category.normalized(from: category)?.userFacingEquivalent {
+            if let rawCategory = category,
+               let category = Exercise.Category(rawValue: rawCategory.trimmingCharacters(in: .whitespacesAndNewlines))?.userFacingEquivalent {
                 return category
             }
             return nil

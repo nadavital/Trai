@@ -14,6 +14,7 @@ struct PlanAdjustmentSheet: View {
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingActionKind) private var pendingChatActionKind: String = ""
 
     @State private var goalType: UserProfile.GoalType
     @State private var calories: Int
@@ -132,6 +133,7 @@ struct PlanAdjustmentSheet: View {
     private func openTraiCoach() {
         pendingChatPrompt = aiCoachPrompt
         pendingChatLaunchLabel = "Reviewing your nutrition plan..."
+        pendingChatActionKind = PendingTraiChatActionKind.nutritionPlanReview.rawValue
         dismiss()
         DispatchQueue.main.async {
             appTabSelection.wrappedValue = .trai

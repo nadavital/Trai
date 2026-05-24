@@ -554,6 +554,7 @@ extension AIPromptBuilder {
         - Ask AT MOST one short follow-up only when missing information would materially change the plan
         - If they ask to change exercises or schedule directionally, make a reasonable proposal instead of starting a long clarification chain
         - Set changesWeeklySchedule to true only when the requested change intentionally adds, removes, or changes the number of weekly workout sessions. Otherwise keep the same number of templates as the current plan.
+        - Set changesActivitySemantics to true only when the user explicitly asked to add, remove, replace, or materially change a modality/activity family such as cardio, climbing, mobility, sport practice, or recovery. Keep it false for wording, order, duration, or exercise swaps that preserve the same activity intent.
         - Preserve and update planIntent, modalityProgression, and template blocks whenever a plan changes
         - Use blocks for modality-specific work: cardio, mobility flows, climbing/sport practice, conditioning, and recovery should not be flattened into fake strength exercises. Use role to describe whether a block is main work, a warmup, an accessory, a finisher, or a cooldown.
         - Preserve specific activity identity with activityTypeName and activityTags. Kind remains a stable behavior primitive, not the user-facing name.
@@ -756,10 +757,14 @@ extension AIPromptBuilder {
                     "type": "boolean",
                     "description": "True only when the user's requested refinement intentionally changes the weekly session count by adding, removing, or changing workout days."
                 ],
+                "changesActivitySemantics": [
+                    "type": "boolean",
+                    "description": "True only when the user explicitly requested adding, removing, replacing, or materially changing an activity/modality family. False when existing activity semantics should be preserved."
+                ],
                 "proposedPlan": planSchema,
                 "updatedPlan": planSchema
             ],
-            "required": ["responseType", "message", "changesWeeklySchedule"]
+            "required": ["responseType", "message", "changesWeeklySchedule", "changesActivitySemantics"]
         ]
     }
 }

@@ -60,6 +60,9 @@ final class LiveWorkoutEntry {
     /// JSON-encoded repeatable activity segments for cardio, conditioning, sport, and mobility work.
     var activitySegmentsData: String = "[]"
 
+    /// JSON-encoded planned repeatable activity segments copied from AI workout suggestions.
+    var plannedActivitySegmentsData: String = "[]"
+
     /// Duration in seconds (for cardio/timed exercises)
     var durationSeconds: Int?
 
@@ -89,6 +92,12 @@ final class LiveWorkoutEntry {
 
     @Transient
     private var cachedActivitySegments: [ActivitySegment] = []
+
+    @Transient
+    private var cachedPlannedActivitySegmentsDataSnapshot: String?
+
+    @Transient
+    private var cachedPlannedActivitySegments: [ActivitySegment] = []
 
     init() {}
 
@@ -480,6 +489,31 @@ extension LiveWorkoutEntry {
         }
     }
 
+    var plannedActivitySegments: [ActivitySegment] {
+        get {
+            if cachedPlannedActivitySegmentsDataSnapshot == plannedActivitySegmentsData {
+                return cachedPlannedActivitySegments
+            }
+            guard let data = plannedActivitySegmentsData.data(using: .utf8),
+                  let decodedSegments = try? JSONDecoder().decode([ActivitySegment].self, from: data) else {
+                cachedPlannedActivitySegments = []
+                cachedPlannedActivitySegmentsDataSnapshot = plannedActivitySegmentsData
+                return []
+            }
+            cachedPlannedActivitySegments = decodedSegments
+            cachedPlannedActivitySegmentsDataSnapshot = plannedActivitySegmentsData
+            return decodedSegments
+        }
+        set {
+            let json = (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+            if plannedActivitySegmentsData != json {
+                plannedActivitySegmentsData = json
+            }
+            cachedPlannedActivitySegments = newValue
+            cachedPlannedActivitySegmentsDataSnapshot = json
+        }
+    }
+
     func addActivitySegment(_ segment: ActivitySegment = ActivitySegment()) {
         var segments = activitySegments
         segments.append(segment)
@@ -719,6 +753,10 @@ extension LiveWorkoutEntry {
         }
         if let plannedDurationSeconds, plannedDurationSeconds > 0 {
             segments.append(Self.formatPlannedDuration(seconds: plannedDurationSeconds))
+        }
+        let plannedSegments = plannedActivitySegments.filter(\.hasLoggedData)
+        if plannedSegments.count > 1 {
+            segments.append("\(plannedSegments.count) planned segments")
         }
         appendPlannedDetail(plannedIntensity, to: &segments)
         appendPlannedDetail(plannedTarget, to: &segments)

@@ -15,6 +15,7 @@ extension AIService {
         let proposedPlan: Plan?
         let updatedPlan: Plan?
         let changesWeeklySchedule: Bool?
+        let changesActivitySemantics: Bool?
     }
 
     func executePlanGenerationPipeline<Plan: Decodable>(

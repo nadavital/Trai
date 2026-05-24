@@ -773,7 +773,7 @@ enum AIFunctionDeclarations {
                                     "description": "Array of sets with reps and optional weight for strength work. Omit or leave empty for non-strength activities unless the user actually tracked repeated strength-style sets."
                                 ]
                             ],
-                            "required": ["name", "category"]
+                            "required": ["name", "category", "activity_name"]
                         ],
                         "description": "List of completed exercise or activity items. Strength items should use sets; cardio, sport, mobility, recovery, conditioning, and custom items should use duration, distance, segments, and notes as appropriate."
                     ]

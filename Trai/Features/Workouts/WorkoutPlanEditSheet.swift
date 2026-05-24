@@ -395,7 +395,7 @@ struct WorkoutPlanEditSheet: View {
         let updated = normalizeTemplates(remaining)
         updatePlan(
             splitType: .custom,
-            daysPerWeek: max(editedPlan.daysPerWeek, updated.count),
+            daysPerWeek: updated.count,
             templates: updated
         )
     }
@@ -623,7 +623,7 @@ struct WorkoutPlanEditSheet: View {
 
         return WorkoutPlan(
             splitType: plan.splitType,
-            daysPerWeek: max(plan.daysPerWeek, templates.count),
+            daysPerWeek: templates.count,
             templates: templates,
             planIntent: plan.planIntent,
             rationale: plan.rationale,

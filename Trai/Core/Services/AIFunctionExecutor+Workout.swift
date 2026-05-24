@@ -579,9 +579,18 @@ extension AIFunctionExecutor {
                     .nilIfEmpty
                 let targetTags = stringArray(from: exerciseData["target_tags"])
                 let trackingFields = stringArray(from: exerciseData["tracking_fields"])
-                let resolvedCategory = Exercise.Category.normalized(from: category)?.userFacingEquivalent
-                    ?? activityTypeName.map { _ in Exercise.Category.custom }
-                    ?? (workoutType.supportsMuscleTargets ? .strength : .cardio)
+                guard let resolvedCategory = category.flatMap({ Exercise.Category(rawValue: $0)?.userFacingEquivalent }) else {
+                    return .dataResponse(FunctionResult(
+                        name: "start_live_workout",
+                        response: ["error": "Each suggested exercise needs a stable category enum value. Put user-facing activity names in activity_name, not category."]
+                    ))
+                }
+                if resolvedCategory != .strength, activityTypeName == nil {
+                    return .dataResponse(FunctionResult(
+                        name: "start_live_workout",
+                        response: ["error": "Non-strength suggested exercises need activity_name so Trai can preserve the activity identity."]
+                    ))
+                }
                 let normalizedTrackingFields = Exercise.normalizedTrackingFields(
                     trackingFields.compactMap(Exercise.TrackingField.init(rawValue:)),
                     for: resolvedCategory

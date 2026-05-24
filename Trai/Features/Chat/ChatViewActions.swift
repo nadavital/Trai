@@ -514,7 +514,9 @@ extension ChatView {
             entry.activityKind = category.liveWorkoutActivityKind
             entry.targetTags = exercise.resolvedTargetTags(category: category)
             entry.trackingFields = exercise.resolvedTrackingFields(category: category)
-            if let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+            if category == .strength,
+               let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !notes.isEmpty {
                 entry.notes = notes
             }
 
@@ -537,7 +539,15 @@ extension ChatView {
                 if let distanceMeters = exercise.distanceMeters, distanceMeters > 0 {
                     entry.plannedTarget = String(format: "%.0f m", distanceMeters)
                 }
-                exercise.activitySegments.forEach { entry.addActivitySegment($0) }
+                if let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+                    entry.plannedTarget = [entry.plannedTarget, notes]
+                        .compactMap { value in
+                            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                            return trimmed.isEmpty ? nil : trimmed
+                        }
+                        .joined(separator: " • ")
+                }
+                entry.plannedActivitySegments = exercise.activitySegments
             }
             entries.append(entry)
         }
@@ -627,7 +637,8 @@ private extension SuggestedWorkoutLog {
 
 private extension SuggestedWorkoutLog.LoggedExercise {
     func resolvedCategory(fallbackWorkoutType: LiveWorkout.WorkoutType) -> Exercise.Category {
-        if let resolved = Exercise.Category.normalized(from: category) {
+        if let rawCategory = category,
+           let resolved = Exercise.Category(rawValue: rawCategory.trimmingCharacters(in: .whitespacesAndNewlines)) {
             return resolved.userFacingEquivalent
         }
         if !sets.isEmpty && !hasActivityMetrics {
@@ -683,7 +694,8 @@ private extension SuggestedWorkoutLog.LoggedExercise {
 
 private extension SuggestedWorkoutEntry.SuggestedExercise {
     func resolvedCategory(fallbackWorkoutType: LiveWorkout.WorkoutType) -> Exercise.Category {
-        if let resolved = Exercise.Category.normalized(from: category) {
+        if let rawCategory = category,
+           let resolved = Exercise.Category(rawValue: rawCategory.trimmingCharacters(in: .whitespacesAndNewlines)) {
             return resolved.userFacingEquivalent
         }
         if hasActivityMetrics {
@@ -1083,12 +1095,6 @@ extension ChatView {
     func handlePlanReviewRequest() {
         guard let recommendation = pendingPlanRecommendation else { return }
 
-        // Clear the card first
-        withAnimation {
-            pendingPlanRecommendation = nil
-            planRecommendationMessage = nil
-        }
-
         // Construct a contextual message based on the trigger
         let prompt: String
         switch recommendation.trigger {
@@ -1111,11 +1117,16 @@ extension ChatView {
         }
 
         // This was launched from an app CTA, not typed into chat.
-        sendAppInitiatedPrompt(
+        guard sendAppInitiatedPrompt(
             prompt,
             launchLabel: "Reviewing your plan...",
             markNutritionPlanReviewedIfNoUpdate: true
-        )
+        ) else { return }
+
+        withAnimation {
+            pendingPlanRecommendation = nil
+            planRecommendationMessage = nil
+        }
     }
 
     /// Mark an app-initiated nutrition review complete when Trai reviewed it without proposing changes.
@@ -1164,51 +1175,43 @@ extension ChatView {
         let trimmedPrompt = pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedPrompt.isEmpty {
             let trimmedLaunchLabel = pendingChatLaunchLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-            let shouldMarkNutritionReview = isNutritionPlanReviewPrompt(
-                prompt: trimmedPrompt,
-                launchLabel: trimmedLaunchLabel
-            )
-            pendingChatPrompt = ""
-            pendingChatLaunchLabel = ""
+            let storedActionKind = PendingTraiChatActionKind(rawValue: pendingChatActionKind)
+            let shouldMarkNutritionReview = storedActionKind == .nutritionPlanReview
             startNewSession(silent: true)
             if let focusedEntryId = UUID(uuidString: pendingFocusedFoodEntryId),
                let focusedEntry = allFoodEntries.first(where: { $0.id == focusedEntryId }) {
                 focusedFoodEntryContext = focusedEntry.focusedChatContext
             }
-            pendingFocusedFoodEntryId = ""
-            sendAppInitiatedPrompt(
+            guard sendAppInitiatedPrompt(
                 trimmedPrompt,
                 launchLabel: trimmedLaunchLabel.isEmpty ? "Reviewing with Trai..." : trimmedLaunchLabel,
                 markNutritionPlanReviewedIfNoUpdate: shouldMarkNutritionReview
-            )
+            ) else { return }
+            pendingChatPrompt = ""
+            pendingChatLaunchLabel = ""
+            pendingFocusedFoodEntryId = ""
+            pendingChatActionKind = ""
             return
         }
 
         if pendingPlanReviewRequest {
-            pendingPlanReviewRequest = false
             startNewSession(silent: true)
-            sendAppInitiatedPrompt(
+            guard sendAppInitiatedPrompt(
                 "Can you review my nutrition plan and check if any updates are needed based on my progress?",
                 launchLabel: "Reviewing your nutrition plan...",
                 markNutritionPlanReviewedIfNoUpdate: true
-            )
+            ) else { return }
+            pendingPlanReviewRequest = false
             return
         }
 
         guard pendingWorkoutPlanReviewRequest else { return }
-        pendingWorkoutPlanReviewRequest = false
         startNewSession(silent: true)
-        sendAppInitiatedPrompt(
+        guard sendAppInitiatedPrompt(
             "Can you review my workout split and suggest any updates based on my recovery and recent workouts?",
             launchLabel: "Reviewing your workout plan..."
-        )
-    }
-
-    private func isNutritionPlanReviewPrompt(prompt: String, launchLabel: String) -> Bool {
-        let text = "\(prompt) \(launchLabel)".lowercased()
-        return text.contains("nutrition plan")
-            || text.contains("calories")
-            || text.contains("macros")
+        ) else { return }
+        pendingWorkoutPlanReviewRequest = false
     }
 
 }

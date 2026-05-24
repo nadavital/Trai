@@ -17,6 +17,7 @@ struct WorkoutDetailSheet: View {
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingActionKind) private var pendingChatActionKind: String = ""
     @Query(sort: \ExerciseHistory.performedAt, order: .reverse) private var allExerciseHistory: [ExerciseHistory]
     @Query private var profiles: [UserProfile]
     @State private var isEditingNotes = false
@@ -520,6 +521,7 @@ struct WorkoutDetailSheet: View {
 
         pendingChatPrompt = workout.traiReviewPrompt
         pendingChatLaunchLabel = "Reviewing your latest session..."
+        pendingChatActionKind = ""
         BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: "engagement.review_workout_session_with_trai",
             domain: .engagement,

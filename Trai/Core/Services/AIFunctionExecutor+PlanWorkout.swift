@@ -955,8 +955,21 @@ extension AIFunctionExecutor {
                 let hasLoggedSetMetrics = sets.contains { set in
                     set.reps > 0 || (set.weightKg ?? 0) > 0
                 }
-                let resolvedCategory = Exercise.Category.normalized(from: category)?.userFacingEquivalent
+                let explicitCategory = category.flatMap { Exercise.Category(rawValue: $0)?.userFacingEquivalent }
+                if category != nil, explicitCategory == nil {
+                    return .dataResponse(FunctionResult(
+                        name: "log_workout",
+                        response: ["error": "Workout item category must be a stable enum value. Put activity names like Running or Bouldering in activity_name."]
+                    ))
+                }
+                let resolvedCategory = explicitCategory
                     ?? (!sets.isEmpty && !hasActivityMetrics ? .strength : nil)
+                if hasActivityMetrics, resolvedCategory != .strength, exerciseActivityName == nil {
+                    return .dataResponse(FunctionResult(
+                        name: "log_workout",
+                        response: ["error": "Non-strength activity logs need activity_name so Trai can preserve the activity identity."]
+                    ))
+                }
                 let normalizedTrackingFields = resolvedCategory.map { category in
                     Exercise.normalizedTrackingFields(
                         trackingFields.compactMap(Exercise.TrackingField.init(rawValue:)),

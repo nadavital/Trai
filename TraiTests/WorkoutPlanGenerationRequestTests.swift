@@ -450,6 +450,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertTrue(required.contains("blocks"))
         XCTAssertTrue(required.contains("notes"))
         XCTAssertTrue(envelopeRequired.contains("changesWeeklySchedule"))
+        XCTAssertTrue(envelopeRequired.contains("changesActivitySemantics"))
 
         let planIntent = try XCTUnwrap(planProperties["planIntent"] as? [String: Any])
         let planIntentRequired = try XCTUnwrap(planIntent["required"] as? [String])
@@ -1120,6 +1121,48 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         )
 
         XCTAssertNil(AIService.validateRefinedWorkoutPlanForTesting(genericPlan, currentPlan: currentPlan))
+    }
+
+    @MainActor
+    func testWorkoutPlanRefinementAllowsExplicitActivitySemanticChange() {
+        let currentPlan = makePlan(
+            templateName: "Climbing Skill",
+            sessionType: .mixed,
+            focusAreas: ["Climbing"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Skill work",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing"],
+                    order: 0
+                )
+            ]
+        )
+        let mobilityPlan = makePlan(
+            templateName: "Mobility Flow",
+            sessionType: .mobility,
+            focusAreas: ["Mobility"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .mobility,
+                    title: "Mobility Flow",
+                    detail: "Replace climbing with mobility work.",
+                    activityTypeName: "Mobility Flow",
+                    activityTags: ["Mobility"],
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertNotNil(
+            AIService.validateRefinedWorkoutPlanForTesting(
+                mobilityPlan,
+                currentPlan: currentPlan,
+                allowsActivitySemanticChange: true
+            )
+        )
     }
 
     private func makeGoalSuggestion(

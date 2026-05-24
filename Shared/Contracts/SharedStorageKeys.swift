@@ -20,6 +20,7 @@ nonisolated enum SharedStorageKeys {
         static let pendingPrompt = "pendingTraiChatPrompt"
         static let pendingLaunchLabel = "pendingTraiChatLaunchLabel"
         static let pendingFocusedFoodEntryId = "pendingTraiChatFocusedFoodEntryId"
+        static let pendingActionKind = "pendingTraiChatActionKind"
     }
 
     enum AppRouting {
@@ -30,4 +31,8 @@ nonisolated enum SharedStorageKeys {
         static let openFoodCamera = "openFoodCameraFromIntent"
         static let startWorkout = "startWorkoutFromIntent"
     }
+}
+
+nonisolated enum PendingTraiChatActionKind: String {
+    case nutritionPlanReview
 }

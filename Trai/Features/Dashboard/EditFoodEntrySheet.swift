@@ -18,6 +18,7 @@ struct EditFoodEntrySheet: View {
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingFocusedFoodEntryId) private var pendingFocusedFoodEntryId: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingActionKind) private var pendingChatActionKind: String = ""
     @Query private var profiles: [UserProfile]
 
     let onAskTrai: ((String, AIService.FocusedFoodEntryContext) -> Void)?
@@ -274,6 +275,7 @@ struct EditFoodEntrySheet: View {
             pendingChatPrompt = prompt
             pendingChatLaunchLabel = "Opening this meal with Trai..."
             pendingFocusedFoodEntryId = entry.id.uuidString
+            pendingChatActionKind = ""
             dismiss()
             DispatchQueue.main.async {
                 appTabSelection.wrappedValue = .trai

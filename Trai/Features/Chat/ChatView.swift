@@ -94,6 +94,7 @@ struct ChatView: View {
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) var pendingChatLaunchLabel: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingFocusedFoodEntryId) var pendingFocusedFoodEntryId: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingActionKind) var pendingChatActionKind: String = ""
     @AppStorage(TraiCoachTone.storageKey) var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
     @State var isTemporarySession = false
     @State var temporaryMessages: [ChatMessage] = []
@@ -681,7 +682,7 @@ struct ChatView: View {
                 SuggestionRowsView(
                     context: smartStarterContext,
                     suggestionUsage: suggestionUsage,
-                    onSuggestionTapped: sendMessage,
+                    onSuggestionTapped: { _ = sendMessage($0) },
                     onTrackTap: trackSuggestionTap
                 )
                 .transition(.opacity)
@@ -691,6 +692,7 @@ struct ChatView: View {
                 selectedImage: $selectedImage,
                 selectedPhotoItem: $selectedPhotoItem,
                 isLoading: isLoading,
+                isInputDisabled: hasPendingStartupActions,
                 onSend: { text in sendMessage(text) },
                 onStop: stopGenerating,
                 onTakePhoto: { showingCamera = true },

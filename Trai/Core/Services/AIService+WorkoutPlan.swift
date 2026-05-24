@@ -528,14 +528,16 @@ extension AIService {
                     validatedRefinedWorkoutPlan(
                         $0,
                         currentPlan: currentPlan,
-                        allowsTemplateCountChange: envelope.changesWeeklySchedule == true
+                        allowsTemplateCountChange: envelope.changesWeeklySchedule == true,
+                        allowsActivitySemanticChange: envelope.changesActivitySemantics == true
                     )
                 }
                 let updatedPlan = envelope.updatedPlan.flatMap {
                     validatedRefinedWorkoutPlan(
                         $0,
                         currentPlan: currentPlan,
-                        allowsTemplateCountChange: envelope.changesWeeklySchedule == true
+                        allowsTemplateCountChange: envelope.changesWeeklySchedule == true,
+                        allowsActivitySemanticChange: envelope.changesActivitySemantics == true
                     )
                 }
                 return WorkoutPlanRefinementResponse(
@@ -554,7 +556,8 @@ extension AIService {
     private func validatedRefinedWorkoutPlan(
         _ plan: WorkoutPlan,
         currentPlan: WorkoutPlan,
-        allowsTemplateCountChange: Bool
+        allowsTemplateCountChange: Bool,
+        allowsActivitySemanticChange: Bool
     ) -> WorkoutPlan? {
         guard !plan.templates.isEmpty,
               plan.planIntent != nil,
@@ -570,7 +573,7 @@ extension AIService {
             return nil
         }
 
-        guard plan.preservesDurableActivitySemantics(from: currentPlan) else {
+        guard allowsActivitySemanticChange || plan.preservesDurableActivitySemantics(from: currentPlan) else {
             log("Ignoring workout plan refinement that dropped durable activity semantics from the current plan.", type: .error)
             return nil
         }
@@ -591,7 +594,8 @@ extension AIService {
     static func validateRefinedWorkoutPlanForTesting(
         _ plan: WorkoutPlan,
         currentPlan: WorkoutPlan,
-        allowsTemplateCountChange: Bool = false
+        allowsTemplateCountChange: Bool = false,
+        allowsActivitySemanticChange: Bool = false
     ) -> WorkoutPlan? {
         guard !plan.templates.isEmpty,
               plan.planIntent != nil,
@@ -599,7 +603,7 @@ extension AIService {
               plan.templates.allSatisfy({ !$0.blocks.isEmpty }),
               plan.hasUserFacingActivityIdentityForEveryBlock,
               allowsTemplateCountChange || plan.templates.count == currentPlan.templates.count,
-              plan.preservesDurableActivitySemantics(from: currentPlan) else {
+              allowsActivitySemanticChange || plan.preservesDurableActivitySemantics(from: currentPlan) else {
             return nil
         }
 

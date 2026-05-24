@@ -324,7 +324,8 @@ private extension SuggestedWorkoutLog.LoggedExercise {
            !activityTypeName.isEmpty {
             return activityTypeName
         }
-        if let category = Exercise.Category.normalized(from: category)?.userFacingEquivalent {
+        if let rawCategory = category,
+           let category = Exercise.Category(rawValue: rawCategory.trimmingCharacters(in: .whitespacesAndNewlines))?.userFacingEquivalent {
             return category.displayName
         }
         return "Activity"

@@ -129,14 +129,15 @@ extension ChatView {
         }
     }
 
-    func sendMessage(_ text: String) {
-        guard !isLoading, currentMessageTask == nil, !hasPendingStartupActions else { return }
+    @discardableResult
+    func sendMessage(_ text: String) -> Bool {
+        guard !isLoading, currentMessageTask == nil, !hasPendingStartupActions else { return false }
 
         let hasText = !text.trimmingCharacters(in: .whitespaces).isEmpty
         let capturedImage = selectedImage
         let hasImage = capturedImage != nil
 
-        guard hasText || hasImage else { return }
+        guard hasText || hasImage else { return false }
 
         selectedImage = nil
         selectedPhotoItem = nil
@@ -148,10 +149,11 @@ extension ChatView {
                 sendMessageAfterFirstFrameTransition(text, capturedImage: capturedImage)
                 isPreparingFirstMessageTransition = false
             }
-            return
+            return true
         }
 
         sendMessageAfterFirstFrameTransition(text, capturedImage: capturedImage)
+        return true
     }
 
     private func sendMessageAfterFirstFrameTransition(_ text: String, capturedImage: UIImage?) {
@@ -193,14 +195,15 @@ extension ChatView {
         }
     }
 
+    @discardableResult
     func sendAppInitiatedPrompt(
         _ text: String,
         launchLabel: String? = nil,
         markNutritionPlanReviewedIfNoUpdate: Bool = false
-    ) {
+    ) -> Bool {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
-        guard currentMessageTask == nil, !isLoading else { return }
+        guard !trimmedText.isEmpty else { return false }
+        guard currentMessageTask == nil, !isLoading else { return false }
 
         updateLastActivity()
         retirePendingPlanSuggestionsInCurrentSession()
@@ -230,6 +233,7 @@ extension ChatView {
                 aiMessage: aiMessage
             )
         }
+        return true
     }
 
     func stopGenerating() {

@@ -85,6 +85,7 @@ struct ChatContentList: View {
                 PlanReviewRecommendationCard(
                     recommendation: recommendation,
                     message: message,
+                    isReviewDisabled: isLoading,
                     onReviewPlan: onReview,
                     onDismiss: onDismiss
                 )

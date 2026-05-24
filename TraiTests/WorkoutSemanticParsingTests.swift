@@ -559,7 +559,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(exercise.startSummarySegments, ["Bouldering", "30 min", "2 segments", "7 attempts"])
     }
 
-    func testStartLiveWorkoutDoesNotInferCategoryFromActivityName() async throws {
+    func testStartLiveWorkoutRejectsMissingStableCategory() async throws {
         let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
             .init(
                 name: "start_live_workout",
@@ -577,14 +577,11 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             )
         )
 
-        guard case .suggestedWorkoutStart(let suggestion) = result,
-              let exercise = suggestion.exercises.first else {
-            return XCTFail("Expected start workout suggestion")
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected validation error")
         }
 
-        XCTAssertEqual(exercise.category, "custom")
-        XCTAssertEqual(exercise.activityTypeName, "Bouldering")
-        XCTAssertFalse(exercise.isStrengthStartItem)
+        XCTAssertNotNil(functionResult.response["error"])
     }
 
     func testStartLiveWorkoutUsesCustomCategoryForUnknownNamedActivity() async throws {
@@ -598,6 +595,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                     "suggested_exercises": [
                         [
                             "name": "Dance Flow",
+                            "category": "custom",
                             "activity_name": "Dance"
                         ]
                     ]
@@ -619,7 +617,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertFalse(exercise.isStrengthStartItem)
     }
 
-    func testStartLiveWorkoutPreservesNonStrengthNameWhenActivityNameIsMissing() async throws {
+    func testStartLiveWorkoutRejectsNonStrengthWithoutActivityName() async throws {
         let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
             .init(
                 name: "start_live_workout",
@@ -638,18 +636,11 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             )
         )
 
-        guard case .suggestedWorkoutStart(let suggestion) = result,
-              let exercise = suggestion.exercises.first else {
-            return XCTFail("Expected start workout suggestion")
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected validation error")
         }
 
-        XCTAssertEqual(exercise.category, "sportPractice")
-        XCTAssertNil(exercise.activityTypeName)
-        XCTAssertEqual(exercise.startSummarySegments, ["30 min"])
-        XCTAssertEqual(
-            Exercise.defaultActivityTypeName(for: exercise.name, category: .sportPractice),
-            "Dance Flow"
-        )
+        XCTAssertNotNil(functionResult.response["error"])
     }
 
     func testStartLiveWorkoutStoresNormalizedActivityCategoryAndTrackingFields() async throws {
@@ -662,7 +653,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                     "suggested_exercises": [
                         [
                             "name": "Run Intervals",
-                            "category": "running",
+                            "category": "cardio",
                             "activity_name": "Running",
                             "target_tags": ["Cardio", "Intervals"],
                             "tracking_fields": ["duration", "calories", "distance"],
@@ -752,10 +743,10 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         )
     }
 
-    func testSuggestedWorkoutStartUsesSharedCategoryNormalization() {
+    func testSuggestedWorkoutStartUsesStableCategoryOnly() {
         let run = SuggestedWorkoutEntry.SuggestedExercise(
             name: "Outdoor Run",
-            category: "running",
+            category: "cardio",
             activityTypeName: "Running",
             targetTags: ["Cardio"],
             trackingFields: ["duration", "distance"],
@@ -773,10 +764,10 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(run.startSummarySegments, ["Running", "30 min", "5.0 km"])
     }
 
-    func testSuggestedWorkoutLogUsesSharedCategoryNormalization() {
+    func testSuggestedWorkoutLogUsesStableCategoryOnly() {
         let padel = SuggestedWorkoutLog.LoggedExercise(
             name: "Padel Drills",
-            category: "padel drills",
+            category: "sportPractice",
             activityTypeName: "Padel",
             targetTags: ["Sport", "Footwork"],
             trackingFields: ["duration", "reps", "notes"],
@@ -1316,10 +1307,61 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         let items = try XCTUnwrap(exercises["items"] as? [String: Any])
         let required = try XCTUnwrap(items["required"] as? [String])
 
-        XCTAssertEqual(required, ["name", "category"])
+        XCTAssertEqual(required, ["name", "category", "activity_name"])
         XCTAssertEqual(exercises["minItems"] as? Int, 1)
         XCTAssertEqual(parameters["required"] as? [String], ["name", "type", "exercises"])
         XCTAssertNotNil((items["properties"] as? [String: Any])?["notes"])
+    }
+
+    func testLogWorkoutRejectsNonStrengthActivityWithoutActivityName() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "name": "Bouldering",
+                    "type": "mixed",
+                    "exercises": [
+                        [
+                            "name": "Bouldering",
+                            "category": "sportPractice",
+                            "duration_minutes": 45
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected validation error")
+        }
+
+        XCTAssertNotNil(functionResult.response["error"])
+    }
+
+    func testLogWorkoutRejectsFreeTextCategoryIdentity() async throws {
+        let result = await AIFunctionExecutor(modelContext: context, userProfile: nil).execute(
+            .init(
+                name: "log_workout",
+                arguments: [
+                    "name": "Padel",
+                    "type": "mixed",
+                    "exercises": [
+                        [
+                            "name": "Padel Drills",
+                            "category": "padel drills",
+                            "activity_name": "Padel",
+                            "duration_minutes": 45
+                        ]
+                    ]
+                ]
+            )
+        )
+
+        guard case .dataResponse(let functionResult) = result else {
+            return XCTFail("Expected validation error")
+        }
+
+        XCTAssertNotNil(functionResult.response["error"])
     }
 
     func testLogWorkoutSchemaUsesCurrentWorkoutModes() throws {

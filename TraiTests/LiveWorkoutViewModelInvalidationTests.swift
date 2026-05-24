@@ -139,6 +139,31 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertTrue(viewModel.isWorkoutComplete)
     }
 
+    func testPlannedActivitySegmentsDoNotCountAsLoggedData() {
+        let workout = LiveWorkout(name: "Bouldering Intervals", workoutType: .mixed)
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Limit Bouldering",
+            orderIndex: 0,
+            exerciseType: "sportPractice"
+        )
+        entry.activityTypeName = "Bouldering"
+        entry.trackingFields = [.duration, .reps, .notes]
+        entry.plannedActivitySegments = [
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 600, reps: 4),
+            LiveWorkoutEntry.ActivitySegment(durationSeconds: 600, reps: 3)
+        ]
+        entry.workout = workout
+        workout.entries = [entry]
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        XCTAssertFalse(entry.hasExercisePreferenceSignal)
+        XCTAssertFalse(viewModel.isWorkoutComplete)
+        XCTAssertEqual(ExerciseHistory.records(from: workout), [])
+        XCTAssertEqual(entry.plannedActivitySummarySegments, ["Bouldering", "2 planned segments"])
+    }
+
     func testLiveWorkoutReviewPromptIncludesActivitySegmentMetrics() {
         let workout = LiveWorkout(name: "Strength + Climbing", workoutType: .mixed)
         workout.completedAt = Date()
