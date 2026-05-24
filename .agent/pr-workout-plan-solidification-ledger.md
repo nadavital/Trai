@@ -118,6 +118,10 @@
 - Intent/deep-link contracts: fixed verified stale durable-ID route gap where an obsolete `template_id` still started a custom workout named like the old plan. Stale durable IDs now resolve to no workout; legacy name-only routes still work.
 - Planned workout starts: fixed verified chat/function-call path so strength entries carry `sourcePlanBlockID`, matching direct Workouts/Dashboard starts.
 - Validation note: focused XCTest pass succeeded for route parsing, route resolution, planned-start provenance, malformed `source_plan_template_id`, and semantic refinement regressions; `git diff --check` is clean.
+- Direct edit-sheet saves: fixed verified stale overwrite gap where Profile/Settings/Workouts normal Edit Plan sheets could save over a newer plan created elsewhere while the sheet was open.
+- Durable workout routes: fixed verified no-current-plan variant where a stale durable route could still create an unlinked custom workout, and malformed `template_id` URLs are now rejected instead of converted to generic custom routes.
+- Refinement validation: fixed verified schedule-change edge cases so intentional weekly schedule reductions can remove sessions while retained sessions keep durable template IDs; activity-semantic edits still cannot churn unrelated template IDs.
+- Validation note: second focused XCTest pass succeeded for direct edit stale guards, malformed/stale/no-plan routes, schedule reductions, and semantic-change ID preservation.
 
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
@@ -189,6 +193,10 @@
 - Legacy exercise-only workout plans and explicit strength-main activity names without tags were not fully protected by durable semantic validation.
 - Stale durable-ID workout routes could still start an unlinked custom workout named like the old planned session.
 - Chat/function-call planned starts preserved `sourcePlanTemplateID` but dropped strength-entry `sourcePlanBlockID`.
+- Normal Edit Plan sheets could overwrite a newer saved plan if the user saved an older open sheet after the plan changed elsewhere.
+- Durable workout routes with a stale `template_id` could still create an unlinked named custom workout when no current workout plan existed.
+- Schedule-reduction refinements could be rejected because removed template IDs were treated like retained durable IDs.
+- `changesActivitySemantics=true` could bypass durable template-ID preservation for unrelated retained sessions.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -257,6 +265,8 @@
 - Result after `0ede45b` current pass: no whitespace errors.
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest8Esc CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/AppRouteTests -only-testing:TraiTests/WorkoutTemplateServiceTests -only-testing:TraiTests/WorkoutSemanticParsingTests/testSuggestWorkoutPreservesAllSavedPlanBlocksWhenNoExplicitPreference -only-testing:TraiTests/WorkoutSemanticParsingTests/testStartLiveWorkoutRejectsMalformedSourcePlanTemplateID -only-testing:TraiTests/WorkoutSemanticParsingTests/testStartLiveWorkoutPreservesSourcePlanTemplateID -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsDroppedDurableBlockTagsWithoutSemanticChange -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsChangedDurableBlockIDWithoutSemanticChange -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsChangedTemplateIDWithoutSemanticChange -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsDroppedLegacyExerciseOnlyActivitySemantics -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsDroppedExplicitStrengthMainActivityNameWithoutTags`
 - Result after current fixes: passed, 40 tests, 0 failures.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /tmp/TraiPRSolidDerivedTest9Esc CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/AppRouteTests -only-testing:TraiTests/WorkoutTemplateServiceTests/testCreateWorkoutForIntentDoesNotNameFallbackWhenDurableIDIsStale -only-testing:TraiTests/WorkoutTemplateServiceTests/testCreateWorkoutForIntentDoesNotNameFallbackForDurableIDWhenNoPlanExists -only-testing:TraiTests/WorkoutTemplateServiceTests/testCreateWorkoutForIntentMatchesTemplateByDurableID -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsChangedTemplateIDWithoutSemanticChange -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsChangedTemplateIDWithActivitySemanticChange -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementAllowsScheduleReductionToDropRemovedTemplateIDs -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanEditSheetRejectsStaleEditingBase -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsDroppedLegacyExerciseOnlyActivitySemantics -only-testing:TraiTests/WorkoutPlanGenerationRequestTests/testWorkoutPlanRefinementRejectsDroppedExplicitStrengthMainActivityNameWithoutTags`
+- Result after latest fixes: passed, 20 tests, 0 failures.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -320,3 +330,6 @@
 - After replacing/editing a workout plan, tap an old large-widget/Shortcut planned workout route and confirm it does not start an empty custom workout named like the stale planned session.
 - In Profile workout-plan setup Pro flow, answer the final personalization prompt and immediately tap Back/dismiss; confirm the old queued generation does not later show a stale review plan.
 - Ask Trai in chat to start a planned strength or mixed session, accept the workout card, and confirm planned strength rows still count against the correct generated-plan block/template.
+- Open normal Edit Plan from Profile/Settings/Workouts, change the saved plan elsewhere, then return and tap Save; confirm the stale-plan alert blocks the old sheet.
+- Ask Trai to reduce a generated plan from 4 days to 3 days while keeping the same focus; confirm the proposal is accepted and retained sessions keep their planned workout routing.
+- Ask Trai to add a modality to one session while leaving others alone; confirm unrelated retained sessions still preserve template/block IDs and planned starts still route correctly.

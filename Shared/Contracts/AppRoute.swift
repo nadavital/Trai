@@ -75,8 +75,10 @@ enum AppRoute: Equatable, Codable {
                 .value?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let parsedTemplateID = templateIDValue.flatMap(UUID.init(uuidString:))
-            let hasInvalidTemplateID = templateIDValue?.isEmpty == false && parsedTemplateID == nil
-            let templateName = hasInvalidTemplateID ? nil : components?.queryItems?
+            if templateIDValue?.isEmpty == false && parsedTemplateID == nil {
+                return nil
+            }
+            let templateName = components?.queryItems?
                 .first(where: { $0.name == Self.workoutTemplateQueryName })?
                 .value
             self = .workout(templateID: parsedTemplateID, templateName: templateName)

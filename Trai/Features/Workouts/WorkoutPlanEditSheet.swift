@@ -637,6 +637,14 @@ struct WorkoutPlanEditSheet: View {
 
     private func savePlan(_ plan: WorkoutPlan) -> Bool {
         guard let profile = userProfile else { return false }
+        guard Self.canSaveCurrentPlan(savedPlan: profile.workoutPlan, editingBase: currentPlan) else {
+            saveError = WorkoutPlanEditSaveError(
+                message: "Your workout plan changed while this edit was open. Reopen the editor to make changes to the latest plan."
+            )
+            HapticManager.error()
+            return false
+        }
+
         let normalizedPlan = normalizedPlanForSave(plan)
         WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
             profile: profile,
@@ -656,6 +664,10 @@ struct WorkoutPlanEditSheet: View {
             HapticManager.error()
             return false
         }
+    }
+
+    static func canSaveCurrentPlan(savedPlan: WorkoutPlan?, editingBase: WorkoutPlan) -> Bool {
+        savedPlan == editingBase
     }
 
     private func refreshGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {

@@ -1268,6 +1268,124 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
     }
 
     @MainActor
+    func testWorkoutPlanRefinementRejectsChangedTemplateIDWithActivitySemanticChange() {
+        let templateID = UUID()
+        let blockID = UUID()
+        let currentPlan = makePlan(
+            templateID: templateID,
+            templateName: "Climbing Skill",
+            sessionType: .mixed,
+            focusAreas: ["Climbing"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: blockID,
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Skill work",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing"],
+                    order: 0
+                )
+            ]
+        )
+        let changedTemplateIDPlan = makePlan(
+            templateID: UUID(),
+            templateName: "Climbing + Mobility",
+            sessionType: .mixed,
+            focusAreas: ["Climbing", "Mobility"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: blockID,
+                    kind: .skill,
+                    title: "Limit Bouldering",
+                    detail: "Skill work",
+                    activityTypeName: "Bouldering",
+                    activityTags: ["Climbing"],
+                    order: 0
+                ),
+                WorkoutPlan.TrainingBlock(
+                    kind: .mobility,
+                    role: .cooldown,
+                    title: "Mobility Cooldown",
+                    detail: "Shoulder and hip mobility",
+                    activityTypeName: "Mobility Flow",
+                    activityTags: ["Mobility"],
+                    order: 1
+                )
+            ]
+        )
+
+        XCTAssertNil(
+            AIService.validateRefinedWorkoutPlanForTesting(
+                changedTemplateIDPlan,
+                currentPlan: currentPlan,
+                allowsActivitySemanticChange: true
+            )
+        )
+    }
+
+    @MainActor
+    func testWorkoutPlanRefinementAllowsScheduleReductionToDropRemovedTemplateIDs() {
+        let keptTemplateID = UUID()
+        let removedTemplateID = UUID()
+        let keptBlockID = UUID()
+        let removedBlockID = UUID()
+        let keptTemplate = WorkoutPlan.WorkoutTemplate(
+            id: keptTemplateID,
+            name: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: keptBlockID,
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Upper-body lifting",
+                    activityTypeName: "Strength",
+                    activityTags: ["Upper"],
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let removedTemplate = WorkoutPlan.WorkoutTemplate(
+            id: removedTemplateID,
+            name: "Lower Strength",
+            sessionType: .strength,
+            focusAreas: ["Lower"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: removedBlockID,
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Lower-body lifting",
+                    activityTypeName: "Strength",
+                    activityTags: ["Lower"],
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 1
+        )
+        let currentPlan = makePlan(templates: [keptTemplate, removedTemplate], daysPerWeek: 2)
+        let reducedPlan = makePlan(templates: [keptTemplate], daysPerWeek: 2)
+
+        let validated = AIService.validateRefinedWorkoutPlanForTesting(
+            reducedPlan,
+            currentPlan: currentPlan,
+            allowsTemplateCountChange: true
+        )
+
+        XCTAssertEqual(validated?.templates.map(\.id), [keptTemplateID])
+        XCTAssertEqual(validated?.daysPerWeek, 1)
+    }
+
+    @MainActor
     func testWorkoutPlanRefinementRejectsDroppedLegacyExerciseOnlyActivitySemantics() {
         let exercise = WorkoutPlan.ExerciseTemplate(
             exerciseName: "Limit Bouldering",
@@ -1433,6 +1551,42 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testWorkoutPlanEditSheetRejectsStaleEditingBase() {
+        let editingBase = makePlan(
+            templateName: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Upper-body lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                )
+            ]
+        )
+        let newerSavedPlan = makePlan(
+            templateName: "Lower Strength",
+            sessionType: .strength,
+            focusAreas: ["Lower"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Lower-body lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                )
+            ]
+        )
+
+        XCTAssertTrue(WorkoutPlanEditSheet.canSaveCurrentPlan(savedPlan: editingBase, editingBase: editingBase))
+        XCTAssertFalse(WorkoutPlanEditSheet.canSaveCurrentPlan(savedPlan: newerSavedPlan, editingBase: editingBase))
+        XCTAssertFalse(WorkoutPlanEditSheet.canSaveCurrentPlan(savedPlan: nil, editingBase: editingBase))
+    }
+
     private func makeGoalSuggestion(
         title: String,
         goalKindRaw: String = WorkoutGoal.GoalKind.frequency.rawValue,
@@ -1489,6 +1643,31 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             planIntent: WorkoutPlan.PlanIntent(
                 primaryFocus: "Test",
                 sessionAllocation: "One test session",
+                summary: "I built this around the requested activity."
+            ),
+            rationale: "Test rationale",
+            guidelines: [],
+            progressionStrategy: .defaultStrategy,
+            modalityProgression: WorkoutPlan.ModalityProgression(
+                focus: .mixed,
+                weeklyProgression: "Repeat and refine.",
+                targets: []
+            ),
+            warnings: nil
+        )
+    }
+
+    private func makePlan(
+        templates: [WorkoutPlan.WorkoutTemplate],
+        daysPerWeek: Int
+    ) -> WorkoutPlan {
+        WorkoutPlan(
+            splitType: .custom,
+            daysPerWeek: daysPerWeek,
+            templates: templates,
+            planIntent: WorkoutPlan.PlanIntent(
+                primaryFocus: "Test",
+                sessionAllocation: "\(templates.count) test sessions",
                 summary: "I built this around the requested activity."
             ),
             rationale: "Test rationale",

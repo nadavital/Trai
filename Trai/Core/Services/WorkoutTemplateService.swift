@@ -94,6 +94,10 @@ struct WorkoutTemplateService {
             }
         }
 
+        if templateID != nil {
+            return nil
+        }
+
         guard let trimmedName, !trimmedName.isEmpty else {
             return createCustomWorkout()
         }

@@ -573,7 +573,18 @@ extension AIService {
             return nil
         }
 
-        guard allowsActivitySemanticChange || plan.preservesDurableActivitySemantics(from: currentPlan) else {
+        guard plan.preservesDurableActivityTopology(
+            from: currentPlan,
+            allowsTemplateCountChange: allowsTemplateCountChange
+        ) else {
+            log("Ignoring workout plan refinement that churned durable template IDs.", type: .error)
+            return nil
+        }
+
+        guard allowsActivitySemanticChange || plan.preservesDurableActivitySemantics(
+            from: currentPlan,
+            allowsTemplateCountChange: allowsTemplateCountChange
+        ) else {
             log("Ignoring workout plan refinement that dropped durable activity semantics from the current plan.", type: .error)
             return nil
         }
@@ -603,7 +614,14 @@ extension AIService {
               plan.templates.allSatisfy({ !$0.blocks.isEmpty }),
               plan.hasUserFacingActivityIdentityForEveryBlock,
               allowsTemplateCountChange || plan.templates.count == currentPlan.templates.count,
-              allowsActivitySemanticChange || plan.preservesDurableActivitySemantics(from: currentPlan) else {
+              plan.preservesDurableActivityTopology(
+                from: currentPlan,
+                allowsTemplateCountChange: allowsTemplateCountChange
+              ),
+              allowsActivitySemanticChange || plan.preservesDurableActivitySemantics(
+                from: currentPlan,
+                allowsTemplateCountChange: allowsTemplateCountChange
+              ) else {
             return nil
         }
 
@@ -640,7 +658,30 @@ private extension WorkoutPlan {
         }
     }
 
-    func preservesDurableActivitySemantics(from currentPlan: WorkoutPlan) -> Bool {
+    func preservesDurableActivityTopology(
+        from currentPlan: WorkoutPlan,
+        allowsTemplateCountChange: Bool
+    ) -> Bool {
+        let currentTemplateIDs = Set(currentPlan.templates.map(\.id))
+        let nextTemplateIDs = Set(templates.map(\.id))
+
+        if allowsTemplateCountChange {
+            if templates.count >= currentPlan.templates.count {
+                return currentTemplateIDs.isSubset(of: nextTemplateIDs)
+            }
+            return nextTemplateIDs.isSubset(of: currentTemplateIDs)
+                && nextTemplateIDs.count == templates.count
+        }
+
+        return currentTemplateIDs == nextTemplateIDs
+            && currentTemplateIDs.count == currentPlan.templates.count
+            && nextTemplateIDs.count == templates.count
+    }
+
+    func preservesDurableActivitySemantics(
+        from currentPlan: WorkoutPlan,
+        allowsTemplateCountChange: Bool
+    ) -> Bool {
         if currentPlan.planIntent?.supportiveCardioConstraint != nil,
            planIntent?.supportiveCardioConstraint == nil {
             return false
@@ -652,12 +693,11 @@ private extension WorkoutPlan {
             guard nextSupportBlockCount >= currentSupportBlockCount else { return false }
         }
 
-        let nextTemplateIDs = Set(templates.map(\.id))
-        guard currentPlan.templates.allSatisfy({ nextTemplateIDs.contains($0.id) }) else {
-            return false
+        let currentTemplatesToPreserve = currentPlan.templates.filter { currentTemplate in
+            trainingTemplate(matching: currentTemplate.id) != nil
         }
 
-        let currentBlocks = currentPlan.requiredDurableActivityBlocks
+        let currentBlocks = currentTemplatesToPreserve.flatMap(\.blocks).filter(\.hasDurableActivitySemanticsToPreserve)
         if !currentBlocks.isEmpty {
             return currentBlocks.allSatisfy { currentBlock in
                 guard let nextBlock = trainingBlock(matching: currentBlock.id) else {
@@ -667,7 +707,7 @@ private extension WorkoutPlan {
             }
         }
 
-        let currentGroups = currentPlan.requiredDurableActivityIdentityGroups
+        let currentGroups = currentTemplatesToPreserve.requiredDurableActivityIdentityGroups
         guard !currentGroups.isEmpty else { return true }
         return currentGroups.allSatisfy { containsVisibleActivityIdentity(matching: $0) }
     }
@@ -681,9 +721,17 @@ private extension WorkoutPlan {
             .flatMap(\.blocks)
             .first { $0.id == id }
     }
+}
 
+private extension WorkoutPlan {
+    func trainingTemplate(matching id: UUID) -> WorkoutPlan.WorkoutTemplate? {
+        templates.first { $0.id == id }
+    }
+}
+
+private extension Array where Element == WorkoutPlan.WorkoutTemplate {
     var requiredDurableActivityIdentityGroups: [[String]] {
-        templates.flatMap { template in
+        flatMap { template in
             let identityBlocks = template.blocks.isEmpty ? template.displayBlocks : template.blocks
             let blockGroups: [[String]] = identityBlocks.compactMap { block in
                 let values = ([block.activityTypeName].compactMap { $0 } + block.activityTags + block.exercises.map(\.exerciseName))
