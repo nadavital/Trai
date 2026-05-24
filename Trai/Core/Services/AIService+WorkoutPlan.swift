@@ -220,6 +220,16 @@ extension AIService {
             emitValidationLog("Workout plan included one or more blocks without activityTypeName.")
             throw AIServiceError.parsingError
         }
+        let templateIDs = plan.templates.map(\.id)
+        guard Set(templateIDs).count == templateIDs.count else {
+            emitValidationLog("Workout plan included duplicate template IDs.")
+            throw AIServiceError.parsingError
+        }
+        let blockIDs = plan.templates.flatMap { $0.blocks.map(\.id) }
+        guard Set(blockIDs).count == blockIDs.count else {
+            emitValidationLog("Workout plan included duplicate block IDs.")
+            throw AIServiceError.parsingError
+        }
 
         if let requestedDays = request.availableDays {
             guard plan.templates.count == requestedDays else {

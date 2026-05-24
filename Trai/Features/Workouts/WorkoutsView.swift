@@ -1123,6 +1123,7 @@ struct WorkoutsView: View {
             try modelContext.save()
             resetStandardWorkoutPlanSetupState()
             showingStandardPlanSetup = false
+            WidgetDataProvider.shared.scheduleRefresh()
             HapticManager.success()
         } catch {
             modelContext.rollback()

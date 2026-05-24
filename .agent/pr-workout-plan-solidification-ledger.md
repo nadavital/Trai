@@ -188,6 +188,11 @@
 - Fresh agent results: lifecycle/review flow, semantic durability, and persistence/history passes found no additional serious issues. Routing/widgets/adherence found two actual widget P2s.
 - Widget routing: fixed verified small-widget gap where the workout icon always emitted a generic `workout` route instead of the durable recommended-template route.
 - Durable widget routes: fixed verified name-only fallback where widget payloads with `recommendedWorkout` but no `recommendedWorkoutTemplateID` could still deep-link to a workout by label.
+- Widget display state: fixed verified stale widget payload gap where medium/large widgets could still present non-durable name-only recommendations as `Up Next` / `Tap to start` even though navigation was disabled.
+- Widget freshness: fixed verified plan-save gap where workout plan changes did not proactively refresh widget snapshots, leaving stale recommendations/routes until unrelated refresh work ran.
+- Chat create stale guard: fixed verified no-plan Workouts chat flow overwrite where a plan created elsewhere after the flow opened could be archived and replaced.
+- Generated-plan ID durability: fixed verified duplicate template/block ID acceptance in generated plans.
+- Name-only workout routes: stopped resolving saved workout-plan templates by display name; durable template IDs are now required for planned-template starts, while name-only requests create unlinked custom workouts.
 - Regression-test coverage: added focused coverage that widget workout actions are disabled when the payload lacks a durable recommended template ID.
 
 ## Manual Test Queue

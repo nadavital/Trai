@@ -85,6 +85,7 @@ extension OnboardingView {
             try modelContext.save()
             UserDefaults.standard.set(true, forKey: AppLaunchArguments.onboardingCompletedCacheKey)
             clearOnboardingDraft()
+            WidgetDataProvider.shared.scheduleRefresh()
         } catch {
             print("Failed to persist onboarding profile: \(error)")
         }

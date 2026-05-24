@@ -74,8 +74,6 @@ struct WorkoutTemplateService {
             let template: WorkoutPlan.WorkoutTemplate?
             if let templateID {
                 template = plan.templates.first(where: { $0.id == templateID })
-            } else if let trimmedName {
-                template = plan.templates.first(where: { $0.name.localizedCaseInsensitiveCompare(trimmedName) == .orderedSame })
             } else {
                 template = nil
             }

@@ -849,6 +849,7 @@ struct ProfileView: View {
         }
         resetStandardWorkoutPlanSetupState()
         showPlanSetupSheet = false
+        WidgetDataProvider.shared.scheduleRefresh()
         HapticManager.success()
     }
 

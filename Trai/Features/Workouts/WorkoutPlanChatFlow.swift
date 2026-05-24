@@ -1268,11 +1268,19 @@ struct WorkoutPlanChatFlow: View {
                 HapticManager.error()
                 return
             }
+            if currentPlanToEdit == nil, profile.workoutPlan != nil {
+                saveError = WorkoutPlanChatFlowSaveError(
+                    message: "Your workout plan changed while this setup was open. Reopen the latest plan before saving changes."
+                )
+                HapticManager.error()
+                return
+            }
 
             if currentPlanToEdit == plan {
                 refreshExistingGeneratedPlanAdherenceGoals(for: plan)
                 insertGeneratedWorkoutGoals(activeGeneratedPlanGoals, for: plan)
                 try? modelContext.save()
+                WidgetDataProvider.shared.scheduleRefresh()
                 HapticManager.success()
                 dismiss()
                 return
@@ -1327,6 +1335,7 @@ struct WorkoutPlanChatFlow: View {
                 return
             }
             HapticManager.success()
+            WidgetDataProvider.shared.scheduleRefresh()
             dismiss()
         }
     }

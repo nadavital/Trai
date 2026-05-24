@@ -587,7 +587,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.sourcePlanTemplateID, profile.workoutPlan?.templates.first?.id)
     }
 
-    func testCreateWorkoutForIntentUsesExactNameOnlyForLegacyRoutes() throws {
+    func testCreateWorkoutForIntentDoesNotBindNameOnlyRouteToSavedTemplate() throws {
         let context = try makeInMemoryContext()
         let profile = UserProfile()
         profile.workoutPlan = WorkoutPlan(
@@ -619,12 +619,12 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         context.insert(profile)
         try context.save()
 
-        let exact = try XCTUnwrap(service.createWorkoutForIntent(
+        let exactName = try XCTUnwrap(service.createWorkoutForIntent(
             name: "upper body strength",
             modelContext: context
         ))
-        XCTAssertEqual(exact.name, "Upper Body Strength")
-        XCTAssertEqual(exact.sourcePlanTemplateID, profile.workoutPlan?.templates[0].id)
+        XCTAssertEqual(exactName.name, "upper body strength")
+        XCTAssertNil(exactName.sourcePlanTemplateID)
 
         let partial = try XCTUnwrap(service.createWorkoutForIntent(
             name: "upper body",

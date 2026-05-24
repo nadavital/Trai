@@ -474,6 +474,7 @@ struct SettingsView: View {
         }
         resetStandardWorkoutPlanSetupState()
         showWorkoutPlanSetup = false
+        WidgetDataProvider.shared.scheduleRefresh()
         HapticManager.success()
     }
 

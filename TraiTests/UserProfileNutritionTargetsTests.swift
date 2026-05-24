@@ -90,6 +90,7 @@ final class UserProfileNutritionTargetsTests: XCTestCase {
             XCTFail("Expected a workout route")
         }
         XCTAssertEqual(data.workoutActionURLString, route.urlString)
+        XCTAssertEqual(data.actionableRecommendedWorkoutName, "Upper Strength")
     }
 
     func testWidgetWorkoutActionIsDisabledAfterWorkoutComplete() {
@@ -101,6 +102,7 @@ final class UserProfileNutritionTargetsTests: XCTestCase {
 
         XCTAssertNil(data.workoutActionRoute)
         XCTAssertNil(data.workoutActionURLString)
+        XCTAssertNil(data.actionableRecommendedWorkoutName)
     }
 
     func testWidgetWorkoutActionIsDisabledOnRestDayWithoutRecommendation() {
@@ -112,6 +114,7 @@ final class UserProfileNutritionTargetsTests: XCTestCase {
 
         XCTAssertNil(data.workoutActionRoute)
         XCTAssertNil(data.workoutActionURLString)
+        XCTAssertNil(data.actionableRecommendedWorkoutName)
     }
 
     func testWidgetWorkoutActionIsDisabledWithoutDurableTemplateID() {
@@ -123,6 +126,7 @@ final class UserProfileNutritionTargetsTests: XCTestCase {
 
         XCTAssertNil(data.workoutActionRoute)
         XCTAssertNil(data.workoutActionURLString)
+        XCTAssertNil(data.actionableRecommendedWorkoutName)
     }
 
     private func makeWidgetSnapshotContext() throws -> ModelContext {

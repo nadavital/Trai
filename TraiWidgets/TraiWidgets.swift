@@ -151,7 +151,7 @@ struct MediumWidgetView: View {
                         Text("Workout Complete")
                             .fontWeight(.medium)
                             .foregroundStyle(.green)
-                    } else if let workout = entry.data.recommendedWorkout {
+                    } else if let workout = entry.data.actionableRecommendedWorkoutName {
                         Image(systemName: "figure.run")
                             .foregroundStyle(.orange)
                         Text("Up Next: \(workout)")
@@ -182,8 +182,10 @@ struct MediumWidgetView: View {
                 MediumActionButton(icon: "fork.knife", url: AppRoute.logFood.urlString, color: .green)
                 if let workoutURLString = entry.data.workoutActionURLString {
                     MediumActionButton(icon: "figure.run", url: workoutURLString, color: .orange)
-                } else {
+                } else if entry.data.todayWorkoutCompleted {
                     MediumStatusIcon(icon: "checkmark.circle.fill", color: .green)
+                } else {
+                    MediumStatusIcon(icon: "moon.zzz.fill", color: .secondary)
                 }
                 MediumActionButton(icon: "circle.hexagongrid.circle", url: AppRoute.chat.urlString, color: .calorieColor)
             }
@@ -262,7 +264,7 @@ struct LargeWidgetView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            } else if let workout = entry.data.recommendedWorkout {
+            } else if let workout = entry.data.actionableRecommendedWorkoutName {
                 Image(systemName: "figure.run")
                     .font(.title2)
                     .foregroundStyle(.orange)
@@ -283,7 +285,7 @@ struct LargeWidgetView: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
-                    Text("Tap to start a workout")
+                    Text("No workout scheduled")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

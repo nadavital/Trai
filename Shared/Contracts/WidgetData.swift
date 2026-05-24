@@ -95,6 +95,13 @@ nonisolated struct WidgetData: Codable {
         workoutActionRoute?.urlString
     }
 
+    var actionableRecommendedWorkoutName: String? {
+        guard workoutActionRoute != nil else { return nil }
+        let workoutName = recommendedWorkout?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let workoutName, !workoutName.isEmpty else { return nil }
+        return workoutName
+    }
+
     nonisolated enum Macro {
         case calories
         case protein

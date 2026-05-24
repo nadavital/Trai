@@ -115,6 +115,86 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertThrowsError(try AIService.validateGeneratedWorkoutPlanForTesting(strengthOnlyPlan, request: request))
     }
 
+    @MainActor
+    func testWorkoutPlanValidationRejectsDuplicateDurableTemplateIDs() {
+        let duplicateID = UUID()
+        let upper = WorkoutPlan.WorkoutTemplate(
+            id: duplicateID,
+            name: "Upper Strength",
+            sessionType: .strength,
+            focusAreas: ["Upper"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: UUID(),
+                    kind: .strength,
+                    title: "Upper Strength",
+                    detail: "Upper-body lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+        let lower = WorkoutPlan.WorkoutTemplate(
+            id: duplicateID,
+            name: "Lower Strength",
+            sessionType: .strength,
+            focusAreas: ["Lower"],
+            targetMuscleGroups: [],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: UUID(),
+                    kind: .strength,
+                    title: "Lower Strength",
+                    detail: "Lower-body lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 1
+        )
+        let plan = makePlan(templates: [upper, lower], daysPerWeek: 2)
+        let request = makeRequest(availableDays: 2)
+
+        XCTAssertThrowsError(try AIService.validateGeneratedWorkoutPlanForTesting(plan, request: request))
+    }
+
+    @MainActor
+    func testWorkoutPlanValidationRejectsDuplicateDurableBlockIDs() {
+        let duplicateID = UUID()
+        let plan = makePlan(
+            templateName: "Mixed Strength",
+            sessionType: .mixed,
+            focusAreas: ["Strength", "Conditioning"],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    id: duplicateID,
+                    kind: .strength,
+                    title: "Strength",
+                    detail: "Upper-body lifting",
+                    activityTypeName: "Strength",
+                    order: 0
+                ),
+                WorkoutPlan.TrainingBlock(
+                    id: duplicateID,
+                    kind: .cardio,
+                    title: "Conditioning",
+                    detail: "Bike intervals",
+                    activityTypeName: "Cycling",
+                    order: 1
+                )
+            ]
+        )
+        let request = makeRequest(availableDays: 1)
+
+        XCTAssertThrowsError(try AIService.validateGeneratedWorkoutPlanForTesting(plan, request: request))
+    }
+
     func testDedicatedCardioSignalOverridesAccessoryCardioDirective() {
         let request = makeRequest(
             workoutType: .mixed,

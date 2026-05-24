@@ -548,6 +548,7 @@ extension ChatView {
             saveImmediately: false
         )
         try? modelContext.save()
+        WidgetDataProvider.shared.scheduleRefresh()
 
         HapticManager.success()
     }
