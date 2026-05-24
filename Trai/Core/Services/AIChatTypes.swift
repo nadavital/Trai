@@ -108,6 +108,7 @@ extension AIService {
         let memoriesContext: String
         let coachContext: String
         let pendingSuggestion: SuggestedFoodEntry?
+        let pendingNutritionPlanSuggestion: PlanUpdateSuggestionEntry?
         let pendingWorkoutPlanSuggestion: WorkoutPlanSuggestionEntry?
         let isIncognitoMode: Bool
         let activeWorkout: WorkoutContext?
@@ -124,6 +125,7 @@ extension AIService {
             memoriesContext: String,
             coachContext: String = "",
             pendingSuggestion: SuggestedFoodEntry? = nil,
+            pendingNutritionPlanSuggestion: PlanUpdateSuggestionEntry? = nil,
             pendingWorkoutPlanSuggestion: WorkoutPlanSuggestionEntry? = nil,
             isIncognitoMode: Bool = false,
             activeWorkout: WorkoutContext? = nil,
@@ -139,6 +141,7 @@ extension AIService {
             self.memoriesContext = memoriesContext
             self.coachContext = coachContext
             self.pendingSuggestion = pendingSuggestion
+            self.pendingNutritionPlanSuggestion = pendingNutritionPlanSuggestion
             self.pendingWorkoutPlanSuggestion = pendingWorkoutPlanSuggestion
             self.isIncognitoMode = isIncognitoMode
             self.activeWorkout = activeWorkout

@@ -42,6 +42,33 @@ enum ChatWorkoutPlanSuggestionContext {
     }
 }
 
+enum ChatNutritionPlanSuggestionContext {
+    static func latestFreshSuggestion(
+        in messages: [ChatMessage],
+        currentPlanUpdatedAt: Date?,
+        includeRetired: Bool = false
+    ) -> PlanUpdateSuggestionEntry? {
+        for message in messages.reversed() where isEligible(message, includeRetired: includeRetired) {
+            guard let suggestion = message.suggestedPlan else { continue }
+            guard !ChatSuggestionFreshness.isStale(
+                messageTimestamp: message.timestamp,
+                currentPlanUpdatedAt: currentPlanUpdatedAt
+            ) else {
+                continue
+            }
+            return suggestion
+        }
+        return nil
+    }
+
+    private static func isEligible(_ message: ChatMessage, includeRetired: Bool) -> Bool {
+        if message.hasPendingPlanSuggestion {
+            return true
+        }
+        return includeRetired && message.suggestedPlan != nil && !message.planUpdateApplied
+    }
+}
+
 // MARK: - Suggestion Tracking
 
 extension ChatView {

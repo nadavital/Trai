@@ -76,6 +76,10 @@ extension AIService {
             prompt += buildPendingSuggestionSection(pending: pending)
         }
 
+        if let pendingNutritionPlan = context.pendingNutritionPlanSuggestion {
+            prompt += buildPendingNutritionPlanSection(suggestion: pendingNutritionPlan)
+        }
+
         if let pendingWorkoutPlan = context.pendingWorkoutPlanSuggestion {
             prompt += buildPendingWorkoutPlanSection(suggestion: pendingWorkoutPlan)
         }
@@ -253,6 +257,32 @@ extension AIService {
         \(!pending.components.isEmpty ? "- Components: \(pending.components.map(\.displayName).joined(separator: ", "))" : "")
 
         If the user says this is wrong or wants corrections (e.g., "that's actually a wrap", "it's closer to 400 calories", "add the sauce", "no toast", "half the rice"), provide an UPDATED suggest_food_log with corrected totals and corrected components. Acknowledge their correction naturally.
+
+        """
+    }
+
+    private func buildPendingNutritionPlanSection(suggestion: PlanUpdateSuggestionEntry) -> String {
+        let proposedValues: [String] = [
+            suggestion.calories.map { "Calories: \($0) kcal" },
+            suggestion.proteinGrams.map { "Protein: \($0)g" },
+            suggestion.carbsGrams.map { "Carbs: \($0)g" },
+            suggestion.fatGrams.map { "Fat: \($0)g" },
+            suggestion.fiberGrams.map { "Fiber: \($0)g" },
+            suggestion.sugarGrams.map { "Sugar: \($0)g" },
+            suggestion.goalDisplayName.map { "Goal: \($0)" }
+        ].compactMap { $0 }
+
+        let proposedSummary = proposedValues.isEmpty
+            ? "No explicit target fields were included."
+            : proposedValues.joined(separator: ", ")
+
+        return """
+
+        PENDING NUTRITION PLAN PROPOSAL (not yet saved):
+        - Proposed targets: \(proposedSummary)
+        \(suggestion.rationale.map { "- Rationale: \($0)" } ?? "")
+
+        If the user asks for another tweak before applying changes, treat this pending proposal as the current draft and revise from it, not from their saved nutrition plan. Include the full revised target set in update_user_plan for every target that should remain part of the pending proposal, not just the single field the user mentioned.
 
         """
     }

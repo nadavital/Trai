@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `406769a Fix stale chat cards and workout function chaining`
+- Latest pushed fix before current round: `cae67dd Fix recursive workout chaining and stale review context`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -95,6 +95,13 @@
 - Live workout planned/logged semantics: no serious issue found in the fresh pass.
 - Regression-test coverage: added focused coverage for recursive function-result merge, stale workout-plan suggestion context, retrying fresh retired plan suggestions, onboarding workout-review invalidation, and date-stable current-period goal fixtures.
 
+### Round 2026-05-24 After `cae67dd`
+- Chat/review pending state: fixed verified nutrition-plan follow-up edit gap where typing a tweak to an unsaved nutrition proposal retired the card before AI context was built, causing the model to revise from saved targets instead of the pending structured draft.
+- Retry/stop behavior: preserved fresh retired nutrition proposals only for retry context, while still rejecting applied or externally stale cards.
+- AI function contracts: added durable pending nutrition-plan proposal data to chat function context and prompt guidance so the model revises from structured target fields rather than keyword-derived local inference.
+- Plan persistence/edit/review flow and live workout planned/logged semantics: no additional serious issue was part of this verified fix.
+- Regression-test coverage: added focused coverage for stale nutrition cards, retrying fresh retired nutrition proposals, and prompt inclusion of pending nutrition-plan targets.
+
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
 - Generated workout plan blocks decoded unknown free-text `kind` values as `.custom`, letting malformed AI payloads store generic behavior data.
@@ -156,6 +163,7 @@
 - Older workout-plan chat proposals could still become the AI refinement base after the active workout plan had been replaced outside that chat.
 - Onboarding generated workout-plan review state was not invalidated when profile/nutrition inputs changed after workout plan/goals generation.
 - Current-period workout goal tests could fail around midnight or the locale week boundary because fixtures used `Date() - 1 hour`.
+- Follow-up edits to an unsaved nutrition-plan proposal in chat retired the pending card before building AI context, so revisions could fall back to the saved nutrition targets.
 
 ## Rejected / Not Actual Issues
 - Plan persistence/edit/review flow had no serious verified issue in the fresh pass after `98b4c7a`.
@@ -196,6 +204,14 @@
 - Result after `406769a` focused rerun: 5 selected tests, 0 failures.
 - `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidDerived3 CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests -only-testing:TraiTests/LiveWorkoutViewModelInvalidationTests -only-testing:TraiTests/WorkoutPlanGenerationRequestTests -only-testing:TraiTests/WorkoutTemplateServiceTests -only-testing:TraiTests/UserProfileWorkoutPlanRequestTests -only-testing:TraiTests/OnboardingFlowPlannerTests`
 - Result after `406769a` broad focused rerun: 219 selected tests, 0 failures.
+- `git diff --check`
+- Result after `cae67dd` nutrition-context fix round: no whitespace errors.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidDerived CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests`
+- Result after `cae67dd` nutrition-context fix round: app/tests compiled, but XCTest runner failed before bootstrapping in the simulator environment with early unexpected exit; no XCTest assertions ran or failed.
+- `xcodebuild test -project Trai.xcodeproj -scheme TraiTests -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/TraiPRSolidDerivedNarrow CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatNutritionPlanSuggestionContextRejectsExternallyStaleCards -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatNutritionPlanSuggestionContextCanUseFreshRetiredSuggestionForRetry -only-testing:TraiTests/WorkoutSemanticParsingTests/testChatWorkoutPlanSuggestionContextCanUseFreshRetiredSuggestionForRetry`
+- Result after `cae67dd` nutrition-context fix round: app/tests compiled, but XCTest runner exited before establishing its connection; no XCTest assertions ran or failed.
+- `xcodebuild build -project Trai.xcodeproj -scheme Trai -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/TraiPRSolidBuild CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO`
+- Result after `cae67dd` nutrition-context fix round: build succeeded.
 
 ## User Manual Test Checklist Once Agents Are Clean
 - From Profile, generate a workout plan, review it with Trai, save it, quit/reopen, and confirm the plan persists.
@@ -252,3 +268,5 @@
 - Generate chat workout-plan proposal A, save or replace plan B from Profile/Workouts/Settings, return to the old chat and ask for a tweak; confirm Trai uses current plan B or asks for clarification instead of refining proposal A.
 - Generate a workout-plan proposal, ask for a follow-up tweak that fails, then retry; confirm the retry still uses the fresh unsaved proposal as context.
 - During onboarding, generate a workout plan/goals, go back and change profile/nutrition inputs, then continue; confirm the old workout plan/goals are cleared and must be regenerated/reconfirmed.
+- In chat, get a nutrition-plan proposal, type a follow-up like "before applying, keep calories but raise carbs and reduce fat," and confirm the old card retires while the new AI proposal is based on the pending card's full structured targets, not the saved plan.
+- Retry a failed nutrition-plan follow-up edit and confirm the retry still uses the fresh retired unsaved proposal when building the next AI response.

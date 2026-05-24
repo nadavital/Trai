@@ -144,6 +144,7 @@ extension ChatView {
 
         selectedImage = nil
         selectedPhotoItem = nil
+        let pendingNutritionPlanSuggestionForContext = currentPendingNutritionPlanSuggestionForContext()
         let pendingWorkoutPlanSuggestionForContext = currentPendingWorkoutPlanSuggestionForContext()
 
         if currentSessionMessages.isEmpty && !isPreparingFirstMessageTransition {
@@ -153,6 +154,7 @@ extension ChatView {
                 sendMessageAfterFirstFrameTransition(
                     text,
                     capturedImage: capturedImage,
+                    pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
                     pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext
                 )
                 isPreparingFirstMessageTransition = false
@@ -163,6 +165,7 @@ extension ChatView {
         sendMessageAfterFirstFrameTransition(
             text,
             capturedImage: capturedImage,
+            pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
             pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext
         )
         return true
@@ -171,6 +174,7 @@ extension ChatView {
     private func sendMessageAfterFirstFrameTransition(
         _ text: String,
         capturedImage: UIImage?,
+        pendingNutritionPlanSuggestionForContext: PlanUpdateSuggestionEntry?,
         pendingWorkoutPlanSuggestionForContext: WorkoutPlanSuggestionEntry?
     ) {
         updateLastActivity()
@@ -208,6 +212,7 @@ extension ChatView {
                 text: text,
                 capturedImage: capturedImage,
                 previousMessages: previousMessages,
+                pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
                 pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext,
                 aiMessage: aiMessage,
                 requestID: requestID
@@ -226,6 +231,7 @@ extension ChatView {
         guard currentMessageTask == nil, !isLoading else { return false }
 
         updateLastActivity()
+        let pendingNutritionPlanSuggestionForContext = currentPendingNutritionPlanSuggestionForContext()
         let pendingWorkoutPlanSuggestionForContext = currentPendingWorkoutPlanSuggestionForContext()
         retirePendingPlanSuggestionsInCurrentSession()
         currentActivity = launchLabel ?? "Reviewing with Trai..."
@@ -260,6 +266,7 @@ extension ChatView {
                 text: trimmedText,
                 capturedImage: nil,
                 previousMessages: previousMessages,
+                pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
                 pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext,
                 aiMessage: aiMessage,
                 requestID: requestID
@@ -282,6 +289,7 @@ extension ChatView {
         text: String,
         capturedImage: UIImage?,
         previousMessages: [ChatMessage],
+        pendingNutritionPlanSuggestionForContext: PlanUpdateSuggestionEntry?,
         pendingWorkoutPlanSuggestionForContext: WorkoutPlanSuggestionEntry?,
         aiMessage: ChatMessage,
         requestID: UUID
@@ -317,6 +325,7 @@ extension ChatView {
                 memoriesContext: memoriesContext,
                 coachContext: coachContext,
                 pendingSuggestion: pendingMealSuggestion?.meal,
+                pendingNutritionPlanSuggestion: pendingNutritionPlanSuggestionForContext ?? currentPendingNutritionPlanSuggestionForContext(),
                 pendingWorkoutPlanSuggestion: pendingWorkoutPlanSuggestionForContext ?? currentPendingWorkoutPlanSuggestionForContext(),
                 isIncognitoMode: isTemporarySession,
                 activeWorkout: workoutContext,
@@ -490,6 +499,11 @@ extension ChatView {
         let capturedImage = userMessage.imageData.flatMap { UIImage(data: $0) }
         let text = userMessage.content
         let previousMessages = Array(currentSessionMessages.prefix(messageIndex - 1).suffix(10))
+        let pendingNutritionPlanSuggestionForContext = ChatNutritionPlanSuggestionContext.latestFreshSuggestion(
+            in: Array(currentSessionMessages.prefix(messageIndex)),
+            currentPlanUpdatedAt: profile?.aiPlanGeneratedAt,
+            includeRetired: true
+        )
         let pendingWorkoutPlanSuggestionForContext = ChatWorkoutPlanSuggestionContext.latestFreshSuggestion(
             in: Array(currentSessionMessages.prefix(messageIndex)),
             currentPlanUpdatedAt: profile?.workoutPlanGeneratedAt,
@@ -503,6 +517,7 @@ extension ChatView {
                 text: text,
                 capturedImage: capturedImage,
                 previousMessages: previousMessages,
+                pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
                 pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext,
                 aiMessage: aiMessage,
                 requestID: requestID
@@ -639,6 +654,13 @@ extension ChatView {
         ChatWorkoutPlanSuggestionContext.latestFreshSuggestion(
             in: currentSessionMessages,
             currentPlanUpdatedAt: profile?.workoutPlanGeneratedAt
+        )
+    }
+
+    private func currentPendingNutritionPlanSuggestionForContext() -> PlanUpdateSuggestionEntry? {
+        ChatNutritionPlanSuggestionContext.latestFreshSuggestion(
+            in: currentSessionMessages,
+            currentPlanUpdatedAt: profile?.aiPlanGeneratedAt
         )
     }
 

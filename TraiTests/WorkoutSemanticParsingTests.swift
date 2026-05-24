@@ -621,6 +621,109 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         ))
     }
 
+    func testChatNutritionPlanSuggestionContextRejectsExternallyStaleCards() {
+        let staleMessage = ChatMessage(content: "", isFromUser: false)
+        staleMessage.timestamp = Date(timeIntervalSince1970: 100)
+        staleMessage.setSuggestedPlan(PlanUpdateSuggestionEntry(
+            calories: 2_100,
+            proteinGrams: 170,
+            carbsGrams: 190,
+            fatGrams: 65,
+            fiberGrams: nil,
+            sugarGrams: nil,
+            goal: nil,
+            rationale: "Old proposal"
+        ))
+        let freshMessage = ChatMessage(content: "", isFromUser: false)
+        freshMessage.timestamp = Date(timeIntervalSince1970: 102)
+        freshMessage.setSuggestedPlan(PlanUpdateSuggestionEntry(
+            calories: 2_250,
+            proteinGrams: 180,
+            carbsGrams: 210,
+            fatGrams: 70,
+            fiberGrams: nil,
+            sugarGrams: nil,
+            goal: nil,
+            rationale: "Fresh proposal"
+        ))
+
+        XCTAssertNil(ChatNutritionPlanSuggestionContext.latestFreshSuggestion(
+            in: [staleMessage],
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 101)
+        ))
+
+        let suggestion = ChatNutritionPlanSuggestionContext.latestFreshSuggestion(
+            in: [staleMessage, freshMessage],
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 101)
+        )
+        XCTAssertEqual(suggestion?.calories, 2_250)
+        XCTAssertEqual(suggestion?.proteinGrams, 180)
+    }
+
+    func testChatNutritionPlanSuggestionContextCanUseFreshRetiredSuggestionForRetry() {
+        let message = ChatMessage(content: "", isFromUser: false)
+        message.timestamp = Date(timeIntervalSince1970: 102)
+        message.setSuggestedPlan(PlanUpdateSuggestionEntry(
+            calories: 2_300,
+            proteinGrams: 185,
+            carbsGrams: 220,
+            fatGrams: 72,
+            fiberGrams: 32,
+            sugarGrams: 55,
+            goal: "build_muscle",
+            rationale: "Fresh retired proposal"
+        ))
+        message.suggestedPlanDismissed = true
+
+        XCTAssertNil(ChatNutritionPlanSuggestionContext.latestFreshSuggestion(
+            in: [message],
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 101)
+        ))
+
+        let retrySuggestion = ChatNutritionPlanSuggestionContext.latestFreshSuggestion(
+            in: [message],
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 101),
+            includeRetired: true
+        )
+        XCTAssertEqual(retrySuggestion?.calories, 2_300)
+        XCTAssertEqual(retrySuggestion?.goal, "build_muscle")
+
+        message.planUpdateApplied = true
+        XCTAssertNil(ChatNutritionPlanSuggestionContext.latestFreshSuggestion(
+            in: [message],
+            currentPlanUpdatedAt: Date(timeIntervalSince1970: 101),
+            includeRetired: true
+        ))
+    }
+
+    func testFunctionCallingPromptIncludesPendingNutritionPlanSuggestion() {
+        let suggestion = PlanUpdateSuggestionEntry(
+            calories: 2_300,
+            proteinGrams: 185,
+            carbsGrams: 220,
+            fatGrams: 72,
+            fiberGrams: 32,
+            sugarGrams: 55,
+            goal: "build_muscle",
+            rationale: "Fuel the current training block"
+        )
+        let prompt = AIService().buildFunctionCallingSystemPrompt(context: .init(
+            profile: nil,
+            todaysFoodEntries: [],
+            currentDateTime: "Sunday, May 24, 2026 at 12:30 AM",
+            conversationHistory: "",
+            memoriesContext: "",
+            pendingNutritionPlanSuggestion: suggestion
+        ))
+
+        XCTAssertTrue(prompt.contains("PENDING NUTRITION PLAN PROPOSAL"))
+        XCTAssertTrue(prompt.contains("Calories: 2300 kcal"))
+        XCTAssertTrue(prompt.contains("Protein: 185g"))
+        XCTAssertTrue(prompt.contains("Carbs: 220g"))
+        XCTAssertTrue(prompt.contains("Goal: Build Muscle"))
+        XCTAssertTrue(prompt.contains("treat this pending proposal as the current draft"))
+    }
+
     func testOnboardingPlanInputInvalidationIncludesGeneratedWorkoutReviewState() {
         XCTAssertTrue(OnboardingPlanInputInvalidation.shouldResetGeneratedPlanState(
             oldSignature: "old",
