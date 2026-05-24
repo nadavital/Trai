@@ -98,6 +98,17 @@ final class UserProfileNutritionTargetsTests: XCTestCase {
         XCTAssertNil(data.workoutActionURLString)
     }
 
+    func testWidgetWorkoutActionIsDisabledOnRestDayWithoutRecommendation() {
+        let data = WidgetData.empty.updatingWorkoutAction(
+            recommendedWorkout: nil,
+            recommendedWorkoutTemplateID: nil,
+            todayWorkoutCompleted: false
+        )
+
+        XCTAssertNil(data.workoutActionRoute)
+        XCTAssertNil(data.workoutActionURLString)
+    }
+
     private func makeWidgetSnapshotContext() throws -> ModelContext {
         let schema = Schema([
             UserProfile.self,

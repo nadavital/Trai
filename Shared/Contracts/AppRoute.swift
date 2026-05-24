@@ -17,11 +17,11 @@ enum AppRoute: Equatable, Codable {
     private static let workoutTemplateIDQueryName = "template_id"
     private static let workoutTemplateQueryName = "template"
 
-    static var appURL: URL {
+    nonisolated static var appURL: URL {
         URL(string: "\(scheme)://")!
     }
 
-    var url: URL {
+    nonisolated var url: URL {
         var components = URLComponents()
         components.scheme = Self.scheme
 
@@ -49,7 +49,7 @@ enum AppRoute: Equatable, Codable {
         return components.url ?? Self.appURL
     }
 
-    var urlString: String {
+    nonisolated var urlString: String {
         url.absoluteString
     }
 

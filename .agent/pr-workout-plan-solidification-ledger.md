@@ -5,7 +5,7 @@
 
 ## Current PR Branch
 - `codex-workout-plan-pro-generation-polish`
-- Latest pushed fix before current round: `048a4be Keep workout plan block semantics scoped`
+- Latest pushed fix before current round: `f28876c Harden generated plan routes and goals`
 
 ## Fixes Already Landed In This Loop
 - Blocked review-flow breakage when generated workout plan review switches into Trai chat.
@@ -168,8 +168,15 @@
 - Generated goal relevance: fixed verified P2 where generated plan-adherence goals could badge unrelated workout history rows because `matches(workout:)` treated unscoped generated goals as matching every workout.
 - Generated goal normalization: fixed verified P2 where AI-produced plan-adherence goals with durable `tracksGeneratedPlanAdherence` but free-form units such as `planned sessions` validated yet never attached to generated template IDs.
 - Widget routing: fixed verified P2 where medium widget workout actions ignored `recommendedWorkoutTemplateID`, and completed large widget rows could still deep-link into another workout.
+- Rest-day widget routing: fixed verified P2 where a widget with no recommended workout and no completed workout still produced a generic workout route.
+- Shared route isolation: marked pure shared app-route URL properties `nonisolated` so widget data can build route strings without Swift concurrency isolation warnings.
 - Regression-test coverage: added focused tests for unscoped schedule reduction rejection, explicit/merged reduction allowance, generated-goal history matching, free-form adherence units, and widget workout route state.
 - Validation note: focused XCTest pass succeeded for 7 selected tests; `git diff --check` is clean.
+
+### Round 2026-05-24 After `f28876c`
+- Local verification of the latest fresh-agent findings found no remaining serious issue in chat/review/edit lifecycle, setup stale-save guards, generated refinement presentation, schedule-reduction semantics, generated plan-adherence goal matching/normalization, or widget workout routing after the rest-day widget action guard.
+- Re-checked fixed issues: Review with Trai startup sends are still gated by pending startup actions; setup/edit saves still compare against the captured base plan; generated refinement presentation is still request/presentation keyed; generated plan-adherence goals now match by durable source template ID; free-form adherence units normalize from `tracksGeneratedPlanAdherence`; widget workout actions use the recommended template route and are disabled after workout completion; removed-template schedule reductions must preserve semantics or mark the removed template changed.
+- Validation note: focused XCTest pass succeeded for 11 selected semantic/stale-save/adherence tests, followed by exact widget/adherence XCTest passes covering recommended-template, completed-workout, and rest-day/no-recommendation route states; `build-for-testing` also succeeded after the shared route isolation fix; `git diff --check` is clean.
 
 ## Manual Test Queue
 - From Profile, Settings, and Workouts, open standard workout-plan setup, mutate/save a different workout plan elsewhere before tapping Save, and confirm the stale setup is blocked instead of overwriting the newer plan.
@@ -184,6 +191,7 @@
 - Complete one generated-plan workout, then log an unrelated custom workout and confirm generated plan-adherence goals do not badge the unrelated history row.
 - Generate/save a plan-adherence goal with AI wording like `planned sessions`; confirm it stores the generated template IDs and progresses from planned workouts.
 - From the medium widget, tap the workout action beside `Up Next` and confirm it starts the exact recommended planned template. After completing today's workout, confirm the large widget completed row does not start a duplicate workout.
+- On a rest day with no recommendation, confirm the medium/large widget does not expose a generic start-workout action.
 
 ## Verified Issues
 - Invalid non-empty `activity_kind` / `activity_role` in workout goal tool calls silently wrote or cleared durable scope data.
