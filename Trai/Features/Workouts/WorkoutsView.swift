@@ -57,6 +57,7 @@ struct WorkoutsView: View {
     @State private var standardWorkoutPlanSetupBase: WorkoutPlan?
     @State private var standardWorkoutPlanAIService = AIService()
     @State private var standardWorkoutPlanSaveError: StandardWorkoutPlanSaveError?
+    @State private var goalCelebrationClearTask: Task<Void, Never>?
 
     // MARK: - Sheet States
 
@@ -967,10 +968,13 @@ struct WorkoutsView: View {
         if goal.status == .completed {
             goal.markActive()
             goal.lastCelebratedAt = nil
+            if celebratedWorkoutGoal?.id == goal.id {
+                celebratedWorkoutGoal = nil
+            }
         } else {
             goal.markCompleted()
             goal.markCelebrated()
-            celebratedWorkoutGoal = goal
+            presentCompletedGoalCelebration(goal)
             HapticManager.success()
         }
         try? modelContext.save()
@@ -992,9 +996,23 @@ struct WorkoutsView: View {
 
         goal.markCompleted()
         goal.markCelebrated()
-        celebratedWorkoutGoal = goal
+        presentCompletedGoalCelebration(goal)
         try? modelContext.save()
         HapticManager.success()
+    }
+
+    private func presentCompletedGoalCelebration(_ goal: WorkoutGoal) {
+        celebratedWorkoutGoal = goal
+        goalCelebrationClearTask?.cancel()
+        goalCelebrationClearTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(6))
+            guard !Task.isCancelled else { return }
+            if celebratedWorkoutGoal?.id == goal.id {
+                withAnimation(.snappy) {
+                    celebratedWorkoutGoal = nil
+                }
+            }
+        }
     }
 
     private func startWorkoutGoalsWithTrai() {

@@ -1733,18 +1733,31 @@ struct WorkoutGoalDetailSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                SessionWeeklyBars(sessionDates: allSessionDates)
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    GoalActivityMetric(
+                        title: "Matched",
+                        value: "\(totalCount)",
+                        subtitle: "since goal started",
+                        iconName: "checkmark.circle.fill",
+                        color: goalAccentColor
+                    )
 
-                HStack {
-                    Text("Past 8 weeks")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                    Spacer()
                     if let latestDate = latestCompletedDate {
-                        Text("Latest \(latestDate.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                        GoalActivityMetric(
+                            title: "Latest",
+                            value: latestDate.formatted(.dateTime.month(.abbreviated).day()),
+                            subtitle: latestDate.formatted(.dateTime.year()),
+                            iconName: "clock.arrow.circlepath",
+                            color: TraiColors.brandAccent
+                        )
                     }
+                }
+
+                if let supportingText = insight.supportingText {
+                    Text(supportingText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -1866,50 +1879,38 @@ struct WorkoutGoalDetailSheet: View {
     }
 }
 
-private struct SessionWeeklyBars: View {
-    let sessionDates: [Date]
-
-    private let weekCount = 8
-    private let maxBarHeight: CGFloat = 44
-    private let minBarHeight: CGFloat = 4
+private struct GoalActivityMetric: View {
+    let title: String
+    let value: String
+    let subtitle: String
+    let iconName: String
+    let color: Color
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 6) {
-            ForEach(weekData, id: \.0) { _, count, label in
-                VStack(spacing: 4) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(count > 0 ? TraiColors.flame : Color(.tertiarySystemFill))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: barHeight(for: count))
-                    Text(label)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: iconName)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(color)
+                .frame(width: 30, height: 30)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
         }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func barHeight(for count: Int) -> CGFloat {
-        let maxCount = weekData.map(\.1).max() ?? 1
-        guard maxCount > 0 else { return minBarHeight }
-        return max(minBarHeight, maxBarHeight * CGFloat(count) / CGFloat(maxCount))
-    }
-
-    private var weekData: [(Int, Int, String)] {
-        let calendar = Calendar.current
-        let today = Date()
-        return (0..<weekCount).map { i in
-            let weekOffset = -(weekCount - 1 - i)
-            let anchorDate = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: today) ?? today
-            guard let weekInterval = calendar.dateInterval(of: .weekOfYear, for: anchorDate) else {
-                return (i, 0, "")
-            }
-            let count = sessionDates.filter { $0 >= weekInterval.start && $0 < weekInterval.end }.count
-            let label = weekInterval.start.formatted(.dateTime.month(.abbreviated))
-            return (i, count, label)
-        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
     }
 }
 
