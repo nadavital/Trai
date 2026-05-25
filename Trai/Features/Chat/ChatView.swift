@@ -869,6 +869,17 @@ struct ChatView: View {
         )
     }
 
+    func appendOptimisticSessionMessages(_ messages: [ChatMessage]) {
+        guard !messages.isEmpty else { return }
+        let existingMessageIDs = Set(cachedSessionMessages.map(\.id))
+        let newMessages = messages.filter { !existingMessageIDs.contains($0.id) }
+        guard !newMessages.isEmpty else { return }
+
+        cachedSessionMessages.append(contentsOf: newMessages)
+        cachedSessionMessages.sort { $0.timestamp < $1.timestamp }
+        cachedMessagesBySession[currentSessionId] = cachedSessionMessages
+    }
+
     private func recentMessagesForCurrentSession(limit: Int) -> [ChatMessage] {
         guard limit > 0 else { return [] }
 
@@ -1123,9 +1134,7 @@ private struct ChatScrollContainer: View {
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        withAnimation(.easeOut(duration: 0.25)) {
-            proxy.scrollTo(ChatContentList.bottomAnchorID, anchor: .bottom)
-        }
+        proxy.scrollTo(ChatContentList.bottomAnchorID, anchor: .bottom)
     }
 }
 

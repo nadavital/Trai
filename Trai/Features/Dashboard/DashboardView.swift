@@ -60,6 +60,7 @@ struct DashboardView: View {
     @State private var reminderCompletionHistory: [ReminderCompletion] = []
     @State private var cachedRecommendedTemplateId: UUID?
     @State private var didPrimeInitialData = false
+    @State private var hasSettledActivationChecklistState = false
     @State private var coachContextRefreshTask: Task<Void, Never>?
     @State private var deferredInitialLoadTask: Task<Void, Never>?
     @State private var remindersLoadTask: Task<Void, Never>?
@@ -105,6 +106,9 @@ struct DashboardView: View {
     }
     private static var remindersInitialLoadDelayMilliseconds: Int {
         AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1400 : 120
+    }
+    private static var activationChecklistStartupGraceMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1600 : 650
     }
     private static var coachContextRefreshDelayMilliseconds: Int {
         AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1200 : 180
@@ -245,7 +249,7 @@ struct DashboardView: View {
     }
 
     private var shouldShowActivationChecklist: Bool {
-        guard isViewingToday, profile != nil else { return false }
+        guard hasSettledActivationChecklistState, isViewingToday, profile != nil else { return false }
         return !hasLoggedFood || !hasWorkoutPlan || healthKitService?.isAuthorized != true
     }
 
@@ -558,6 +562,12 @@ struct DashboardView: View {
                 scheduleDeferredStartupWork(
                     delayMilliseconds: Self.deferredStartupWorkDelayMilliseconds
                 )
+            }
+            .task(id: didPrimeInitialData) {
+                guard didPrimeInitialData, !hasSettledActivationChecklistState else { return }
+                try? await Task.sleep(for: .milliseconds(Self.activationChecklistStartupGraceMilliseconds))
+                guard !Task.isCancelled else { return }
+                hasSettledActivationChecklistState = true
             }
             .onAppear {
                 if tabActivationPolicy.activeSince == nil {

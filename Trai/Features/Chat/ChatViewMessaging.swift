@@ -202,7 +202,7 @@ extension ChatView {
                 modelContext.insert(userMessage)
                 modelContext.insert(aiMessage)
             }
-            rebuildSessionMessages(preferLiveQueryData: true)
+            appendOptimisticSessionMessages([userMessage, aiMessage])
         }
 
         let requestID = UUID()
