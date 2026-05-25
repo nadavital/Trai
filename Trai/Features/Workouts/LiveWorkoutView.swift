@@ -339,6 +339,8 @@ struct LiveWorkoutView: View {
                         calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
                     )
 
+                    workoutTargetSelector
+
                     GeneralSessionOverviewCard(workout: viewModel.workout)
 
                     SessionGoalsCard(
@@ -421,34 +423,15 @@ struct LiveWorkoutView: View {
                         calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
                     )
 
-                    // Targets can include muscles, planned split days, broad activity
-                    // fallbacks, and user-defined activity types from the exercise library.
-                    MuscleGroupSelector(
-                        selectedMuscles: Binding(
-                            get: { Set(viewModel.workout.muscleGroups) },
-                            set: { viewModel.updateMuscleGroups(Array($0)) }
-                        ),
-                        selectedActivityCategories: Binding(
-                            get: { Set(viewModel.targetActivityCategories) },
-                            set: { viewModel.updateActivityTargets(Array($0)) }
-                        ),
-                        selectedActivityTypes: Binding(
-                            get: { Set(viewModel.targetActivityTypes) },
-                            set: { selectedTypes in viewModel.updateActivityTypeTargets(Array(selectedTypes)) }
-                        ),
-                        isCustomWorkout: viewModel.exerciseSuggestions.isEmpty,
-                        planTargets: planTargets,
-                        activityTypeTargets: activityTypeTargets,
-                        showsMuscleTargets: viewModel.workout.type.supportsMuscleTargets,
-                        onSelectPlanTarget: { target in
-                            viewModel.applyPlanTarget(
-                                name: target.title,
-                                muscles: target.muscles,
-                                categories: target.categories,
-                                activityTypes: target.activityTypes
-                            )
-                        }
-                    )
+                    workoutTargetSelector
+
+                    if !relevantSessionGoals.isEmpty {
+                        SessionGoalsCard(
+                            goals: relevantSessionGoals,
+                            onAddGoal: { showingGoalSheet = true },
+                            onToggleCompletion: toggleGoalCompletion
+                        )
+                    }
 
                     // Planned and ad hoc workout items share the same logging surface.
                     ForEach(entries, id: \.id) { entry in
@@ -587,6 +570,36 @@ struct LiveWorkoutView: View {
                 onDeleteExercise: { removeEntry(entry) }
             )
         }
+    }
+
+    private var workoutTargetSelector: some View {
+        MuscleGroupSelector(
+            selectedMuscles: Binding(
+                get: { Set(viewModel.workout.muscleGroups) },
+                set: { viewModel.updateMuscleGroups(Array($0)) }
+            ),
+            selectedActivityCategories: Binding(
+                get: { Set(viewModel.targetActivityCategories) },
+                set: { viewModel.updateActivityTargets(Array($0)) }
+            ),
+            selectedActivityTypes: Binding(
+                get: { Set(viewModel.targetActivityTypes) },
+                set: { selectedTypes in viewModel.updateActivityTypeTargets(Array(selectedTypes)) }
+            ),
+            isCustomWorkout: viewModel.exerciseSuggestions.isEmpty,
+            planTargets: planTargets,
+            activityTypeTargets: activityTypeTargets,
+            showsMuscleTargets: viewModel.workout.type.supportsMuscleTargets
+                || viewModel.workout.type == .custom,
+            onSelectPlanTarget: { target in
+                viewModel.applyPlanTarget(
+                    name: target.title,
+                    muscles: target.muscles,
+                    categories: target.categories,
+                    activityTypes: target.activityTypes
+                )
+            }
+        )
     }
 
     // MARK: - Helpers

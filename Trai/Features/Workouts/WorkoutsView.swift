@@ -9,13 +9,6 @@ import SwiftUI
 import SwiftData
 
 struct WorkoutsView: View {
-    private struct PendingCustomWorkoutStart {
-        let name: String
-        let type: LiveWorkout.WorkoutType
-        let muscles: [LiveWorkout.MuscleGroup]
-        let focusAreas: [String]
-    }
-
     // MARK: - Queries
 
     @Query private var profiles: [UserProfile]
@@ -76,12 +69,10 @@ struct WorkoutsView: View {
     @State private var showingWorkoutGoalDetail: WorkoutGoal?
     @State private var showingWorkoutGoalAISetup = false
     @State private var showingWorkoutSheet = false
-    @State private var showingCustomWorkoutSetup = false
     @State private var showingPersonalRecords = false
     @State private var showingCustomExercises = false
     @State private var pendingWorkout: LiveWorkout?
     @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
-    @State private var pendingCustomWorkoutStart: PendingCustomWorkoutStart?
     @State private var lastOpenTrackedAt: Date?
     @State private var historyRefreshTask: Task<Void, Never>?
     @State private var deferredRecoveryRefreshTask: Task<Void, Never>?
@@ -235,31 +226,6 @@ struct WorkoutsView: View {
         }
     }
 
-    private var recentWorkoutModes: [WorkoutMode] {
-        let liveModes = completedLiveWorkouts
-            .sorted { ($0.completedAt ?? $0.startedAt) > ($1.completedAt ?? $1.startedAt) }
-            .prefix(8)
-            .map(\.type)
-
-        let sessionModes = allWorkouts
-            .prefix(8)
-            .map(\.inferredWorkoutMode)
-
-        return liveModes + sessionModes
-    }
-
-    private var plannedWorkoutModes: [WorkoutMode] {
-        workoutPlan?.templates.map(\.sessionType) ?? []
-    }
-
-    private var personalizedWorkoutTypes: [WorkoutMode] {
-        WorkoutMode.personalizedOrder(
-            recentModes: recentWorkoutModes,
-            plannedModes: plannedWorkoutModes,
-            goalModes: activeWorkoutGoals.compactMap(\.linkedWorkoutType)
-        )
-    }
-
     private var workoutsByDate: [(date: Date, workouts: [WorkoutSession])] { cachedWorkoutsByDate }
 
     /// Completed in-app workouts grouped by date
@@ -337,7 +303,7 @@ struct WorkoutsView: View {
                         recoveryScores: templateScores,
                         recommendedTemplateId: recommendedTemplateId,
                         onStartTemplate: startWorkoutFromTemplate,
-                        onStartCustomWorkout: { showingCustomWorkoutSetup = true },
+                        onStartCustomWorkout: { startCustomWorkout(type: .custom) },
                         onCreatePlan: workoutPlan == nil ? { showingStandardPlanSetup = true } : nil,
                         onEditPlan: workoutPlanEditAction
                     )
@@ -546,25 +512,6 @@ struct WorkoutsView: View {
                     LiveWorkoutView(workout: workout, template: pendingTemplate)
                         .traiSheetBranding()
                 }
-            }
-            .sheet(isPresented: $showingCustomWorkoutSetup) {
-                CustomWorkoutSetupSheet(
-                    onStart: { name, type, muscles, focusAreas in
-                        queueCustomWorkoutStart(name: name, type: type, muscles: muscles, focusAreas: focusAreas)
-                    },
-                    orderedWorkoutTypes: personalizedWorkoutTypes
-                )
-                .traiSheetBranding()
-            }
-            .onChange(of: showingCustomWorkoutSetup) { _, isShowing in
-                guard !isShowing, let pendingCustomWorkoutStart else { return }
-                self.pendingCustomWorkoutStart = nil
-                startCustomWorkout(
-                    name: pendingCustomWorkoutStart.name,
-                    type: pendingCustomWorkoutStart.type,
-                    muscles: pendingCustomWorkoutStart.muscles,
-                    focusAreas: pendingCustomWorkoutStart.focusAreas
-                )
             }
             .onChange(of: showingWorkoutSheet) { _, isShowing in
                 if !isShowing {
@@ -1361,7 +1308,7 @@ struct WorkoutsView: View {
 
     private func startCustomWorkout(
         name: String = "Custom Workout",
-        type: LiveWorkout.WorkoutType = .strength,
+        type: LiveWorkout.WorkoutType = .custom,
         muscles: [LiveWorkout.MuscleGroup] = [],
         focusAreas: [String] = []
     ) {
@@ -1396,25 +1343,6 @@ struct WorkoutsView: View {
         pendingWorkout = workout
         showingWorkoutSheet = true
         HapticManager.selectionChanged()
-    }
-
-    private func queueCustomWorkoutStart(
-        name: String,
-        type: LiveWorkout.WorkoutType,
-        muscles: [LiveWorkout.MuscleGroup],
-        focusAreas: [String]
-    ) {
-        let request = PendingCustomWorkoutStart(name: name, type: type, muscles: muscles, focusAreas: focusAreas)
-        guard showingCustomWorkoutSetup else {
-            startCustomWorkout(
-                name: request.name,
-                type: request.type,
-                muscles: request.muscles,
-                focusAreas: request.focusAreas
-            )
-            return
-        }
-        pendingCustomWorkoutStart = request
     }
 
     private func deleteWorkout(_ workout: WorkoutSession) {

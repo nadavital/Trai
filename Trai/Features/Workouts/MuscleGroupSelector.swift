@@ -211,6 +211,7 @@ struct MuscleGroupSelector: View {
             selectedActivityTypes.remove(target.title)
         } else {
             selectedActivityTypes.insert(target.title)
+            selectedActivityCategories.formUnion(target.categories.flatMap { Array($0.suggestionCategories) })
         }
         HapticManager.selectionChanged()
     }

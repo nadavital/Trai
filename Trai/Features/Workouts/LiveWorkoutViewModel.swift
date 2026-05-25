@@ -1649,6 +1649,11 @@ final class LiveWorkoutViewModel {
 
     func updateMuscleGroups(_ muscles: [LiveWorkout.MuscleGroup]) {
         workout.muscleGroups = muscles
+        if muscles.isEmpty {
+            refreshWorkoutTypeFromTargets()
+        } else {
+            workout.type = .strength
+        }
         // Update workout name based on muscles if it's still the default
         if workout.name == "Custom Workout" && !muscles.isEmpty {
             let muscleNames = muscles.sorted { $0.displayName < $1.displayName }
@@ -1672,6 +1677,7 @@ final class LiveWorkoutViewModel {
         }
         let categoryFocus = Self.visibleActivityFocusLabels(for: categories)
         workout.focusAreas = Self.dedupedFocusAreas(existingFreeformFocus + categoryFocus)
+        refreshWorkoutTypeFromTargets()
         if workout.name == "Custom Workout", !categories.isEmpty, workout.muscleGroups.isEmpty {
             workout.name = categories.prefix(2).map(\.displayName).joined(separator: " + ")
         }
@@ -1687,6 +1693,7 @@ final class LiveWorkoutViewModel {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && Self.nonActivityTypeFocusKeys.contains($0.goalNormalizedKey) }
         workout.focusAreas = Self.dedupedFocusAreas(broadFocusAreas + cleanedActivityTypes)
+        refreshWorkoutTypeFromTargets()
         if workout.name == "Custom Workout", let first = cleanedActivityTypes.first {
             workout.name = first
         }
@@ -1706,6 +1713,29 @@ final class LiveWorkoutViewModel {
         workout.focusAreas = Self.dedupedFocusAreas(categoryFocus + activityTypes)
         rebuildSuggestionPool(reason: .targetMusclesChanged)
         saveImmediately()
+    }
+
+    private func refreshWorkoutTypeFromTargets() {
+        if !workout.muscleGroups.isEmpty {
+            workout.type = .strength
+            return
+        }
+
+        workout.type = Self.workoutMode(for: categoriesFromFocusAreas())
+    }
+
+    private static func workoutMode(for categories: Set<Exercise.Category>) -> WorkoutMode {
+        guard !categories.isEmpty else { return .custom }
+        let expandedCategories = categories.reduce(into: Set<Exercise.Category>()) { result, category in
+            result.formUnion(category.suggestionCategories)
+        }
+
+        if expandedCategories.contains(.cardio) { return .cardio }
+        if expandedCategories.contains(.conditioning) { return .hiit }
+        if expandedCategories.contains(.mobility) || expandedCategories.contains(.flexibility) { return .mobility }
+        if expandedCategories.contains(.recovery) { return .recovery }
+        if expandedCategories.contains(.strength) { return .strength }
+        return .custom
     }
 
     private static func visibleActivityFocusLabels(for categories: [Exercise.Category]) -> [String] {
