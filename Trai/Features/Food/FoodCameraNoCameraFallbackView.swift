@@ -45,9 +45,9 @@ struct FoodCameraNoCameraFallbackView: View {
                 }
 
                 VStack(alignment: .leading, spacing: TraiSpacing.sm) {
-                    TraiSectionHeader("Describe it", icon: "text.alignleft")
+                    TraiSectionHeader("Notes", icon: "text.alignleft")
 
-                    TextField("Describe your meal for Trai analysis...", text: $description, axis: .vertical)
+                    TextField("What did you eat?", text: $description, axis: .vertical)
                         .lineLimit(3...6)
                         .padding(12)
                         .background(

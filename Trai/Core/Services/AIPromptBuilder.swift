@@ -18,16 +18,18 @@ enum AIPromptBuilder {
         Analyze this food and provide accurate nutritional information.
 
         You are an expert nutrition coach and food logger. Be decisive and professionally confident when the primary food is identifiable.
-        Your top priority is producing the most accurate loggable estimate possible from the image and any user description.
-        Use visual evidence first, then reasonable nutrition estimation based on typical real-world preparation and portion sizes.
+        Your top priority is producing the most accurate loggable estimate possible from the image and any user notes.
+        Treat the photo and notes as one combined meal log. Use visual evidence for photographed items, and use the notes for extra eaten items, portion details, substitutions, preparation details, or corrections that are not visible.
 
         Rules:
         - Focus on the food or drink the user most likely intends to log (main/foreground item or plated meal).
         - Ignore incidental/background foods, nearby items, other people's meals, and unopened packaging unless clearly part of what they ate.
+        - If the notes mention additional food or drink the user ate, include it with the photographed food in the same total estimate even when it is not visible in the image.
+        - If the notes contradict the photo, trust explicit user notes for what they ate while still using the photo for portion and visual context where useful.
         - Estimate portion size from visible cues such as plate size, bowl size, cup size, packaging, hand scale, cut pieces, fill level, and common serving presentations.
         - If the food appears cooked in a recognizable way, infer the most likely cooking method when it materially affects calories or macros. Use visual cues like grill marks, breading, frying texture, roasting, sauteed appearance, sauces, oil sheen, or visible preparation style.
-        - You may infer common included components when they are strongly implied by the visible food presentation, but do NOT add speculative extras that are not reasonably supported by the image or description.
-        - If one meal contains multiple clear components (for example a plate plus a visible side), include those visible components together.
+        - You may infer common included components when they are strongly implied by the visible food presentation, but do NOT add speculative extras that are not reasonably supported by the image or notes.
+        - If one meal contains multiple clear components from either the photo or notes, include those components together.
         - When a meal has multiple clear components, return a structured components array describing the major items that make up the meal.
         - If the image is a beverage, identify the beverage directly. For plain water or plain sparkling water with no visible additions, return water with 0 calories and 0g macros.
         - Prefer the most specific food name that is actually supported by the image. Do not guess a polished dish name when multiple materially different foods are still plausible.
@@ -49,13 +51,13 @@ enum AIPromptBuilder {
         - Be realistic and nutritionally useful. Use typical portion sizes only when visually plausible.
         - If quantity is uncertain, estimate the most likely visible serving instead of refusing, unless the food itself is too unclear to identify.
         - If preparation style is visually likely and meaningfully changes calories or macros, incorporate that into the estimate.
-        - Macros and calories should reflect the total visible serving the user is most likely trying to log.
+        - Macros and calories should reflect the total serving the user is most likely trying to log, including both visible items and explicitly noted items.
         - Include sugarGrams whenever sugar content is reasonably inferable, especially for foods or drinks where sugar is a primary nutrient such as table sugar, honey, syrup, juice, soda, candy, or sweetened coffee/tea.
         - Use confidence "high" or "medium" for most identifiable meals and drinks. Use confidence "low" only when the primary item itself is genuinely hard to identify.
         """
 
         if let description {
-            prompt += "\n\nUser description: \(description)"
+            prompt += "\n\nUser notes: \(description)"
         }
 
         return prompt
@@ -68,23 +70,23 @@ enum AIPromptBuilder {
             "properties": [
                 "name": [
                     "type": "string",
-                    "description": "Name of the visible food or drink. Use a generic visible label if uncertain, not a specific guess."
+                    "description": "Name of the food or drink being logged from the photo and user notes. Use a generic label if uncertain, not a specific guess."
                 ],
                 "calories": [
                     "type": "integer",
-                    "description": "Estimated total calories for the visible serving. Use 0 only when the item is clearly zero-calorie, such as plain water, or the image is too unclear to identify a loggable item."
+                    "description": "Estimated total calories for the serving being logged, including visible and explicitly noted items. Use 0 only when the item is clearly zero-calorie, such as plain water, or no loggable item can be identified."
                 ],
                 "proteinGrams": [
                     "type": "number",
-                    "description": "Estimated protein in grams for the visible serving"
+                    "description": "Estimated protein in grams for the serving being logged"
                 ],
                 "carbsGrams": [
                     "type": "number",
-                    "description": "Estimated carbohydrates in grams for the visible serving"
+                    "description": "Estimated carbohydrates in grams for the serving being logged"
                 ],
                 "fatGrams": [
                     "type": "number",
-                    "description": "Estimated fat in grams for the visible serving"
+                    "description": "Estimated fat in grams for the serving being logged"
                 ],
                 "fiberGrams": [
                     "type": "number",
@@ -98,7 +100,7 @@ enum AIPromptBuilder {
                 ],
                 "servingSize": [
                     "type": "string",
-                    "description": "Estimated visible serving size such as '1 medium bowl' or '16 oz bottle'",
+                    "description": "Estimated serving size such as '1 medium bowl', '16 oz bottle', or a combined serving from the photo and notes",
                     "nullable": true
                 ],
                 "confidence": [
@@ -120,12 +122,12 @@ enum AIPromptBuilder {
                 "mealKind": [
                     "type": "string",
                     "enum": ["food", "meal"],
-                    "description": "Use 'meal' when the visible loggable item includes multiple meaningful components, otherwise 'food'.",
+                    "description": "Use 'meal' when the logged item includes multiple meaningful components from the photo or notes, otherwise 'food'.",
                     "nullable": true
                 ],
                 "components": [
                     "type": "array",
-                    "description": "Major visible meal components. Omit or return an empty array for a simple single-item food.",
+                    "description": "Major meal components from the photo and user notes. Omit or return an empty array for a simple single-item food.",
                     "items": [
                         "type": "object",
                         "properties": [
@@ -135,7 +137,7 @@ enum AIPromptBuilder {
                             ],
                             "displayName": [
                                 "type": "string",
-                                "description": "Visible component name"
+                                "description": "Component name from the photo or user notes"
                             ],
                             "role": [
                                 "type": "string",

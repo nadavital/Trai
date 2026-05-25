@@ -81,13 +81,13 @@ struct FoodCameraReviewView: View {
                     .clipShape(.rect(cornerRadius: 16))
                 }
 
-                // Description input
+                // Notes input
                 VStack(alignment: .leading, spacing: 8) {
                     Text(descriptionLabel)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
-                    TextField("Add details about your food...", text: $description, axis: .vertical)
+                    TextField("Add notes, extra items, portions...", text: $description, axis: .vertical)
                         .lineLimit(2...4)
                         .padding()
                         .background(Color(.secondarySystemBackground))
@@ -205,7 +205,7 @@ struct FoodCameraReviewView: View {
         case .memorySuggestion:
             return "Notes (optional)"
         default:
-            return isTextOnly ? "Description" : "Description (optional)"
+            return isTextOnly ? "Notes" : "Notes (optional)"
         }
     }
 
