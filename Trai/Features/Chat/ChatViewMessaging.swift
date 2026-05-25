@@ -147,16 +147,16 @@ extension ChatView {
         let pendingNutritionPlanSuggestionForContext = currentPendingNutritionPlanSuggestionForContext()
         let pendingWorkoutPlanSuggestionForContext = currentPendingWorkoutPlanSuggestionForContext()
 
-        if currentSessionMessages.isEmpty && !isPreparingFirstMessageTransition {
+        if !hasMessagesInCurrentSession && !isPreparingFirstMessageTransition {
             isPreparingFirstMessageTransition = true
+            sendMessageAfterFirstFrameTransition(
+                text,
+                capturedImage: capturedImage,
+                pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
+                pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext
+            )
             Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(170))
-                sendMessageAfterFirstFrameTransition(
-                    text,
-                    capturedImage: capturedImage,
-                    pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
-                    pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext
-                )
+                await Task.yield()
                 isPreparingFirstMessageTransition = false
             }
             return true
@@ -662,6 +662,19 @@ extension ChatView {
             in: currentSessionMessages,
             currentPlanUpdatedAt: profile?.aiPlanGeneratedAt
         )
+    }
+
+    private var hasMessagesInCurrentSession: Bool {
+        if isTemporarySession {
+            return !temporaryMessages.isEmpty
+        }
+
+        if !currentSessionMessages.isEmpty {
+            return true
+        }
+
+        let sessionID = currentSessionId
+        return allMessages.contains { $0.sessionId == sessionID }
     }
 
     private func fetchActivityData() async -> AIService.ActivityData {
