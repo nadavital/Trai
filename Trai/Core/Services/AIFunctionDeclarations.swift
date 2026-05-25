@@ -483,16 +483,40 @@ enum AIFunctionDeclarations {
                     ],
                     "goal_kind": [
                         "type": "string",
-                        "enum": ["milestone", "frequency", "duration", "distance", "weight"]
+                        "enum": WorkoutGoal.GoalKind.allCases.map(\.rawValue)
                     ],
                     "workout_type": [
                         "type": "string",
-                        "description": "Optional broad workout type scope. Map user phrases like running, weight lifting, stretching, or bouldering to the closest supported enum value before passing this.",
+                        "description": "Optional stable workout-mode scope. Use this for broad behavior only; keep specific user-facing identity in activity_name or activity_tags.",
                         "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom"]
                     ],
                     "activity_name": [
                         "type": "string",
                         "description": "Optional specific exercise or activity name"
+                    ],
+                    "activity_tags": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Optional semantic activity tags or custom activity families this goal should match, such as Climbing, grip, intervals, mobility, or technique."
+                    ],
+                    "activity_kind": [
+                        "type": "string",
+                        "description": "Optional internal fallback behavior kind for goals tied to a workout entry instead of a whole session. Prefer activity_name or activity_tags when the user-facing activity identity matters.",
+                        "enum": AIPromptBuilder.workoutGoalActivityKindRawValues
+                    ],
+                    "activity_role": [
+                        "type": "string",
+                        "description": "Optional placement role inside a workout, such as warmup, add-on, finish, or cooldown.",
+                        "enum": AIPromptBuilder.workoutGoalActivityRoleRawValues
+                    ],
+                    "generated_plan_block_ids": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Exact block IDs from CURRENT WORKOUT PLAN when this goal is tied to specific saved/generated plan blocks. Use this instead of relying on activity names or tags for generated-plan block goals."
+                    ],
+                    "tracks_plan_adherence": [
+                        "type": "boolean",
+                        "description": "True only when the goal tracks completion of the user's whole generated weekly workout plan, not a specific activity, modality, exercise, or support block."
                     ],
                     "target_value": [
                         "type": "number",
@@ -504,12 +528,16 @@ enum AIFunctionDeclarations {
                     ],
                     "period_unit": [
                         "type": "string",
-                        "description": "Optional cadence period for frequency goals",
+                        "description": "Cadence period for frequency, duration, distance, or count goals",
                         "enum": ["day", "week", "month"]
                     ],
                     "period_count": [
                         "type": "integer",
-                        "description": "Optional number of period units, e.g. 1 week or 4 weeks"
+                        "description": "Number of period units. Use 1 for per-day, per-week, or per-month frequency/count goals."
+                    ],
+                    "success_criteria": [
+                        "type": "string",
+                        "description": "Concise criteria for how Trai and the user will know the goal is achieved, especially for custom or milestone goals"
                     ],
                     "target_date": [
                         "type": "string",
@@ -524,7 +552,7 @@ enum AIFunctionDeclarations {
                         "description": "Optional notes or rationale"
                     ]
                 ],
-                "required": ["title", "goal_kind"]
+                "required": ["title", "goal_kind", "success_criteria"]
             ]
         ]
     }
@@ -546,7 +574,7 @@ enum AIFunctionDeclarations {
                     ],
                     "goal_kind": [
                         "type": "string",
-                        "enum": ["milestone", "frequency", "duration", "distance", "weight"]
+                        "enum": WorkoutGoal.GoalKind.allCases.map(\.rawValue)
                     ],
                     "status": [
                         "type": "string",
@@ -554,12 +582,36 @@ enum AIFunctionDeclarations {
                     ],
                     "workout_type": [
                         "type": "string",
-                        "description": "Updated broad workout type. Map user phrases like running, weight lifting, stretching, or bouldering to the closest supported enum value before passing this; pass empty string to clear it.",
+                        "description": "Updated stable workout-mode scope. Use this for broad behavior only; keep specific user-facing identity in activity_name or activity_tags. Pass empty string to clear it.",
                         "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom", ""]
                     ],
                     "activity_name": [
                         "type": "string",
                         "description": "Updated linked activity name. Pass empty string to clear it."
+                    ],
+                    "activity_tags": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Updated semantic activity tags or custom activity families this goal should match. Pass an empty array to clear."
+                    ],
+                    "activity_kind": [
+                        "type": "string",
+                        "description": "Updated internal fallback behavior kind. Prefer activity_name or activity_tags when the user-facing activity identity matters; pass empty string to clear it.",
+                        "enum": AIPromptBuilder.workoutGoalActivityKindRawValues + [""]
+                    ],
+                    "activity_role": [
+                        "type": "string",
+                        "description": "Updated placement role inside a workout; pass empty string to clear it.",
+                        "enum": AIPromptBuilder.workoutGoalActivityRoleRawValues + [""]
+                    ],
+                    "generated_plan_block_ids": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Updated exact block IDs from CURRENT WORKOUT PLAN when this goal is tied to specific saved/generated plan blocks. Pass an empty array to clear this durable generated-plan block scope."
+                    ],
+                    "tracks_plan_adherence": [
+                        "type": "boolean",
+                        "description": "Set true only when the goal tracks completion of the whole generated weekly workout plan; set false for activity-, modality-, exercise-, or support-block-specific goals."
                     ],
                     "target_value": [
                         "type": "number",
@@ -571,11 +623,16 @@ enum AIFunctionDeclarations {
                     ],
                     "period_unit": [
                         "type": "string",
+                        "description": "Updated cadence period for frequency, duration, distance, or count goals. Pass empty string to clear only when the goal kind does not use periods.",
                         "enum": ["day", "week", "month", ""]
                     ],
                     "period_count": [
                         "type": "integer",
-                        "description": "Updated period count"
+                        "description": "Updated period count. Use 1 for per-day, per-week, or per-month frequency/count goals."
+                    ],
+                    "success_criteria": [
+                        "type": "string",
+                        "description": "Updated success criteria. Pass empty string to clear."
                     ],
                     "target_date": [
                         "type": "string",
@@ -625,18 +682,31 @@ enum AIFunctionDeclarations {
     static var logWorkout: [String: Any] {
         [
             "name": "log_workout",
-            "description": "Log a completed workout session for the user. Use when the user mentions finishing a workout or exercise. Ask for details about exercises, sets, reps, and weights if not provided. Always provide a descriptive workout name.",
+            "description": "Log a completed workout session for the user. Use when the user mentions finishing a workout or exercise. Preserve the user-facing activity identity and choose the fields that match what they did: sets/reps/weight for lifting, duration/distance/segments/notes for cardio, sport, mobility, conditioning, recovery, or custom activities. Always provide a descriptive workout name.",
             "parameters": [
                 "type": "object",
                 "properties": [
                     "name": [
                         "type": "string",
-                        "description": "A descriptive name for the workout (e.g., 'Morning Push Day', 'Leg Day', 'Upper Body Strength', 'Back & Biceps'). Generate a meaningful name based on the exercises."
+                        "description": "A descriptive name for the workout or activity session (e.g., 'Morning Push Day', 'Leg Day', 'Tempo Run', 'Climbing Technique', 'Mobility Flow'). Generate a meaningful name based on what the user did."
                     ],
                     "type": [
                         "type": "string",
-                        "description": "Type of workout or semantic activity phrase. The app normalizes activities like running, cycling, weight lifting, stretching, and bouldering to the closest supported workout type.",
-                        "enum": ["strength", "cardio", "hiit", "yoga", "running", "cycling", "swimming", "walking", "sports", "other"]
+                        "description": "Stable internal workout primitive. Use strength for lifting, cardio for running/cycling/rowing/walking, hiit for intervals/conditioning, climbing/yoga/pilates/flexibility/mobility/recovery when appropriate, mixed for hybrid sessions, and custom for user-defined activity. Put the user-facing activity identity in activity_name/activity_tags.",
+                        "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom"]
+                    ],
+                    "activity_name": [
+                        "type": "string",
+                        "description": "Optional user-facing activity identity for the workout, such as Climbing, Cycling, Mobility Flow, Basketball, or Hybrid Strength."
+                    ],
+                    "activity_tags": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Semantic activity tags and targets that should be saved with the workout, such as climbing, endurance, mobility, upper body, or running intervals."
+                    ],
+                    "source_plan_template_id": [
+                        "type": "string",
+                        "description": "Optional exact template id from CURRENT WORKOUT PLAN when the user says this completed workout corresponds to a saved/generated plan session. Leave empty for open/custom workouts."
                     ],
                     "duration_minutes": [
                         "type": "integer",
@@ -648,12 +718,70 @@ enum AIFunctionDeclarations {
                     ],
                     "exercises": [
                         "type": "array",
+                        "minItems": 1,
                         "items": [
                             "type": "object",
                             "properties": [
                                 "name": [
                                     "type": "string",
                                     "description": "Name of the exercise"
+                                ],
+                                "category": [
+                                    "type": "string",
+                                    "description": "Stable tracking behavior primitive for this item. Use strength for sets/reps/weight; cardio for timed or distance activities; conditioning, mobility, flexibility, recovery, skill, sportPractice, or custom when those better describe how the app should track it. Keep the user-facing identity in activity_name and target_tags.",
+                                    "enum": ["strength", "cardio", "conditioning", "mobility", "skill", "sportPractice", "recovery", "flexibility", "custom"]
+                                ],
+                                "activity_name": [
+                                    "type": "string",
+                                    "description": "User-facing activity identity for this logged item, such as Rowing, Climbing, Mobility Flow, or Push Strength."
+                                ],
+                                "activity_role": [
+                                    "type": "string",
+                                    "description": "Optional stable planned-block placement role when this item corresponds to a plan block.",
+                                    "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom"]
+                                ],
+                                "source_plan_block_id": [
+                                    "type": "string",
+                                    "description": "Optional exact block id from CURRENT WORKOUT PLAN when this completed item corresponds to a specific saved/generated plan block. Only provide this with source_plan_template_id."
+                                ],
+                                "target_tags": [
+                                    "type": "array",
+                                    "items": ["type": "string"],
+                                    "description": "User-facing targets this item trains, such as chest, endurance, climbing, shoulder stability, or recovery."
+                                ],
+                                "tracking_fields": [
+                                    "type": "array",
+                                    "items": [
+                                        "type": "string",
+                                        "enum": ["sets", "reps", "weight", "duration", "distance", "notes"]
+                                    ],
+                                    "description": "Fields the app should show for this item. Do not include calories."
+                                ],
+                                "duration_minutes": [
+                                    "type": "integer",
+                                    "description": "Duration for non-strength activities, if known."
+                                ],
+                                "distance_meters": [
+                                    "type": "number",
+                                    "description": "Distance for non-strength activities, if known."
+                                ],
+                                "notes": [
+                                    "type": "string",
+                                    "description": "Per-item notes to preserve details the user gave for this completed exercise or activity."
+                                ],
+                                "segments": [
+                                    "type": "array",
+                                    "items": [
+                                        "type": "object",
+                                        "properties": [
+                                            "duration_minutes": ["type": "integer"],
+                                            "distance_meters": ["type": "number"],
+                                            "reps": ["type": "integer"],
+                                            "weight_kg": ["type": "number"],
+                                            "notes": ["type": "string"]
+                                        ]
+                                    ],
+                                    "description": "Repeatable sections for non-strength activities, similar to sets for lifting."
                                 ],
                                 "sets": [
                                     "type": "array",
@@ -665,15 +793,15 @@ enum AIFunctionDeclarations {
                                         ],
                                         "required": ["reps"]
                                     ],
-                                    "description": "Array of sets with reps and optional weight for each"
+                                    "description": "Array of sets with reps and optional weight for strength work. Omit or leave empty for non-strength activities unless the user actually tracked repeated strength-style sets."
                                 ]
                             ],
-                            "required": ["name", "sets"]
+                            "required": ["name", "category", "activity_name"]
                         ],
-                        "description": "List of exercises with detailed set information"
+                        "description": "List of completed exercise or activity items. Strength items should use sets; cardio, sport, mobility, recovery, conditioning, and custom items should use duration, distance, segments, and notes as appropriate."
                     ]
                 ],
-                "required": ["name", "type"]
+                "required": ["name", "type", "exercises"]
             ]
         ]
     }
@@ -695,14 +823,19 @@ enum AIFunctionDeclarations {
     static var suggestWorkout: [String: Any] {
         [
             "name": "suggest_workout",
-            "description": "Generate a workout suggestion based on the user's muscle recovery status and preferences. Use when the user asks for a workout recommendation, what they should train today, or wants help planning their workout.",
+            "description": "Generate a startable workout suggestion from the user's saved plan when they ask what to train today, or from explicit activity, muscle, duration, and equipment preferences when provided.",
             "parameters": [
                 "type": "object",
                 "properties": [
                     "workout_type": [
                         "type": "string",
-                        "description": "Preferred workout type. Map user phrases like running, weight lifting, stretching, or bouldering to the closest supported enum value before passing this (optional - will auto-select if not specified)",
+                        "description": "Stable internal workout primitive. Keep custom user-facing identities in activity_focuses instead of forcing them into this enum. Optional - will auto-select if not specified.",
                         "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom"]
+                    ],
+                    "activity_focuses": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "User-facing activity names or targets the suggestion should account for, such as climbing, rowing, mobility, basketball, or hybrid strength."
                     ],
                     "target_muscle_groups": [
                         "type": "array",
@@ -728,7 +861,7 @@ enum AIFunctionDeclarations {
     static var startLiveWorkout: [String: Any] {
         [
             "name": "start_live_workout",
-            "description": "Start a live workout tracking session for the user. Use when the user says they want to start a workout, begin training, or are ready to work out. This creates a new workout that they can track exercises in.",
+            "description": "Start a live workout tracking session for the user. Use when the user says they want to start a workout, begin training, or are ready to work out. This creates a new workout where they can track strength exercises, cardio, sport practice, mobility, recovery, conditioning, or custom activities.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -738,8 +871,17 @@ enum AIFunctionDeclarations {
                     ],
                     "workout_type": [
                         "type": "string",
-                        "description": "Type of workout. Map user phrases like running, weight lifting, stretching, or bouldering to the closest supported enum value before passing this.",
+                        "description": "Stable internal workout primitive. Put custom user-facing activity identity in activity_focuses or each suggested exercise's activity_name.",
                         "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom"]
+                    ],
+                    "activity_focuses": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "User-facing activity names or targets this live workout should start with, such as climbing, rowing, mobility, basketball, upper body, or endurance."
+                    ],
+                    "source_plan_template_id": [
+                        "type": "string",
+                        "description": "Optional exact template id from CURRENT WORKOUT PLAN when the user is starting a saved/generated plan session. Leave empty for open/custom workouts."
                     ],
                     "target_muscle_groups": [
                         "type": "array",
@@ -748,19 +890,61 @@ enum AIFunctionDeclarations {
                     ],
                     "suggested_exercises": [
                         "type": "array",
+                        "minItems": 1,
                         "items": [
                             "type": "object",
                             "properties": [
-                                "name": ["type": "string", "description": "Exercise name"],
+                                "name": ["type": "string", "description": "Exercise or activity item name"],
+                                "category": [
+                                    "type": "string",
+                                    "description": "Stable tracking behavior primitive for tracking fields. Keep the user-facing identity in activity_name and target_tags.",
+                                    "enum": ["strength", "cardio", "conditioning", "mobility", "skill", "sportPractice", "recovery", "flexibility", "custom"]
+                                ],
+                                "activity_name": ["type": "string", "description": "User-facing activity identity for this item."],
+                                "activity_role": [
+                                    "type": "string",
+                                    "description": "Optional stable planned-block placement role when this item corresponds to a plan block.",
+                                    "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom"]
+                                ],
+                                "target_tags": [
+                                    "type": "array",
+                                    "items": ["type": "string"],
+                                    "description": "Semantic targets this item trains."
+                                ],
+                                "tracking_fields": [
+                                    "type": "array",
+                                    "items": [
+                                        "type": "string",
+                                        "enum": ["sets", "reps", "weight", "duration", "distance", "notes"]
+                                    ],
+                                    "description": "Fields the live workout should show. Do not include calories."
+                                ],
                                 "sets": ["type": "integer", "description": "Recommended sets"],
                                 "reps": ["type": "integer", "description": "Recommended reps"],
-                                "weight_kg": ["type": "number", "description": "Recommended weight in kg (optional)"]
-                            ]
+                                "weight_kg": ["type": "number", "description": "Recommended weight in kg (optional)"],
+                                "duration_minutes": ["type": "integer", "description": "Suggested duration for non-strength activities."],
+                                "distance_meters": ["type": "number", "description": "Suggested distance for non-strength activities."],
+                                "segments": [
+                                    "type": "array",
+                                    "items": [
+                                        "type": "object",
+                                        "properties": [
+                                            "duration_minutes": ["type": "integer"],
+                                            "distance_meters": ["type": "number"],
+                                            "reps": ["type": "integer"],
+                                            "weight_kg": ["type": "number"],
+                                            "notes": ["type": "string"]
+                                        ]
+                                    ],
+                                    "description": "Repeatable sections for non-strength work."
+                                ]
+                            ],
+                            "required": ["name", "category", "activity_name"]
                         ],
-                        "description": "Pre-populated exercises for the workout (optional)"
+                        "description": "Pre-populated strength exercises or activity items for the workout."
                     ]
                 ],
-                "required": ["name", "workout_type"]
+                "required": ["name", "workout_type", "suggested_exercises"]
             ]
         ]
     }

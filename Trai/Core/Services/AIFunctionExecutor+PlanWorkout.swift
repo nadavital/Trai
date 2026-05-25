@@ -20,18 +20,27 @@ extension AIFunctionExecutor {
             ))
         }
 
+        let todayInterval = WorkoutDayTargetContext.dayInterval()
+        let hasWorkoutToday = WorkoutDayTargetContext.hasWorkout(
+            in: todayInterval,
+            modelContext: modelContext
+        )
+        let dailyTargets: [String: Any] = [
+            "calories": profile.dailyCalorieGoal,
+            "protein": profile.dailyProteinGoal,
+            "carbs": profile.dailyCarbsGoal,
+            "fat": profile.dailyFatGoal,
+            "fiber": profile.dailyFiberGoal,
+            "sugar": profile.dailySugarGoal
+        ]
+
         return .dataResponse(FunctionResult(
             name: "get_user_plan",
             response: [
                 "goal": profile.goal.rawValue,
-                "daily_targets": [
-                    "calories": profile.dailyCalorieGoal,
-                    "protein": profile.dailyProteinGoal,
-                    "carbs": profile.dailyCarbsGoal,
-                    "fat": profile.dailyFatGoal,
-                    "fiber": profile.dailyFiberGoal,
-                    "sugar": profile.dailySugarGoal
-                ],
+                "daily_targets": dailyTargets,
+                "effective_calorie_target_today": profile.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutToday),
+                "has_workout_today": hasWorkoutToday,
                 "enabled_macros": profile.enabledMacrosOrdered.map(\.rawValue),
                 "activity_level": profile.activityLevel,
                 "current_weight_kg": profile.currentWeightKg ?? 0,
@@ -128,6 +137,7 @@ extension AIFunctionExecutor {
                     "name": workout.displayName,
                     "type": workout.inferredWorkoutMode.rawValue,
                     "display_type": workout.displayTypeName,
+                    "activity_tags": workout.semanticActivityTags,
                     "date": dateFormatter.string(from: workout.loggedAt),
                     "duration_minutes": workout.durationMinutes ?? 0,
                     "sets": workout.sets,
@@ -149,20 +159,54 @@ extension AIFunctionExecutor {
 
             // Build detailed exercise list
             var exercises: [[String: Any]] = []
+            var activities: [[String: Any]] = []
             for entry in sortedEntries {
-                let sets = entry.sets
-                guard !sets.isEmpty else { continue }
+                guard entry.hasExercisePreferenceSignal else { continue }
+
+                let completedSets = entry.completedSets ?? []
+                if !entry.isStrength {
+                    let trimmedNotes = entry.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                    activities.append([
+                        "name": entry.exerciseName,
+                        "type": entry.exerciseType,
+                        "activity_type": entry.activityTypeName,
+                        "activity_tags": entry.targetTags,
+                        "tracking_fields": entry.trackingFields.map(\.rawValue),
+                        "role": entry.activityRole?.rawValue ?? "",
+                        "duration_minutes": entry.trackedDurationSeconds / 60,
+                        "distance_meters": entry.trackedDistanceMeters,
+                        "segments": entry.activitySegments
+                            .filter(\.hasLoggedData)
+                            .map { segment in
+                                [
+                                    "duration_minutes": (segment.durationSeconds ?? 0) / 60,
+                                    "distance_meters": segment.distanceMeters ?? 0,
+                                    "reps": segment.reps ?? 0,
+                                    "weight_kg": segment.weightKg ?? 0,
+                                    "notes": segment.notes
+                                ] as [String: Any]
+                            },
+                        "completed": entry.completedAt != nil,
+                        "logged": entry.isLoggedActivity,
+                        "notes": trimmedNotes
+                    ])
+                    continue
+                }
+
+                guard !completedSets.isEmpty else { continue }
 
                 var exerciseData: [String: Any] = [
                     "name": entry.exerciseName,
-                    "sets_count": sets.count,
+                    "activity_type": entry.activityTypeName,
+                    "activity_tags": entry.targetTags,
+                    "sets_count": completedSets.count,
                     "total_reps": entry.totalReps,
-                    "best_weight_kg": sets.map(\.weightKg).max() ?? 0,
+                    "best_weight_kg": completedSets.map(\.weightKg).max() ?? 0,
                     "total_volume_kg": entry.totalVolume
                 ]
 
                 // Include set-by-set breakdown
-                exerciseData["sets_detail"] = sets.map { set -> [String: Any] in
+                exerciseData["sets_detail"] = completedSets.map { set -> [String: Any] in
                     [
                         "reps": set.reps,
                         "weight_kg": set.weightKg,
@@ -179,9 +223,14 @@ extension AIFunctionExecutor {
                 "type": liveWorkout.type.rawValue,
                 "date": dateFormatter.string(from: liveWorkout.startedAt),
                 "duration_minutes": Int(liveWorkout.duration / 60),
+                "summary_segments": liveWorkout.historySummarySegments,
+                "workout_item_count": exercises.count + activities.count,
+                "exercise_count": exercises.count,
+                "activity_count": activities.count,
                 "total_sets": liveWorkout.totalSets,
                 "total_volume_kg": liveWorkout.totalVolume,
                 "muscle_groups": liveWorkout.muscleGroups.map(\.displayName),
+                "focus_areas": liveWorkout.focusAreas,
                 "tracked_in_app": true,
                 "source": "trai_live_workout",
                 "notes": liveWorkout.notes.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -189,6 +238,9 @@ extension AIFunctionExecutor {
 
             if !exercises.isEmpty {
                 workoutData["exercises"] = exercises
+            }
+            if !activities.isEmpty {
+                workoutData["activities"] = activities
             }
 
             workoutsWithDate.append((sortDate: liveWorkout.startedAt, payload: workoutData))
@@ -286,27 +338,7 @@ extension AIFunctionExecutor {
             }
         }
 
-        let serializedGoals = filteredGoals.map { goal in
-            [
-                "id": goal.id.uuidString,
-                "title": goal.trimmedTitle,
-                "goal_kind": goal.goalKind.rawValue,
-                "status": goal.status.rawValue,
-                "workout_type": goal.linkedWorkoutType?.rawValue ?? "",
-                "activity_name": goal.trimmedActivityName ?? "",
-                "target_value": goal.targetValue as Any,
-                "target_unit": goal.targetUnit,
-                "period_unit": goal.periodUnit?.rawValue ?? "",
-                "period_count": goal.periodCount as Any,
-                "notes": goal.trimmedNotes,
-                "target_date": goal.targetDate.map(formatDateForFunction) ?? "",
-                "check_in_cadence_days": goal.checkInCadenceDays as Any,
-                "updated_at": formatDateTimeForFunction(goal.updatedAt),
-                "scope_summary": goal.scopeSummary,
-                "tracking_summary": goal.trackingSummary ?? "",
-                "horizon_summary": goal.horizonSummary ?? ""
-            ]
-        }
+        let serializedGoals = filteredGoals.map(serializedWorkoutGoal)
 
         return .dataResponse(FunctionResult(
             name: "get_workout_goals",
@@ -342,29 +374,123 @@ extension AIFunctionExecutor {
             ))
         }
 
-        let workoutType = WorkoutMode.normalized(from: args["workout_type"] as? String)
+        let workoutType: WorkoutMode?
+        if let rawWorkoutType = args["workout_type"] as? String {
+            let trimmedWorkoutType = rawWorkoutType.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedWorkoutType.isEmpty {
+                workoutType = nil
+            } else if let stableWorkoutType = WorkoutMode(rawValue: trimmedWorkoutType) {
+                workoutType = stableWorkoutType
+            } else {
+                return .dataResponse(FunctionResult(
+                    name: "create_workout_goal",
+                    response: ["error": "workout_type must be a stable workout mode enum. Put user-facing activity names in activity_name or activity_tags."]
+                ))
+            }
+        } else {
+            workoutType = nil
+        }
         let activityName = (args["activity_name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let activityTags = stringArray(from: args["activity_tags"])
+        let activityKind: WorkoutPlan.TrainingBlock.BlockKind?
+        if let rawActivityKind = args["activity_kind"] as? String {
+            let trimmedKind = rawActivityKind.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedKind.isEmpty {
+                activityKind = nil
+            } else if let stableKind = WorkoutPlan.TrainingBlock.BlockKind(rawValue: trimmedKind) {
+                activityKind = stableKind
+            } else {
+                return .dataResponse(FunctionResult(
+                    name: "create_workout_goal",
+                    response: ["error": "activity_kind must be a stable training block kind enum."]
+                ))
+            }
+        } else {
+            activityKind = nil
+        }
+        let activityRole: WorkoutPlan.TrainingBlock.Role?
+        if let rawActivityRole = args["activity_role"] as? String {
+            let trimmedRole = rawActivityRole.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedRole.isEmpty {
+                activityRole = nil
+            } else if let stableRole = WorkoutPlan.TrainingBlock.Role(rawValue: trimmedRole) {
+                activityRole = stableRole
+            } else {
+                return .dataResponse(FunctionResult(
+                    name: "create_workout_goal",
+                    response: ["error": "activity_role must be a stable training block role enum."]
+                ))
+            }
+        } else {
+            activityRole = nil
+        }
         let notes = (args["notes"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let targetValue = numericDouble(from: args["target_value"])
         let targetUnit = (args["target_unit"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let periodUnit = (args["period_unit"] as? String).flatMap(WorkoutGoal.PeriodUnit.init(rawValue:))
         let periodCount = numericInt(from: args["period_count"])
+        let successCriteria = (args["success_criteria"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let targetDate = parseDate(args["target_date"] as? String)
         let checkInCadenceDays = numericInt(from: args["check_in_cadence_days"])
+        let tracksPlanAdherence = args["tracks_plan_adherence"] as? Bool == true
+        let generatedPlanBlockIDs: [UUID]
+        if args.keys.contains("generated_plan_block_ids") {
+            switch parsedGeneratedPlanBlockIDs(
+                from: args["generated_plan_block_ids"],
+                functionName: "create_workout_goal"
+            ) {
+            case .success(let ids):
+                generatedPlanBlockIDs = ids
+            case .failure(let result):
+                return .dataResponse(result)
+            }
+        } else {
+            generatedPlanBlockIDs = []
+        }
+
+        if tracksPlanAdherence, !generatedPlanBlockIDs.isEmpty {
+            return .dataResponse(FunctionResult(
+                name: "create_workout_goal",
+                response: ["error": "generated_plan_block_ids cannot be used with tracks_plan_adherence."]
+            ))
+        }
+
+        if let error = workoutGoalValidationError(
+            goalKind: goalKind,
+            targetValue: targetValue,
+            targetUnit: targetUnit,
+            periodUnit: periodUnit,
+            periodCount: periodCount,
+            successCriteria: successCriteria
+        ) {
+            return .dataResponse(FunctionResult(
+                name: "create_workout_goal",
+                response: ["error": error]
+            ))
+        }
 
         let goal = WorkoutGoal(
             title: title,
             goalKind: goalKind,
             linkedWorkoutType: workoutType,
             linkedActivityName: activityName?.isEmpty == false ? activityName : nil,
+            linkedActivityTags: activityTags,
+            linkedActivityKind: activityKind,
+            linkedActivityRole: activityRole,
             targetValue: goalKind.supportsNumericTarget ? targetValue : nil,
             targetUnit: goalKind.supportsNumericTarget ? targetUnit : "",
             periodUnit: goalKind.usesPeriodTarget ? periodUnit : nil,
             periodCount: goalKind.usesPeriodTarget ? periodCount : nil,
+            successCriteria: successCriteria,
             notes: notes,
             targetDate: targetDate,
-            checkInCadenceDays: checkInCadenceDays
+            checkInCadenceDays: checkInCadenceDays,
+            tracksGeneratedPlanAdherence: tracksPlanAdherence,
+            generatedPlanBlockIDs: generatedPlanBlockIDs
         )
+        if tracksPlanAdherence, let plan = userProfile?.workoutPlan {
+            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+        }
 
         modelContext.insert(goal)
         try? modelContext.save()
@@ -372,21 +498,7 @@ extension AIFunctionExecutor {
             name: "create_workout_goal",
             response: [
                 "success": true,
-                "goal": [
-                    "id": goal.id.uuidString,
-                    "title": goal.trimmedTitle,
-                    "goal_kind": goal.goalKind.rawValue,
-                    "status": goal.status.rawValue,
-                    "workout_type": goal.linkedWorkoutType?.rawValue ?? "",
-                    "activity_name": goal.trimmedActivityName ?? "",
-                    "target_value": goal.targetValue as Any,
-                    "target_unit": goal.targetUnit,
-                    "period_unit": goal.periodUnit?.rawValue ?? "",
-                    "period_count": goal.periodCount as Any,
-                    "notes": goal.trimmedNotes,
-                    "target_date": goal.targetDate.map(formatDateForFunction) ?? "",
-                    "check_in_cadence_days": goal.checkInCadenceDays as Any
-                ]
+                "goal": serializedWorkoutGoal(goal)
             ]
         ))
     }
@@ -412,26 +524,47 @@ extension AIFunctionExecutor {
             ))
         }
 
+        var title = goal.title
+        var goalKind = goal.goalKind
+        var status = goal.status
+        var completedAt = goal.completedAt
+        var linkedWorkoutType = goal.linkedWorkoutType
+        var linkedActivityName = goal.linkedActivityName
+        var linkedActivityTags = goal.linkedActivityTags
+        var linkedActivityKind = goal.linkedActivityKind
+        var linkedActivityRole = goal.linkedActivityRole
+        var targetValue = goal.targetValue
+        var targetUnit = goal.targetUnit
+        var periodUnit = goal.periodUnit
+        var periodCount = goal.periodCount
+        var successCriteria = goal.trimmedSuccessCriteria
+        var targetDate = goal.targetDate
+        var checkInCadenceDays = goal.checkInCadenceDays
+        var notes = goal.trimmedNotes
+        var tracksPlanAdherence = goal.tracksGeneratedPlanAdherence
+        var generatedPlanBlockIDs = goal.generatedPlanBlockIDs
+        let updatesGeneratedPlanBlockIDs = args.keys.contains("generated_plan_block_ids")
+
         if let rawTitle = args["title"] as? String {
             let trimmed = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
-                goal.title = trimmed
+                title = trimmed
             }
         }
 
         if let rawKind = args["goal_kind"] as? String,
-           let goalKind = WorkoutGoal.GoalKind(rawValue: rawKind) {
-            goal.goalKind = goalKind
+           let parsedGoalKind = WorkoutGoal.GoalKind(rawValue: rawKind) {
+            goalKind = parsedGoalKind
         }
 
         if let rawStatus = args["status"] as? String,
-           let status = WorkoutGoal.GoalStatus(rawValue: rawStatus) {
-            goal.status = status
+           let parsedStatus = WorkoutGoal.GoalStatus(rawValue: rawStatus) {
+            status = parsedStatus
             switch status {
             case .completed:
-                goal.completedAt = goal.completedAt ?? Date()
+                completedAt = completedAt ?? Date()
             case .active:
-                goal.completedAt = nil
+                completedAt = nil
             case .paused:
                 break
             }
@@ -439,67 +572,238 @@ extension AIFunctionExecutor {
 
         if let rawWorkoutType = args["workout_type"] as? String {
             let trimmedType = rawWorkoutType.trimmingCharacters(in: .whitespacesAndNewlines)
-            goal.linkedWorkoutType = trimmedType.isEmpty ? nil : WorkoutMode.normalized(from: trimmedType)
+            if trimmedType.isEmpty {
+                linkedWorkoutType = nil
+            } else if let stableWorkoutType = WorkoutMode(rawValue: trimmedType) {
+                linkedWorkoutType = stableWorkoutType
+            } else {
+                return .dataResponse(FunctionResult(
+                    name: "update_workout_goal",
+                    response: ["error": "workout_type must be a stable workout mode enum. Put user-facing activity names in activity_name or activity_tags."]
+                ))
+            }
         }
 
         if let rawActivityName = args["activity_name"] as? String {
             let trimmedActivity = rawActivityName.trimmingCharacters(in: .whitespacesAndNewlines)
-            goal.linkedActivityName = trimmedActivity.isEmpty ? nil : trimmedActivity
+            linkedActivityName = trimmedActivity.isEmpty ? nil : trimmedActivity
+        }
+
+        if args.keys.contains("activity_tags") {
+            linkedActivityTags = stringArray(from: args["activity_tags"])
+        }
+
+        if let rawActivityKind = args["activity_kind"] as? String {
+            let trimmedKind = rawActivityKind.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedKind.isEmpty {
+                linkedActivityKind = nil
+            } else if let stableKind = WorkoutPlan.TrainingBlock.BlockKind(rawValue: trimmedKind) {
+                linkedActivityKind = stableKind
+            } else {
+                return .dataResponse(FunctionResult(
+                    name: "update_workout_goal",
+                    response: ["error": "activity_kind must be a stable training block kind enum."]
+                ))
+            }
+        }
+
+        if let rawActivityRole = args["activity_role"] as? String {
+            let trimmedRole = rawActivityRole.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedRole.isEmpty {
+                linkedActivityRole = nil
+            } else if let stableRole = WorkoutPlan.TrainingBlock.Role(rawValue: trimmedRole) {
+                linkedActivityRole = stableRole
+            } else {
+                return .dataResponse(FunctionResult(
+                    name: "update_workout_goal",
+                    response: ["error": "activity_role must be a stable training block role enum."]
+                ))
+            }
         }
 
         if args.keys.contains("target_value") {
-            goal.targetValue = numericDouble(from: args["target_value"])
+            targetValue = numericDouble(from: args["target_value"])
         }
 
         if let rawTargetUnit = args["target_unit"] as? String {
-            goal.targetUnit = rawTargetUnit.trimmingCharacters(in: .whitespacesAndNewlines)
+            targetUnit = rawTargetUnit.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         if let rawPeriodUnit = args["period_unit"] as? String {
             let trimmedPeriodUnit = rawPeriodUnit.trimmingCharacters(in: .whitespacesAndNewlines)
-            goal.periodUnit = trimmedPeriodUnit.isEmpty ? nil : WorkoutGoal.PeriodUnit(rawValue: trimmedPeriodUnit)
+            periodUnit = trimmedPeriodUnit.isEmpty ? nil : WorkoutGoal.PeriodUnit(rawValue: trimmedPeriodUnit)
         }
 
         if args.keys.contains("period_count") {
-            goal.periodCount = numericInt(from: args["period_count"])
+            periodCount = numericInt(from: args["period_count"])
+        }
+
+        if let rawSuccessCriteria = args["success_criteria"] as? String {
+            successCriteria = rawSuccessCriteria.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         if let rawTargetDate = args["target_date"] as? String {
             let trimmedTargetDate = rawTargetDate.trimmingCharacters(in: .whitespacesAndNewlines)
-            goal.targetDate = trimmedTargetDate.isEmpty ? nil : parseDate(trimmedTargetDate)
+            targetDate = trimmedTargetDate.isEmpty ? nil : parseDate(trimmedTargetDate)
         }
 
         if args.keys.contains("check_in_cadence_days") {
-            goal.checkInCadenceDays = numericInt(from: args["check_in_cadence_days"])
+            checkInCadenceDays = numericInt(from: args["check_in_cadence_days"])
         }
 
         if let rawNotes = args["notes"] as? String {
-            goal.notes = rawNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+            notes = rawNotes.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
+        if let rawTracksPlanAdherence = args["tracks_plan_adherence"] as? Bool {
+            tracksPlanAdherence = rawTracksPlanAdherence
+        }
+
+        if updatesGeneratedPlanBlockIDs {
+            switch parsedGeneratedPlanBlockIDs(
+                from: args["generated_plan_block_ids"],
+                functionName: "update_workout_goal"
+            ) {
+            case .success(let ids):
+                generatedPlanBlockIDs = ids
+            case .failure(let result):
+                return .dataResponse(result)
+            }
+        }
+
+        if tracksPlanAdherence, !generatedPlanBlockIDs.isEmpty {
+            return .dataResponse(FunctionResult(
+                name: "update_workout_goal",
+                response: ["error": "generated_plan_block_ids cannot be used with tracks_plan_adherence."]
+            ))
+        }
+
+        if let error = workoutGoalValidationError(
+            goalKind: goalKind,
+            targetValue: targetValue,
+            targetUnit: targetUnit,
+            periodUnit: periodUnit,
+            periodCount: periodCount,
+            successCriteria: successCriteria
+        ) {
+            return .dataResponse(FunctionResult(
+                name: "update_workout_goal",
+                response: ["error": error]
+            ))
+        }
+
+        goal.title = title
+        goal.goalKind = goalKind
+        goal.status = status
+        goal.completedAt = completedAt
+        goal.linkedWorkoutType = linkedWorkoutType
+        goal.linkedActivityName = linkedActivityName
+        goal.linkedActivityTags = linkedActivityTags
+        goal.linkedActivityKind = linkedActivityKind
+        goal.linkedActivityRole = linkedActivityRole
+        goal.targetValue = goalKind.supportsNumericTarget ? targetValue : nil
+        goal.targetUnit = goalKind.supportsNumericTarget ? targetUnit : ""
+        goal.periodUnit = goalKind.usesPeriodTarget ? periodUnit : nil
+        goal.periodCount = goalKind.usesPeriodTarget ? periodCount : nil
+        goal.successCriteria = successCriteria
+        goal.targetDate = targetDate
+        goal.checkInCadenceDays = checkInCadenceDays
+        goal.notes = notes
+        goal.tracksGeneratedPlanAdherence = tracksPlanAdherence
+        if tracksPlanAdherence, let plan = userProfile?.workoutPlan {
+            goal.generatedPlanBlockIDs = []
+            goal.requiresGeneratedPlanBlockScope = false
+            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+        } else if !tracksPlanAdherence {
+            goal.generatedPlanTemplateIDs = []
+            if updatesGeneratedPlanBlockIDs {
+                goal.generatedPlanBlockIDs = generatedPlanBlockIDs
+                goal.requiresGeneratedPlanBlockScope = !generatedPlanBlockIDs.isEmpty
+            }
+        }
         goal.updatedAt = Date()
         try? modelContext.save()
         return .dataResponse(FunctionResult(
             name: "update_workout_goal",
             response: [
                 "success": true,
-                "goal": [
-                    "id": goal.id.uuidString,
-                    "title": goal.trimmedTitle,
-                    "goal_kind": goal.goalKind.rawValue,
-                    "status": goal.status.rawValue,
-                    "workout_type": goal.linkedWorkoutType?.rawValue ?? "",
-                    "activity_name": goal.trimmedActivityName ?? "",
-                    "target_value": goal.targetValue as Any,
-                    "target_unit": goal.targetUnit,
-                    "period_unit": goal.periodUnit?.rawValue ?? "",
-                    "period_count": goal.periodCount as Any,
-                    "notes": goal.trimmedNotes,
-                    "target_date": goal.targetDate.map(formatDateForFunction) ?? "",
-                    "check_in_cadence_days": goal.checkInCadenceDays as Any
-                ]
+                "goal": serializedWorkoutGoal(goal)
             ]
         ))
+    }
+
+    private func serializedWorkoutGoal(_ goal: WorkoutGoal) -> [String: Any] {
+        [
+            "id": goal.id.uuidString,
+            "title": goal.trimmedTitle,
+            "goal_kind": goal.goalKind.rawValue,
+            "status": goal.status.rawValue,
+            "workout_type": goal.linkedWorkoutType?.rawValue ?? "",
+            "activity_name": goal.trimmedActivityName ?? "",
+            "activity_tags": goal.linkedActivityTags,
+            "activity_kind": goal.linkedActivityKind?.rawValue ?? "",
+            "activity_role": goal.linkedActivityRole?.rawValue ?? "",
+            "generated_plan_block_ids": goal.generatedPlanBlockIDs.map(\.uuidString),
+            "tracks_plan_adherence": goal.tracksGeneratedPlanAdherence,
+            "target_value": goal.targetValue as Any,
+            "target_unit": goal.targetUnit,
+            "period_unit": goal.periodUnit?.rawValue ?? "",
+            "period_count": goal.periodCount as Any,
+            "success_criteria": goal.trimmedSuccessCriteria,
+            "notes": goal.trimmedNotes,
+            "target_date": goal.targetDate.map(formatDateForFunction) ?? "",
+            "check_in_cadence_days": goal.checkInCadenceDays as Any,
+            "updated_at": formatDateTimeForFunction(goal.updatedAt),
+            "scope_summary": goal.scopeSummary,
+            "tracking_summary": goal.trackingSummary ?? "",
+            "horizon_summary": goal.horizonSummary ?? ""
+        ]
+    }
+
+    private func parsedGeneratedPlanBlockIDs(
+        from value: Any?,
+        functionName: String
+    ) -> GeneratedPlanBlockIDParseResult {
+        let rawIDs = stringArray(from: value)
+        guard !rawIDs.isEmpty else { return .success([]) }
+
+        var seen: Set<UUID> = []
+        var parsedIDs: [UUID] = []
+        for rawID in rawIDs {
+            guard let id = UUID(uuidString: rawID) else {
+                return .failure(FunctionResult(
+                    name: functionName,
+                    response: ["error": "generated_plan_block_ids must contain exact block ids from the current workout plan."]
+                ))
+            }
+            if seen.insert(id).inserted {
+                parsedIDs.append(id)
+            }
+        }
+
+        guard let plan = userProfile?.workoutPlan else {
+            return .failure(FunctionResult(
+                name: functionName,
+                response: ["error": "generated_plan_block_ids requires a current workout plan."]
+            ))
+        }
+
+        let currentBlockIDs = Set(plan.templates.flatMap { template in
+            template.blocks.map(\.id)
+        })
+        guard parsedIDs.allSatisfy(currentBlockIDs.contains) else {
+            return .failure(FunctionResult(
+                name: functionName,
+                response: ["error": "generated_plan_block_ids must contain only block ids from the current workout plan."]
+            ))
+        }
+
+        return .success(parsedIDs)
+    }
+
+    private enum GeneratedPlanBlockIDParseResult {
+        case success([UUID])
+        case failure(FunctionResult)
     }
 
     private func parseDate(_ rawDate: String?) -> Date? {
@@ -559,6 +863,65 @@ extension AIFunctionExecutor {
             return Int(string.trimmingCharacters(in: .whitespacesAndNewlines))
         default:
             return nil
+        }
+    }
+
+    private func workoutGoalValidationError(
+        goalKind: WorkoutGoal.GoalKind,
+        targetValue: Double?,
+        targetUnit: String,
+        periodUnit: WorkoutGoal.PeriodUnit?,
+        periodCount: Int?,
+        successCriteria: String
+    ) -> String? {
+        guard !successCriteria.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "success_criteria is required"
+        }
+
+        guard goalKind.supportsNumericTarget else { return nil }
+        guard let targetValue, targetValue > 0 else {
+            return "target_value must be greater than 0"
+        }
+        guard !targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "target_unit is required"
+        }
+
+        if goalKind.usesPeriodTarget {
+            guard periodUnit != nil else {
+                return "period_unit is required for \(goalKind.rawValue) goals"
+            }
+            guard let periodCount, periodCount > 0 else {
+                return "period_count must be greater than 0 for \(goalKind.rawValue) goals"
+            }
+        }
+
+        if goalKind == .frequency || goalKind == .count,
+           periodCount != 1 {
+            return "period_count must be 1 for \(goalKind.rawValue) goals"
+        }
+
+        return nil
+    }
+
+    private func stringArray(from value: Any?) -> [String] {
+        switch value {
+        case let values as [String]:
+            return values
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        case let values as [Any]:
+            return values.compactMap { element in
+                (element as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+            }
+        case let value as String:
+            return value
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        default:
+            return []
         }
     }
 
@@ -703,26 +1066,119 @@ extension AIFunctionExecutor {
                 response: ["error": "Missing workout type"]
             ))
         }
-        let workoutType = WorkoutMode.normalized(from: type)?.rawValue
-            ?? type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let trimmedType = type.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let workoutMode = WorkoutMode(rawValue: trimmedType) else {
+            return .dataResponse(FunctionResult(
+                name: "log_workout",
+                response: ["error": "Workout type must be a stable enum value. Put activity names like Running or Bouldering in activity_name."]
+            ))
+        }
+        let workoutType = workoutMode.rawValue
+        let activityName = (args["activity_name"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let activityTags = stringArray(from: args["activity_tags"])
+        let sourcePlanTemplateID: UUID?
+        if let rawSourcePlanTemplateID = args["source_plan_template_id"] as? String,
+           !rawSourcePlanTemplateID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let trimmedSourcePlanTemplateID = rawSourcePlanTemplateID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let parsedSourcePlanTemplateID = UUID(uuidString: trimmedSourcePlanTemplateID) else {
+                return .dataResponse(FunctionResult(
+                    name: "log_workout",
+                    response: ["error": "source_plan_template_id must be an exact template id from the current workout plan."]
+                ))
+            }
+            guard userProfile?.workoutPlan?.templates.contains(where: { $0.id == parsedSourcePlanTemplateID }) == true else {
+                return .dataResponse(FunctionResult(
+                    name: "log_workout",
+                    response: ["error": "source_plan_template_id must match an existing session in the current workout plan."]
+                ))
+            }
+            sourcePlanTemplateID = parsedSourcePlanTemplateID
+        } else {
+            sourcePlanTemplateID = nil
+        }
+        let sourcePlanTemplate = sourcePlanTemplateID.flatMap { templateID in
+            userProfile?.workoutPlan?.templates.first(where: { $0.id == templateID })
+        }
 
         let workoutName = args["name"] as? String  // Trai-generated name
-        let durationMinutes = args["duration_minutes"] as? Int
+        let durationMinutes = numericInt(from: args["duration_minutes"])
         let notes = args["notes"] as? String
 
         // Parse exercises with per-set data
         var exercises: [SuggestedWorkoutLog.LoggedExercise] = []
         if let exercisesData = args["exercises"] as? [[String: Any]] {
+            let shouldApplyWorkoutDurationToSingleActivity = exercisesData.count == 1
             for exerciseData in exercisesData {
                 guard let name = exerciseData["name"] as? String else { continue }
+                let category = (exerciseData["category"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+                let exerciseActivityName = (exerciseData["activity_name"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+                let activityRole: WorkoutPlan.TrainingBlock.Role?
+                if let rawActivityRole = exerciseData["activity_role"] as? String {
+                    let trimmedRole = rawActivityRole.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmedRole.isEmpty {
+                        activityRole = nil
+                    } else if let stableRole = WorkoutPlan.TrainingBlock.Role(rawValue: trimmedRole) {
+                        activityRole = stableRole
+                    } else {
+                        return .dataResponse(FunctionResult(
+                            name: "log_workout",
+                            response: ["error": "activity_role must be a stable training block role enum."]
+                        ))
+                    }
+                } else {
+                    activityRole = nil
+                }
+                let sourcePlanBlockID: UUID?
+                if let rawSourcePlanBlockID = exerciseData["source_plan_block_id"] as? String,
+                   !rawSourcePlanBlockID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    guard let sourcePlanTemplate else {
+                        return .dataResponse(FunctionResult(
+                            name: "log_workout",
+                            response: ["error": "source_plan_block_id requires source_plan_template_id from the current workout plan."]
+                        ))
+                    }
+                    let trimmedSourcePlanBlockID = rawSourcePlanBlockID.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard let parsedSourcePlanBlockID = UUID(uuidString: trimmedSourcePlanBlockID) else {
+                        return .dataResponse(FunctionResult(
+                            name: "log_workout",
+                            response: ["error": "source_plan_block_id must be an exact block id from the current workout plan."]
+                        ))
+                    }
+                    guard sourcePlanTemplate.blocks.contains(where: { $0.id == parsedSourcePlanBlockID }) else {
+                        return .dataResponse(FunctionResult(
+                            name: "log_workout",
+                            response: ["error": "source_plan_block_id must belong to source_plan_template_id in the current workout plan."]
+                        ))
+                    }
+                    sourcePlanBlockID = parsedSourcePlanBlockID
+                } else {
+                    let persistedBlocks = sourcePlanTemplate?.blocks ?? []
+                    sourcePlanBlockID = persistedBlocks.count == 1 ? persistedBlocks[0].id : nil
+                }
+                let targetTags = stringArray(from: exerciseData["target_tags"])
+                let trackingFields = stringArray(from: exerciseData["tracking_fields"])
+                let exerciseDurationMinutes = numericInt(from: exerciseData["duration_minutes"])
+                let loggedDurationMinutes = exerciseDurationMinutes
+                    ?? (shouldApplyWorkoutDurationToSingleActivity ? durationMinutes : nil)
+                let distanceMeters = numericDouble(from: exerciseData["distance_meters"])
+                let exerciseNotes = (exerciseData["notes"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+                let segments = parseLoggedActivitySegments(exerciseData["segments"])
 
                 var sets: [SuggestedWorkoutLog.LoggedExercise.SetData] = []
 
                 // New format: sets is an array of {reps, weight_kg}
                 if let setsArray = exerciseData["sets"] as? [[String: Any]] {
                     for setData in setsArray {
-                        let reps = setData["reps"] as? Int ?? 10
-                        let weight = setData["weight_kg"] as? Double
+                        let reps = numericInt(from: setData["reps"]) ?? 10
+                        let weight = numericDouble(from: setData["weight_kg"])
                         sets.append(SuggestedWorkoutLog.LoggedExercise.SetData(
                             reps: reps,
                             weightKg: weight
@@ -730,9 +1186,9 @@ extension AIFunctionExecutor {
                     }
                 }
                 // Legacy format: sets/reps as integers
-                else if let setCount = exerciseData["sets"] as? Int {
-                    let reps = exerciseData["reps"] as? Int ?? 10
-                    let weight = exerciseData["weight_kg"] as? Double
+                else if let setCount = numericInt(from: exerciseData["sets"]) {
+                    let reps = numericInt(from: exerciseData["reps"]) ?? 10
+                    let weight = numericDouble(from: exerciseData["weight_kg"])
                     for _ in 0..<setCount {
                         sets.append(SuggestedWorkoutLog.LoggedExercise.SetData(
                             reps: reps,
@@ -741,25 +1197,122 @@ extension AIFunctionExecutor {
                     }
                 }
 
-                if !sets.isEmpty {
+                let hasActivityMetrics = loggedDurationMinutes != nil
+                    || distanceMeters != nil
+                    || exerciseNotes != nil
+                    || !segments.isEmpty
+                let hasLoggedSetMetrics = sets.contains { set in
+                    set.reps > 0 || (set.weightKg ?? 0) > 0
+                }
+                let explicitCategory = category.flatMap { Exercise.Category(rawValue: $0)?.userFacingEquivalent }
+                if category != nil, explicitCategory == nil {
+                    return .dataResponse(FunctionResult(
+                        name: "log_workout",
+                        response: ["error": "Workout item category must be a stable enum value. Put activity names like Running or Bouldering in activity_name."]
+                    ))
+                }
+                let resolvedCategory = explicitCategory
+                    ?? (!sets.isEmpty && !hasActivityMetrics ? .strength : nil)
+                if (hasActivityMetrics || hasLoggedSetMetrics), resolvedCategory != .strength, exerciseActivityName == nil {
+                    return .dataResponse(FunctionResult(
+                        name: "log_workout",
+                        response: ["error": "Non-strength activity logs need activity_name so Trai can preserve the activity identity."]
+                    ))
+                }
+                let normalizedTrackingFields = resolvedCategory.map { category in
+                    Exercise.normalizedTrackingFields(
+                        trackingFields.compactMap(Exercise.TrackingField.init(rawValue:)),
+                        for: category
+                    ).map(\.rawValue)
+                }
+
+                if hasLoggedSetMetrics || hasActivityMetrics {
                     exercises.append(SuggestedWorkoutLog.LoggedExercise(
                         name: name,
+                        category: resolvedCategory?.rawValue ?? category,
+                        activityTypeName: exerciseActivityName,
+                        activityRole: activityRole?.rawValue,
+                        sourcePlanBlockID: sourcePlanBlockID,
+                        targetTags: targetTags,
+                        trackingFields: normalizedTrackingFields ?? trackingFields,
+                        durationMinutes: loggedDurationMinutes,
+                        distanceMeters: distanceMeters,
+                        notes: exerciseNotes,
+                        segments: segments,
                         sets: sets
                     ))
                 }
             }
         }
+        guard !exercises.isEmpty else {
+            return .dataResponse(FunctionResult(
+                name: "log_workout",
+                response: [
+                    "error": "Missing completed workout details. Include completed sets for strength work or a non-strength activity item with category, activity_name, and any known duration, distance, segments, or notes."
+                ]
+            ))
+        }
+        let semanticActivityTags = Self.loggedWorkoutActivityTags(
+            requested: activityTags,
+            exercises: exercises
+        )
 
         // Return suggestion for user approval (don't save yet)
         let suggestion = SuggestedWorkoutLog(
             name: workoutName,
             workoutType: workoutType,
+            activityName: activityName,
+            activityTags: semanticActivityTags.isEmpty ? nil : semanticActivityTags,
+            sourcePlanTemplateID: sourcePlanTemplateID,
             durationMinutes: durationMinutes,
             exercises: exercises,
             notes: notes
         )
 
         return .suggestedWorkoutLog(suggestion)
+    }
+
+    private static func loggedWorkoutActivityTags(
+        requested: [String],
+        exercises: [SuggestedWorkoutLog.LoggedExercise]
+    ) -> [String] {
+        let explicit = requested.dedupedByGoalKey()
+        if !explicit.isEmpty {
+            return explicit
+        }
+
+        let derived = exercises
+            .filter(\.isActivityLog)
+            .flatMap { exercise in
+                ([exercise.activityTypeName] + (exercise.targetTags ?? []))
+                    .compactMap { $0 }
+            }
+        return derived.dedupedByGoalKey()
+    }
+
+    private func parseLoggedActivitySegments(_ value: Any?) -> [SuggestedWorkoutLog.LoggedExercise.ActivitySegment] {
+        guard let values = value as? [[String: Any]] else { return [] }
+        return values.compactMap { rawSegment -> SuggestedWorkoutLog.LoggedExercise.ActivitySegment? in
+            let durationMinutes = numericInt(from: rawSegment["duration_minutes"])
+            let distanceMeters = numericDouble(from: rawSegment["distance_meters"])
+            let reps = numericInt(from: rawSegment["reps"])
+            let weightKg = numericDouble(from: rawSegment["weight_kg"])
+            let notes = (rawSegment["notes"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty
+
+            guard durationMinutes != nil || distanceMeters != nil || reps != nil || weightKg != nil || notes != nil else {
+                return nil
+            }
+
+            return SuggestedWorkoutLog.LoggedExercise.ActivitySegment(
+                durationMinutes: durationMinutes,
+                distanceMeters: distanceMeters,
+                reps: reps,
+                weightKg: weightKg,
+                notes: notes
+            )
+        }
     }
 
     // MARK: - Weight Functions
@@ -1101,5 +1654,25 @@ extension AIFunctionExecutor {
         }
 
         return nil
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
+}
+
+private extension Array where Element == String {
+    func dedupedByGoalKey() -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in self {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.goalNormalizedKey
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
     }
 }

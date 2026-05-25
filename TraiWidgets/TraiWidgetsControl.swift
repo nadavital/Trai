@@ -35,6 +35,6 @@ struct StartWorkoutControlIntent: ControlConfigurationIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & OpensIntent {
-        return .result(opensIntent: OpenURLIntent(AppRoute.workout(templateName: nil).url))
+        return .result(opensIntent: OpenURLIntent(AppRoute.workout(templateID: nil, templateName: nil).url))
     }
 }

@@ -13,6 +13,16 @@ extension AIService {
 
     // MARK: - System Prompt Builder
 
+    nonisolated static let activeWorkoutPriorityInstructions = """
+    The user is mid-workout and opened chat between workout items, sets, or activity blocks. This is your TOP priority:
+    - They're likely asking about their CURRENT workout (activity, exercise, form, alternatives, pacing, or logging)
+    - Keep responses SHORT (2-3 sentences max) - they're holding their phone during training
+    - Be direct and actionable - no lengthy explanations
+    - If they ask about form, give ONE key cue
+    - If something hurts, suggest ONE alternative exercise, activity variation, or recovery adjustment
+    - Offer quick encouragement but don't be preachy
+    """
+
     func buildFunctionCallingSystemPrompt(context: ChatFunctionContext) -> String {
         var prompt = """
         You are Trai, a knowledgeable fitness coach. Be helpful, concise, and direct.
@@ -44,11 +54,15 @@ extension AIService {
         """
 
         if let profile = context.profile {
-            prompt += buildUserInfoSection(profile: profile)
-            prompt += buildWorkoutPlanSection(profile: profile)
+            prompt += buildUserInfoSection(profile: profile, hasWorkoutToday: context.hasWorkoutToday)
+            prompt += Self.workoutPlanPromptSection(profile: profile)
         }
 
         prompt += buildTodaysFoodSection(entries: context.todaysFoodEntries)
+
+        if let focusedFoodEntry = context.focusedFoodEntry {
+            prompt += buildFocusedFoodEntrySection(entry: focusedFoodEntry)
+        }
 
         if !context.memoriesContext.isEmpty {
             prompt += buildMemoriesSection(memoriesContext: context.memoriesContext)
@@ -60,6 +74,10 @@ extension AIService {
 
         if let pending = context.pendingSuggestion {
             prompt += buildPendingSuggestionSection(pending: pending)
+        }
+
+        if let pendingNutritionPlan = context.pendingNutritionPlanSuggestion {
+            prompt += Self.pendingNutritionPlanPromptSection(suggestion: pendingNutritionPlan)
         }
 
         if let pendingWorkoutPlan = context.pendingWorkoutPlanSuggestion {
@@ -75,7 +93,7 @@ extension AIService {
         return prompt
     }
 
-    private func buildUserInfoSection(profile: UserProfile) -> String {
+    private func buildUserInfoSection(profile: UserProfile, hasWorkoutToday: Bool) -> String {
         var userInfo: [String] = []
         if !profile.name.isEmpty {
             userInfo.append("Name: \(profile.name)")
@@ -111,9 +129,13 @@ extension AIService {
 
         let trackedMacroNames = profile.enabledMacrosOrdered.map(\.displayName).joined(separator: ", ")
 
+        let effectiveCalories = profile.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutToday)
+        let dayType = hasWorkoutToday ? "training day" : "rest day"
+        let targetLine = "Today's Targets (\(dayType)): \(effectiveCalories) kcal, \(profile.dailyProteinGoal)g protein, \(profile.dailyCarbsGoal)g carbs, \(profile.dailyFatGoal)g fat, \(profile.dailyFiberGoal)g fiber, \(profile.dailySugarGoal)g sugar"
+
         section += """
         User's Goal: \(profile.goal.displayName)
-        Daily Targets: \(profile.dailyCalorieGoal) kcal, \(profile.dailyProteinGoal)g protein, \(profile.dailyCarbsGoal)g carbs, \(profile.dailyFatGoal)g fat, \(profile.dailyFiberGoal)g fiber, \(profile.dailySugarGoal)g sugar
+        \(targetLine)
         Actively Tracked Macros: \(trackedMacroNames.isEmpty ? "Calories only" : trackedMacroNames)
         All macro targets are still stored in the plan, but day-to-day UI should prioritize the actively tracked macros.
 
@@ -135,24 +157,90 @@ extension AIService {
         """
     }
 
-    private func buildWorkoutPlanSection(profile: UserProfile) -> String {
+    private func buildFocusedFoodEntrySection(entry: FocusedFoodEntryContext) -> String {
+        var details: [String] = [
+            "Entry ID: \(entry.entryId.uuidString)",
+            "Name: \(entry.name)",
+            "Logged: \(entry.loggedAt.formatted(date: .abbreviated, time: .shortened))",
+            "Semantic meal: \(entry.semanticMeal)",
+            "Nutrition: \(entry.calories) kcal, \(formattedMacroValue(entry.proteinGrams))g protein, \(formattedMacroValue(entry.carbsGrams))g carbs, \(formattedMacroValue(entry.fatGrams))g fat"
+        ]
+
+        if let fiberGrams = entry.fiberGrams {
+            details.append("Fiber: \(formattedMacroValue(fiberGrams))g")
+        }
+        if let sugarGrams = entry.sugarGrams {
+            details.append("Sugar: \(formattedMacroValue(sugarGrams))g")
+        }
+        if let servingSize = entry.servingSize?.trimmingCharacters(in: .whitespacesAndNewlines), !servingSize.isEmpty {
+            details.append("Serving size: \(servingSize)")
+        }
+        if let notes = entry.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+            details.append("User notes: \(notes)")
+        }
+
+        return """
+
+        PRIVATE FOCUSED LOGGED MEAL CONTEXT:
+        \(details.map { "- \($0)" }.joined(separator: "\n"))
+
+        The user opened this specific logged meal from the editor. Keep replies focused on it.
+        If the user asks to change this meal, use this exact entry_id with edit_food_entry or edit_food_components.
+        Do not show or mention the entry ID.
+
+        """
+    }
+
+    private func formattedMacroValue(_ value: Double) -> String {
+        let rounded = value.rounded()
+        if abs(value - rounded) < 0.05 {
+            return String(Int(rounded))
+        }
+        return String(format: "%.1f", value)
+    }
+
+    private static func workoutPlanPromptSection(profile: UserProfile) -> String {
         guard let plan = profile.workoutPlan else { return "" }
 
         let sessionPreview = plan.templates
             .sorted { $0.order < $1.order }
-            .prefix(5)
-            .map(\.name)
-            .joined(separator: ", ")
+            .map { template in
+                let blocks = template.primaryBlockSummary
+                let title = blocks.isEmpty ? template.name : "\(template.name) (\(blocks))"
+                let blockPreview = template.blocks
+                    .sorted { $0.order < $1.order }
+                    .map { block in
+                        let activity = block.displayActivityName
+                        return "\(block.id.uuidString): \(activity) [kind: \(block.kind.rawValue), role: \(block.role.rawValue)]"
+                    }
+                    .joined(separator: "; ")
+                if blockPreview.isEmpty {
+                    return "- \(template.id.uuidString): \(title)"
+                }
+                return "- \(template.id.uuidString): \(title)\n  Blocks: \(blockPreview)"
+            }
+            .joined(separator: "\n")
 
         return """
 
         CURRENT WORKOUT PLAN:
         - Split: \(plan.splitType.displayName)
         - Days per week: \(plan.daysPerWeek)
-        - Sessions: \(sessionPreview)
+        \(plan.planIntent.map { "- Intent: \($0.summary)" } ?? "")
+        - Sessions:
+        \(sessionPreview)
+        - When starting or logging a planned session, pass the exact session id as source_plan_template_id.
+        - When logging a planned workout item, pass the exact block id as source_plan_block_id on that exercise item.
+        - When creating or updating a goal for a specific current-plan block, pass the exact block id in generated_plan_block_ids.
 
         """
     }
+
+#if DEBUG
+    static func workoutPlanPromptSectionForTesting(profile: UserProfile) -> String {
+        workoutPlanPromptSection(profile: profile)
+    }
+#endif
 
     private func buildMemoriesSection(memoriesContext: String) -> String {
         """
@@ -192,18 +280,48 @@ extension AIService {
         """
     }
 
+    nonisolated static func pendingNutritionPlanPromptSection(suggestion: PlanUpdateSuggestionEntry) -> String {
+        let proposedValues: [String] = [
+            suggestion.calories.map { "Calories: \($0) kcal" },
+            suggestion.proteinGrams.map { "Protein: \($0)g" },
+            suggestion.carbsGrams.map { "Carbs: \($0)g" },
+            suggestion.fatGrams.map { "Fat: \($0)g" },
+            suggestion.fiberGrams.map { "Fiber: \($0)g" },
+            suggestion.sugarGrams.map { "Sugar: \($0)g" },
+            suggestion.goalDisplayName.map { "Goal: \($0)" }
+        ].compactMap { $0 }
+
+        let proposedSummary = proposedValues.isEmpty
+            ? "No explicit target fields were included."
+            : proposedValues.joined(separator: ", ")
+
+        return """
+
+        PENDING NUTRITION PLAN PROPOSAL (not yet saved):
+        - Proposed targets: \(proposedSummary)
+        \(suggestion.rationale.map { "- Rationale: \($0)" } ?? "")
+
+        If the user asks for another tweak before applying changes, treat this pending proposal as the current draft and revise from it, not from their saved nutrition plan. Include the full revised target set in update_user_plan for every target that should remain part of the pending proposal, not just the single field the user mentioned.
+
+        """
+    }
+
     private func buildPendingWorkoutPlanSection(suggestion: WorkoutPlanSuggestionEntry) -> String {
         let sessionPreview = suggestion.plan.templates
             .sorted { $0.order < $1.order }
             .prefix(5)
-            .map(\.name)
-            .joined(separator: ", ")
+            .map { template in
+                let blocks = template.primaryBlockSummary
+                return blocks.isEmpty ? template.name : "\(template.name) (\(blocks))"
+            }
+            .joined(separator: " | ")
 
         return """
 
         PENDING WORKOUT PLAN PROPOSAL (not yet saved):
         - Split: \(suggestion.plan.splitType.displayName)
         - Days per week: \(suggestion.plan.daysPerWeek)
+        \(suggestion.plan.planIntent.map { "- Intent: \($0.summary)" } ?? "")
         - Sessions: \(sessionPreview)
 
         If the user asks for another tweak before saving, treat this pending proposal as the current draft and revise from it, not from their saved plan.
@@ -217,13 +335,7 @@ extension AIService {
         ⚠️ ACTIVE WORKOUT IN PROGRESS - PRIORITY CONTEXT:
         \(workout.description)
 
-        The user is mid-workout and opened chat between sets. This is your TOP priority:
-        - They're likely asking about their CURRENT workout (exercises, form, alternatives)
-        - Keep responses SHORT (2-3 sentences max) - they're holding their phone between sets
-        - Be direct and actionable - no lengthy explanations
-        - If they ask about form, give ONE key cue
-        - If something hurts, suggest ONE alternative exercise
-        - Offer quick encouragement but don't be preachy
+        \(Self.activeWorkoutPriorityInstructions)
 
         """
     }
@@ -271,6 +383,7 @@ extension AIService {
         - Prefer progression, consistency, frequency, distance, duration, or milestone framing over one-off routine completion.
         - If the user asks for something like "work out 3x a week", create a frequency goal with the right cadence fields instead of flattening it into a generic milestone.
         - If the request maps to a specific recurring exercise, it's okay to create an activity-linked goal for that exercise.
+        - If the request maps to a specific block in the current generated workout plan, pass exact generated_plan_block_ids from CURRENT WORKOUT PLAN; do not rely on names or tags for generated-plan block goals.
         - Use soft target dates when they help make the goal concrete, but don't force a hard date on every goal.
         - After updating or creating a workout goal, clearly tell the user what changed.
 
@@ -611,8 +724,7 @@ extension AIService {
 
             completeAIRequest(requestTicket)
 
-            let hasSuggestion = !result.suggestedFoods.isEmpty || result.planUpdate != nil || result.suggestedFoodEdit != nil || result.suggestedFoodComponentEdit != nil || result.suggestedWorkoutPlan != nil || result.suggestedWorkout != nil || result.suggestedWorkoutLog != nil || result.suggestedReminder != nil
-            if !additionalFunctionResults.isEmpty && !hasSuggestion {
+            if !additionalFunctionResults.isEmpty && !result.hasSuggestion {
                 let chainedResult = try await sendParallelFunctionResults(
                     functionResults: additionalFunctionResults,
                     previousMessages: messages,
@@ -622,26 +734,7 @@ extension AIService {
                     onTextChunk: onTextChunk,
                     depth: depth + 1
                 )
-                if !chainedResult.text.isEmpty {
-                    result.text += chainedResult.text
-                }
-                result.suggestedFoods.append(contentsOf: chainedResult.suggestedFoods)
-                if let plan = chainedResult.planUpdate {
-                    result.planUpdate = plan
-                }
-                if let edit = chainedResult.suggestedFoodEdit {
-                    result.suggestedFoodEdit = edit
-                }
-                if let componentEdit = chainedResult.suggestedFoodComponentEdit {
-                    result.suggestedFoodComponentEdit = componentEdit
-                }
-                if let workoutPlan = chainedResult.suggestedWorkoutPlan {
-                    result.suggestedWorkoutPlan = workoutPlan
-                }
-                if let reminder = chainedResult.suggestedReminder {
-                    result.suggestedReminder = reminder
-                }
-                result.savedMemories.append(contentsOf: chainedResult.savedMemories)
+                result.mergeChainedResult(chainedResult)
             }
 
             return result

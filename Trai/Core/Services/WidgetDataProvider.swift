@@ -80,7 +80,7 @@ private actor WidgetDataRefreshActor {
     }
 }
 
-nonisolated private struct WidgetDataSnapshotBuilder {
+nonisolated struct WidgetDataSnapshotBuilder {
     private let readyThreshold: Double = 48
     private let recoveringThreshold: Double = 24
 
@@ -88,14 +88,18 @@ nonisolated private struct WidgetDataSnapshotBuilder {
         let profileDescriptor = FetchDescriptor<UserProfile>()
         let profile = (try? modelContext.fetch(profileDescriptor))?.first
 
-        let calorieGoal = profile?.effectiveCalorieGoal ?? 2000
-        let proteinGoal = profile?.dailyProteinGoal ?? 150
-        let carbsGoal = profile?.dailyCarbsGoal ?? 200
-        let fatGoal = profile?.dailyFatGoal ?? 65
-
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: Date())
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        let todayWorkoutCompleted = hasWorkout(
+            in: DateInterval(start: startOfDay, end: endOfDay),
+            modelContext: modelContext
+        )
+
+        let calorieGoal = profile?.effectiveCalorieGoal(hasWorkoutToday: todayWorkoutCompleted) ?? 2_000
+        let proteinGoal = profile?.dailyProteinGoal ?? 150
+        let carbsGoal = profile?.dailyCarbsGoal ?? 200
+        let fatGoal = profile?.dailyFatGoal ?? 65
 
         let foodDescriptor = FetchDescriptor<FoodEntry>(
             predicate: #Predicate { entry in
@@ -113,20 +117,15 @@ nonisolated private struct WidgetDataSnapshotBuilder {
         let readyMuscleCount = recoveryInfo.filter { $0.status == .ready }.count
 
         var recommendedWorkout: String?
+        var recommendedWorkoutTemplateID: UUID?
         if let workoutPlan = profile?.workoutPlan {
-            recommendedWorkout = bestTemplateForToday(
+            let recommendation = bestTemplateForToday(
                 plan: workoutPlan,
                 recoveryInfo: recoveryInfo
-            )?.template.name
+            )?.template
+            recommendedWorkout = recommendation?.name
+            recommendedWorkoutTemplateID = recommendation?.id
         }
-
-        let workoutDescriptor = FetchDescriptor<LiveWorkout>(
-            predicate: #Predicate { workout in
-                workout.completedAt != nil && workout.completedAt! >= startOfDay
-            }
-        )
-        let todayWorkouts = (try? modelContext.fetch(workoutDescriptor)) ?? []
-        let todayWorkoutCompleted = !todayWorkouts.isEmpty
 
         return WidgetData(
             caloriesConsumed: caloriesConsumed,
@@ -139,6 +138,7 @@ nonisolated private struct WidgetDataSnapshotBuilder {
             fatGoal: fatGoal,
             readyMuscleCount: readyMuscleCount,
             recommendedWorkout: recommendedWorkout,
+            recommendedWorkoutTemplateID: recommendedWorkoutTemplateID,
             workoutStreak: workoutStreak(modelContext: modelContext),
             todayWorkoutCompleted: todayWorkoutCompleted,
             lastUpdated: Date()
@@ -158,6 +158,36 @@ nonisolated private struct WidgetDataSnapshotBuilder {
                     status: recoveryStatus(hoursSinceTraining: hoursSince)
                 )
             }
+    }
+
+    nonisolated private func hasWorkout(in interval: DateInterval, modelContext: ModelContext) -> Bool {
+        let startDate = interval.start
+        let endDate = interval.end
+
+        var sessionDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { session in
+                session.loggedAt >= startDate && session.loggedAt < endDate
+            }
+        )
+        sessionDescriptor.fetchLimit = 1
+        if ((try? modelContext.fetch(sessionDescriptor)) ?? []).isEmpty == false {
+            return true
+        }
+
+        let liveWorkoutLookbackStart = Calendar.current.date(
+            byAdding: .day,
+            value: -7,
+            to: startDate
+        ) ?? startDate
+        let liveDescriptor = FetchDescriptor<LiveWorkout>(
+            predicate: #Predicate { workout in
+                workout.startedAt >= liveWorkoutLookbackStart && workout.startedAt < endDate
+            }
+        )
+        return ((try? modelContext.fetch(liveDescriptor)) ?? []).contains { workout in
+            guard let completedAt = workout.completedAt else { return false }
+            return completedAt >= startDate && completedAt < endDate
+        }
     }
 
     nonisolated private func lastTrainedDates(modelContext: ModelContext) -> [LiveWorkout.MuscleGroup: Date] {
@@ -295,10 +325,10 @@ nonisolated private struct WidgetDataSnapshotBuilder {
         _ template: WorkoutPlan.WorkoutTemplate,
         recoveryInfo: [WidgetMuscleRecoveryInfo]
     ) -> (score: Double, reason: String) {
-        let templateMuscles = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
+        let templateMuscles = recoveryMuscles(for: template)
 
         guard !templateMuscles.isEmpty else {
-            return (0.5, "Unknown muscle groups")
+            return nonMuscleTemplateScore(template)
         }
 
         var readyCount = 0
@@ -341,6 +371,45 @@ nonisolated private struct WidgetDataSnapshotBuilder {
         }
 
         return (1.0, "All muscles recovered")
+    }
+
+    nonisolated private func recoveryMuscles(
+        for template: WorkoutPlan.WorkoutTemplate
+    ) -> [LiveWorkout.MuscleGroup] {
+        guard template.sessionType.supportsMuscleTargets else { return [] }
+
+        var groups: [LiveWorkout.MuscleGroup] = []
+        var seen: Set<LiveWorkout.MuscleGroup> = []
+        for target in template.resolvedTargetMuscleGroups {
+            let mappedGroups = LiveWorkout.MuscleGroup.fromTargetString(target)
+            for group in mappedGroups where shouldUseRecoveryMuscle(group, for: target) && !seen.contains(group) {
+                groups.append(group)
+                seen.insert(group)
+            }
+        }
+        return groups
+    }
+
+    nonisolated private func shouldUseRecoveryMuscle(
+        _ group: LiveWorkout.MuscleGroup,
+        for rawTarget: String
+    ) -> Bool {
+        guard group == .fullBody else { return true }
+        let compactTarget = rawTarget
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        return compactTarget == "fullbody"
+    }
+
+    nonisolated private func nonMuscleTemplateScore(
+        _ template: WorkoutPlan.WorkoutTemplate
+    ) -> (score: Double, reason: String) {
+        let focus = template.focusAreasDisplay.trimmingCharacters(in: .whitespacesAndNewlines)
+        let label = focus.isEmpty ? template.sessionType.displayName : focus
+        return (1.0, "\(label) from your plan")
     }
 
     nonisolated private func workoutStreak(modelContext: ModelContext) -> Int {

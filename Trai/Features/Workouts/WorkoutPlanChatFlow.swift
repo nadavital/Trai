@@ -15,6 +15,7 @@ struct WorkoutPlanChatFlow: View {
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
 
     @Query private var profiles: [UserProfile]
+    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
     private var userProfile: UserProfile? { profiles.first }
 
     // MARK: - Mode Configuration
@@ -28,8 +29,26 @@ struct WorkoutPlanChatFlow: View {
     /// Existing saved plan to revise instead of starting from a blank questionnaire
     var currentPlanToEdit: WorkoutPlan? = nil
 
+    /// Message shown when seeding an existing/generated plan into the chat
+    var existingPlanIntroMessage = "Here's your current plan. Tell me what you'd like to change and I'll revise it without making you start over."
+
+    /// Primary action title for saving an existing/generated plan in onboarding
+    var existingPlanAcceptTitle = "Save Plan"
+
+    /// Goals generated with the onboarding plan, shown before the user saves it
+    var generatedPlanGoals: [WorkoutGoal] = []
+
+    /// Shows compact onboarding copy for the generated plan review surface
+    var showsGeneratedOnboardingHeader = false
+
+    /// Optional first refinement to send after seeding an existing generated plan
+    var initialRefinementPrompt: String? = nil
+
     /// Called when plan is complete (onboarding mode only)
     var onComplete: ((WorkoutPlan) -> Void)?
+
+    /// Called when the onboarding flow should save both a final plan and the generated goals that match it.
+    var onCompleteWithGoals: ((WorkoutPlan, [WorkoutGoal]) -> Void)?
 
     /// Called when user skips (onboarding mode only)
     var onSkip: (() -> Void)?
@@ -46,6 +65,19 @@ struct WorkoutPlanChatFlow: View {
     @State private var planAccepted = false
     @State private var showRefineMode = false
     @State private var isTransitioning = false  // For question transition animation
+    @State private var didSubmitInitialRefinementPrompt = false
+    @State private var isPreparingInitialRefinementPrompt = false
+    @State private var didRefineGeneratedPlan = false
+    @State private var completedRefinementMessages: [String] = []
+    @State private var activeGeneratedPlanGoals: [WorkoutGoal] = []
+    @State private var selectedGeneratedGoal: WorkoutGoal?
+    @State private var isRefiningPlan = false
+    @State private var refinementTask: Task<Void, Never>?
+    @State private var refinementRequestID: UUID?
+    @State private var refinementReviewMessagesBeforeRequest: [WorkoutPlanFlowMessage] = []
+    @State private var pendingRefinementMessageIDs: Set<UUID> = []
+    @State private var generatedResultPresentationID: UUID?
+    @State private var saveError: WorkoutPlanChatFlowSaveError?
 
     @FocusState private var isInputFocused: Bool
 
@@ -88,6 +120,10 @@ struct WorkoutPlanChatFlow: View {
         isEditingExistingPlan && showRefineMode && generatedPlan != nil && !isGenerating
     }
 
+    private var hasCancellableRefinement: Bool {
+        refinementTask != nil
+    }
+
     private var refinementSuggestions: [TraiSuggestion] {
         [
             TraiSuggestion("Change the split", subtitle: "Try something like upper/lower or full body"),
@@ -95,6 +131,7 @@ struct WorkoutPlanChatFlow: View {
             TraiSuggestion("Remove a day", subtitle: "Condense the plan into fewer sessions"),
             TraiSuggestion("Make workouts shorter", subtitle: "Trim the session length"),
             TraiSuggestion("Add more cardio", subtitle: "Layer conditioning into the week"),
+            TraiSuggestion("Edit goals", subtitle: "Change what Trai tracks with this plan"),
             TraiSuggestion("Add more recovery", subtitle: "Make the week easier to sustain"),
             TraiSuggestion("Adapt this for home equipment", subtitle: "Swap gym work for what I have"),
             TraiSuggestion("Swap some exercises", subtitle: "Keep the structure but change the lifts")
@@ -105,6 +142,24 @@ struct WorkoutPlanChatFlow: View {
         isEditingExistingPlan && showRefineMode
             ? "Updating your workout plan..."
             : "Creating your personalized plan..."
+    }
+
+    private enum GeneratedPlanPresentation {
+        case proposal
+        case current
+    }
+
+    private var generatedResultAnimation: Animation {
+        .spring(response: 0.42, dampingFraction: 0.86)
+    }
+
+    private var generatedResultTransition: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: .bottom)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.98, anchor: .bottom)),
+            removal: .opacity
+        )
     }
 
     // MARK: - Body
@@ -124,7 +179,11 @@ struct WorkoutPlanChatFlow: View {
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
-                                if !isOnboarding && !isGenerating {
+                                if hasCancellableRefinement {
+                                    Button("Stop", systemImage: "stop.fill") {
+                                        cancelRefinementRequest()
+                                    }
+                                } else if !isOnboarding && !isGenerating {
                                     Button("Cancel", systemImage: "xmark") {
                                         dismiss()
                                     }
@@ -136,6 +195,13 @@ struct WorkoutPlanChatFlow: View {
             }
         }
         .traiSheetBranding()
+        .alert(item: $saveError) { error in
+            Alert(
+                title: Text("Workout Plan Not Saved"),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
 
     private var mainContent: some View {
@@ -150,6 +216,7 @@ struct WorkoutPlanChatFlow: View {
                         // All messages
                         ForEach(messages) { message in
                             messageView(for: message)
+                                .transition(generatedResultTransition)
                                 .id(message.id)
                         }
 
@@ -200,7 +267,7 @@ struct WorkoutPlanChatFlow: View {
             }
 
             // Input bar
-            if !isGenerating {
+            if shouldShowInputBar {
                 inputBar
             }
         }
@@ -208,8 +275,17 @@ struct WorkoutPlanChatFlow: View {
             // Dismiss keyboard when tapping outside
             isInputFocused = false
         }
+        .sheet(item: $selectedGeneratedGoal) { goal in
+            GeneratedWorkoutGoalDetailSheet(goal: goal)
+            .traiSheetBranding()
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .onAppear {
             if messages.isEmpty {
+                if activeGeneratedPlanGoals.isEmpty {
+                    activeGeneratedPlanGoals = generatedPlanGoals
+                }
                 if isEditingExistingPlan {
                     seedExistingPlanConversation()
                 } else {
@@ -224,7 +300,22 @@ struct WorkoutPlanChatFlow: View {
 
     @ViewBuilder
     private var welcomeMessage: some View {
-        if !isEditingExistingPlan {
+        if showsGeneratedOnboardingHeader {
+            HStack(alignment: .center, spacing: 12) {
+                TraiLensView(size: 40, state: .answering, palette: .energy, breathes: false)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Here’s the plan I built")
+                        .font(.headline.weight(.bold))
+
+                    Text("Ask for changes before you save it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+            }
+        } else if !isEditingExistingPlan {
             HStack(alignment: .top, spacing: 12) {
                 TraiLensView(size: 36, state: .idle, palette: .energy)
 
@@ -255,9 +346,10 @@ struct WorkoutPlanChatFlow: View {
             WorkoutPlanProposalCard(
                 plan: plan,
                 message: message,
-                onAccept: { acceptPlan() },
+                onAccept: isOnboarding || isGenerating || isRefiningPlan ? nil : { acceptPlan() },
                 acceptTitle: isEditingExistingPlan ? "Save Changes" : "Use This Plan",
-                onCustomize: isEditingExistingPlan || showRefineMode ? nil : { enterRefineMode() }
+                onCustomize: isEditingExistingPlan || showRefineMode ? nil : { enterRefineMode() },
+                isCompactReview: isOnboarding
             )
 
         case .currentPlan(let plan, let message):
@@ -265,8 +357,19 @@ struct WorkoutPlanChatFlow: View {
                 plan: plan,
                 message: message,
                 onAccept: nil,
-                onCustomize: nil
+                acceptTitle: existingPlanAcceptTitle,
+                onCustomize: nil,
+                isCompactReview: isOnboarding
             )
+
+        case .generatedGoals(let goals):
+            generatedGoalsCard(goals)
+
+        case .saveGeneratedPlan:
+            saveGeneratedPlanButton
+
+        case .planUpdateInProgress(let plan):
+            collapsedPlanSummary(plan)
 
         case .planAccepted:
             WorkoutPlanAcceptedBadge()
@@ -304,10 +407,166 @@ struct WorkoutPlanChatFlow: View {
                     )
                 }
             }
+            .padding(.horizontal)
         }
         .padding(.top, 6)
         .padding(.bottom, 2)
         .background(Color(.systemBackground))
+    }
+
+    private func generatedGoalsCard(_ goals: [WorkoutGoal]) -> some View {
+        VStack(alignment: .leading, spacing: isOnboarding ? 8 : 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "flag.checkered")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.accent)
+
+                Text(isOnboarding ? "Goals" : "Goals Trai will track")
+                    .font(.subheadline.weight(.bold))
+
+                Spacer(minLength: 0)
+            }
+
+            VStack(spacing: 8) {
+                ForEach(goals.prefix(2), id: \.id) { goal in
+                    generatedGoalRow(goal)
+                }
+            }
+        }
+        .padding(isOnboarding ? 12 : 14)
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.accentColor.opacity(0.22), lineWidth: 1)
+        }
+    }
+
+    private func generatedGoalRow(_ goal: WorkoutGoal) -> some View {
+        Button {
+            HapticManager.lightTap()
+            selectedGeneratedGoal = goal
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                if isOnboarding {
+                    Image(systemName: goal.goalKind.iconName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.accent)
+                        .frame(width: 18, height: 18)
+                        .padding(.top, 2)
+                } else {
+                    Image(systemName: goal.goalKind.iconName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.accent)
+                        .frame(width: 28, height: 28)
+                        .background(Color.accentColor.opacity(0.12), in: Circle())
+                }
+
+                VStack(alignment: .leading, spacing: isOnboarding ? 1 : 3) {
+                    Text(goal.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(isOnboarding ? 1 : 2)
+
+                    Text(generatedGoalDetailText(goal))
+                        .font(isOnboarding ? .caption2 : .caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(isOnboarding ? 2 : 2)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, isOnboarding ? 3 : 7)
+            }
+            .padding(isOnboarding ? 8 : 10)
+            .background(Color(.tertiarySystemFill).opacity(0.55), in: .rect(cornerRadius: 13, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func collapsedPlanSummary(_ plan: WorkoutPlan) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.accent)
+                .frame(width: 28, height: 28)
+                .background(Color.accentColor.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Updating previous plan")
+                    .font(.subheadline.weight(.semibold))
+
+                Text("\(plan.splitType.displayName) • \(plan.templates.count) sessions")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.accentColor.opacity(0.18), lineWidth: 1)
+        }
+    }
+
+    private var saveGeneratedPlanButton: some View {
+        Button {
+            savePlan()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark")
+                    .font(.caption.weight(.bold))
+                Text(saveGeneratedPlanTitle)
+                    .font(.subheadline.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.traiPrimary(color: .accentColor, size: .compact, fullWidth: true, height: 42))
+        .disabled(isPlanSaveUnavailable)
+        .accessibilityLabel(saveGeneratedPlanTitle)
+    }
+
+    private var isPlanSaveUnavailable: Bool {
+        isGenerating || isRefiningPlan || isPreparingInitialRefinementPrompt
+    }
+
+    private var saveGeneratedPlanTitle: String {
+        let hasGoals = !deduplicatedGeneratedPlanGoals.isEmpty
+        if didRefineGeneratedPlan {
+            return hasGoals ? "Save Changes + Goals" : "Save Changes"
+        }
+        return hasGoals ? "Save Plan + Goals" : existingPlanAcceptTitle
+    }
+
+    private var shouldShowInputBar: Bool {
+        !isPreparingInitialRefinementPrompt && (!isGenerating || (planAccepted && showRefineMode))
+    }
+
+    private var hasUnsubmittedInitialRefinementPrompt: Bool {
+        guard !didSubmitInitialRefinementPrompt,
+              let prompt = initialRefinementPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return false
+        }
+        return !prompt.isEmpty
+    }
+
+    private func generatedGoalDetailText(_ goal: WorkoutGoal) -> String {
+        let trackingSummary = goal.trackingSummary
+        let supportingSummary = goal.supportingSummary
+        return [
+            trackingSummary,
+            goal.scopeSummary,
+            supportingSummary == trackingSummary ? nil : supportingSummary,
+            goal.horizonSummary
+        ]
+        .compactMap { $0 }
+        .filter { !$0.isEmpty }
+        .joined(separator: " • ")
     }
 
     // MARK: - Current Options View
@@ -364,6 +623,13 @@ struct WorkoutPlanChatFlow: View {
                     if shouldShowRefinementSuggestions {
                         refinementSuggestionView
                     }
+                    if hasCancellableRefinement {
+                        Button("Stop", systemImage: "stop.fill") {
+                            cancelRefinementRequest()
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.accentColor)
+                    }
 
                     SimpleChatInputBar(
                         text: $inputText,
@@ -384,6 +650,7 @@ struct WorkoutPlanChatFlow: View {
                     onSend: { handleCustomInput() },
                     onContinue: { handleContinue() },
                     onSkip: { handleSkip() },
+                    allowsSkipping: false,
                     isFocused: $isInputFocused
                 )
             } else {
@@ -457,24 +724,66 @@ struct WorkoutPlanChatFlow: View {
         guard let plan = currentPlanToEdit else { return }
 
         generatedPlan = plan
+        isPreparingInitialRefinementPrompt = hasUnsubmittedInitialRefinementPrompt
         planAccepted = true
         showRefineMode = true
 
-        messages.append(
-            WorkoutPlanFlowMessage(
-                type: .currentPlan(
-                    plan,
-                    "Here's your current plan. Tell me what you'd like to change and I'll revise it without making you start over."
-                )
+        let goals = deduplicatedGeneratedPlanGoals
+        Task { @MainActor in
+            await presentGeneratedResultPackage(
+                plan: plan,
+                introText: isOnboarding ? generatedPlanIntroText(for: plan) : nil,
+                planMessage: existingPlanIntroMessage,
+                goals: goals,
+                includeSaveAction: isOnboarding,
+                presentation: .current
             )
-        )
+            submitInitialRefinementPromptIfNeeded()
+        }
+    }
+
+    private func generatedPlanIntroText(for plan: WorkoutPlan) -> String {
+        let compactIntro = generatedIntro(from: existingPlanIntroMessage)
+        if !compactIntro.isEmpty {
+            return compactIntro
+        }
+
+        if let summary = plan.planIntent?.summary.trimmingCharacters(in: .whitespacesAndNewlines),
+           !summary.isEmpty {
+            return summary
+        }
+
+        return generatedPlanFallbackIntro(for: plan)
+    }
+
+    private func generatedIntro(from text: String) -> String {
+        text
+            .split(whereSeparator: \.isNewline)
+            .joined(separator: " ")
+            .split(separator: " ")
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func submitInitialRefinementPromptIfNeeded() {
+        guard !didSubmitInitialRefinementPrompt,
+              let prompt = initialRefinementPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !prompt.isEmpty,
+              generatedPlan != nil else {
+            isPreparingInitialRefinementPrompt = false
+            return
+        }
+
+        guard submitRefineRequest(prompt) else {
+            isPreparingInitialRefinementPrompt = false
+            return
+        }
+        didSubmitInitialRefinementPrompt = true
+        isPreparingInitialRefinementPrompt = false
     }
 
     private func handleContinue() {
-        guard !currentAnswers.isEmpty || isLastQuestion else {
-            handleSkip()
-            return
-        }
+        guard !currentAnswers.isEmpty else { return }
 
         HapticManager.lightTap()
 
@@ -567,6 +876,7 @@ struct WorkoutPlanChatFlow: View {
 
     private func generatePlan() {
         isGenerating = true
+        generatedResultPresentationID = nil
 
         Task {
             let request = buildRequest()
@@ -574,40 +884,37 @@ struct WorkoutPlanChatFlow: View {
 
             do {
                 let plan = try await service.generateWorkoutPlan(request: request)
-                generatedPlan = plan
-
-                withAnimation(.spring(response: 0.3)) {
-                    // Show Trai's intro message separately
-                    messages.append(WorkoutPlanFlowMessage(
-                        type: .traiMessage(generatePlanIntroMessage(for: plan))
-                    ))
-                    // Then show the plan card
-                    messages.append(WorkoutPlanFlowMessage(
-                        type: .planProposal(plan, "")
-                    ))
-                    isGenerating = false
+                await MainActor.run {
+                    generatedPlan = plan
                 }
+                await presentGeneratedResultPackage(
+                    plan: plan,
+                    introText: generatePlanIntroMessage(for: plan),
+                    planMessage: "",
+                    goals: [],
+                    includeSaveAction: false,
+                    presentation: .proposal
+                )
                 HapticManager.success()
             } catch {
-                // Use fallback plan
-                let fallbackPlan = WorkoutPlan.createDefault(from: request)
-                generatedPlan = fallbackPlan
-
                 withAnimation(.spring(response: 0.3)) {
                     messages.append(WorkoutPlanFlowMessage(
-                        type: .traiMessage("Here's a solid plan based on what you told me!")
-                    ))
-                    messages.append(WorkoutPlanFlowMessage(
-                        type: .planProposal(fallbackPlan, "")
+                        type: .error("Trai couldn't build your plan. Please try again.")
                     ))
                     isGenerating = false
                 }
+                HapticManager.error()
             }
         }
     }
 
     /// Generate a personalized intro message for the plan
     private func generatePlanIntroMessage(for plan: WorkoutPlan) -> String {
+        if let summary = plan.planIntent?.summary.trimmingCharacters(in: .whitespacesAndNewlines),
+           !summary.isEmpty {
+            return summary
+        }
+
         let splitName = plan.splitType.displayName
         let days = plan.daysPerWeek
 
@@ -616,7 +923,16 @@ struct WorkoutPlanChatFlow: View {
             return plan.rationale
         }
 
-        // Generate a contextual message
+        let planModalities = planIntroModalities(for: plan)
+        if planModalities.count > 1 {
+            return "I built a \(days)-day plan that balances \(formattedPlanIntroList(planModalities)) across the week."
+        }
+        if let modality = planModalities.first, modality.caseInsensitiveCompare("Strength") != .orderedSame {
+            return "I built a \(days)-day plan centered on \(modality.lowercased()) with enough structure to keep it sustainable."
+        }
+
+        // Generate a contextual message when the plan does not expose enough
+        // template detail yet, such as older fallback plans.
         let workoutTypes = collectedAnswers.answers(for: "workoutType")
         if workoutTypes.contains("Mixed") || workoutTypes.count > 1 {
             return "I've put together a \(splitName) split that balances everything you want - \(days) days per week with a good mix of training styles."
@@ -628,7 +944,76 @@ struct WorkoutPlanChatFlow: View {
             let customFocus = workoutTypes.joined(separator: ", ")
             return "I've mapped out a \(days)-day plan centered on \(customFocus.lowercased()) with enough structure to keep it sustainable week to week."
         } else {
-            return "I've created a \(splitName) program for you - \(days) days per week tailored to your goals and schedule."
+            return generatedPlanFallbackIntro(for: plan, splitName: splitName, days: days)
+        }
+    }
+
+    private func generatedPlanFallbackIntro(
+        for plan: WorkoutPlan,
+        splitName: String? = nil,
+        days: Int? = nil
+    ) -> String {
+        let dayCount = days ?? plan.daysPerWeek
+        if let focus = plan.planIntent?.primaryFocus.trimmingCharacters(in: .whitespacesAndNewlines),
+           !focus.isEmpty {
+            return "I built a \(dayCount)-day plan around \(focus.lowercased()). You can save it or tell me what to change."
+        }
+
+        let structure = (splitName ?? plan.splitType.displayName).trimmingCharacters(in: .whitespacesAndNewlines)
+        if plan.splitType == .custom || structure.localizedCaseInsensitiveContains("plan") {
+            return "I built a \(dayCount)-day plan around your setup. You can save it or tell me what to change."
+        }
+
+        return "I built a \(dayCount)-day \(structure.lowercased()) plan. You can save it or tell me what to change."
+    }
+
+    private func planIntroModalities(for plan: WorkoutPlan) -> [String] {
+        var result: [String] = []
+        var seen: Set<String> = []
+
+        func append(_ raw: String?) {
+            guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else { return }
+            let key = value.goalNormalizedKey
+            guard !key.isEmpty, seen.insert(key).inserted else { return }
+            result.append(value)
+        }
+
+        for template in plan.templates {
+            switch template.sessionType {
+            case .strength:
+                append("Strength")
+            case .mixed, .custom:
+                break
+            default:
+                append(template.sessionType.displayName)
+            }
+
+            template.displayBlocks.forEach { block in
+                append(block.displayActivityName)
+                block.activityTags.forEach(append)
+            }
+
+            template.focusAreas.forEach(append)
+        }
+
+        return result
+            .filter { !$0.localizedCaseInsensitiveContains("day") }
+            .prefix(4)
+            .map { $0 }
+    }
+
+    private func formattedPlanIntroList(_ values: [String]) -> String {
+        let clipped = Array(values.prefix(3))
+        switch clipped.count {
+        case 0:
+            return "your training"
+        case 1:
+            return clipped[0].lowercased()
+        case 2:
+            return "\(clipped[0].lowercased()) and \(clipped[1].lowercased())"
+        default:
+            return "\(clipped[0].lowercased()), \(clipped[1].lowercased()), and \(clipped[2].lowercased())"
         }
     }
 
@@ -672,17 +1057,31 @@ struct WorkoutPlanChatFlow: View {
         submitRefineRequest(suggestion.text)
     }
 
-    private func submitRefineRequest(_ text: String) {
+    @discardableResult
+    private func submitRefineRequest(_ text: String) -> Bool {
         let messageText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !messageText.isEmpty, let currentPlan = generatedPlan else { return }
+        guard !messageText.isEmpty, let currentPlan = generatedPlan, !isGenerating, !isRefiningPlan else { return false }
+
+        let requestID = UUID()
+        refinementRequestID = requestID
+        generatedResultPresentationID = nil
+        let previousReviewMessages = messages.filter(isGeneratedPlanReviewMessage)
+        refinementReviewMessagesBeforeRequest = previousReviewMessages
+        let conversationHistory = refinementConversationHistory
+        let progressMessage = WorkoutPlanFlowMessage(type: .planUpdateInProgress(currentPlan))
+        let userMessage = WorkoutPlanFlowMessage(type: .userAnswer([messageText]))
+        pendingRefinementMessageIDs = [progressMessage.id, userMessage.id]
 
         // Add user message
         withAnimation(.spring(response: 0.3)) {
-            messages.append(WorkoutPlanFlowMessage(type: .userAnswer([messageText])))
+            messages.removeAll(where: isGeneratedPlanReviewMessage)
+            messages.append(progressMessage)
+            messages.append(userMessage)
+            isRefiningPlan = true
+            isGenerating = true
         }
-        isGenerating = true
 
-        Task {
+        refinementTask = Task {
             let request = buildRequest()
             let service = AIService()
 
@@ -691,48 +1090,237 @@ struct WorkoutPlanChatFlow: View {
                     currentPlan: currentPlan,
                     request: request,
                     userMessage: messageText,
-                    conversationHistory: refinementConversationHistory
+                    conversationHistory: conversationHistory
                 )
+                try Task.checkCancellation()
+                let updatedPlan = response.proposedPlan ?? response.updatedPlan
+                let refreshedGoals = if isOnboarding, let updatedPlan {
+                    await finalGeneratedGoals(for: updatedPlan)
+                } else {
+                    activeGeneratedPlanGoals
+                }
+                try Task.checkCancellation()
 
-                withAnimation(.spring(response: 0.3)) {
-                    if let newPlan = response.proposedPlan ?? response.updatedPlan {
-                        if newPlan != currentPlan {
-                            messages.append(WorkoutPlanFlowMessage(
-                                type: .planUpdated(newPlan)
-                            ))
+                await MainActor.run {
+                    guard refinementRequestID == requestID else { return }
+                    refinementTask = nil
+                    if let newPlan = updatedPlan {
+                        messages.removeAll(where: isGeneratedPlanReviewMessage)
+                        if !isOnboarding, newPlan != currentPlan {
+                            messages.append(WorkoutPlanFlowMessage(type: .planUpdated(newPlan)))
                         }
                         generatedPlan = newPlan
-                        messages.append(WorkoutPlanFlowMessage(
-                            type: .planProposal(newPlan, response.message)
-                        ))
+                        activeGeneratedPlanGoals = refreshedGoals
+                        completedRefinementMessages.append(messageText)
+                        pendingRefinementMessageIDs = []
+                        didRefineGeneratedPlan = true
                     } else {
+                        refinementRequestID = nil
+                        messages.removeAll(where: isGeneratedPlanReviewOrPendingRefinementMessage)
+                        pendingRefinementMessageIDs = []
                         messages.append(WorkoutPlanFlowMessage(
                             type: .traiMessage(response.message)
                         ))
+                        messages.append(contentsOf: previousReviewMessages)
+                        isRefiningPlan = false
+                        isGenerating = false
                     }
-                    isGenerating = false
+                }
+
+                if let newPlan = updatedPlan {
+                    try Task.checkCancellation()
+                    let shouldPresent = await MainActor.run {
+                        refinementRequestID == requestID
+                    }
+                    guard shouldPresent else { return }
+                    await presentGeneratedResultPackage(
+                        plan: newPlan,
+                        introText: isOnboarding ? (response.message.isEmpty ? "I updated the plan and goals. Review the changes, then save when it looks right." : response.message) : nil,
+                        planMessage: response.message,
+                        goals: isOnboarding ? refreshedGoals : [],
+                        includeSaveAction: isOnboarding,
+                        presentation: .proposal
+                    )
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    if refinementRequestID == requestID {
+                        restoreReviewMessagesAfterRefinementCancel()
+                    }
                 }
             } catch {
-                withAnimation(.spring(response: 0.3)) {
-                    messages.append(WorkoutPlanFlowMessage(
-                        type: .error("Sorry, I couldn't process that. Try again?")
-                    ))
-                    isGenerating = false
+                await MainActor.run {
+                    guard refinementRequestID == requestID else { return }
+                    refinementTask = nil
+                    refinementRequestID = nil
+                    withAnimation(.spring(response: 0.3)) {
+                        messages.removeAll(where: isGeneratedPlanReviewOrPendingRefinementMessage)
+                        pendingRefinementMessageIDs = []
+                        messages.append(WorkoutPlanFlowMessage(
+                            type: .error("Trai couldn't update your plan. Please try again.")
+                        ))
+                        messages.append(contentsOf: previousReviewMessages)
+                        isRefiningPlan = false
+                        isGenerating = false
+                    }
+                    HapticManager.error()
                 }
             }
         }
+        return true
+    }
+
+    private func cancelRefinementRequest() {
+        refinementTask?.cancel()
+        restoreReviewMessagesAfterRefinementCancel()
+        HapticManager.selectionChanged()
+    }
+
+    private func restoreReviewMessagesAfterRefinementCancel() {
+        refinementTask = nil
+        refinementRequestID = nil
+        generatedResultPresentationID = nil
+        withAnimation(.spring(response: 0.3)) {
+            messages.removeAll(where: isGeneratedPlanReviewOrPendingRefinementMessage)
+            pendingRefinementMessageIDs = []
+            messages.append(contentsOf: refinementReviewMessagesBeforeRequest)
+            isRefiningPlan = false
+            isGenerating = false
+        }
+        refinementReviewMessagesBeforeRequest = []
+    }
+
+    @MainActor
+    private func presentGeneratedResultPackage(
+        plan: WorkoutPlan,
+        introText: String?,
+        planMessage: String,
+        goals: [WorkoutGoal],
+        includeSaveAction: Bool,
+        presentation: GeneratedPlanPresentation
+    ) async {
+        let presentationID = UUID()
+        generatedResultPresentationID = presentationID
+        withAnimation(generatedResultAnimation) {
+            refinementTask = nil
+            refinementRequestID = nil
+            isRefiningPlan = false
+            isGenerating = false
+        }
+
+        if let introText, !introText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            guard await appendGeneratedResultMessage(
+                .traiMessage(introText),
+                delayMilliseconds: 90,
+                presentationID: presentationID
+            ) else { return }
+        }
+
+        let planMessageType: WorkoutPlanFlowMessage.MessageType = switch presentation {
+        case .proposal:
+            .planProposal(plan, planMessage)
+        case .current:
+            .currentPlan(plan, planMessage)
+        }
+        guard await appendGeneratedResultMessage(
+            planMessageType,
+            delayMilliseconds: 130,
+            presentationID: presentationID
+        ) else { return }
+
+        let goalsToShow = deduplicatedGoals(goals.map { goal in
+            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+            return goal
+        })
+        if !goalsToShow.isEmpty {
+            guard generatedResultPresentationID == presentationID else { return }
+            activeGeneratedPlanGoals = goalsToShow
+            guard await appendGeneratedResultMessage(
+                .generatedGoals(goalsToShow),
+                delayMilliseconds: 120,
+                presentationID: presentationID
+            ) else { return }
+        }
+
+        if includeSaveAction {
+            guard await appendGeneratedResultMessage(
+                .saveGeneratedPlan,
+                delayMilliseconds: 90,
+                presentationID: presentationID
+            ) else { return }
+        }
+
+        if generatedResultPresentationID == presentationID {
+            generatedResultPresentationID = nil
+        }
+    }
+
+    @MainActor
+    @discardableResult
+    private func appendGeneratedResultMessage(
+        _ type: WorkoutPlanFlowMessage.MessageType,
+        delayMilliseconds: UInt64,
+        presentationID: UUID
+    ) async -> Bool {
+        if delayMilliseconds > 0 {
+            do {
+                try await Task.sleep(nanoseconds: delayMilliseconds * 1_000_000)
+            } catch {
+                return false
+            }
+        }
+
+        guard generatedResultPresentationID == presentationID else { return false }
+        withAnimation(generatedResultAnimation) {
+            messages.append(WorkoutPlanFlowMessage(type: type))
+        }
+        return true
+    }
+
+    private func isGeneratedPlanReviewMessage(_ message: WorkoutPlanFlowMessage) -> Bool {
+        switch message.type {
+        case .planProposal, .currentPlan, .generatedGoals, .saveGeneratedPlan, .planUpdateInProgress:
+            true
+        case .question, .userAnswer, .thinking, .planAccepted, .traiMessage, .planUpdated, .error:
+            false
+        }
+    }
+
+    private func isGeneratedPlanReviewOrPendingRefinementMessage(_ message: WorkoutPlanFlowMessage) -> Bool {
+        isGeneratedPlanReviewMessage(message) || pendingRefinementMessageIDs.contains(message.id)
     }
 
     private func savePlan() {
+        guard !isPlanSaveUnavailable else { return }
         guard let plan = generatedPlan else { return }
 
         if isOnboarding {
-            HapticManager.success()
-            onComplete?(plan)
+            saveOnboardingPlan(plan)
         } else {
             guard let profile = userProfile else { return }
+            if let currentPlanToEdit,
+               profile.workoutPlan != currentPlanToEdit {
+                saveError = WorkoutPlanChatFlowSaveError(
+                    message: "Your workout plan changed while this edit was open. Reopen the latest plan before saving changes."
+                )
+                HapticManager.error()
+                return
+            }
+            if currentPlanToEdit == nil, profile.workoutPlan != nil {
+                saveError = WorkoutPlanChatFlowSaveError(
+                    message: "Your workout plan changed while this setup was open. Reopen the latest plan before saving changes."
+                )
+                HapticManager.error()
+                return
+            }
 
-            if currentPlanToEdit == plan {
+            let durablePlan = plan.normalizedForDurableBlocks()
+
+            if currentPlanToEdit == durablePlan {
+                refreshExistingGeneratedPlanAdherenceGoals(for: durablePlan)
+                insertGeneratedWorkoutGoals(activeGeneratedPlanGoals, for: durablePlan)
+                try? modelContext.save()
+                WidgetDataProvider.shared.scheduleRefresh()
                 HapticManager.success()
                 dismiss()
                 return
@@ -744,14 +1332,18 @@ struct WorkoutPlanChatFlow: View {
                 profile: profile,
                 reason: .chatAdjustment,
                 modelContext: modelContext,
-                replacingWith: plan
+                replacingWith: durablePlan
             )
 
-            profile.workoutPlan = plan
+            profile.workoutPlan = durablePlan
+            profile.applyStructuredWorkoutPlanPreferences(from: durablePlan)
+            refreshExistingGeneratedPlanAdherenceGoals(for: durablePlan)
+
+            insertGeneratedWorkoutGoals(activeGeneratedPlanGoals, for: durablePlan)
 
             if !hadExistingPlan {
                 WorkoutPlanHistoryService.archivePlan(
-                    plan,
+                    durablePlan,
                     profile: profile,
                     reason: .chatCreate,
                     modelContext: modelContext
@@ -774,9 +1366,132 @@ struct WorkoutPlanChatFlow: View {
                 profile.workoutTimePerSession = duration
             }
 
-            try? modelContext.save()
+            do {
+                try modelContext.save()
+            } catch {
+                modelContext.rollback()
+                saveError = WorkoutPlanChatFlowSaveError(message: error.localizedDescription)
+                HapticManager.error()
+                return
+            }
             HapticManager.success()
+            WidgetDataProvider.shared.scheduleRefresh()
             dismiss()
+        }
+    }
+
+    private func refreshExistingGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
+        WorkoutGoal.refreshGeneratedPlanAdherenceGoals(
+            workoutGoals.filter { $0.status == .active },
+            for: plan
+        )
+    }
+
+    private func saveOnboardingPlan(_ plan: WorkoutPlan) {
+        guard !isGenerating else { return }
+        isGenerating = true
+
+        Task {
+            let goals = await finalGeneratedGoals(for: plan)
+            await MainActor.run {
+                activeGeneratedPlanGoals = goals
+                isGenerating = false
+                HapticManager.success()
+                if let onCompleteWithGoals {
+                    onCompleteWithGoals(plan, goals)
+                } else {
+                    onComplete?(plan)
+                }
+            }
+        }
+    }
+
+    private func finalGeneratedGoals(for plan: WorkoutPlan) async -> [WorkoutGoal] {
+        let currentGoals = deduplicatedGeneratedPlanGoals
+        guard didRefineGeneratedPlan || currentGoals.isEmpty else {
+            return normalizedGeneratedPlanGoals(currentGoals, for: plan)
+        }
+
+        do {
+            let service = AIService()
+            let suggestions = try await service.suggestWorkoutGoals(
+                userGoal: userProfile?.goal.displayName,
+                plannedSessions: plannedSessionSummaries(for: plan),
+                recentSessions: [],
+                recentTrainingSummary: [],
+                exerciseSummaries: [],
+                memoryContext: workoutPlanContextForAI(),
+                existingGoals: activeWorkoutGoalContextForAI(),
+                userIntent: latestUserRefinementIntent,
+                prefersMetricWeight: userProfile?.usesMetricExerciseWeight ?? true
+            )
+            let goals = deduplicatedGoals(suggestions.map { suggestion in
+                let goal = suggestion.asWorkoutGoal()
+                goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+                goal.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan)
+                return goal
+            })
+            return goals.isEmpty ? normalizedGeneratedPlanGoals(currentGoals, for: plan) : goals
+        } catch {
+            return normalizedGeneratedPlanGoals(currentGoals, for: plan)
+        }
+    }
+
+    private func normalizedGeneratedPlanGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) -> [WorkoutGoal] {
+        goals.forEach {
+            $0.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+            $0.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan)
+        }
+        return goals
+    }
+
+    private func plannedSessionSummaries(for plan: WorkoutPlan) -> [String] {
+        plan.templates.prefix(6).map { template in
+            let blockDetail = template.blocks
+                .sorted { $0.order < $1.order }
+                .prefix(4)
+                .map { block in
+                    "\(block.title) [blockID=\(block.id.uuidString), kind=\(block.kind.rawValue), role=\(block.role.rawValue)]"
+                }
+                .joined(separator: ", ")
+            let detail = [
+                template.sessionType.displayName,
+                template.focusAreasDisplay,
+                template.primaryBlockSummary,
+                blockDetail,
+                template.structuredExercises.prefix(3).map(\.exerciseName).joined(separator: ", ")
+            ]
+            .filter { !$0.isEmpty }
+            .joined(separator: " • ")
+            return "\(template.name) [templateID=\(template.id.uuidString)] (\(detail))"
+        }
+    }
+
+    private var latestUserRefinementIntent: String? {
+        let userMessages = completedRefinementMessages
+            .suffix(4)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+        guard !userMessages.isEmpty else { return nil }
+        return userMessages.joined(separator: " | ")
+    }
+
+    private func deduplicatedGoals(_ goals: [WorkoutGoal]) -> [WorkoutGoal] {
+        var seen: Set<String> = []
+        return goals.filter { goal in
+            let key = goal.planSetupDeduplicationKey
+            guard !key.isEmpty else { return false }
+            return seen.insert(key).inserted
+        }
+    }
+
+    private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) {
+        for goal in WorkoutGoal.generatedGoalsToInsert(
+            goals,
+            existingGoals: workoutGoals,
+            for: plan
+        ) {
+            modelContext.insert(goal)
         }
     }
 
@@ -811,7 +1526,8 @@ struct WorkoutPlanChatFlow: View {
         let customWorkoutTypes = workoutTypeAnswers.filter { !["Strength", "Cardio", "HIIT", "Flexibility", "Mixed"].contains($0) }
         let customWorkoutType = customWorkoutTypes.isEmpty ? nil : customWorkoutTypes.joined(separator: ", ")
         let customExperience = backgroundAnswers.first { !["Beginner", "Returning", "Intermediate", "Advanced"].contains($0) }
-        let customEquipment = equipmentAnswers.first { !["Full Gym", "Home - Dumbbells", "Home - Full Setup", "Bodyweight Only"].contains($0) }
+        let knownEquipmentAnswers = ["Full Gym", "Dumbbells/Bands", "Barbell Setup", "Home Gym", "Home - Dumbbells", "Home - Full Setup", "Bodyweight Only"]
+        let customEquipment = equipmentAnswers.first { !knownEquipmentAnswers.contains($0) }
         let customModalities = (workoutTypeAnswers + constraintAnswers).filter {
             !["Strength", "Cardio", "HIIT", "Flexibility", "Mixed", "Climbing", "Yoga", "Pilates", "Mobility", "Running", "Cycling", "Swimming", "Rowing", "Walking", "Jump Rope", "Need cardio included", "Let Trai decide"].contains($0)
         }
@@ -820,13 +1536,14 @@ struct WorkoutPlanChatFlow: View {
             backgroundAnswers: backgroundAnswers,
             constraintAnswers: constraintAnswers
         )
-        let conversationContext = buildConversationContext(
+        let conversationContext = (buildConversationContext(
             workoutTypeAnswers: workoutTypeAnswers,
             scheduleAnswers: scheduleAnswers,
             equipmentAnswers: equipmentAnswers,
             backgroundAnswers: backgroundAnswers,
             constraintAnswers: constraintAnswers
-        )
+        ) ?? []) + workoutPlanContextForAI()
+        let specificGoals = activeWorkoutGoalContextForAI() + generatedWorkoutGoalContextForAI()
 
         return WorkoutPlanGenerationRequest(
             name: profile?.name ?? "User",
@@ -846,30 +1563,41 @@ struct WorkoutPlanChatFlow: View {
             customExperience: customExperience,
             customEquipment: customEquipment,
             customCardioType: customModalities.isEmpty ? nil : customModalities.joined(separator: ", "),
-            specificGoals: nil,
+            specificGoals: specificGoals.isEmpty ? nil : specificGoals,
             weakPoints: nil,
             injuries: extractLimitations(from: constraintAnswers),
             preferences: preferences,
-            conversationContext: conversationContext
+            conversationContext: conversationContext.isEmpty ? nil : conversationContext
         )
     }
 
     private var refinementConversationHistory: [WorkoutPlanChatMessage] {
-        messages.compactMap { message in
+        let completedMessages: Set<String> = Set(
+            completedRefinementMessages.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        )
+        var history: [WorkoutPlanChatMessage] = []
+
+        for message in messages {
             switch message.type {
             case .userAnswer(let answers):
-                return WorkoutPlanChatMessage(role: .user, content: answers.joined(separator: ", "))
+                let content = answers
+                    .joined(separator: ", ")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard completedMessages.contains(content) else { continue }
+                history.append(WorkoutPlanChatMessage(role: .user, content: content))
             case .traiMessage(let text):
-                return WorkoutPlanChatMessage(role: .assistant, content: text)
+                history.append(WorkoutPlanChatMessage(role: .assistant, content: text))
             case .planProposal(_, let message), .currentPlan(_, let message):
-                guard !message.isEmpty else { return nil }
-                return WorkoutPlanChatMessage(role: .assistant, content: message)
-            case .error(let text):
-                return WorkoutPlanChatMessage(role: .assistant, content: text)
-            case .question(_), .thinking(_), .planAccepted, .planUpdated(_):
-                return nil
+                guard !message.isEmpty else { continue }
+                history.append(WorkoutPlanChatMessage(role: .assistant, content: message))
+            case .error:
+                continue
+            case .question(_), .thinking(_), .generatedGoals(_), .saveGeneratedPlan, .planUpdateInProgress(_), .planAccepted, .planUpdated(_):
+                continue
             }
         }
+
+        return history
     }
 
     private func buildEditingRequest() -> WorkoutPlanGenerationRequest {
@@ -880,6 +1608,8 @@ struct WorkoutPlanChatFlow: View {
             : .mixed
         let inferredCardioTypes = currentPlan.map { inferCardioTypes(from: $0) } ?? []
         let preferredSplit = currentPlan.flatMap { inferPreferredSplit(from: $0) }
+        let activeGoals = activeWorkoutGoalContextForAI() + generatedWorkoutGoalContextForAI()
+        let context = workoutPlanContextForAI()
 
         if let profile = userProfile {
             return profile.buildWorkoutPlanRequest(
@@ -887,7 +1617,9 @@ struct WorkoutPlanChatFlow: View {
                 selectedWorkoutTypes: inferredWorkoutTypes.isEmpty ? nil : inferredWorkoutTypes,
                 preferredSplit: preferredSplit,
                 cardioTypes: inferredCardioTypes.isEmpty ? nil : inferredCardioTypes,
-                timePerWorkout: inferSessionDuration(from: currentPlan)
+                timePerWorkout: inferSessionDuration(from: currentPlan),
+                specificGoals: activeGoals.isEmpty ? nil : activeGoals,
+                conversationContext: context.isEmpty ? nil : context
             )
         }
 
@@ -909,12 +1641,78 @@ struct WorkoutPlanChatFlow: View {
             customExperience: nil,
             customEquipment: nil,
             customCardioType: nil,
-            specificGoals: nil,
+            specificGoals: activeGoals.isEmpty ? nil : activeGoals,
             weakPoints: nil,
             injuries: nil,
             preferences: nil,
-            conversationContext: nil
+            conversationContext: context.isEmpty ? nil : context
         )
+    }
+
+    private func workoutPlanContextForAI() -> [String] {
+        var context = OnboardingWorkoutPlanUserContext.nutritionContext(from: userProfile)
+        context.append(contentsOf: workoutPlanMemoryContext())
+        context.append(contentsOf: activeWorkoutGoalContextForAI().map { "Existing workout goal: \($0)" })
+        context.append(contentsOf: generatedWorkoutGoalContextForAI().map { "Generated onboarding workout goal: \($0)" })
+        return context
+    }
+
+    private func workoutPlanMemoryContext() -> [String] {
+        let descriptor = FetchDescriptor<CoachMemory>(
+            predicate: #Predicate<CoachMemory> { memory in
+                memory.isActive
+            },
+            sortBy: [
+                SortDescriptor(\CoachMemory.importance, order: .reverse),
+                SortDescriptor(\CoachMemory.createdAt, order: .reverse)
+            ]
+        )
+        let memories = (try? modelContext.fetch(descriptor)) ?? []
+        return memories
+            .filter {
+                $0.topic == .workout || $0.topic == .general || $0.category == .goal || $0.category == .context || $0.category == .restriction
+            }
+            .prefix(8)
+            .map(\.promptFormat)
+    }
+
+    private func activeWorkoutGoalContextForAI() -> [String] {
+        let descriptor = FetchDescriptor<WorkoutGoal>(
+            predicate: #Predicate<WorkoutGoal> { goal in
+                goal.statusRaw == "active"
+            },
+            sortBy: [SortDescriptor(\WorkoutGoal.updatedAt, order: .reverse)]
+        )
+        let goals = (try? modelContext.fetch(descriptor)) ?? []
+        return OnboardingWorkoutPlanUserContext.activeGoalContext(from: goals)
+    }
+
+    private func generatedWorkoutGoalContextForAI() -> [String] {
+        deduplicatedGeneratedPlanGoals
+            .prefix(6)
+            .map { goal in
+                let trackingSummary = goal.trackingSummary
+                let supportingSummary = goal.supportingSummary
+                return [
+                    goal.title,
+                    trackingSummary,
+                    goal.scopeSummary,
+                    supportingSummary == trackingSummary ? nil : supportingSummary,
+                    goal.horizonSummary
+                ]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .joined(separator: " • ")
+            }
+    }
+
+    private var deduplicatedGeneratedPlanGoals: [WorkoutGoal] {
+        var seen: Set<String> = []
+        return activeGeneratedPlanGoals.filter { goal in
+            let key = goal.planSetupDeduplicationKey
+            guard !key.isEmpty else { return false }
+            return seen.insert(key).inserted
+        }
     }
 
     private func inferWorkoutTypes(from plan: WorkoutPlan) -> [WorkoutPlanGenerationRequest.WorkoutType] {
@@ -967,30 +1765,32 @@ struct WorkoutPlanChatFlow: View {
         var inferredTypes: [WorkoutPlanGenerationRequest.CardioType] = []
 
         for template in plan.templates {
-            let loweredTokens = ([template.name] + template.focusAreas)
-                .joined(separator: " ")
-                .lowercased()
+            let blockIdentityValues = template.displayBlocks.flatMap { block -> [String] in
+                var values = [block.title]
+                if let activityTypeName = block.activityTypeName {
+                    values.append(activityTypeName)
+                }
+                values.append(contentsOf: block.activityTags)
+                return values
+            }
+            let visibleKeys = Set(
+                ([template.name] + template.focusAreas + template.targetMuscleGroups + blockIdentityValues)
+                .map(\.goalNormalizedKey)
+                .filter { !$0.isEmpty }
+            )
 
-            let inferredType: WorkoutPlanGenerationRequest.CardioType?
+            var inferredType: WorkoutPlanGenerationRequest.CardioType?
+            for cardioType in WorkoutPlanGenerationRequest.CardioType.allCases where cardioType != .anyCardio {
+                let aliasKeys = cardioType.visibleIdentityAliases.map(\.goalNormalizedKey)
+                if aliasKeys.contains(where: { visibleKeys.contains($0) }) {
+                    inferredType = cardioType
+                    break
+                }
+            }
 
-            if template.sessionType == .climbing || loweredTokens.contains("climb") || loweredTokens.contains("boulder") {
-                inferredType = .climbing
-            } else if loweredTokens.contains("run") {
-                inferredType = .running
-            } else if loweredTokens.contains("cycl") {
-                inferredType = .cycling
-            } else if loweredTokens.contains("swim") {
-                inferredType = .swimming
-            } else if loweredTokens.contains("row") {
-                inferredType = .rowing
-            } else if loweredTokens.contains("walk") || loweredTokens.contains("hike") {
-                inferredType = .walking
-            } else if loweredTokens.contains("jump rope") || loweredTokens.contains("jumprope") {
-                inferredType = .jumpRope
-            } else if template.sessionType == .cardio {
+            if inferredType == nil,
+               template.sessionType == .cardio || template.displayBlocks.contains(where: { $0.kind == .cardio }) {
                 inferredType = .anyCardio
-            } else {
-                inferredType = nil
             }
 
             if let inferredType, !inferredTypes.contains(inferredType) {
@@ -1010,7 +1810,6 @@ struct WorkoutPlanChatFlow: View {
             case "Cardio": return .cardio
             case "HIIT": return .hiit
             case "Yoga", "Pilates", "Mobility", "Flexibility": return .flexibility
-            case "Climbing": return .cardio
             case "Mixed": return .mixed
             default: return nil
             }
@@ -1032,8 +1831,8 @@ struct WorkoutPlanChatFlow: View {
         guard let answer = answers.first else { return nil }
         switch answer {
         case "Full Gym": return .fullGym
-        case "Home - Dumbbells": return .homeBasic
-        case "Home - Full Setup": return .homeAdvanced
+        case "Dumbbells/Bands", "Home - Dumbbells": return .homeBasic
+        case "Barbell Setup", "Home Gym", "Home - Full Setup": return .homeAdvanced
         case "Bodyweight Only": return .bodyweightOnly
         default: return nil
         }
@@ -1067,7 +1866,6 @@ struct WorkoutPlanChatFlow: View {
             case "Running": return .running
             case "Cycling": return .cycling
             case "Swimming": return .swimming
-            case "Climbing": return .climbing
             case "Walking": return .walking
             case "Rowing": return .rowing
             case "Jump Rope": return .jumpRope
@@ -1200,6 +1998,126 @@ struct WorkoutPlanChatFlow: View {
             proxy.scrollTo("bottomAnchor", anchor: .bottom)
         }
     }
+}
+
+private struct GeneratedWorkoutGoalDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let goal: WorkoutGoal
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    headerCard
+                    detailCard
+                }
+                .padding()
+            }
+            .navigationTitle("Goal")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark") {
+                        dismiss()
+                    }
+                    .labelStyle(.iconOnly)
+                    .tint(.accentColor)
+                }
+            }
+        }
+    }
+
+    private var headerCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: goal.goalKind.iconName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.accent)
+                    .frame(width: 34, height: 34)
+                    .background(Color.accentColor.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(goal.title)
+                        .font(.headline.weight(.bold))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let trackingSummary = goal.trackingSummary {
+                        Text(trackingSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16, style: .continuous))
+    }
+
+    private var detailCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !goal.trimmedSuccessCriteria.isEmpty {
+                goalDetailRow(
+                    title: "How Trai verifies it",
+                    value: goal.trimmedSuccessCriteria,
+                    icon: "checkmark.seal.fill"
+                )
+            }
+
+            if let supportingSummary = goal.supportingSummary, supportingSummary != goal.trimmedSuccessCriteria {
+                goalDetailRow(
+                    title: "Notes",
+                    value: supportingSummary,
+                    icon: "text.bubble.fill"
+                )
+            }
+
+            goalDetailRow(
+                title: "Scope",
+                value: goal.scopeSummary,
+                icon: "scope"
+            )
+
+            if let horizonSummary = goal.horizonSummary, !horizonSummary.isEmpty {
+                goalDetailRow(
+                    title: "Timeline",
+                    value: horizonSummary,
+                    icon: "calendar"
+                )
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16, style: .continuous))
+    }
+
+    private func goalDetailRow(title: String, value: String, icon: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.accent)
+                .frame(width: 20)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(value)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+}
+
+private struct WorkoutPlanChatFlowSaveError: Identifiable {
+    let id = UUID()
+    let message: String
 }
 
 // MARK: - Preview

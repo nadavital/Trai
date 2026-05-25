@@ -56,7 +56,8 @@ final class LiveActivityManager {
             completedSets: 0,
             totalSets: 0,
             heartRate: nil,
-            isPaused: false
+            isPaused: false,
+            supportsSetShortcut: false
         )
 
         let content = ActivityContent(state: initialState, staleDate: Date().addingTimeInterval(60))
@@ -78,6 +79,7 @@ final class LiveActivityManager {
         elapsedSeconds: Int,
         currentExercise: String?,
         currentEquipment: String? = nil,
+        currentDetail: String? = nil,
         completedSets: Int,
         totalSets: Int,
         heartRate: Int?,
@@ -88,7 +90,11 @@ final class LiveActivityManager {
         totalVolumeKg: Double? = nil,
         totalVolumeLbs: Double? = nil,
         nextExercise: String? = nil,
-        usesMetricWeight: Bool = true
+        usesMetricWeight: Bool = true,
+        progressCompleted: Int? = nil,
+        progressTotal: Int? = nil,
+        progressLabel: String? = nil,
+        supportsSetShortcut: Bool = true
     ) {
         guard let activity = currentActivity else { return }
 
@@ -96,6 +102,7 @@ final class LiveActivityManager {
             elapsedSeconds: elapsedSeconds,
             currentExercise: currentExercise,
             currentEquipment: currentEquipment,
+            currentDetail: currentDetail,
             completedSets: completedSets,
             totalSets: totalSets,
             heartRate: heartRate,
@@ -106,7 +113,11 @@ final class LiveActivityManager {
             totalVolumeKg: totalVolumeKg,
             totalVolumeLbs: totalVolumeLbs,
             nextExercise: nextExercise,
-            usesMetricWeight: usesMetricWeight
+            usesMetricWeight: usesMetricWeight,
+            progressCompleted: progressCompleted,
+            progressTotal: progressTotal,
+            progressLabel: progressLabel,
+            supportsSetShortcut: supportsSetShortcut
         )
 
         let content = ActivityContent(state: updatedState, staleDate: Date().addingTimeInterval(60))

@@ -76,7 +76,7 @@ struct TraiDataProvider: TimelineProvider {
             score += 0.2
         }
 
-        if data.recommendedWorkout != nil && !data.todayWorkoutCompleted {
+        if data.actionableRecommendedWorkoutName != nil {
             score += 0.1
         }
 
@@ -111,7 +111,13 @@ struct SmallWidgetView: View {
             // Larger icon-only action buttons
             HStack(spacing: 12) {
                 SmallWidgetActionButton(icon: "fork.knife", url: AppRoute.logFood.urlString, color: .green)
-                SmallWidgetActionButton(icon: "figure.run", url: AppRoute.workout(templateName: nil).urlString, color: .orange)
+                if let workoutURLString = entry.data.workoutActionURLString {
+                    SmallWidgetActionButton(icon: "figure.run", url: workoutURLString, color: .orange)
+                } else if entry.data.todayWorkoutCompleted {
+                    SmallWidgetStatusIcon(icon: "checkmark.circle.fill", color: .green)
+                } else {
+                    SmallWidgetStatusIcon(icon: "moon.zzz.fill", color: .secondary)
+                }
                 SmallWidgetActionButton(icon: "circle.hexagongrid.circle", url: AppRoute.chat.urlString, color: .calorieColor)
             }
         }
@@ -145,7 +151,7 @@ struct MediumWidgetView: View {
                         Text("Workout Complete")
                             .fontWeight(.medium)
                             .foregroundStyle(.green)
-                    } else if let workout = entry.data.recommendedWorkout {
+                    } else if let workout = entry.data.actionableRecommendedWorkoutName {
                         Image(systemName: "figure.run")
                             .foregroundStyle(.orange)
                         Text("Up Next: \(workout)")
@@ -174,7 +180,13 @@ struct MediumWidgetView: View {
             // Right: Action buttons column
             VStack(spacing: 6) {
                 MediumActionButton(icon: "fork.knife", url: AppRoute.logFood.urlString, color: .green)
-                MediumActionButton(icon: "figure.run", url: AppRoute.workout(templateName: nil).urlString, color: .orange)
+                if let workoutURLString = entry.data.workoutActionURLString {
+                    MediumActionButton(icon: "figure.run", url: workoutURLString, color: .orange)
+                } else if entry.data.todayWorkoutCompleted {
+                    MediumStatusIcon(icon: "checkmark.circle.fill", color: .green)
+                } else {
+                    MediumStatusIcon(icon: "moon.zzz.fill", color: .secondary)
+                }
                 MediumActionButton(icon: "circle.hexagongrid.circle", url: AppRoute.chat.urlString, color: .calorieColor)
             }
             .frame(width: 40)
@@ -188,10 +200,6 @@ struct MediumWidgetView: View {
 
 struct LargeWidgetView: View {
     let entry: TraiWidgetEntry
-
-    private var workoutURL: URL {
-        AppRoute.workout(templateName: entry.data.recommendedWorkout).url
-    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -221,55 +229,15 @@ struct LargeWidgetView: View {
             }
 
             // Workout section (no background, cleaner)
-            Link(destination: workoutURL) {
-                HStack {
-                    if entry.data.todayWorkoutCompleted {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.green)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Workout Complete")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                            Text("Great job today!")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else if let workout = entry.data.recommendedWorkout {
-                        Image(systemName: "figure.run")
-                            .font(.title2)
-                            .foregroundStyle(.orange)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Up Next: \(workout)")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                            Text("Tap to start")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Image(systemName: "moon.zzz.fill")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Rest Day")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.secondary)
-                            Text("Tap to start a workout")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+            if let workoutURLString = entry.data.workoutActionURLString,
+               let workoutURL = URL(string: workoutURLString) {
+                Link(destination: workoutURL) {
+                    largeWorkoutStatusRow(showsDisclosure: true)
                 }
+                .buttonStyle(.plain)
+            } else {
+                largeWorkoutStatusRow(showsDisclosure: false)
             }
-            .buttonStyle(.plain)
 
             // Action buttons (clean, no heavy backgrounds)
             HStack(spacing: 10) {
@@ -279,6 +247,58 @@ struct LargeWidgetView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func largeWorkoutStatusRow(showsDisclosure: Bool) -> some View {
+        HStack {
+            if entry.data.todayWorkoutCompleted {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Workout Complete")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Text("Great job today!")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else if let workout = entry.data.actionableRecommendedWorkoutName {
+                Image(systemName: "figure.run")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Up Next: \(workout)")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Text("Tap to start")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Image(systemName: "moon.zzz.fill")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Rest Day")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                    Text("No workout scheduled")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
     }
 }
 
@@ -566,6 +586,20 @@ struct SmallWidgetActionButton: View {
     }
 }
 
+struct SmallWidgetStatusIcon: View {
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        Image(systemName: icon)
+            .font(.body)
+            .foregroundStyle(color)
+            .frame(width: 40, height: 40)
+            .background(color.opacity(0.12))
+            .clipShape(.circle)
+    }
+}
+
 struct MediumWidgetActionButton: View {
     let icon: String
     let label: String
@@ -603,6 +637,20 @@ struct MediumActionButton: View {
                 .background(color.opacity(0.12))
                 .clipShape(.circle)
         }
+    }
+}
+
+struct MediumStatusIcon: View {
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        Image(systemName: icon)
+            .font(.callout)
+            .foregroundStyle(color)
+            .frame(width: 38, height: 38)
+            .background(color.opacity(0.12))
+            .clipShape(.circle)
     }
 }
 
@@ -697,6 +745,7 @@ private enum TraiWidgetsPreviewData {
         fatGoal: 65,
         readyMuscleCount: 5,
         recommendedWorkout: "Push Day",
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 3,
         todayWorkoutCompleted: false,
         lastUpdated: Date()
@@ -713,6 +762,7 @@ private enum TraiWidgetsPreviewData {
         fatGoal: 65,
         readyMuscleCount: 5,
         recommendedWorkout: "Push Day",
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 3,
         todayWorkoutCompleted: false,
         lastUpdated: Date()
@@ -729,6 +779,7 @@ private enum TraiWidgetsPreviewData {
         fatGoal: 65,
         readyMuscleCount: 7,
         recommendedWorkout: "Leg Day",
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 5,
         todayWorkoutCompleted: false,
         lastUpdated: Date()

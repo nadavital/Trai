@@ -37,6 +37,15 @@ struct WorkoutPlanFlowMessage: Identifiable {
         /// Existing saved plan shown as the starting point for editing
         case currentPlan(WorkoutPlan, String)
 
+        /// Goals Trai created alongside a generated onboarding plan
+        case generatedGoals([WorkoutGoal])
+
+        /// Saves the generated onboarding plan and goals together
+        case saveGeneratedPlan
+
+        /// Compact placeholder for the previous plan while Trai is refining it
+        case planUpdateInProgress(WorkoutPlan)
+
         /// Plan was accepted
         case planAccepted
 
@@ -102,8 +111,8 @@ enum WorkoutPlanQuestion: String, CaseIterable {
                 question: "What equipment do you have access to?",
                 suggestions: [
                     TraiSuggestion("Full Gym", subtitle: "Machines, cables, free weights"),
-                    TraiSuggestion("Home - Dumbbells", subtitle: "Basic dumbbells and bench"),
-                    TraiSuggestion("Home - Full Setup", subtitle: "Rack, barbell, weights"),
+                    TraiSuggestion("Dumbbells/Bands", subtitle: "Simple home equipment"),
+                    TraiSuggestion("Barbell Setup", subtitle: "Rack, barbell, bench"),
                     TraiSuggestion("Bodyweight Only", subtitle: "No equipment needed")
                 ],
                 selectionMode: .single,

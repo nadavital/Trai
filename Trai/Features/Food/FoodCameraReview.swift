@@ -81,13 +81,13 @@ struct FoodCameraReviewView: View {
                     .clipShape(.rect(cornerRadius: 16))
                 }
 
-                // Description input
+                // Notes input
                 VStack(alignment: .leading, spacing: 8) {
                     Text(descriptionLabel)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
-                    TextField("Add details about your food...", text: $description, axis: .vertical)
+                    TextField("Add notes, extra items, portions...", text: $description, axis: .vertical)
                         .lineLimit(2...4)
                         .padding()
                         .background(Color(.secondarySystemBackground))
@@ -205,7 +205,7 @@ struct FoodCameraReviewView: View {
         case .memorySuggestion:
             return "Notes (optional)"
         default:
-            return isTextOnly ? "Description" : "Description (optional)"
+            return isTextOnly ? "Notes" : "Notes (optional)"
         }
     }
 
@@ -522,7 +522,7 @@ struct NutritionSourcesSheet: View {
     private var primaryCopy: String {
         switch context {
         case .foodAnalysis:
-            "Trai's food analysis is an AI estimate based on the photo, description, and saved context. Portion size, hidden ingredients, cooking method, and labels can change the result, so verify packaged or restaurant food against official nutrition information. These estimates are for general nutrition tracking only and are not medical advice."
+            "Trai's food analysis is an AI estimate based on the photo, description, and saved context. Portion size, hidden ingredients, cooking method, and labels can change the result, so verify packaged or restaurant food against official nutrition information. These estimates are for general nutrition insight and are not medical advice."
         case .nutritionPlan:
             "Trai's plan targets are generated from your profile, goal, and activity level using standard nutrition-estimation methods. They are planning estimates, not medical advice, and should not replace guidance from a qualified medical or nutrition professional."
         }

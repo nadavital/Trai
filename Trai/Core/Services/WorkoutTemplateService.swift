@@ -30,43 +30,78 @@ struct WorkoutTemplateService {
     func createCustomWorkout(
         name: String = "Custom Workout",
         type: LiveWorkout.WorkoutType = .strength,
-        muscles: [LiveWorkout.MuscleGroup] = []
+        muscles: [LiveWorkout.MuscleGroup] = [],
+        focusAreas: [String] = []
     ) -> LiveWorkout {
         LiveWorkout(
             name: name,
             workoutType: type,
-            targetMuscleGroups: muscles
+            targetMuscleGroups: muscles,
+            focusAreas: focusAreas
         )
     }
 
     /// Create a startable workout from a plan template (without pre-filled entries).
     func createStartWorkout(from template: WorkoutPlan.WorkoutTemplate) -> LiveWorkout {
         let muscleGroups = template.sessionType.supportsMuscleTargets
-            ? LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
+            ? LiveWorkout.MuscleGroup.fromTargetStrings(template.resolvedTargetMuscleGroups)
             : []
-        return LiveWorkout(
+        let workout = LiveWorkout(
             name: template.name,
             workoutType: template.sessionType,
             targetMuscleGroups: muscleGroups,
-            focusAreas: template.focusAreas
+            focusAreas: focusAreasPreservingBlockActivities(from: template)
         )
+        workout.sourcePlanTemplateID = template.id
+        return workout
     }
 
     /// Resolve app-intent/deep-link workout names into concrete workout instances.
-    func createWorkoutForIntent(name: String, modelContext: ModelContext) -> LiveWorkout {
-        if name == "custom" {
+    func createWorkoutForIntent(
+        templateID: UUID? = nil,
+        name: String?,
+        modelContext: ModelContext
+    ) -> LiveWorkout? {
+        let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if templateID == nil,
+           trimmedName == nil || trimmedName?.localizedCaseInsensitiveCompare("custom") == .orderedSame {
             return createCustomWorkout()
         }
 
         let profileDescriptor = FetchDescriptor<UserProfile>()
         if let profile = try? modelContext.fetch(profileDescriptor).first,
-           let plan = profile.workoutPlan,
-           let template = plan.templates.first(where: { $0.name.localizedCaseInsensitiveContains(name) }) {
-            return createStartWorkout(from: template)
+           let plan = profile.workoutPlan {
+            let template: WorkoutPlan.WorkoutTemplate?
+            if let templateID {
+                template = plan.templates.first(where: { $0.id == templateID })
+            } else {
+                template = nil
+            }
+
+            if let template {
+                return createWorkoutFromTemplate(
+                    template,
+                    progressionStrategy: plan.progressionStrategy,
+                    modelContext: modelContext,
+                    prefillStrengthExercises: true
+                )
+            }
+
+            if templateID != nil {
+                return nil
+            }
         }
 
-        // Preserve prior fallback behavior for unmatched names.
-        return createCustomWorkout(name: name)
+        if templateID != nil {
+            return nil
+        }
+
+        return createCustomWorkout()
+    }
+
+    /// Resolve app-intent/deep-link workout names into concrete workout instances.
+    func createWorkoutForIntent(name: String, modelContext: ModelContext) -> LiveWorkout? {
+        createWorkoutForIntent(templateID: nil, name: name, modelContext: modelContext)
     }
 
     /// Persist a newly created workout in SwiftData.
@@ -87,59 +122,122 @@ struct WorkoutTemplateService {
     func createWorkoutFromTemplate(
         _ template: WorkoutPlan.WorkoutTemplate,
         progressionStrategy: WorkoutPlan.ProgressionStrategy,
-        modelContext: ModelContext
+        modelContext: ModelContext,
+        prefillStrengthExercises: Bool = true
     ) -> LiveWorkout {
-        let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
+        let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.resolvedTargetMuscleGroups)
 
         let workout = LiveWorkout(
             name: template.name,
             workoutType: template.sessionType,
             targetMuscleGroups: template.sessionType.supportsMuscleTargets ? muscleGroups : [],
-            focusAreas: template.focusAreas
+            focusAreas: focusAreasPreservingBlockActivities(from: template)
         )
+        workout.sourcePlanTemplateID = template.id
 
-        guard template.sessionType.prefersStructuredEntries else {
-            return workout
-        }
-
-        // Create entries from exercise templates
         var entries: [LiveWorkoutEntry] = []
+        var nextOrderIndex = 0
+        let displayBlocks = template.displayBlocks
+        let hasBlockLevelExercises = displayBlocks.contains { !$0.exercises.isEmpty }
+        var usedTopLevelExerciseFallback = false
 
-        for exerciseTemplate in template.exercises.sorted(by: { $0.order < $1.order }) {
-            let entry = LiveWorkoutEntry(
-                exerciseName: exerciseTemplate.exerciseName,
-                orderIndex: exerciseTemplate.order
-            )
-
-            // Get last performance for this exercise
-            let lastPerformance = getLastPerformance(
-                exerciseName: exerciseTemplate.exerciseName,
-                modelContext: modelContext
-            )
-
-            // Calculate suggested weight with progression
-            let (weightKg, reps) = calculateSuggestedWeightAndReps(
-                lastPerformance: lastPerformance,
-                template: exerciseTemplate,
-                strategy: progressionStrategy
-            )
-            let cleanWeight = WeightUtility.cleanWeightFromKg(weightKg)
-
-            // Add sets based on template
-            for _ in 0..<exerciseTemplate.defaultSets {
-                entry.addSet(LiveWorkoutEntry.SetData(
-                    reps: reps,
-                    weight: cleanWeight,
-                    completed: false,
-                    isWarmup: false
-                ))
+        for block in displayBlocks {
+            var blockExercises = block.exercises
+            if blockExercises.isEmpty,
+               block.kind == .strength,
+               !hasBlockLevelExercises,
+               !usedTopLevelExerciseFallback {
+                blockExercises = template.structuredExercises
+                usedTopLevelExerciseFallback = !blockExercises.isEmpty
             }
 
-            entries.append(entry)
+            if block.kind == .strength, !blockExercises.isEmpty, prefillStrengthExercises {
+                for exerciseTemplate in blockExercises.sorted(by: { $0.order < $1.order }) {
+                    let entry = LiveWorkoutEntry(
+                        exerciseName: exerciseTemplate.exerciseName,
+                        orderIndex: nextOrderIndex
+                    )
+                    entry.activityKind = block.kind
+                    entry.activityRole = block.role
+                    entry.activityTypeName = block.displayActivityName
+                    entry.targetTags = block.resolvedActivityTags(including: exerciseTemplate.muscleGroup)
+                    entry.sourcePlanBlockID = block.id
+                    entry.plannedIntensity = block.intensity
+                    entry.plannedTarget = block.target
+                    entry.notes = exerciseTemplate.notes ?? ""
+
+                    let lastPerformance = getLastPerformance(
+                        exerciseName: exerciseTemplate.exerciseName,
+                        modelContext: modelContext
+                    )
+
+                    let (weightKg, reps) = calculateSuggestedWeightAndReps(
+                        lastPerformance: lastPerformance,
+                        template: exerciseTemplate,
+                        strategy: progressionStrategy
+                    )
+                    let cleanWeight = WeightUtility.cleanWeightFromKg(weightKg)
+
+                    for _ in 0..<exerciseTemplate.defaultSets {
+                        entry.addSet(LiveWorkoutEntry.SetData(
+                            reps: reps,
+                            weight: cleanWeight,
+                            completed: false,
+                            isWarmup: false
+                        ))
+                    }
+
+                    entries.append(entry)
+                    nextOrderIndex += 1
+                }
+            } else if block.shouldCreateLiveWorkoutEntry {
+                let entry = LiveWorkoutEntry(
+                    exerciseName: block.liveWorkoutDisplayName,
+                    orderIndex: nextOrderIndex,
+                    exerciseType: block.liveWorkoutExerciseType(in: template)
+                )
+                if let durationMinutes = block.durationMinutes, durationMinutes > 0 {
+                    let seconds = durationMinutes * 60
+                    entry.plannedDurationSeconds = seconds
+                }
+                entry.activityKind = block.kind
+                entry.activityRole = block.role
+                entry.activityTypeName = block.displayActivityName
+                entry.targetTags = block.resolvedActivityTags()
+                entry.sourcePlanBlockID = block.id
+                entry.plannedIntensity = block.intensity
+                entry.plannedTarget = block.target
+                entry.notes = ""
+                entries.append(entry)
+                nextOrderIndex += 1
+            }
         }
 
         workout.entries = entries
         return workout
+    }
+
+    private func focusAreasPreservingBlockActivities(from template: WorkoutPlan.WorkoutTemplate) -> [String] {
+        var seen: Set<String> = []
+        var values: [String] = []
+
+        func append(_ rawValue: String?) {
+            guard let rawValue else { return }
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            let key = Exercise.normalizedActivityKey(trimmed)
+            guard !key.isEmpty, seen.insert(key).inserted else { return }
+            values.append(trimmed)
+        }
+
+        template.focusAreas.forEach(append)
+
+        for block in template.displayBlocks {
+            append(block.activityTypeName)
+            block.activityTags.forEach(append)
+        }
+
+        return values
     }
 
     // MARK: - Get Last Performance
@@ -398,5 +496,57 @@ struct WorkoutTemplateService {
             return "\(repPattern.count)x\(reps)"
         }
         return repPattern.map(String.init).joined(separator: ",")
+    }
+}
+
+private extension WorkoutPlan.TrainingBlock {
+    var shouldCreateLiveWorkoutEntry: Bool {
+        switch kind {
+        case .cardio, .conditioning, .skill, .mobility, .recovery, .sportPractice, .custom:
+            return true
+        case .strength:
+            return false
+        }
+    }
+
+    func resolvedActivityTags(including additionalTag: String? = nil) -> [String] {
+        var seen: Set<String> = []
+        return (activityTags + [additionalTag, displayActivityName])
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { seen.insert($0.goalNormalizedKey).inserted }
+    }
+
+    func liveWorkoutExerciseType(in template: WorkoutPlan.WorkoutTemplate) -> String {
+        if kind == .cardio || kind == .conditioning {
+            return template.sessionType == .cardio || template.sessionType == .hiit ? "cardio" : "activity"
+        }
+        return kind.liveWorkoutExerciseType
+    }
+
+    var liveWorkoutDisplayName: String {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let activityName = displayActivityName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !activityName.isEmpty else {
+            return trimmedTitle.isEmpty ? kind.displayName : trimmedTitle
+        }
+
+        let genericTitleKeys = (
+            WorkoutPlan.TrainingBlock.BlockKind.allCases.flatMap { [$0.displayName, $0.rawValue] }
+            + WorkoutPlan.TrainingBlock.Role.allCases.flatMap { [$0.displayName, $0.rawValue] }
+            + [
+                "Activity",
+                "Block",
+                "Session",
+                "Sport"
+            ]
+        ).map(\.goalNormalizedKey)
+
+        if trimmedTitle.isEmpty || genericTitleKeys.contains(trimmedTitle.goalNormalizedKey) {
+            return activityName
+        }
+
+        return trimmedTitle
     }
 }

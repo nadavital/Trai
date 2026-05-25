@@ -26,9 +26,42 @@ final class LiveWorkoutEntry {
     /// Type of exercise: "strength", "cardio", or "flexibility"
     var exerciseType: String = "strength"
 
+    /// Broad activity kind for non-strength planned/ad hoc work, e.g. "cardio", "mobility", "skill".
+    var activityKindRaw: String = ""
+
+    /// Role inside the workout, e.g. "main", "warmup", "accessory", "finisher", "cooldown".
+    var activityRoleRaw: String = ""
+
+    /// Source workout-plan block ID when this entry came from a generated or manual plan.
+    var sourcePlanBlockIDRaw: String?
+
+    /// Planned duration in seconds before the user edits/logs the actual duration.
+    var plannedDurationSeconds: Int?
+
+    /// Planned effort or intensity cue copied from the workout plan.
+    var plannedIntensity: String?
+
+    /// Planned target copied from the workout plan, such as pace, zone, or movement cue.
+    var plannedTarget: String?
+
+    /// Comma-separated targeting tags copied from the exercise library or inferred from the plan.
+    var targetTagsRaw: String = ""
+
+    /// Comma-separated tracking fields copied from the exercise library.
+    var trackingFieldsRaw: String = ""
+
+    /// User-facing activity type copied from the exercise library or generated plan.
+    var activityTypeNameRaw: String = ""
+
     /// JSON-encoded sets data for strength exercises
     /// Format: [{"reps": 10, "weightKg": 50.0, "completed": true, "isWarmup": false}]
     var setsData: String = "[]"
+
+    /// JSON-encoded repeatable activity segments for cardio, conditioning, sport, and mobility work.
+    var activitySegmentsData: String = "[]"
+
+    /// JSON-encoded planned repeatable activity segments copied from AI workout suggestions.
+    var plannedActivitySegmentsData: String = "[]"
 
     /// Duration in seconds (for cardio/timed exercises)
     var durationSeconds: Int?
@@ -36,7 +69,7 @@ final class LiveWorkoutEntry {
     /// Distance in meters (for cardio exercises)
     var distanceMeters: Double?
 
-    /// Calories burned (from HealthKit or manual entry)
+    /// Calories burned from imported external workout data. Not exposed as a manual tracking metric.
     var caloriesBurned: Double?
 
     /// Notes for this specific exercise
@@ -54,16 +87,28 @@ final class LiveWorkoutEntry {
     @Transient
     private var cachedSets: [SetData] = []
 
+    @Transient
+    private var cachedActivitySegmentsDataSnapshot: String?
+
+    @Transient
+    private var cachedActivitySegments: [ActivitySegment] = []
+
+    @Transient
+    private var cachedPlannedActivitySegmentsDataSnapshot: String?
+
+    @Transient
+    private var cachedPlannedActivitySegments: [ActivitySegment] = []
+
     init() {}
 
     /// Whether this is a cardio exercise
     var isCardio: Bool {
-        exerciseType == "cardio"
+        resolvedExerciseCategory == .cardio
     }
 
     /// Whether this is a strength exercise
     var isStrength: Bool {
-        exerciseType == "strength"
+        resolvedExerciseCategory == .strength
     }
 
     /// Whether this is a non-strength, non-cardio activity item.
@@ -71,17 +116,116 @@ final class LiveWorkoutEntry {
         !isStrength && !isCardio
     }
 
-    var activityIconName: String {
-        switch exerciseType {
-        case "strength":
-            return "dumbbell.fill"
-        case "cardio":
-            return "figure.run"
-        case "flexibility":
-            return "figure.cooldown"
-        default:
-            return "list.bullet.rectangle"
+    /// Passive plan guidance shown in live workouts before the user logs any real data.
+    var isPlannedActivityGuidance: Bool {
+        !isStrength && sourcePlanBlockID != nil && !hasActivityLogData
+    }
+
+    var hasExercisePreferenceSignal: Bool {
+        if isStrength {
+            return completedSets?.isEmpty == false
         }
+        return hasActivityLogData
+    }
+
+    var isLoggedActivity: Bool {
+        guard !isStrength else { return false }
+        return hasActivityLogData
+    }
+
+    private var hasActivityLogData: Bool {
+        completedAt != nil
+            || trackedDurationSeconds > 0
+            || trackedDistanceMeters > 0
+            || activitySegments.contains { $0.hasLoggedData }
+            || sets.contains { !$0.isWarmup && $0.hasLoggedData }
+            || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var trackingFields: [Exercise.TrackingField] {
+        get {
+            let fields = trackingFieldsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .compactMap(Exercise.TrackingField.init(rawValue:))
+            let category = resolvedActivityCategory
+            if !fields.isEmpty {
+                return Exercise.normalizedTrackingFields(fields, for: category)
+            }
+            return Exercise.defaultTrackingFields(for: category)
+        }
+        set {
+            let category = resolvedActivityCategory
+            trackingFieldsRaw = Exercise.normalizedTrackingFields(newValue, for: category).map(\.rawValue).joined(separator: ",")
+        }
+    }
+
+    var targetTags: [String] {
+        get {
+            targetTagsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            targetTagsRaw = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ",")
+        }
+    }
+
+    var activityTypeName: String {
+        get {
+            let explicit = activityTypeNameRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !explicit.isEmpty { return explicit }
+            return Exercise.defaultActivityTypeName(
+                for: exerciseName,
+                category: Exercise.Category.normalized(from: exerciseType) ?? .custom
+            )
+        }
+        set {
+            activityTypeNameRaw = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    var activityKind: WorkoutPlan.TrainingBlock.BlockKind? {
+        get {
+            let trimmed = activityKindRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return WorkoutPlan.TrainingBlock.BlockKind(rawValue: trimmed)
+        }
+        set {
+            activityKindRaw = newValue?.rawValue ?? ""
+        }
+    }
+
+    var activityRole: WorkoutPlan.TrainingBlock.Role? {
+        get {
+            let trimmed = activityRoleRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return WorkoutPlan.TrainingBlock.Role(rawValue: trimmed)
+        }
+        set {
+            activityRoleRaw = newValue?.rawValue ?? ""
+        }
+    }
+
+    var sourcePlanBlockID: UUID? {
+        get {
+            guard let raw = sourcePlanBlockIDRaw else { return nil }
+            return UUID(uuidString: raw)
+        }
+        set {
+            sourcePlanBlockIDRaw = newValue?.uuidString
+        }
+    }
+
+    var activityIconName: String {
+        if let kind = activityKind {
+            return kind.iconName
+        }
+        return resolvedExerciseCategory.iconName
     }
 
     init(exercise: Exercise, orderIndex: Int) {
@@ -90,6 +234,12 @@ final class LiveWorkoutEntry {
         self.exerciseType = exercise.category
         self.equipmentName = exercise.displayEquipment  // Use inferred equipment if not stored
         self.orderIndex = orderIndex
+        self.trackingFields = exercise.trackingFields
+        self.targetTags = exercise.targetTags
+        self.activityTypeName = exercise.activityTypeName
+        if exercise.exerciseCategory != .strength {
+            self.activityKind = exercise.exerciseCategory.liveWorkoutActivityKind
+        }
     }
 
     init(exerciseName: String, orderIndex: Int, exerciseId: UUID? = nil, exerciseType: String = "strength", equipmentName: String? = nil) {
@@ -98,12 +248,119 @@ final class LiveWorkoutEntry {
         self.exerciseId = exerciseId
         self.exerciseType = exerciseType
         self.equipmentName = equipmentName
+        self.activityTypeName = Exercise.defaultActivityTypeName(
+            for: exerciseName,
+            category: Exercise.Category.normalized(from: exerciseType) ?? .custom
+        )
+    }
+}
+
+extension LiveWorkoutEntry {
+    var resolvedExerciseCategory: Exercise.Category {
+        (Exercise.Category.normalized(from: exerciseType) ?? .custom).userFacingEquivalent
+    }
+
+    var resolvedActivityCategory: Exercise.Category {
+        if let category = activityKind?.exerciseCategoryFallback.userFacingEquivalent {
+            return category
+        }
+        return resolvedExerciseCategory
+    }
+}
+
+extension WorkoutPlan.TrainingBlock.BlockKind {
+    var exerciseCategoryFallback: Exercise.Category {
+        switch self {
+        case .strength:
+            return .strength
+        case .cardio:
+            return .cardio
+        case .conditioning:
+            return .conditioning
+        case .skill:
+            return .skill
+        case .sportPractice:
+            return .sportPractice
+        case .mobility:
+            return .mobility
+        case .recovery:
+            return .recovery
+        case .custom:
+            return .custom
+        }
+    }
+
+    static func liveWorkoutFallbackKind(for exerciseType: String) -> WorkoutPlan.TrainingBlock.BlockKind? {
+        switch exerciseType {
+        case "strength":
+            return .strength
+        case "cardio":
+            return .cardio
+        case "conditioning":
+            return .conditioning
+        case "mobility", "flexibility":
+            return .mobility
+        case "skill":
+            return .skill
+        case "sportPractice":
+            return .sportPractice
+        case "recovery":
+            return .recovery
+        case "custom":
+            return .custom
+        default:
+            return nil
+        }
+    }
+
+    var liveWorkoutExerciseType: String {
+        switch self {
+        case .cardio, .conditioning:
+            return "cardio"
+        case .mobility, .recovery:
+            return "flexibility"
+        case .skill, .sportPractice, .custom, .strength:
+            return "activity"
+        }
     }
 }
 
 // MARK: - Set Data Model
 
 extension LiveWorkoutEntry {
+    struct ActivitySegment: Codable, Identifiable, Equatable {
+        var id: UUID = UUID()
+        var durationSeconds: Int?
+        var distanceMeters: Double?
+        var reps: Int?
+        var weightKg: Double?
+        var notes: String
+
+        init(
+            id: UUID = UUID(),
+            durationSeconds: Int? = nil,
+            distanceMeters: Double? = nil,
+            reps: Int? = nil,
+            weightKg: Double? = nil,
+            notes: String = ""
+        ) {
+            self.id = id
+            self.durationSeconds = durationSeconds
+            self.distanceMeters = distanceMeters
+            self.reps = reps
+            self.weightKg = weightKg
+            self.notes = notes
+        }
+
+        nonisolated var hasLoggedData: Bool {
+            (durationSeconds ?? 0) > 0
+                || (distanceMeters ?? 0) > 0
+                || (reps ?? 0) > 0
+                || (weightKg ?? 0) > 0
+                || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
     struct SetData: Codable, Identifiable, Equatable {
         var id: UUID = UUID()
         var reps: Int
@@ -174,6 +431,13 @@ extension LiveWorkoutEntry {
             Double(reps) * weightKg
         }
 
+        var hasLoggedData: Bool {
+            reps > 0
+                || weightKg > 0
+                || weightLbs > 0
+                || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
         /// Get clean weight in user's preferred unit
         func effectiveWeightUnit(defaultUsesMetric: Bool) -> WeightUnit {
             preferredWeightUnit ?? WeightUnit(usesMetric: defaultUsesMetric)
@@ -199,6 +463,93 @@ extension LiveWorkoutEntry {
 // MARK: - Sets Management
 
 extension LiveWorkoutEntry {
+    var activitySegments: [ActivitySegment] {
+        get {
+            if cachedActivitySegmentsDataSnapshot == activitySegmentsData {
+                return cachedActivitySegments
+            }
+            guard let data = activitySegmentsData.data(using: .utf8),
+                  let decodedSegments = try? JSONDecoder().decode([ActivitySegment].self, from: data) else {
+                cachedActivitySegments = []
+                cachedActivitySegmentsDataSnapshot = activitySegmentsData
+                return []
+            }
+            cachedActivitySegments = decodedSegments
+            cachedActivitySegmentsDataSnapshot = activitySegmentsData
+            return decodedSegments
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            if activitySegmentsData != json {
+                activitySegmentsData = json
+            }
+            cachedActivitySegments = newValue
+            cachedActivitySegmentsDataSnapshot = json
+        }
+    }
+
+    var plannedActivitySegments: [ActivitySegment] {
+        get {
+            if cachedPlannedActivitySegmentsDataSnapshot == plannedActivitySegmentsData {
+                return cachedPlannedActivitySegments
+            }
+            guard let data = plannedActivitySegmentsData.data(using: .utf8),
+                  let decodedSegments = try? JSONDecoder().decode([ActivitySegment].self, from: data) else {
+                cachedPlannedActivitySegments = []
+                cachedPlannedActivitySegmentsDataSnapshot = plannedActivitySegmentsData
+                return []
+            }
+            cachedPlannedActivitySegments = decodedSegments
+            cachedPlannedActivitySegmentsDataSnapshot = plannedActivitySegmentsData
+            return decodedSegments
+        }
+        set {
+            let json = (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+            if plannedActivitySegmentsData != json {
+                plannedActivitySegmentsData = json
+            }
+            cachedPlannedActivitySegments = newValue
+            cachedPlannedActivitySegmentsDataSnapshot = json
+        }
+    }
+
+    func addActivitySegment(_ segment: ActivitySegment = ActivitySegment()) {
+        var segments = activitySegments
+        segments.append(segment)
+        activitySegments = segments
+    }
+
+    func updateActivitySegment(at index: Int, with segment: ActivitySegment) {
+        var segments = activitySegments
+        guard index < segments.count else { return }
+        segments[index] = segment
+        activitySegments = segments
+    }
+
+    func removeActivitySegment(at index: Int) {
+        var segments = activitySegments
+        guard index < segments.count else { return }
+        segments.remove(at: index)
+        activitySegments = segments
+    }
+
+    var trackedDurationSeconds: Int {
+        let segmentTotal = activitySegments
+            .compactMap(\.durationSeconds)
+            .filter { $0 > 0 }
+            .reduce(0, +)
+        return max(durationSeconds ?? 0, segmentTotal)
+    }
+
+    var trackedDistanceMeters: Double {
+        let segmentTotal = activitySegments
+            .compactMap(\.distanceMeters)
+            .filter { $0 > 0 }
+            .reduce(0, +)
+        return max(distanceMeters ?? 0, segmentTotal)
+    }
+
     /// Parsed sets from JSON
     var sets: [SetData] {
         get {
@@ -312,7 +663,8 @@ extension LiveWorkoutEntry {
 extension LiveWorkoutEntry {
     /// Formatted duration
     var formattedDuration: String? {
-        guard let seconds = durationSeconds else { return nil }
+        let seconds = trackedDurationSeconds
+        guard seconds > 0 else { return nil }
         let minutes = seconds / 60
         let remainingSeconds = seconds % 60
         if minutes >= 60 {
@@ -325,7 +677,8 @@ extension LiveWorkoutEntry {
 
     /// Formatted distance
     var formattedDistance: String? {
-        guard let meters = distanceMeters else { return nil }
+        let meters = trackedDistanceMeters
+        guard meters > 0 else { return nil }
         if meters >= 1000 {
             return String(format: "%.2f km", meters / 1000)
         }
@@ -334,8 +687,9 @@ extension LiveWorkoutEntry {
 
     /// Pace (min/km) for cardio
     var pacePerKm: Double? {
-        guard let meters = distanceMeters, meters > 0,
-              let seconds = durationSeconds, seconds > 0 else { return nil }
+        let meters = trackedDistanceMeters
+        let seconds = trackedDurationSeconds
+        guard meters > 0, seconds > 0 else { return nil }
         let km = meters / 1000
         let minutes = Double(seconds) / 60
         return minutes / km
@@ -347,5 +701,164 @@ extension LiveWorkoutEntry {
         let minutes = Int(pace)
         let seconds = Int((pace - Double(minutes)) * 60)
         return String(format: "%d:%02d /km", minutes, seconds)
+    }
+
+    func traiActivitySummarySegments(usesMetric: Bool = true) -> [String] {
+        guard !isStrength else { return [] }
+
+        var segments: [String] = []
+        let activityName = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != exerciseName.goalNormalizedKey {
+            segments.append(activityName)
+        }
+        if let duration = formattedDuration {
+            segments.append(duration)
+        }
+        if let distance = formattedDistance {
+            segments.append(distance)
+        }
+
+        let loggedSegments = activitySegments.filter(\.hasLoggedData)
+        if loggedSegments.count > 1 {
+            segments.append("\(loggedSegments.count) \(metricName(for: loggedSegments.count, pluralLabel: segmentMetricLabel))")
+        }
+
+        let countTotal = loggedSegments
+            .compactMap(\.reps)
+            .filter { $0 > 0 }
+            .reduce(0, +)
+        if countTotal > 0 {
+            segments.append("\(countTotal) \(metricName(for: countTotal, pluralLabel: countMetricLabel))")
+        }
+
+        let maxWeightKg = loggedSegments
+            .compactMap(\.weightKg)
+            .filter { $0 > 0 }
+            .max()
+        if let maxWeightKg {
+            let unit = WeightUnit(usesMetric: usesMetric)
+            segments.append("\(WeightUtility.format(maxWeightKg, displayUnit: unit)) max")
+        }
+
+        return segments
+    }
+
+    var plannedActivitySummarySegments: [String] {
+        guard !isStrength else { return [] }
+
+        var segments: [String] = []
+        let activityName = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != exerciseName.goalNormalizedKey {
+            segments.append(activityName)
+        }
+        if let plannedDurationSeconds, plannedDurationSeconds > 0 {
+            segments.append(Self.formatPlannedDuration(seconds: plannedDurationSeconds))
+        }
+        let plannedSegments = plannedActivitySegments.filter(\.hasLoggedData)
+        if plannedSegments.count > 1 {
+            segments.append("\(plannedSegments.count) planned segments")
+        }
+        appendPlannedDetail(plannedIntensity, to: &segments)
+        appendPlannedDetail(plannedTarget, to: &segments)
+        return segments
+    }
+
+    func traiWorkoutContextDetail(usesMetricExerciseWeight: Bool) -> String {
+        if isStrength {
+            let completedSets = sets.filter { $0.completed && $0.reps > 0 && !$0.isWarmup }
+            var parts = [exerciseName, "\(completedSets.count) logged sets"]
+            if let bestSet = completedSets.max(by: { $0.volume < $1.volume }) {
+                parts.append("\(WeightUtility.format(bestSet.weightKg, displayUnit: WeightUnit(usesMetric: usesMetricExerciseWeight))) x \(bestSet.reps)")
+            }
+            if !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                parts.append("notes: \(notes)")
+            }
+            return parts.joined(separator: " • ")
+        }
+
+        var parts: [String] = [exerciseName]
+        let activityName = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != exerciseName.goalNormalizedKey {
+            parts.append(activityName)
+        }
+        let loggedSummary = traiActivitySummarySegments(usesMetric: usesMetricExerciseWeight)
+        let plannedSummary = plannedActivitySummarySegments
+        let summary = loggedSummary.isEmpty && !plannedSummary.isEmpty
+            ? plannedSummary
+            : loggedSummary
+        parts.append(contentsOf: summary.filter { segment in
+            segment.goalNormalizedKey != activityName.goalNormalizedKey
+        }.prefix(4))
+        let trackingSummary = trackingFields
+            .map(\.displayName)
+            .filter { !$0.isEmpty }
+            .joined(separator: "/")
+        if !trackingSummary.isEmpty {
+            parts.append("tracks \(trackingSummary)")
+        }
+
+        let tags = targetTags.prefix(3)
+        if !tags.isEmpty {
+            parts.append("targets \(tags.joined(separator: ", "))")
+        }
+
+        if !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append("notes: \(notes)")
+        }
+        return parts.joined(separator: " • ")
+    }
+
+    private static func formatPlannedDuration(seconds: Int) -> String {
+        let minutes = seconds / 60
+        guard minutes > 0 else { return "<1 min" }
+        if minutes >= 60 {
+            let hours = minutes / 60
+            let remainingMinutes = minutes % 60
+            return remainingMinutes > 0 ? "\(hours)h \(remainingMinutes)m" : "\(hours)h"
+        }
+        return "\(minutes) min"
+    }
+
+    private func appendPlannedDetail(_ rawValue: String?, to segments: inout [String]) {
+        let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return }
+        let normalized = trimmed.goalNormalizedKey
+        guard !normalized.isEmpty,
+              !segments.contains(where: { $0.goalNormalizedKey == normalized }) else {
+            return
+        }
+        segments.append(trimmed)
+    }
+
+    private var segmentMetricLabel: String {
+        let category = resolvedActivityCategory
+        switch category {
+        case .conditioning:
+            return "rounds"
+        default:
+            return "segments"
+        }
+    }
+
+    private var countMetricLabel: String {
+        let category = resolvedActivityCategory
+        switch category {
+        case .sportPractice:
+            return "attempts"
+        case .conditioning:
+            return "rounds"
+        case .mobility, .recovery:
+            return "reps"
+        default:
+            return "reps"
+        }
+    }
+
+    private func metricName(for value: Int, pluralLabel: String) -> String {
+        guard value == 1 else { return pluralLabel }
+        if pluralLabel.hasSuffix("s") {
+            return String(pluralLabel.dropLast())
+        }
+        return pluralLabel
     }
 }

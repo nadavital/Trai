@@ -18,7 +18,7 @@ struct SuggestedWorkoutCard: View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
-                Image(systemName: "dumbbell.fill")
+                Image(systemName: workout.iconName)
                     .foregroundStyle(.accent)
                 Text("Start Workout?")
                     .font(.subheadline)
@@ -32,14 +32,24 @@ struct SuggestedWorkoutCard: View {
                     .font(.headline)
 
                 HStack(spacing: 12) {
-                    Label("\(workout.exercises.count) exercises", systemImage: "list.bullet")
+                    Label(workout.exercisesSummary, systemImage: "list.bullet")
                     Label("\(workout.durationMinutes) min", systemImage: "clock")
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-                if !workout.targetMuscleGroups.isEmpty {
+                if let activityFocuses = workout.activityFocuses, !activityFocuses.isEmpty {
+                    Text(activityFocuses.prefix(3).joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if !workout.targetMuscleGroups.isEmpty {
                     Text(workout.muscleGroupsSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let firstExerciseSummary {
+                    Text(firstExerciseSummary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -76,6 +86,13 @@ struct SuggestedWorkoutCard: View {
         .background(Color(.secondarySystemBackground))
         .clipShape(.rect(cornerRadius: 16))
     }
+
+    private var firstExerciseSummary: String? {
+        guard let exercise = workout.exercises.first else { return nil }
+        let details = exercise.startSummarySegments
+        guard !details.isEmpty else { return exercise.name }
+        return ([exercise.name] + Array(details.prefix(3))).joined(separator: " • ")
+    }
 }
 
 // MARK: - Workout Started Badge
@@ -111,7 +128,7 @@ struct SuggestedWorkoutLogCard: View {
             // Header row
             HStack {
                 HStack(spacing: 6) {
-                    Image(systemName: "dumbbell.fill")
+                    Image(systemName: workoutLog.iconName)
                     Text("Log this?")
                         .font(.subheadline)
                         .fontWeight(.semibold)
@@ -138,23 +155,9 @@ struct SuggestedWorkoutLogCard: View {
                 Text(workoutLog.displayName)
                     .font(.headline)
 
-                HStack(spacing: 6) {
-                    if !workoutLog.exercises.isEmpty {
-                        Text("\(workoutLog.exercises.count) exercises")
-                    }
-                    if workoutLog.totalSets > 0 {
-                        Text("•")
-                            .foregroundStyle(.tertiary)
-                        Text("\(workoutLog.totalSets) sets")
-                    }
-                    if let duration = workoutLog.durationMinutes, duration > 0 {
-                        Text("•")
-                            .foregroundStyle(.tertiary)
-                        Text("\(duration) min")
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(workoutLog.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -221,34 +224,111 @@ private struct WorkoutLogExerciseRow: View {
                 .font(.subheadline)
                 .fontWeight(.medium)
 
-            // Sets as rows (reps on left, weight on right)
-            VStack(spacing: 4) {
-                ForEach(exercise.sets.indices, id: \.self) { index in
-                    let set = exercise.sets[index]
-                    HStack {
-                        Text("Set \(index + 1)")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .frame(width: 44, alignment: .leading)
-
-                        Text("\(set.reps) reps")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Spacer()
-
-                        if let weight = set.weightKg, weight > 0 {
-                            let displayWeight = useLbs ? Int(weight * 2.20462) : Int(weight)
-                            let unit = useLbs ? "lbs" : "kg"
-                            Text("\(displayWeight) \(unit)")
+            if exercise.isStrengthLog {
+                VStack(spacing: 4) {
+                    ForEach(exercise.sets.indices, id: \.self) { index in
+                        let set = exercise.sets[index]
+                        HStack {
+                            Text("Set \(index + 1)")
                                 .font(.caption)
-                                .fontWeight(.medium)
+                                .foregroundStyle(.tertiary)
+                                .frame(width: 44, alignment: .leading)
+
+                            Text("\(set.reps) reps")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Spacer()
+
+                            if let weight = set.weightKg, weight > 0 {
+                                let displayWeight = useLbs ? Int(weight * 2.20462) : Int(weight)
+                                let unit = useLbs ? "lbs" : "kg"
+                                Text("\(displayWeight) \(unit)")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                            }
                         }
+                    }
+                }
+            } else {
+                activityDetails
+            }
+        }
+        .padding(12)
+    }
+
+    @ViewBuilder
+    private var activityDetails: some View {
+        let details = exercise.activitySummarySegments
+        if details.isEmpty {
+            Text(exercise.fallbackActivityLabel)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    ForEach(Array(details.prefix(3).enumerated()), id: \.offset) { index, detail in
+                        if index > 0 {
+                            Text("•")
+                                .foregroundStyle(.tertiary)
+                        }
+                        Text(detail)
+                            .lineLimit(1)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                if let segments = exercise.segments, !segments.isEmpty {
+                    ForEach(Array(segments.prefix(3).enumerated()), id: \.element.id) { index, segment in
+                        Text(segmentSummary(segment, index: index, exercise: exercise))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
                     }
                 }
             }
         }
-        .padding(12)
+    }
+
+    private func segmentSummary(
+        _ segment: SuggestedWorkoutLog.LoggedExercise.ActivitySegment,
+        index: Int,
+        exercise: SuggestedWorkoutLog.LoggedExercise
+    ) -> String {
+        var parts: [String] = ["Segment \(index + 1)"]
+        if let duration = segment.durationMinutes, duration > 0 {
+            parts.append("\(duration) min")
+        }
+        if let distance = segment.distanceMeters, distance > 0 {
+            if distance >= 1000 {
+                parts.append(String(format: "%.1f km", distance / 1000))
+            } else {
+                parts.append("\(Int(distance.rounded())) m")
+            }
+        }
+        if let reps = segment.reps, reps > 0 {
+            parts.append("\(reps) \(exercise.metricName(for: reps, pluralLabel: exercise.countMetricLabel))")
+        }
+        let notes = segment.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !notes.isEmpty {
+            parts.append(notes)
+        }
+        return parts.joined(separator: " • ")
+    }
+}
+
+private extension SuggestedWorkoutLog.LoggedExercise {
+    var fallbackActivityLabel: String {
+        if let activityTypeName = activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !activityTypeName.isEmpty {
+            return activityTypeName
+        }
+        if let rawCategory = category,
+           let category = Exercise.Category(rawValue: rawCategory.trimmingCharacters(in: .whitespacesAndNewlines))?.userFacingEquivalent {
+            return category.displayName
+        }
+        return "Activity"
     }
 }
 

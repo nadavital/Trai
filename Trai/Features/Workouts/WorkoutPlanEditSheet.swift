@@ -11,21 +11,25 @@ import SwiftData
 struct WorkoutPlanEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.appTabSelection) private var appTabSelection
+    @AppStorage("pendingWorkoutPlanSetupRequest") private var pendingWorkoutPlanSetupRequest = false
 
     @Query private var profiles: [UserProfile]
+    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
     private var userProfile: UserProfile? { profiles.first }
 
     let currentPlan: WorkoutPlan
 
-    @State private var showingFullSetup = false
     @State private var showingDayEditor = false
     @State private var editingTemplateID: UUID?
     @State private var editorDayName = ""
     @State private var editorSessionType: WorkoutMode = .strength
     @State private var editorFocusAreasText = ""
-    @State private var editorSelectedMuscles: Set<LiveWorkout.MuscleGroup> = [.fullBody]
+    @State private var editorSelectedMuscles: Set<LiveWorkout.MuscleGroup> = []
+    @State private var editorPreservedTargetGroups: [String] = []
     @State private var editedPlan: WorkoutPlan
     @State private var hasPendingChanges = false
+    @State private var saveError: WorkoutPlanEditSaveError?
 
     init(currentPlan: WorkoutPlan) {
         self.currentPlan = currentPlan
@@ -58,7 +62,7 @@ struct WorkoutPlanEditSheet: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", systemImage: "checkmark") {
-                        savePlan(editedPlan)
+                        guard savePlan(editedPlan) else { return }
                         hasPendingChanges = false
                         dismiss()
                     }
@@ -67,9 +71,12 @@ struct WorkoutPlanEditSheet: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showingFullSetup) {
-            WorkoutPlanChatFlow()
-                .traiSheetBranding()
+        .alert(item: $saveError) { error in
+            Alert(
+                title: Text("Workout Plan Not Saved"),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
         .sheet(isPresented: $showingDayEditor) {
             WorkoutDayEditorSheet(
@@ -79,6 +86,7 @@ struct WorkoutPlanEditSheet: View {
                 sessionType: $editorSessionType,
                 focusAreasText: $editorFocusAreasText,
                 selectedMuscles: $editorSelectedMuscles,
+                hasPreservedTargetGroups: !editorPreservedTargetGroups.isEmpty,
                 onCancel: { showingDayEditor = false },
                 onConfirm: {
                     if let templateID = editingTemplateID {
@@ -249,7 +257,9 @@ struct WorkoutPlanEditSheet: View {
     private var quickActionsSection: some View {
         Section {
             Button {
-                showingFullSetup = true
+                dismiss()
+                pendingWorkoutPlanSetupRequest = true
+                appTabSelection.wrappedValue = .workouts
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "arrow.counterclockwise")
@@ -265,7 +275,8 @@ struct WorkoutPlanEditSheet: View {
         editorDayName = ""
         editorSessionType = orderedTemplates.last?.sessionType ?? .strength
         editorFocusAreasText = ""
-        editorSelectedMuscles = [.fullBody]
+        editorSelectedMuscles = editorSessionType.supportsMuscleTargets ? [.fullBody] : []
+        editorPreservedTargetGroups = []
         showingDayEditor = true
     }
 
@@ -274,8 +285,11 @@ struct WorkoutPlanEditSheet: View {
         editorDayName = template.name
         editorSessionType = template.sessionType
         editorFocusAreasText = template.focusAreas.joined(separator: ", ")
-        let selected = Set(template.targetMuscleGroups.compactMap(normalizeMuscleGroup))
-        editorSelectedMuscles = selected.isEmpty ? [.fullBody] : selected
+        let selected = Set(template.resolvedTargetMuscleGroups.compactMap(normalizeMuscleGroup))
+        editorSelectedMuscles = selected
+        editorPreservedTargetGroups = selected.isEmpty && template.sessionType.supportsMuscleTargets
+            ? template.targetMuscleGroups
+            : []
         showingDayEditor = true
     }
 
@@ -334,18 +348,38 @@ struct WorkoutPlanEditSheet: View {
                 selectedMuscles: muscles
             )
             let resolvedFocusAreas = sanitizeFocusAreas(focusAreas.isEmpty ? targetGroups : focusAreas)
+            let finalName = trimmedName.isEmpty
+                ? defaultDayName(
+                    for: sessionType,
+                    focusAreas: resolvedFocusAreas.isEmpty ? targetGroups : resolvedFocusAreas,
+                    dayIndex: template.order + 1
+                )
+                : trimmedName
+
+            guard sessionType == template.sessionType else {
+                return WorkoutPlan.WorkoutTemplate(
+                    id: template.id,
+                    name: finalName,
+                    sessionType: sessionType,
+                    focusAreas: resolvedFocusAreas,
+                    targetMuscleGroups: targetGroups,
+                    exercises: [],
+                    estimatedDurationMinutes: template.estimatedDurationMinutes,
+                    order: template.order,
+                    notes: template.notes
+                )
+            }
+
+            let changedSemanticFocus = resolvedFocusAreas != template.focusAreas
+                || targetGroups != template.targetMuscleGroups
             return copyTemplate(
                 template,
-                name: trimmedName.isEmpty
-                    ? defaultDayName(
-                        for: sessionType,
-                        focusAreas: resolvedFocusAreas.isEmpty ? targetGroups : resolvedFocusAreas,
-                        dayIndex: template.order + 1
-                    )
-                    : trimmedName,
+                name: finalName,
                 sessionType: sessionType,
                 focusAreas: resolvedFocusAreas,
-                targetMuscleGroups: targetGroups
+                targetMuscleGroups: targetGroups,
+                exercises: changedSemanticFocus ? [] : nil,
+                blocks: changedSemanticFocus ? [] : nil
             )
         }
 
@@ -362,7 +396,7 @@ struct WorkoutPlanEditSheet: View {
         let updated = normalizeTemplates(remaining)
         updatePlan(
             splitType: .custom,
-            daysPerWeek: max(editedPlan.daysPerWeek, updated.count),
+            daysPerWeek: updated.count,
             templates: updated
         )
     }
@@ -376,9 +410,11 @@ struct WorkoutPlanEditSheet: View {
             splitType: splitType ?? editedPlan.splitType,
             daysPerWeek: daysPerWeek ?? editedPlan.daysPerWeek,
             templates: templates ?? editedPlan.templates,
+            planIntent: editedPlan.planIntent,
             rationale: editedPlan.rationale,
             guidelines: editedPlan.guidelines,
             progressionStrategy: editedPlan.progressionStrategy,
+            modalityProgression: editedPlan.modalityProgression,
             warnings: editedPlan.warnings
         )
         hasPendingChanges = editedPlan != currentPlan
@@ -402,16 +438,15 @@ struct WorkoutPlanEditSheet: View {
     }
 
     private func orderedTargetGroups(from muscles: Set<LiveWorkout.MuscleGroup>) -> [String] {
-        let selected = muscles.isEmpty ? Set([LiveWorkout.MuscleGroup.fullBody]) : muscles
         return LiveWorkout.MuscleGroup.allCases
-            .filter { selected.contains($0) }
+            .filter { muscles.contains($0) }
             .map(\.rawValue)
     }
 
     private func normalizeTemplates(_ templates: [WorkoutPlan.WorkoutTemplate]) -> [WorkoutPlan.WorkoutTemplate] {
         templates.enumerated().map { index, template in
             let targetGroups = template.sessionType.supportsMuscleTargets
-                ? sanitizeTargetGroups(template.targetMuscleGroups)
+                ? sanitizeTargetGroups(template.resolvedTargetMuscleGroups)
                 : []
             let focusAreas = sanitizeFocusAreas(template.focusAreas.isEmpty ? targetGroups : template.focusAreas)
             return copyTemplate(
@@ -419,7 +454,8 @@ struct WorkoutPlanEditSheet: View {
                 sessionType: template.sessionType,
                 focusAreas: focusAreas,
                 targetMuscleGroups: targetGroups,
-                exercises: [],
+                exercises: template.exercises,
+                blocks: template.blocks,
                 order: index
             )
         }
@@ -444,9 +480,7 @@ struct WorkoutPlanEditSheet: View {
             return customGroup
         }
 
-        if normalized.isEmpty {
-            return [LiveWorkout.MuscleGroup.fullBody.rawValue]
-        }
+        guard !normalized.isEmpty else { return [] }
 
         if normalized.count > 1 {
             return normalized.filter { $0 != LiveWorkout.MuscleGroup.fullBody.rawValue }
@@ -498,8 +532,11 @@ struct WorkoutPlanEditSheet: View {
         selectedMuscles: Set<LiveWorkout.MuscleGroup>
     ) -> [String] {
         guard sessionType.supportsMuscleTargets else { return [] }
-        let selected = selectedMuscles.isEmpty ? Set([LiveWorkout.MuscleGroup.fullBody]) : selectedMuscles
-        return sanitizeTargetGroups(orderedTargetGroups(from: selected))
+        if selectedMuscles.isEmpty, !editorPreservedTargetGroups.isEmpty {
+            return sanitizeTargetGroups(editorPreservedTargetGroups)
+        }
+        let muscles = selectedMuscles.isEmpty ? Set([LiveWorkout.MuscleGroup.fullBody]) : selectedMuscles
+        return sanitizeTargetGroups(orderedTargetGroups(from: muscles))
     }
 
     private func defaultDayName(
@@ -553,8 +590,10 @@ struct WorkoutPlanEditSheet: View {
         focusAreas: [String]? = nil,
         targetMuscleGroups: [String]? = nil,
         exercises: [WorkoutPlan.ExerciseTemplate]? = nil,
+        blocks: [WorkoutPlan.TrainingBlock]? = nil,
         estimatedDurationMinutes: Int? = nil,
-        order: Int? = nil
+        order: Int? = nil,
+        notes: String? = nil
     ) -> WorkoutPlan.WorkoutTemplate {
         WorkoutPlan.WorkoutTemplate(
             id: template.id,
@@ -563,9 +602,10 @@ struct WorkoutPlanEditSheet: View {
             focusAreas: focusAreas ?? template.focusAreas,
             targetMuscleGroups: targetMuscleGroups ?? template.targetMuscleGroups,
             exercises: exercises ?? template.exercises,
+            blocks: blocks ?? template.blocks,
             estimatedDurationMinutes: estimatedDurationMinutes ?? template.estimatedDurationMinutes,
             order: order ?? template.order,
-            notes: nil
+            notes: notes ?? template.notes
         )
     }
 
@@ -575,26 +615,43 @@ struct WorkoutPlanEditSheet: View {
             let finalName = trimmedName.isEmpty
                 ? defaultDayName(
                     for: template.sessionType,
-                    focusAreas: template.focusAreas.isEmpty ? template.targetMuscleGroups : template.focusAreas,
+                    focusAreas: template.focusAreas.isEmpty ? template.resolvedTargetMuscleGroups : template.focusAreas,
                     dayIndex: index + 1
                 )
                 : trimmedName
-            return copyTemplate(template, name: finalName, exercises: [], order: index)
+            let durableBlocks = template.blocks.isEmpty ? template.displayBlocks : template.blocks
+            return copyTemplate(template, name: finalName, blocks: durableBlocks, order: index)
         }
 
         return WorkoutPlan(
             splitType: plan.splitType,
             daysPerWeek: max(plan.daysPerWeek, templates.count),
             templates: templates,
+            planIntent: plan.planIntent,
             rationale: plan.rationale,
             guidelines: plan.guidelines,
             progressionStrategy: plan.progressionStrategy,
+            modalityProgression: plan.modalityProgression,
             warnings: plan.warnings
-        )
+        ).normalizedForDurableBlocks()
     }
 
-    private func savePlan(_ plan: WorkoutPlan) {
-        guard let profile = userProfile else { return }
+#if DEBUG
+    func normalizedPlanForSaveForTesting(_ plan: WorkoutPlan) -> WorkoutPlan {
+        normalizedPlanForSave(plan)
+    }
+#endif
+
+    private func savePlan(_ plan: WorkoutPlan) -> Bool {
+        guard let profile = userProfile else { return false }
+        guard Self.canSaveCurrentPlan(savedPlan: profile.workoutPlan, editingBase: currentPlan) else {
+            saveError = WorkoutPlanEditSaveError(
+                message: "Your workout plan changed while this edit was open. Reopen the editor to make changes to the latest plan."
+            )
+            HapticManager.error()
+            return false
+        }
+
         let normalizedPlan = normalizedPlanForSave(plan)
         WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
             profile: profile,
@@ -603,8 +660,42 @@ struct WorkoutPlanEditSheet: View {
             replacingWith: normalizedPlan
         )
         profile.workoutPlan = normalizedPlan
-        try? modelContext.save()
+        profile.applyStructuredWorkoutPlanPreferences(from: normalizedPlan)
+        refreshGeneratedPlanAdherenceGoals(for: normalizedPlan)
+        do {
+            try modelContext.save()
+            WidgetDataProvider.shared.scheduleRefresh()
+            return true
+        } catch {
+            modelContext.rollback()
+            saveError = WorkoutPlanEditSaveError(message: error.localizedDescription)
+            HapticManager.error()
+            return false
+        }
     }
+
+    static func canSaveCurrentPlan(savedPlan: WorkoutPlan?, editingBase: WorkoutPlan) -> Bool {
+        savedPlan == editingBase
+    }
+
+    static func canSaveSetupPlan(savedPlan: WorkoutPlan?, setupBase: WorkoutPlan?) -> Bool {
+        guard let setupBase else {
+            return savedPlan == nil
+        }
+        return canSaveCurrentPlan(savedPlan: savedPlan, editingBase: setupBase)
+    }
+
+    private func refreshGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
+        WorkoutGoal.refreshGeneratedPlanAdherenceGoals(
+            workoutGoals.filter { $0.status == .active },
+            for: plan
+        )
+    }
+}
+
+private struct WorkoutPlanEditSaveError: Identifiable {
+    let id = UUID()
+    let message: String
 }
 
 private struct WorkoutDayRow: View {
@@ -645,7 +736,7 @@ private struct WorkoutDayRow: View {
     }
 }
 
-private struct WorkoutDayEditorSheet: View {
+struct WorkoutDayEditorSheet: View {
     private enum Field: Hashable {
         case dayName
         case focusAreas
@@ -664,6 +755,7 @@ private struct WorkoutDayEditorSheet: View {
     @Binding var sessionType: WorkoutMode
     @Binding var focusAreasText: String
     @Binding var selectedMuscles: Set<LiveWorkout.MuscleGroup>
+    let hasPreservedTargetGroups: Bool
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
@@ -695,7 +787,7 @@ private struct WorkoutDayEditorSheet: View {
         case .strength:
             return "e.g., Push Day"
         case .cardio:
-            return "e.g., Zone 2 Run"
+            return "e.g., Steady Run"
         case .hiit:
             return "e.g., Conditioning Circuit"
         case .climbing:
@@ -715,6 +807,10 @@ private struct WorkoutDayEditorSheet: View {
         case .custom:
             return "e.g., Skills Session"
         }
+    }
+
+    private var canConfirm: Bool {
+        !sessionType.supportsMuscleTargets || !selectedMuscles.isEmpty || hasPreservedTargetGroups
     }
 
     var body: some View {
@@ -796,11 +892,11 @@ private struct WorkoutDayEditorSheet: View {
 
                     if !sessionType.supportsMuscleTargets {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("Focus Areas")
+                            Text("Activity Focus")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
 
-                            Text("Describe the style of session, skill, or energy system you want this day to cover.")
+                            Text("Name the activities or outcomes this day should cover.")
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
 
@@ -821,7 +917,7 @@ private struct WorkoutDayEditorSheet: View {
                                     .foregroundStyle(.secondary)
                                     .padding(.top, 2)
 
-                                TextField("e.g., Flow, Bouldering, Zone 2, Conditioning", text: $focusAreasText, axis: .vertical)
+                                TextField("e.g., Bouldering, Steady Cardio, Mobility Flow", text: $focusAreasText, axis: .vertical)
                                     .lineLimit(2...4)
                                     .textInputAutocapitalization(.words)
                                     .disableAutocorrection(true)
@@ -888,17 +984,16 @@ private struct WorkoutDayEditorSheet: View {
                     Button(confirmTitle, systemImage: "checkmark", action: onConfirm)
                         .labelStyle(.iconOnly)
                         .tint(.accentColor)
+                        .disabled(!canConfirm)
                 }
             }
         }
         .traiSheetBranding()
         .onChange(of: sessionType) { _, newValue in
-            if newValue.supportsMuscleTargets {
-                if selectedMuscles.isEmpty {
-                    selectedMuscles = [.fullBody]
-                }
-            } else {
+            if !newValue.supportsMuscleTargets {
                 selectedMuscles = []
+            } else if selectedMuscles.isEmpty {
+                selectedMuscles = [.fullBody]
             }
         }
     }
@@ -922,15 +1017,15 @@ private struct WorkoutDayEditorSheet: View {
         if selectedMuscles.contains(muscle) {
             selectedMuscles.remove(muscle)
         } else {
-            selectedMuscles.insert(muscle)
+            if muscle == .fullBody {
+                selectedMuscles = [.fullBody]
+            } else {
+                selectedMuscles.insert(muscle)
+            }
         }
 
         if muscle != .fullBody {
             selectedMuscles.remove(.fullBody)
-        }
-
-        if selectedMuscles.isEmpty {
-            selectedMuscles.insert(.fullBody)
         }
     }
 
@@ -951,7 +1046,7 @@ private struct WorkoutDayEditorSheet: View {
         case "full body":
             return "Full Body"
         case "zone 2":
-            return "Zone 2"
+            return "Steady Cardio"
         default:
             return raw.localizedCapitalized
         }
@@ -985,7 +1080,7 @@ private struct WorkoutDayEditorSheet: View {
     }
 }
 
-private struct DayMuscleTile: View {
+struct DayMuscleTile: View {
     let muscle: LiveWorkout.MuscleGroup
     let isSelected: Bool
     let action: () -> Void
@@ -1014,7 +1109,7 @@ private struct DayMuscleTile: View {
     }
 }
 
-private struct DayPresetChip: View {
+struct DayPresetChip: View {
     let title: String
     var isSelected: Bool = false
     let action: () -> Void
@@ -1034,7 +1129,7 @@ private struct DayPresetChip: View {
     }
 }
 
-private struct SessionTypeTile: View {
+struct SessionTypeTile: View {
     let mode: WorkoutMode
     let isSelected: Bool
     let action: () -> Void

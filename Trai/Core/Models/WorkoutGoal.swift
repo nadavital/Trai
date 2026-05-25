@@ -14,14 +14,22 @@ final class WorkoutGoal {
     var statusRaw: String = GoalStatus.active.rawValue
     var linkedWorkoutTypeRaw: String?
     var linkedActivityName: String?
+    var linkedActivityTagsRaw: String = ""
+    var linkedActivityKindRaw: String?
+    var linkedActivityRoleRaw: String?
     var targetValue: Double?
     var targetUnit: String = ""
     var periodUnitRaw: String?
     var periodCount: Int?
+    var successCriteria: String = ""
     var notes: String = ""
     var targetDate: Date?
     var checkInCadenceDays: Int?
     var baselineValue: Double?
+    var tracksGeneratedPlanAdherence: Bool = false
+    var generatedPlanTemplateIDsRaw: String = ""
+    var generatedPlanBlockIDsRaw: String = ""
+    var requiresGeneratedPlanBlockScope: Bool = false
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var completedAt: Date?
@@ -36,28 +44,42 @@ final class WorkoutGoal {
         status: GoalStatus = .active,
         linkedWorkoutType: WorkoutMode? = nil,
         linkedActivityName: String? = nil,
+        linkedActivityTags: [String] = [],
+        linkedActivityKind: WorkoutPlan.TrainingBlock.BlockKind? = nil,
+        linkedActivityRole: WorkoutPlan.TrainingBlock.Role? = nil,
         targetValue: Double? = nil,
         targetUnit: String = "",
         periodUnit: PeriodUnit? = nil,
         periodCount: Int? = nil,
+        successCriteria: String = "",
         notes: String = "",
         targetDate: Date? = nil,
         checkInCadenceDays: Int? = nil,
-        baselineValue: Double? = nil
+        baselineValue: Double? = nil,
+        tracksGeneratedPlanAdherence: Bool = false,
+        generatedPlanBlockIDs: [UUID] = [],
+        requiresGeneratedPlanBlockScope: Bool = false
     ) {
         self.title = title
         self.goalKindRaw = goalKind.rawValue
         self.statusRaw = status.rawValue
         self.linkedWorkoutTypeRaw = linkedWorkoutType?.rawValue
         self.linkedActivityName = linkedActivityName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.linkedActivityTags = linkedActivityTags
+        self.linkedActivityKindRaw = linkedActivityKind?.rawValue
+        self.linkedActivityRoleRaw = linkedActivityRole?.rawValue
         self.targetValue = targetValue
         self.targetUnit = targetUnit
         self.periodUnitRaw = periodUnit?.rawValue
         self.periodCount = periodCount
+        self.successCriteria = successCriteria.trimmingCharacters(in: .whitespacesAndNewlines)
         self.notes = notes
         self.targetDate = targetDate
         self.checkInCadenceDays = checkInCadenceDays
         self.baselineValue = baselineValue
+        self.tracksGeneratedPlanAdherence = tracksGeneratedPlanAdherence
+        self.generatedPlanBlockIDs = generatedPlanBlockIDs
+        self.requiresGeneratedPlanBlockScope = requiresGeneratedPlanBlockScope || !generatedPlanBlockIDs.isEmpty
     }
 }
 
@@ -67,6 +89,7 @@ extension WorkoutGoal {
         case frequency = "frequency"
         case duration = "duration"
         case distance = "distance"
+        case count = "count"
         case weight = "weight"
 
         var id: String { rawValue }
@@ -77,6 +100,7 @@ extension WorkoutGoal {
             case .frequency: "Frequency"
             case .duration: "Duration"
             case .distance: "Distance"
+            case .count: "Count"
             case .weight: "Weight"
             }
         }
@@ -87,6 +111,7 @@ extension WorkoutGoal {
             case .frequency: "calendar.badge.clock"
             case .duration: "clock.badge"
             case .distance: "point.topleft.down.curvedto.point.bottomright.up"
+            case .count: "number"
             case .weight: "dumbbell.fill"
             }
         }
@@ -96,7 +121,7 @@ extension WorkoutGoal {
         }
 
         var usesPeriodTarget: Bool {
-            self == .frequency
+            self == .frequency || self == .duration || self == .distance || self == .count
         }
     }
 
@@ -161,8 +186,59 @@ extension WorkoutGoal {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    var linkedActivityTags: [String] {
+        get {
+            linkedActivityTagsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            linkedActivityTagsRaw = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ",")
+        }
+    }
+
+    var linkedActivityKind: WorkoutPlan.TrainingBlock.BlockKind? {
+        get { linkedActivityKindRaw.flatMap(WorkoutPlan.TrainingBlock.BlockKind.init(rawValue:)) }
+        set { linkedActivityKindRaw = newValue?.rawValue }
+    }
+
+    var linkedActivityRole: WorkoutPlan.TrainingBlock.Role? {
+        get { linkedActivityRoleRaw.flatMap(WorkoutPlan.TrainingBlock.Role.init(rawValue:)) }
+        set { linkedActivityRoleRaw = newValue?.rawValue }
+    }
+
+    var hasActivityScope: Bool {
+        trimmedActivityName != nil
+            || !linkedActivityTags.isEmpty
+            || linkedActivityKind != nil
+            || linkedActivityRole != nil
+            || !generatedPlanBlockIDs.isEmpty
+    }
+
+    var requiresDurableGeneratedPlanScope: Bool {
+        hasActivityScope || linkedWorkoutType != nil
+    }
+
     var trimmedNotes: String {
         notes.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedSuccessCriteria: String {
+        successCriteria.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var supportingSummary: String? {
+        let criteria = trimmedSuccessCriteria
+        if !criteria.isEmpty {
+            return criteria
+        }
+
+        let notes = trimmedNotes
+        return notes.isEmpty ? nil : notes
     }
 
     var isActive: Bool {
@@ -179,22 +255,30 @@ extension WorkoutGoal {
             return 21
         case .frequency:
             return periodUnit == .month ? 28 : 14
-        case .duration, .distance, .weight:
+        case .duration, .distance, .count, .weight:
             return 21
         }
     }
 
     var scopeSummary: String {
-        if let activityName = trimmedActivityName, let linkedWorkoutType {
-            return "\(linkedWorkoutType.displayName) • \(activityName)"
+        var parts: [String] = []
+        if let linkedWorkoutType {
+            parts.append(linkedWorkoutType.displayName)
         }
         if let activityName = trimmedActivityName {
-            return activityName
+            parts.append(activityName)
         }
-        if let linkedWorkoutType {
-            return linkedWorkoutType.displayName
+        if !linkedActivityTags.isEmpty {
+            parts.append(linkedActivityTags.prefix(2).joined(separator: ", "))
         }
-        return "Any session"
+        let hasSemanticActivityScope = trimmedActivityName != nil || !linkedActivityTags.isEmpty
+        if !hasSemanticActivityScope, let linkedActivityKind {
+            parts.append(linkedActivityKind.displayName)
+        }
+        if !hasSemanticActivityScope, let linkedActivityRole {
+            parts.append(linkedActivityRole.placementDisplayName)
+        }
+        return parts.isEmpty ? "Any session" : parts.joined(separator: " • ")
     }
 
     var trackingSummary: String? {
@@ -205,10 +289,13 @@ extension WorkoutGoal {
             let periodLabel = periodLabelText
             return "\(roundedTarget)x per \(periodLabel)"
         case .milestone:
-            return nil
-        case .duration, .distance, .weight:
+            let criteria = trimmedSuccessCriteria
+            return criteria.isEmpty ? nil : criteria
+        case .duration, .distance, .count, .weight:
             guard let targetValue, targetValue > 0 else { return nil }
-            return formattedTargetValue(targetValue, unit: targetUnit)
+            let target = formattedTargetValue(targetValue, unit: targetUnit)
+            guard goalKind != .weight, periodUnit != nil else { return target }
+            return "\(target) / \(periodLabelText)"
         }
     }
 
@@ -226,36 +313,247 @@ extension WorkoutGoal {
         return "By \(targetDate.formatted(date: .abbreviated, time: .omitted))"
     }
 
-    func matches(workout: LiveWorkout) -> Bool {
-        if let linkedWorkoutType, linkedWorkoutType != workout.type {
+    var planSetupDeduplicationKey: String {
+        let scopeParts: [String] = [
+            linkedWorkoutTypeRaw?.goalNormalizedKey ?? "any",
+            trimmedActivityName?.goalNormalizedKey ?? "",
+            linkedActivityTags.map(\.goalNormalizedKey).filter { !$0.isEmpty }.sorted().joined(separator: ","),
+            linkedActivityKindRaw?.goalNormalizedKey ?? "",
+            linkedActivityRoleRaw?.goalNormalizedKey ?? "",
+            tracksGeneratedPlanAdherence ? "planAdherence" : "",
+            requiresGeneratedPlanBlockScope ? "planBlockScope" : "",
+            generatedPlanBlockIDs.map(\.uuidString).sorted().joined(separator: ",")
+        ]
+
+        let targetParts: [String] = [
+            targetValue.map(Self.normalizedTargetValue) ?? "",
+            targetUnit.goalNormalizedKey,
+            periodUnitRaw?.goalNormalizedKey ?? "",
+            periodCount.map(String.init) ?? ""
+        ]
+
+        if goalKind != .milestone {
+            return ([goalKind.rawValue] + scopeParts + targetParts)
+                .joined(separator: "|")
+        }
+
+        return ([goalKind.rawValue] + scopeParts + [
+            trimmedTitle.goalNormalizedKey,
+            trimmedSuccessCriteria.goalNormalizedKey
+        ])
+        .joined(separator: "|")
+    }
+
+    func normalizeGeneratedPlanAdherenceScopeIfNeeded(for plan: WorkoutPlan) {
+        guard isGeneratedPlanAdherenceGoal(for: plan) else { return }
+
+        targetValue = Double(plan.daysPerWeek)
+        generatedPlanTemplateIDs = plan.templates.map(\.id)
+        generatedPlanBlockIDs = []
+        requiresGeneratedPlanBlockScope = false
+        linkedWorkoutTypeRaw = nil
+        linkedActivityName = nil
+        linkedActivityTags = []
+        linkedActivityKindRaw = nil
+        linkedActivityRoleRaw = nil
+        updatedAt = Date()
+    }
+
+    func normalizeGeneratedPlanBlockScopeIfNeeded(for plan: WorkoutPlan) {
+        guard !tracksGeneratedPlanAdherence, requiresGeneratedPlanBlockScope || !generatedPlanBlockIDs.isEmpty else { return }
+        if !generatedPlanBlockIDs.isEmpty {
+            requiresGeneratedPlanBlockScope = true
+        }
+        let validBlockIDs = Set(plan.templates.flatMap { template in
+            template.blocks.map(\.id)
+        })
+        let normalizedIDs = generatedPlanBlockIDs.filter { validBlockIDs.contains($0) }
+        guard normalizedIDs != generatedPlanBlockIDs else { return }
+        generatedPlanBlockIDs = normalizedIDs
+        updatedAt = Date()
+    }
+
+    static func refreshGeneratedPlanAdherenceGoals(
+        _ goals: [WorkoutGoal],
+        for plan: WorkoutPlan
+    ) {
+        goals
+            .filter(\.tracksGeneratedPlanAdherence)
+            .forEach { $0.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan) }
+        goals
+            .filter { !$0.tracksGeneratedPlanAdherence && ($0.requiresGeneratedPlanBlockScope || !$0.generatedPlanBlockIDs.isEmpty) }
+            .forEach { $0.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan) }
+    }
+
+    static func generatedGoalsToInsert(
+        _ goals: [WorkoutGoal],
+        existingGoals: [WorkoutGoal],
+        for plan: WorkoutPlan
+    ) -> [WorkoutGoal] {
+        var existingKeys = Set(existingGoals.map(\.planSetupDeduplicationKey))
+        var result: [WorkoutGoal] = []
+        for goal in goals {
+            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+            goal.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan)
+            guard goal.tracksGeneratedPlanAdherence
+                || !goal.requiresDurableGeneratedPlanScope
+                || !goal.generatedPlanBlockIDs.isEmpty else {
+                continue
+            }
+            let key = goal.planSetupDeduplicationKey
+            guard !key.isEmpty, existingKeys.insert(key).inserted else { continue }
+            result.append(goal)
+        }
+        return result
+    }
+
+    private func isGeneratedPlanAdherenceGoal(for plan: WorkoutPlan) -> Bool {
+        guard goalKind == .frequency,
+              let targetValue,
+              targetValue > 0,
+              plan.daysPerWeek > 0 else {
             return false
         }
 
-        guard let activityName = trimmedActivityName?.goalNormalizedKey else {
-            return true
+        guard tracksGeneratedPlanAdherence else {
+            return false
         }
 
-        let normalizedFocusAreas = Set(workout.focusAreas.map(\.goalNormalizedKey))
-        if normalizedFocusAreas.contains(activityName) {
-            return true
-        }
+        return true
+    }
 
-        if workout.name.goalNormalizedKey == activityName {
-            return true
-        }
+    var hasValidTrackingCriteria: Bool {
+        guard !trimmedSuccessCriteria.isEmpty else { return false }
 
-        return (workout.entries ?? []).contains {
-            $0.exerciseName.goalNormalizedKey == activityName
+        switch goalKind {
+        case .milestone:
+            return true
+        case .frequency:
+            return targetValue.map { $0 > 0 } == true &&
+                periodUnit != nil &&
+                !(targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        case .duration, .distance, .weight:
+            return targetValue.map { $0 > 0 } == true &&
+                !(targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        case .count:
+            return targetValue.map { $0 > 0 } == true &&
+                periodUnit != nil &&
+                !(targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
 
+    func matches(workout: LiveWorkout) -> Bool {
+        if requiresGeneratedPlanBlockScope || !generatedPlanBlockIDs.isEmpty {
+            return matchesGeneratedPlanBlock(workout: workout)
+        }
+
+        if tracksGeneratedPlanAdherence {
+            return matchesGeneratedPlanTemplate(workout: workout)
+        }
+
+        guard hasActivityScope else {
+            if let linkedWorkoutType {
+                return linkedWorkoutType == workout.type
+            }
+            return true
+        }
+
+        let activityName = trimmedActivityName?.goalNormalizedKey
+        let nameMatches = activityName.map {
+            Set(workout.focusAreas.map(\.goalNormalizedKey)).contains($0)
+                || workout.name.goalNormalizedKey == $0
+        } ?? false
+
+        let tagMatches: Bool = {
+            let tags = normalizedLinkedActivityTags
+            guard !tags.isEmpty else { return false }
+            let workoutTokens = Set(workout.focusAreas.map(\.goalNormalizedKey) + [workout.name.goalNormalizedKey])
+            return !tags.isDisjoint(with: workoutTokens)
+        }()
+
+        if (workout.entries ?? []).contains(where: { matches(entry: $0) }) || nameMatches || tagMatches {
+            return true
+        }
+
+        if trimmedActivityName == nil,
+           normalizedLinkedActivityTags.isEmpty,
+           linkedActivityRole == nil,
+           let linkedActivityKind,
+           Self.matches(workout: workout, activityKind: linkedActivityKind) {
+            return true
+        }
+
+        return false
+    }
+
+    func matches(entry: LiveWorkoutEntry) -> Bool {
+        if requiresGeneratedPlanBlockScope || !generatedPlanBlockIDs.isEmpty {
+            guard let sourcePlanBlockID = entry.sourcePlanBlockID else { return false }
+            return Set(generatedPlanBlockIDs).contains(sourcePlanBlockID)
+        }
+
+        let entryTokens = Set(
+            ([entry.exerciseName, entry.activityTypeName] + entry.targetTags)
+                .map(\.goalNormalizedKey)
+                .filter { !$0.isEmpty }
+        )
+
+        if let activityName = trimmedActivityName?.goalNormalizedKey,
+           !entryTokens.contains(activityName) {
+            return false
+        }
+
+        let activityTags = normalizedLinkedActivityTags
+        if !activityTags.isEmpty {
+            guard !activityTags.isDisjoint(with: entryTokens) else { return false }
+        }
+
+        if let linkedActivityKind {
+            let entryKind = entry.activityKind ?? WorkoutPlan.TrainingBlock.BlockKind.liveWorkoutFallbackKind(for: entry.exerciseType)
+            if entryKind != linkedActivityKind {
+                return false
+            }
+        }
+
+        if let linkedActivityRole,
+           entry.activityRole != linkedActivityRole {
+            return false
+        }
+
+        return true
+    }
+
     func matches(session: WorkoutSession) -> Bool {
+        guard !requiresGeneratedPlanBlockScope, generatedPlanBlockIDs.isEmpty else { return false }
+
         if let linkedWorkoutType, linkedWorkoutType != session.inferredWorkoutMode {
             return false
         }
 
-        guard let activityName = trimmedActivityName?.goalNormalizedKey else {
+        guard hasActivityScope else {
             return true
+        }
+
+        let tags = normalizedLinkedActivityTags
+        if trimmedActivityName == nil,
+           tags.isEmpty,
+           linkedActivityRole == nil,
+           let linkedActivityKind,
+           Self.matches(session: session, activityKind: linkedActivityKind) {
+            return true
+        }
+
+        guard let activityName = trimmedActivityName?.goalNormalizedKey else {
+            guard !tags.isEmpty else { return false }
+            return !tags.isDisjoint(with: session.goalMatchingTokens)
+        }
+
+        if !tags.isEmpty, !tags.isDisjoint(with: session.goalMatchingTokens) {
+            return true
+        }
+
+        guard !activityName.isEmpty else {
+            return false
         }
 
         return session.goalMatchingTokens.contains(activityName)
@@ -291,11 +589,116 @@ extension WorkoutGoal {
         }
         return trimmedUnit.isEmpty ? formattedValue : "\(formattedValue) \(trimmedUnit)"
     }
+
+    private var normalizedLinkedActivityTags: Set<String> {
+        Set(linkedActivityTags.map(\.goalNormalizedKey).filter { !$0.isEmpty })
+    }
+
+    private static func matches(
+        workout: LiveWorkout,
+        activityKind: WorkoutPlan.TrainingBlock.BlockKind
+    ) -> Bool {
+        let candidates = [workout.workoutType, workout.name] + workout.focusAreas
+        if candidates.contains(where: { rawValue in
+            Exercise.Category.normalized(from: rawValue)?
+                .userFacingEquivalent
+                .liveWorkoutActivityKind == activityKind
+        }) {
+            return true
+        }
+
+        return WorkoutPlan.TrainingBlock.BlockKind(sessionType: workout.type) == activityKind
+    }
+
+    private static func matches(
+        session: WorkoutSession,
+        activityKind: WorkoutPlan.TrainingBlock.BlockKind
+    ) -> Bool {
+        if let exerciseKind = session.exercise?
+            .exerciseCategory
+            .userFacingEquivalent
+            .liveWorkoutActivityKind {
+            return exerciseKind == activityKind
+        }
+
+        let candidates = [
+            session.healthKitWorkoutType,
+            session.displayTypeName,
+            session.displayName
+        ] + session.semanticActivityTags
+
+        if candidates.compactMap({ $0 }).contains(where: { rawValue in
+            Exercise.Category.normalized(from: rawValue)?
+                .userFacingEquivalent
+                .liveWorkoutActivityKind == activityKind
+        }) {
+            return true
+        }
+
+        return WorkoutPlan.TrainingBlock.BlockKind(sessionType: session.inferredWorkoutMode) == activityKind
+    }
+
+    private static func normalizedTargetValue(_ value: Double) -> String {
+        if value.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(Int(value.rounded()))
+        }
+        return String(format: "%.2f", value)
+    }
+}
+
+extension WorkoutGoal {
+    var generatedPlanTemplateIDs: [UUID] {
+        get {
+            generatedPlanTemplateIDsRaw
+                .split(separator: ",")
+                .compactMap { UUID(uuidString: String($0)) }
+        }
+        set {
+            generatedPlanTemplateIDsRaw = newValue
+                .map(\.uuidString)
+                .joined(separator: ",")
+        }
+    }
+
+    var generatedPlanBlockIDs: [UUID] {
+        get {
+            generatedPlanBlockIDsRaw
+                .split(separator: ",")
+                .compactMap { UUID(uuidString: String($0)) }
+        }
+        set {
+            generatedPlanBlockIDsRaw = newValue
+                .map(\.uuidString)
+                .joined(separator: ",")
+            if !newValue.isEmpty {
+                requiresGeneratedPlanBlockScope = true
+            }
+        }
+    }
+
+    func matchesGeneratedPlanTemplate(workout: LiveWorkout) -> Bool {
+        guard tracksGeneratedPlanAdherence else { return false }
+        guard let sourceID = workout.sourcePlanTemplateID else { return false }
+        return Set(generatedPlanTemplateIDs).contains(sourceID)
+    }
+
+    func matchesGeneratedPlanBlock(workout: LiveWorkout) -> Bool {
+        let blockIDs = Set(generatedPlanBlockIDs)
+        guard !blockIDs.isEmpty else { return false }
+        return (workout.entries ?? []).contains { entry in
+            guard let sourcePlanBlockID = entry.sourcePlanBlockID else { return false }
+            return blockIDs.contains(sourcePlanBlockID)
+        }
+    }
 }
 
 extension String {
     var goalNormalizedKey: String {
-        trimmingCharacters(in: .whitespacesAndNewlines)
+        let scalars = trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+            .unicodeScalars
+            .filter { CharacterSet.alphanumerics.contains($0) }
+        return String(String.UnicodeScalarView(scalars))
     }
+
 }

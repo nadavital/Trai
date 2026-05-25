@@ -8,6 +8,136 @@
 import SwiftUI
 import SwiftData
 
+enum ChatSuggestionFreshness {
+    static func isStale(messageTimestamp: Date, currentPlanUpdatedAt: Date?) -> Bool {
+        guard let currentPlanUpdatedAt else { return false }
+        return currentPlanUpdatedAt > messageTimestamp
+    }
+}
+
+enum ChatWorkoutPlanSuggestionContext {
+    static func latestFreshSuggestion(
+        in messages: [ChatMessage],
+        currentPlanUpdatedAt: Date?,
+        includeRetired: Bool = false
+    ) -> WorkoutPlanSuggestionEntry? {
+        for message in messages.reversed() where isEligible(message, includeRetired: includeRetired) {
+            guard let suggestion = message.suggestedWorkoutPlan else { continue }
+            guard !ChatSuggestionFreshness.isStale(
+                messageTimestamp: message.timestamp,
+                currentPlanUpdatedAt: currentPlanUpdatedAt
+            ) else {
+                continue
+            }
+            return suggestion
+        }
+        return nil
+    }
+
+    private static func isEligible(_ message: ChatMessage, includeRetired: Bool) -> Bool {
+        if message.hasPendingWorkoutPlanSuggestion {
+            return true
+        }
+        return includeRetired && message.suggestedWorkoutPlan != nil && !message.workoutPlanUpdateApplied
+    }
+}
+
+enum ChatWorkoutStartSuggestionContext {
+    static func isStale(
+        suggestion: SuggestedWorkoutEntry,
+        messageTimestamp: Date,
+        currentPlanUpdatedAt: Date?,
+        currentTemplateIDs: Set<UUID>?
+    ) -> Bool {
+        guard let sourcePlanTemplateID = suggestion.sourcePlanTemplateID else {
+            return false
+        }
+        guard let currentTemplateIDs, currentTemplateIDs.contains(sourcePlanTemplateID) else {
+            return true
+        }
+        return ChatSuggestionFreshness.isStale(
+            messageTimestamp: messageTimestamp,
+            currentPlanUpdatedAt: currentPlanUpdatedAt
+        )
+    }
+}
+
+enum ChatWorkoutLogSuggestionContext {
+    static func isStale(
+        suggestion: SuggestedWorkoutLog,
+        messageTimestamp: Date,
+        currentPlanUpdatedAt: Date?,
+        currentTemplateIDs: Set<UUID>?
+    ) -> Bool {
+        guard let sourcePlanTemplateID = suggestion.sourcePlanTemplateID else {
+            return false
+        }
+        guard let currentTemplateIDs, currentTemplateIDs.contains(sourcePlanTemplateID) else {
+            return true
+        }
+        return ChatSuggestionFreshness.isStale(
+            messageTimestamp: messageTimestamp,
+            currentPlanUpdatedAt: currentPlanUpdatedAt
+        )
+    }
+}
+
+enum ChatWorkoutStartFreshness {
+    static func isCurrent(_ workout: SuggestedWorkoutEntry, currentPlan: WorkoutPlan?) -> Bool {
+        guard let sourcePlanTemplateID = workout.sourcePlanTemplateID else { return true }
+        guard let template = currentPlan?.templates.first(where: { $0.id == sourcePlanTemplateID }) else {
+            return false
+        }
+
+        if template.blocks.isEmpty {
+            let currentExerciseIDs = Set(template.structuredExercises.map(\.id))
+            return workout.exercises.allSatisfy { exercise in
+                guard let category = exercise.strictCategory else { return false }
+                guard category == .strength else { return true }
+                guard !currentExerciseIDs.isEmpty else { return false }
+                return currentExerciseIDs.contains(exercise.id)
+            }
+        }
+
+        let currentBlockIDs = Set(template.displayBlocks.map(\.id))
+        guard !currentBlockIDs.isEmpty else { return false }
+
+        return workout.exercises.allSatisfy { exercise in
+            guard let category = exercise.strictCategory else { return false }
+            let sourceBlockID = exercise.sourcePlanBlockID ?? (category == .strength ? nil : exercise.id)
+            guard let sourceBlockID else { return false }
+            return currentBlockIDs.contains(sourceBlockID)
+        }
+    }
+}
+
+enum ChatNutritionPlanSuggestionContext {
+    static func latestFreshSuggestion(
+        in messages: [ChatMessage],
+        currentPlanUpdatedAt: Date?,
+        includeRetired: Bool = false
+    ) -> PlanUpdateSuggestionEntry? {
+        for message in messages.reversed() where isEligible(message, includeRetired: includeRetired) {
+            guard let suggestion = message.suggestedPlan else { continue }
+            guard !ChatSuggestionFreshness.isStale(
+                messageTimestamp: message.timestamp,
+                currentPlanUpdatedAt: currentPlanUpdatedAt
+            ) else {
+                continue
+            }
+            return suggestion
+        }
+        return nil
+    }
+
+    private static func isEligible(_ message: ChatMessage, includeRetired: Bool) -> Bool {
+        if message.hasPendingPlanSuggestion {
+            return true
+        }
+        return includeRetired && message.suggestedPlan != nil && !message.planUpdateApplied
+    }
+}
+
 // MARK: - Suggestion Tracking
 
 extension ChatView {
@@ -148,10 +278,27 @@ extension ChatView {
     @discardableResult
     func retirePendingPlanSuggestionsInCurrentSession() -> Bool {
         var retiredAnySuggestion = false
+        var seenMessageIds: Set<UUID> = []
+        var messagesToRetire = currentSessionMessages
+        let sessionId = currentSessionId
 
-        for message in currentSessionMessages where message.hasPendingPlanSuggestion {
-            message.suggestedPlanDismissed = true
-            retiredAnySuggestion = true
+        if !isTemporarySession {
+            let descriptor = FetchDescriptor<ChatMessage>(
+                sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
+            )
+            let persistedMessages = (try? modelContext.fetch(descriptor)) ?? allMessages
+            messagesToRetire.append(contentsOf: persistedMessages.filter { $0.sessionId == sessionId })
+        }
+
+        for message in messagesToRetire where seenMessageIds.insert(message.id).inserted {
+            if message.hasPendingPlanSuggestion {
+                message.suggestedPlanDismissed = true
+                retiredAnySuggestion = true
+            }
+            if message.hasPendingWorkoutPlanSuggestion {
+                message.suggestedWorkoutPlanDismissed = true
+                retiredAnySuggestion = true
+            }
         }
 
         guard retiredAnySuggestion else { return false }
@@ -161,14 +308,95 @@ extension ChatView {
         return true
     }
 
+    func latestPendingWorkoutPlanSuggestionMessageID() -> UUID? {
+        var seenMessageIds: Set<UUID> = []
+        var messagesToInspect = currentSessionMessages
+        let sessionId = currentSessionId
+
+        if !isTemporarySession {
+            let descriptor = FetchDescriptor<ChatMessage>(
+                sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
+            )
+            let persistedMessages = (try? modelContext.fetch(descriptor)) ?? allMessages
+            messagesToInspect.append(contentsOf: persistedMessages.filter { $0.sessionId == sessionId })
+        }
+
+        return messagesToInspect
+            .sorted { $0.timestamp > $1.timestamp }
+            .first { message in
+                seenMessageIds.insert(message.id).inserted && message.hasPendingWorkoutPlanSuggestion
+            }?
+            .id
+    }
+
+    func latestPendingPlanSuggestionMessageID() -> UUID? {
+        var seenMessageIds: Set<UUID> = []
+        var messagesToInspect = currentSessionMessages
+        let sessionId = currentSessionId
+
+        if !isTemporarySession {
+            let descriptor = FetchDescriptor<ChatMessage>(
+                sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
+            )
+            let persistedMessages = (try? modelContext.fetch(descriptor)) ?? allMessages
+            messagesToInspect.append(contentsOf: persistedMessages.filter { $0.sessionId == sessionId })
+        }
+
+        return messagesToInspect
+            .sorted { $0.timestamp > $1.timestamp }
+            .first { message in
+                seenMessageIds.insert(message.id).inserted && message.hasPendingPlanSuggestion
+            }?
+            .id
+    }
+
+    func retirePendingWorkoutPlanSuggestions(except keptMessageID: UUID) {
+        var retiredAnySuggestion = false
+        var seenMessageIds: Set<UUID> = []
+        var messagesToRetire = currentSessionMessages
+        let sessionId = currentSessionId
+
+        if !isTemporarySession {
+            let descriptor = FetchDescriptor<ChatMessage>(
+                sortBy: [SortDescriptor(\ChatMessage.timestamp, order: .reverse)]
+            )
+            let persistedMessages = (try? modelContext.fetch(descriptor)) ?? allMessages
+            messagesToRetire.append(contentsOf: persistedMessages.filter { $0.sessionId == sessionId })
+        }
+
+        for message in messagesToRetire
+        where seenMessageIds.insert(message.id).inserted
+            && message.id != keptMessageID
+            && message.hasPendingWorkoutPlanSuggestion {
+            message.suggestedWorkoutPlanDismissed = true
+            retiredAnySuggestion = true
+        }
+
+        if retiredAnySuggestion {
+            try? modelContext.save()
+            rebuildSessionMessages(preferLiveQueryData: true)
+        }
+    }
+
     func acceptPlanSuggestion(_ plan: PlanUpdateSuggestionEntry, for message: ChatMessage) {
         guard let profile else { return }
+        let latestPendingSuggestionID = latestPendingPlanSuggestionMessageID()
+        guard latestPendingSuggestionID == message.id,
+              !ChatSuggestionFreshness.isStale(
+                messageTimestamp: message.timestamp,
+                currentPlanUpdatedAt: profile.aiPlanGeneratedAt
+              ) else {
+            message.suggestedPlanDismissed = true
+            message.errorMessage = "This nutrition plan update is no longer current. Use the latest plan card instead."
+            try? modelContext.save()
+            HapticManager.error()
+            return
+        }
 
         let currentWeight = weightEntries.first?.weightKg
 
         // Archive current plan before updating
         archiveCurrentPlan(profile: profile, reason: .chatAdjustment, userWeightKg: currentWeight)
-
         if let calories = plan.calories {
             profile.dailyCalorieGoal = calories
         }
@@ -199,6 +427,7 @@ extension ChatView {
 
         // Update assessment state - marks plan as reviewed with current weight as new baseline
         planAssessmentService.markPlanReviewed(profile: profile, currentWeightKg: currentWeight)
+        profile.aiPlanGeneratedAt = Date()
 
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.applyPlanUpdate,
@@ -209,6 +438,10 @@ extension ChatView {
             saveImmediately: false
         )
 
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            message.planUpdateApplied = true
+        }
+
         do {
             try modelContext.save()
         } catch {
@@ -216,10 +449,6 @@ extension ChatView {
             message.errorMessage = "We couldn’t save this plan update. Please try again."
             HapticManager.error()
             return
-        }
-
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            message.planUpdateApplied = true
         }
 
         HapticManager.success()
@@ -281,21 +510,36 @@ extension ChatView {
 extension ChatView {
     func acceptWorkoutPlanSuggestion(_ suggestion: WorkoutPlanSuggestionEntry, for message: ChatMessage) {
         guard let profile else { return }
+        let latestPendingSuggestionID = latestPendingWorkoutPlanSuggestionMessageID()
+        guard latestPendingSuggestionID == message.id,
+              !ChatSuggestionFreshness.isStale(
+                messageTimestamp: message.timestamp,
+                currentPlanUpdatedAt: profile.workoutPlanGeneratedAt
+              ) else {
+            message.suggestedWorkoutPlanDismissed = true
+            message.errorMessage = "This workout plan update is no longer current. Use the latest plan card instead."
+            try? modelContext.save()
+            HapticManager.error()
+            return
+        }
 
         let hadExistingPlan = profile.workoutPlan != nil
+        let durablePlan = suggestion.plan.normalizedForDurableBlocks()
 
         WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
             profile: profile,
             reason: .chatAdjustment,
             modelContext: modelContext,
-            replacingWith: suggestion.plan
+            replacingWith: durablePlan
         )
 
-        profile.workoutPlan = suggestion.plan
+        profile.workoutPlan = durablePlan
+        profile.applyStructuredWorkoutPlanPreferences(from: durablePlan)
+        refreshGeneratedPlanAdherenceGoals(for: durablePlan)
 
         if !hadExistingPlan {
             WorkoutPlanHistoryService.archivePlan(
-                suggestion.plan,
+                durablePlan,
                 profile: profile,
                 reason: .chatCreate,
                 modelContext: modelContext
@@ -314,6 +558,7 @@ extension ChatView {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.workoutPlanUpdateApplied = true
         }
+        retirePendingWorkoutPlanSuggestions(except: message.id)
 
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.reviewWorkoutPlan,
@@ -324,8 +569,13 @@ extension ChatView {
             saveImmediately: false
         )
         try? modelContext.save()
+        WidgetDataProvider.shared.scheduleRefresh()
 
         HapticManager.success()
+    }
+
+    private func refreshGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
+        WorkoutGoal.refreshGeneratedPlanAdherenceGoals(activeWorkoutGoals, for: plan)
     }
 
     func dismissWorkoutPlanSuggestion(for message: ChatMessage) {
@@ -345,25 +595,59 @@ extension ChatView {
 
 // MARK: - Workout Log Suggestion Actions
 
-extension ChatView {
-    func acceptWorkoutLogSuggestion(_ workoutLog: SuggestedWorkoutLog, for message: ChatMessage) {
-        // Create a LiveWorkout with proper exercise details
-        let workoutType = LiveWorkout.WorkoutType.normalized(from: workoutLog.workoutType)
-            ?? (workoutLog.isStrength ? .strength : .cardio)
+enum ChatWorkoutLogSuggestionMapper {
+    enum MappingError: Error {
+        case invalidWorkoutType
+        case invalidCategory
+        case missingActivityName
+
+        var userMessage: String {
+            switch self {
+            case .invalidWorkoutType, .invalidCategory:
+                return "This workout log needs stable activity data before it can be saved. Ask Trai to regenerate it."
+            case .missingActivityName:
+                return "This workout log needs activity names before it can be saved. Ask Trai to regenerate it."
+            }
+        }
+    }
+
+    static func makeWorkout(from workoutLog: SuggestedWorkoutLog, now: Date = Date()) throws -> LiveWorkout {
+        guard let workoutType = LiveWorkout.WorkoutType(rawValue: workoutLog.workoutType) else {
+            throw MappingError.invalidWorkoutType
+        }
+
         let workout = LiveWorkout(
             name: workoutLog.displayName,
             workoutType: workoutType,
             targetMuscleGroups: [],
-            focusAreas: workoutType.supportsMuscleTargets ? [] : [workoutLog.displayName]
+            focusAreas: workoutLog.semanticFocusAreas
         )
+        workout.sourcePlanTemplateID = workoutLog.sourcePlanTemplateID
 
-        // Add exercises as entries
         var entries: [LiveWorkoutEntry] = []
         for (index, exercise) in workoutLog.exercises.enumerated() {
-            let entry = LiveWorkoutEntry(exerciseName: exercise.name, orderIndex: index)
+            guard let category = exercise.strictCategory else {
+                throw MappingError.invalidCategory
+            }
+            if category != .strength, exercise.trimmedActivityTypeName == nil {
+                throw MappingError.missingActivityName
+            }
+            let entry = LiveWorkoutEntry(
+                exerciseName: exercise.name,
+                orderIndex: index,
+                exerciseType: category.rawValue
+            )
+            entry.activityTypeName = exercise.resolvedActivityName(category: category)
+            entry.activityKind = category.liveWorkoutActivityKind
+            entry.activityRole = exercise.resolvedActivityRole
+            entry.targetTags = exercise.resolvedTargetTags(category: category)
+            entry.trackingFields = exercise.resolvedTrackingFields(category: category)
+            entry.sourcePlanBlockID = exercise.sourcePlanBlockID
+            if let exerciseNotes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !exerciseNotes.isEmpty {
+                entry.notes = exerciseNotes
+            }
 
-            // Add each set with its specific reps/weight
-            for setData in exercise.sets {
+            for setData in exercise.sets where category == .strength {
                 let cleanWeight = WeightUtility.cleanWeightFromKg(setData.weightKg ?? 0)
                 entry.addSet(LiveWorkoutEntry.SetData(
                     reps: setData.reps,
@@ -372,25 +656,82 @@ extension ChatView {
                     isWarmup: false
                 ))
             }
+            if category != .strength {
+                entry.durationSeconds = exercise.durationMinutes.map { max(0, $0) * 60 }
+                entry.distanceMeters = exercise.distanceMeters
+                let segments = exercise.activitySegments
+                if !exercise.sets.isEmpty {
+                    exercise.sets.forEach { setData in
+                        entry.addActivitySegment(LiveWorkoutEntry.ActivitySegment(
+                            reps: setData.reps > 0 ? setData.reps : nil,
+                            weightKg: (setData.weightKg ?? 0) > 0 ? setData.weightKg : nil
+                        ))
+                    }
+                }
+                if segments.isEmpty, entry.activitySegments.isEmpty, entry.durationSeconds != nil || entry.distanceMeters != nil || !entry.notes.isEmpty {
+                    entry.addActivitySegment(LiveWorkoutEntry.ActivitySegment(
+                        durationSeconds: entry.durationSeconds,
+                        distanceMeters: entry.distanceMeters,
+                        notes: entry.notes
+                    ))
+                } else if !segments.isEmpty {
+                    segments.forEach { entry.addActivitySegment($0) }
+                }
+                if entry.hasExercisePreferenceSignal {
+                    entry.completedAt = now
+                }
+            }
 
             entries.append(entry)
         }
         workout.entries = entries
 
-        // Set duration by adjusting start time
-        if let duration = workoutLog.durationMinutes {
-            workout.startedAt = Date().addingTimeInterval(-Double(duration) * 60)
+        if let duration = workoutLog.resolvedDurationMinutes {
+            workout.startedAt = now.addingTimeInterval(-Double(duration) * 60)
         }
-
-        // Mark as completed
-        workout.completedAt = Date()
+        workout.completedAt = now
 
         if let notes = workoutLog.notes {
             workout.notes = notes
         }
 
+        return workout
+    }
+}
+
+extension ChatView {
+    func acceptWorkoutLogSuggestion(_ workoutLog: SuggestedWorkoutLog, for message: ChatMessage) {
+        guard !ChatWorkoutLogSuggestionContext.isStale(
+            suggestion: workoutLog,
+            messageTimestamp: message.timestamp,
+            currentPlanUpdatedAt: profile?.workoutPlanGeneratedAt,
+            currentTemplateIDs: profile?.workoutPlan.map { Set($0.templates.map(\.id)) }
+        ) else {
+            message.suggestedWorkoutLogDismissed = true
+            message.errorMessage = "This planned workout log is no longer current. Ask Trai to log the latest plan session instead."
+            try? modelContext.save()
+            HapticManager.error()
+            return
+        }
+
+        let workout: LiveWorkout
+        do {
+            workout = try ChatWorkoutLogSuggestionMapper.makeWorkout(from: workoutLog)
+        } catch let error as ChatWorkoutLogSuggestionMapper.MappingError {
+            message.errorMessage = error.userMessage
+            HapticManager.error()
+            return
+        } catch {
+            message.errorMessage = "This workout log needs stable activity data before it can be saved. Ask Trai to regenerate it."
+            HapticManager.error()
+            return
+        }
+
         // Save to database
         modelContext.insert(workout)
+        for history in ExerciseHistory.records(from: workout) {
+            modelContext.insert(history)
+        }
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.completeWorkout,
             domain: .workout,
@@ -403,19 +744,21 @@ extension ChatView {
             ],
             saveImmediately: false
         )
+        message.workoutLogSaved = true
         do {
             try modelContext.save()
         } catch {
             modelContext.rollback()
+            message.workoutLogSaved = false
             message.errorMessage = "We couldn’t save this workout. Please try again."
             HapticManager.error()
             return
         }
 
-        // Update message state
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.workoutLogSaved = true
         }
+        WidgetDataProvider.shared.scheduleRefresh()
 
         HapticManager.success()
     }
@@ -441,41 +784,135 @@ extension ChatView {
 extension ChatView {
     func acceptWorkoutSuggestion(_ workout: SuggestedWorkoutEntry, for message: ChatMessage) {
         // Map workout type string to enum
-        let workoutType = LiveWorkout.WorkoutType.normalized(from: workout.workoutType) ?? .strength
-
+        guard let workoutType = LiveWorkout.WorkoutType(rawValue: workout.workoutType) else {
+            message.errorMessage = "This workout needs stable activity data before it can be started. Ask Trai to regenerate it."
+            HapticManager.error()
+            return
+        }
+        let currentWorkoutTemplateIDs = profile?.workoutPlan.map { plan in
+            Set(plan.templates.map(\.id))
+        }
+        guard !ChatWorkoutStartSuggestionContext.isStale(
+            suggestion: workout,
+            messageTimestamp: message.timestamp,
+            currentPlanUpdatedAt: profile?.workoutPlanGeneratedAt,
+            currentTemplateIDs: currentWorkoutTemplateIDs
+        ) else {
+            message.suggestedWorkoutDismissed = true
+            message.errorMessage = "This planned workout is no longer current. Ask Trai to start the latest plan session instead."
+            try? modelContext.save()
+            HapticManager.error()
+            return
+        }
+        guard !workout.exercises.isEmpty else {
+            message.errorMessage = "This workout needs at least one trackable item before it can be started. Ask Trai to regenerate it."
+            HapticManager.error()
+            return
+        }
+        for exercise in workout.exercises {
+            guard let category = exercise.strictCategory else {
+                message.errorMessage = "This workout needs stable activity categories before it can be started. Ask Trai to regenerate it."
+                HapticManager.error()
+                return
+            }
+            if category != .strength, exercise.trimmedActivityTypeName == nil {
+                message.errorMessage = "This workout needs activity names before it can be started. Ask Trai to regenerate it."
+                HapticManager.error()
+                return
+            }
+        }
+        guard ChatWorkoutStartFreshness.isCurrent(workout, currentPlan: profile?.workoutPlan) else {
+            message.errorMessage = "Your workout plan changed since Trai suggested this start. Ask Trai for a fresh planned workout."
+            HapticManager.error()
+            return
+        }
         // Map target muscle groups
         let targetMuscles = workoutType.supportsMuscleTargets
             ? LiveWorkout.MuscleGroup.fromTargetStrings(workout.targetMuscleGroups)
             : []
         let focusAreas = workoutType.supportsMuscleTargets ? [] : workout.targetMuscleGroups
+        let semanticFocus = workout.resolvedActivityFocuses
 
         // Create the LiveWorkout
         let liveWorkout = LiveWorkout(
             name: workout.name,
             workoutType: workoutType,
             targetMuscleGroups: targetMuscles,
-            focusAreas: focusAreas
+            focusAreas: semanticFocus.isEmpty ? focusAreas : semanticFocus
         )
+        liveWorkout.sourcePlanTemplateID = workout.sourcePlanTemplateID
 
-        // Start with one ready exercise. The live workout view will continue
-        // surfacing Trai suggestions instead of dumping the whole plan at once.
         var entries: [LiveWorkoutEntry] = []
-        if let exercise = workout.exercises.first {
-            let entry = LiveWorkoutEntry(exerciseName: exercise.name, orderIndex: 0)
-            let setDefaults = WorkoutTemplateService().suggestedSetDefaults(
+        entries.reserveCapacity(workout.exercises.count)
+        for (index, exercise) in workout.exercises.enumerated() {
+            guard let category = exercise.strictCategory else { continue }
+            let entry = LiveWorkoutEntry(
                 exerciseName: exercise.name,
-                requestedReps: exercise.reps,
-                requestedWeightKg: exercise.weightKg,
-                progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
-                modelContext: modelContext
+                orderIndex: index,
+                exerciseType: category.rawValue
             )
-            entry.addSet(LiveWorkoutEntry.SetData(
-                reps: setDefaults.reps,
-                weight: setDefaults.weight,
-                completed: false,
-                isWarmup: false
-            ))
+            entry.activityTypeName = exercise.resolvedActivityName(category: category)
+            entry.activityKind = category.liveWorkoutActivityKind
+            entry.activityRole = exercise.resolvedActivityRole
+            entry.targetTags = exercise.resolvedTargetTags(category: category)
+            entry.trackingFields = exercise.resolvedTrackingFields(category: category)
+            if category == .strength,
+               let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !notes.isEmpty {
+                entry.notes = notes
+            }
+            if category == .strength {
+                entry.sourcePlanBlockID = exercise.sourcePlanBlockID
+            }
+
+            if category == .strength {
+                let setDefaults = WorkoutTemplateService().suggestedSetDefaults(
+                    exerciseName: exercise.name,
+                    requestedReps: exercise.reps,
+                    requestedWeightKg: exercise.weightKg,
+                    progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
+                    modelContext: modelContext
+                )
+                let setCount = max(exercise.sets, 1)
+                for _ in 0..<setCount {
+                    entry.addSet(LiveWorkoutEntry.SetData(
+                        reps: setDefaults.reps,
+                        weight: setDefaults.weight,
+                        completed: false,
+                        isWarmup: false
+                    ))
+                }
+            } else {
+                entry.sourcePlanBlockID = exercise.sourcePlanBlockID ?? exercise.id
+                entry.plannedDurationSeconds = exercise.durationMinutes.map { max(0, $0) * 60 }
+                if let distanceMeters = exercise.distanceMeters, distanceMeters > 0 {
+                    entry.plannedTarget = String(format: "%.0f m", distanceMeters)
+                }
+                if let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+                    entry.plannedTarget = [entry.plannedTarget, notes]
+                        .compactMap { value in
+                            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                            return trimmed.isEmpty ? nil : trimmed
+                        }
+                        .joined(separator: " • ")
+                }
+                entry.plannedActivitySegments = exercise.activitySegments
+                if entry.plannedActivitySegments.isEmpty, entry.plannedDurationSeconds != nil || entry.plannedTarget != nil {
+                    entry.plannedActivitySegments = [
+                        LiveWorkoutEntry.ActivitySegment(
+                            durationSeconds: entry.plannedDurationSeconds,
+                            distanceMeters: exercise.distanceMeters,
+                            notes: entry.plannedTarget ?? ""
+                        )
+                    ]
+                }
+            }
             entries.append(entry)
+        }
+        guard !entries.isEmpty else {
+            message.errorMessage = "This workout needs at least one trackable item before it can be started. Ask Trai to regenerate it."
+            HapticManager.error()
+            return
         }
         liveWorkout.entries = entries
 
@@ -546,6 +983,149 @@ extension ChatView {
             return .nutrition
         }
         return .engagement
+    }
+}
+
+private extension SuggestedWorkoutLog {
+    var semanticFocusAreas: [String] {
+        var values = activityTags ?? []
+        if let activityName = activityName?.trimmingCharacters(in: .whitespacesAndNewlines), !activityName.isEmpty {
+            values.insert(activityName, at: 0)
+        } else if !displayName.isEmpty {
+            values.insert(displayName, at: 0)
+        }
+        return values.dedupedByGoalKey()
+    }
+}
+
+private extension SuggestedWorkoutLog.LoggedExercise {
+    var strictCategory: Exercise.Category? {
+        guard let rawCategory = category else { return nil }
+        return Exercise.Category(rawValue: rawCategory.trimmingCharacters(in: .whitespacesAndNewlines))?.userFacingEquivalent
+    }
+
+    var trimmedActivityTypeName: String? {
+        guard let activityTypeName else { return nil }
+        let trimmed = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    func resolvedActivityName(category: Exercise.Category) -> String {
+        if let activityTypeName = activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines), !activityTypeName.isEmpty {
+            return activityTypeName
+        }
+        return Exercise.defaultActivityTypeName(for: name, category: category)
+    }
+
+    var resolvedActivityRole: WorkoutPlan.TrainingBlock.Role? {
+        guard let activityRole else { return nil }
+        return WorkoutPlan.TrainingBlock.Role(rawValue: activityRole.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    func resolvedTargetTags(category: Exercise.Category) -> [String] {
+        let explicitTags = targetTags?.dedupedByGoalKey() ?? []
+        if !explicitTags.isEmpty { return explicitTags }
+        return category == .strength ? [] : [resolvedActivityName(category: category)]
+    }
+
+    func resolvedTrackingFields(category: Exercise.Category) -> [Exercise.TrackingField] {
+        let explicitFields = trackingFields?
+            .compactMap(Exercise.TrackingField.init(rawValue:))
+            ?? []
+        return explicitFields.isEmpty
+            ? Exercise.defaultTrackingFields(for: category)
+            : Exercise.normalizedTrackingFields(explicitFields, for: category)
+    }
+
+    var activitySegments: [LiveWorkoutEntry.ActivitySegment] {
+        (segments ?? []).map {
+            LiveWorkoutEntry.ActivitySegment(
+                durationSeconds: $0.durationMinutes.map { max(0, $0) * 60 },
+                distanceMeters: $0.distanceMeters,
+                reps: $0.reps,
+                weightKg: $0.weightKg,
+                notes: $0.notes ?? ""
+            )
+        }
+    }
+}
+
+private extension SuggestedWorkoutEntry.SuggestedExercise {
+    var strictCategory: Exercise.Category? {
+        guard let rawCategory = category else { return nil }
+        return Exercise.Category(rawValue: rawCategory.trimmingCharacters(in: .whitespacesAndNewlines))?.userFacingEquivalent
+    }
+
+    var trimmedActivityTypeName: String? {
+        guard let activityTypeName else { return nil }
+        let trimmed = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    func resolvedActivityName(category: Exercise.Category) -> String {
+        if let activityTypeName = activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines), !activityTypeName.isEmpty {
+            return activityTypeName
+        }
+        return Exercise.defaultActivityTypeName(for: name, category: category)
+    }
+
+    var resolvedActivityRole: WorkoutPlan.TrainingBlock.Role? {
+        guard let activityRole else { return nil }
+        return WorkoutPlan.TrainingBlock.Role(rawValue: activityRole.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    func resolvedTargetTags(category: Exercise.Category) -> [String] {
+        let explicitTags = targetTags?.dedupedByGoalKey() ?? []
+        if !explicitTags.isEmpty { return explicitTags }
+        return category == .strength ? [] : [resolvedActivityName(category: category)]
+    }
+
+    func resolvedTrackingFields(category: Exercise.Category) -> [Exercise.TrackingField] {
+        let explicitFields = trackingFields?
+            .compactMap(Exercise.TrackingField.init(rawValue:))
+            ?? []
+        return explicitFields.isEmpty
+            ? Exercise.defaultTrackingFields(for: category)
+            : Exercise.normalizedTrackingFields(explicitFields, for: category)
+    }
+
+    var activitySegments: [LiveWorkoutEntry.ActivitySegment] {
+        (segments ?? []).map {
+            LiveWorkoutEntry.ActivitySegment(
+                durationSeconds: $0.durationMinutes.map { max(0, $0) * 60 },
+                distanceMeters: $0.distanceMeters,
+                reps: $0.reps,
+                weightKg: $0.weightKg,
+                notes: $0.notes ?? ""
+            )
+        }
+    }
+}
+
+private extension SuggestedWorkoutEntry {
+    var resolvedActivityFocuses: [String] {
+        let explicit = activityFocuses ?? []
+        let derived = exercises
+            .filter(\.isActivityStartItem)
+            .flatMap { exercise in
+                ([exercise.activityTypeName] + (exercise.targetTags ?? []))
+                    .compactMap { $0 }
+            }
+        return (explicit + derived).dedupedByGoalKey()
+    }
+}
+
+private extension Array where Element == String {
+    func dedupedByGoalKey() -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in self {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.goalNormalizedKey
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
     }
 }
 
@@ -871,12 +1451,6 @@ extension ChatView {
     func handlePlanReviewRequest() {
         guard let recommendation = pendingPlanRecommendation else { return }
 
-        // Clear the card first
-        withAnimation {
-            pendingPlanRecommendation = nil
-            planRecommendationMessage = nil
-        }
-
         // Construct a contextual message based on the trigger
         let prompt: String
         switch recommendation.trigger {
@@ -899,11 +1473,16 @@ extension ChatView {
         }
 
         // This was launched from an app CTA, not typed into chat.
-        sendAppInitiatedPrompt(
+        guard sendAppInitiatedPrompt(
             prompt,
             launchLabel: "Reviewing your plan...",
             markNutritionPlanReviewedIfNoUpdate: true
-        )
+        ) else { return }
+
+        withAnimation {
+            pendingPlanRecommendation = nil
+            planRecommendationMessage = nil
+        }
     }
 
     /// Mark an app-initiated nutrition review complete when Trai reviewed it without proposing changes.
@@ -947,51 +1526,59 @@ extension ChatView {
 
     /// Check for pending cross-tab startup actions that should open in chat
     func checkForPendingStartupActions() {
+        guard currentMessageTask == nil, !isLoading else { return }
+
         let trimmedPrompt = pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedPrompt.isEmpty {
             let trimmedLaunchLabel = pendingChatLaunchLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-            let shouldMarkNutritionReview = isNutritionPlanReviewPrompt(
-                prompt: trimmedPrompt,
-                launchLabel: trimmedLaunchLabel
-            )
-            pendingChatPrompt = ""
-            pendingChatLaunchLabel = ""
+            let storedActionKind = PendingTraiChatActionKind(rawValue: pendingChatActionKind)
+            let shouldMarkNutritionReview = storedActionKind == .nutritionPlanReview
             startNewSession(silent: true)
-            sendAppInitiatedPrompt(
+            if let focusedEntryId = UUID(uuidString: pendingFocusedFoodEntryId),
+               let focusedEntry = focusedFoodEntry(with: focusedEntryId) {
+                focusedFoodEntryContext = focusedEntry.focusedChatContext
+            }
+            guard sendAppInitiatedPrompt(
                 trimmedPrompt,
                 launchLabel: trimmedLaunchLabel.isEmpty ? "Reviewing with Trai..." : trimmedLaunchLabel,
                 markNutritionPlanReviewedIfNoUpdate: shouldMarkNutritionReview
-            )
+            ) else { return }
+            pendingChatPrompt = ""
+            pendingChatLaunchLabel = ""
+            pendingFocusedFoodEntryId = ""
+            pendingChatActionKind = ""
             return
         }
 
         if pendingPlanReviewRequest {
-            pendingPlanReviewRequest = false
             startNewSession(silent: true)
-            sendAppInitiatedPrompt(
+            guard sendAppInitiatedPrompt(
                 "Can you review my nutrition plan and check if any updates are needed based on my progress?",
                 launchLabel: "Reviewing your nutrition plan...",
                 markNutritionPlanReviewedIfNoUpdate: true
-            )
+            ) else { return }
+            pendingPlanReviewRequest = false
             return
         }
 
         guard pendingWorkoutPlanReviewRequest else { return }
-        pendingWorkoutPlanReviewRequest = false
         startNewSession(silent: true)
-        sendAppInitiatedPrompt(
+        guard sendAppInitiatedPrompt(
             "Can you review my workout split and suggest any updates based on my recovery and recent workouts?",
             launchLabel: "Reviewing your workout plan..."
+        ) else { return }
+        pendingWorkoutPlanReviewRequest = false
+    }
+
+    private func focusedFoodEntry(with id: UUID) -> FoodEntry? {
+        if let entry = allFoodEntries.first(where: { $0.id == id }) {
+            return entry
+        }
+        let descriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate { $0.id == id }
         )
+        return try? modelContext.fetch(descriptor).first
     }
-
-    private func isNutritionPlanReviewPrompt(prompt: String, launchLabel: String) -> Bool {
-        let text = "\(prompt) \(launchLabel)".lowercased()
-        return text.contains("nutrition plan")
-            || text.contains("calories")
-            || text.contains("macros")
-    }
-
 }
 
 // MARK: - Reminder Suggestion Actions

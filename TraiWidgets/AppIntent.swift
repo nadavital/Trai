@@ -40,11 +40,11 @@ struct OpenURLIntent: AppIntent {
 
 // MARK: - Live Activity Intents
 
-/// Intent for adding a set to the current exercise from Live Activity
+/// Intent for adding a set to the current strength item from Live Activity
 /// Uses App Groups to communicate with the main app
 struct AddSetIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Add Set"
-    static var description = IntentDescription("Add a set to the current exercise")
+    static var description = IntentDescription("Add a set to the current strength item")
     static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {

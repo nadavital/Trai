@@ -21,6 +21,7 @@ final class UserProfile {
 
     /// Goal type: "weightLoss", "muscleGain", "maintenance", etc.
     var goalType: String = "maintenance"
+
     var targetWeightKg: Double?
     var currentWeightKg: Double?
 
@@ -160,13 +161,13 @@ extension UserProfile {
 
         var displayName: String {
             switch self {
-            case .loseWeight: "Lose Weight"
-            case .loseFat: "Lose Fat, Keep Muscle"
-            case .buildMuscle: "Build Muscle"
-            case .recomposition: "Body Recomposition"
-            case .maintenance: "Maintain Weight"
-            case .performance: "Athletic Performance"
-            case .health: "General Health"
+            case .loseWeight: "Lose weight"
+            case .loseFat: "Lose fat"
+            case .buildMuscle: "Build muscle"
+            case .recomposition: "Get leaner and stronger"
+            case .maintenance: "Maintain"
+            case .performance: "Improve performance"
+            case .health: "Improve health"
             }
         }
 
@@ -193,12 +194,22 @@ extension UserProfile {
             case .health: "heart.circle.fill"
             }
         }
+
+        var shouldCollectTargetWeight: Bool {
+            switch self {
+            case .loseWeight, .loseFat, .buildMuscle:
+                true
+            case .recomposition, .maintenance, .performance, .health:
+                false
+            }
+        }
     }
 
     var goal: GoalType {
         get { GoalType(rawValue: goalType) ?? .maintenance }
         set { goalType = newValue.rawValue }
     }
+
 }
 
 // MARK: - Gender
@@ -490,6 +501,18 @@ extension UserProfile {
             conversationContext: conversationContext
         )
     }
+
+    func applyStructuredWorkoutPlanPreferences(from plan: WorkoutPlan) {
+        preferredWorkoutDays = plan.daysPerWeek
+
+        let durations = plan.templates
+            .map(\.estimatedDurationMinutes)
+            .filter { $0 > 0 }
+        guard !durations.isEmpty else { return }
+
+        let averageDuration = Double(durations.reduce(0, +)) / Double(durations.count)
+        workoutTimePerSession = Int((averageDuration / 5).rounded() * 5)
+    }
 }
 
 // MARK: - Plan Assessment State
@@ -601,7 +624,7 @@ extension UserProfile {
         var description: String {
             switch self {
             case .customWorkout: "Start an empty workout where you add exercises"
-            case .recommendedWorkout: "Start the best workout from your plan based on recovery"
+            case .recommendedWorkout: "Start the next recommended session from your plan"
             }
         }
     }

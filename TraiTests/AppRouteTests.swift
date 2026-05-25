@@ -23,8 +23,8 @@ final class AppRouteTests: XCTestCase {
         let routes: [AppRoute] = [
             .logFood,
             .logWeight,
-            .workout(templateName: nil),
-            .workout(templateName: "Push Pull Legs"),
+            .workout(templateID: nil, templateName: nil),
+            .workout(templateID: UUID(uuidString: "11111111-1111-1111-1111-111111111111"), templateName: "Push Pull Legs"),
             .chat
         ]
 
@@ -34,9 +34,20 @@ final class AppRouteTests: XCTestCase {
         }
     }
 
-    func testWorkoutRouteParsesTemplateFromQuery() {
+    func testWorkoutRouteIgnoresNameOnlyTemplateFromQuery() {
         let route = AppRoute(urlString: "trai://workout?template=Upper%20Body")
-        XCTAssertEqual(route, .workout(templateName: "Upper Body"))
+        XCTAssertNil(route)
+    }
+
+    func testWorkoutRouteParsesDurableTemplateIDFromQuery() {
+        let id = UUID(uuidString: "11111111-1111-1111-1111-111111111111")
+        let route = AppRoute(urlString: "trai://workout?template_id=11111111-1111-1111-1111-111111111111&template=Upper%20Body")
+        XCTAssertEqual(route, .workout(templateID: id, templateName: "Upper Body"))
+    }
+
+    func testWorkoutRouteWithMalformedTemplateIDDoesNotFallbackToName() {
+        let route = AppRoute(urlString: "trai://workout?template_id=not-a-template-id&template=Upper%20Body")
+        XCTAssertNil(route)
     }
 
     func testInitRejectsUnknownSchemeOrHost() {
@@ -77,7 +88,7 @@ final class AppRouteTests: XCTestCase {
         defaults.set("custom", forKey: SharedStorageKeys.LegacyLaunchIntents.startWorkout)
 
         let consumed = PendingAppRouteStore.consumePendingRoute(defaults: defaults)
-        XCTAssertEqual(consumed, .workout(templateName: nil))
+        XCTAssertEqual(consumed, .workout(templateID: nil, templateName: nil))
         XCTAssertNil(defaults.string(forKey: SharedStorageKeys.LegacyLaunchIntents.startWorkout))
     }
 
@@ -85,7 +96,7 @@ final class AppRouteTests: XCTestCase {
         defaults.set("Leg Day", forKey: SharedStorageKeys.LegacyLaunchIntents.startWorkout)
 
         let consumed = PendingAppRouteStore.consumePendingRoute(defaults: defaults)
-        XCTAssertEqual(consumed, .workout(templateName: "Leg Day"))
+        XCTAssertNil(consumed)
     }
 
     func testPendingRouteStoreReturnsNilWhenNoPendingData() {

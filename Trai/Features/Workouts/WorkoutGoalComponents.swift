@@ -52,7 +52,14 @@ enum WorkoutGoalProgressResolver {
     ) -> [WorkoutGoal] {
         goals
             .filter { goal in
-                goal.matches(workout: workout) && (includeCompleted || goal.isActive)
+                let matchesWorkout: Bool
+                if goal.tracksGeneratedPlanAdherence {
+                    matchesWorkout = goal.matchesGeneratedPlanTemplate(workout: workout)
+                        && (workout.completedAt == nil || hasLoggedGeneratedPlanProgress(in: workout))
+                } else {
+                    matchesWorkout = goal.matches(workout: workout)
+                }
+                return matchesWorkout && (includeCompleted || goal.isActive)
             }
             .sorted { lhs, rhs in
                 if lhs.status != rhs.status {
@@ -103,7 +110,7 @@ enum WorkoutGoalProgressResolver {
         sessions: [WorkoutSession] = []
     ) -> [RecentWorkoutSignal] {
         let currentFocus = Set(workout.focusAreas.map(\.goalNormalizedKey))
-        let currentActivities = Set((workout.entries ?? []).map { $0.exerciseName.goalNormalizedKey })
+        let currentActivities = workoutActivityTokens(workout)
 
         let liveSignals: [RecentWorkoutSignal] = workouts
             .filter { candidate in
@@ -114,14 +121,12 @@ enum WorkoutGoalProgressResolver {
                     return true
                 }
 
-                let candidateActivities = Set((candidate.entries ?? []).map { $0.exerciseName.goalNormalizedKey })
+                let candidateActivities = workoutActivityTokens(candidate)
                 return !candidateActivities.isDisjoint(with: currentActivities)
             }
             .compactMap { candidate -> RecentWorkoutSignal? in
                 guard let note = latestNote(in: candidate), !note.isEmpty else { return nil }
-                let subtitle = [candidate.displayFocusSummary, candidate.formattedDuration]
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " • ")
+                let subtitle = candidate.workoutContextSummarySegments.joined(separator: " • ")
 
                 return RecentWorkoutSignal(
                     title: candidate.name,
@@ -160,9 +165,7 @@ enum WorkoutGoalProgressResolver {
             .filter { $0.completedAt != nil }
             .compactMap { workout -> RecentWorkoutSignal? in
                 guard let note = latestNote(in: workout), !note.isEmpty else { return nil }
-                let subtitle = [workout.type.displayName, workout.displayFocusSummary, workout.formattedDuration]
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " • ")
+                let subtitle = workout.workoutContextSummarySegments.joined(separator: " • ")
 
                 return RecentWorkoutSignal(
                     title: workout.name,
@@ -184,7 +187,7 @@ enum WorkoutGoalProgressResolver {
         in workouts: [LiveWorkout]
     ) -> [LiveWorkout] {
         workouts
-            .filter { $0.completedAt != nil && goal.matches(workout: $0) }
+            .filter { hasCompletedProgress(for: goal, in: $0) }
             .sorted {
                 ($0.completedAt ?? $0.startedAt) > ($1.completedAt ?? $1.startedAt)
             }
@@ -241,7 +244,7 @@ enum WorkoutGoalProgressResolver {
         in sessions: [WorkoutSession]
     ) -> [WorkoutSession] {
         sessions
-            .filter { goal.matches(session: $0) }
+            .filter { isSessionProgressCandidate($0, for: goal) }
             .sorted { $0.loggedAt > $1.loggedAt }
     }
 
@@ -252,18 +255,11 @@ enum WorkoutGoalProgressResolver {
         exerciseHistory: [ExerciseHistory],
         useLbs: Bool
     ) -> WorkoutGoalInsight {
-        let matchingWorkouts = workouts.filter { workout in
-            workout.completedAt != nil && goal.matches(workout: workout)
-        }
-        let matchingSessions = sessions.filter { goal.matches(session: $0) }
+        let matchingWorkouts = matchingCompletedWorkouts(for: goal, in: workouts)
+        let matchingSessions = matchingCompletedSessions(for: goal, in: sessions)
 
         let matchingEntries = matchingWorkouts.flatMap { workout in
-            (workout.entries ?? []).filter { entry in
-                guard let activityName = goal.trimmedActivityName?.goalNormalizedKey else {
-                    return true
-                }
-                return entry.exerciseName.goalNormalizedKey == activityName
-            }
+            (workout.entries ?? []).filter { goal.matches(entry: $0) }
         }
 
         let latestSupportingNote = latestNote(
@@ -272,6 +268,7 @@ enum WorkoutGoalProgressResolver {
             or: matchingSessions
         )
         let trimmedGoalNotes = goal.trimmedNotes
+        let trimmedSuccessCriteria = goal.trimmedSuccessCriteria
 
         switch goal.goalKind {
         case .milestone:
@@ -284,7 +281,9 @@ enum WorkoutGoalProgressResolver {
                 progressText = "Use notes and completed sessions to track this"
             }
 
-            let supportingText = latestSupportingNote ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
+            let supportingText = latestSupportingNote
+                ?? (trimmedSuccessCriteria.isEmpty ? nil : trimmedSuccessCriteria)
+                ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
 
             return WorkoutGoalInsight(
                 goal: goal,
@@ -317,6 +316,7 @@ enum WorkoutGoalProgressResolver {
             let supportingParts = [
                 frequencyProgress.periodRangeText,
                 latestSupportingNote,
+                trimmedSuccessCriteria.isEmpty ? nil : trimmedSuccessCriteria,
                 trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes
             ].compactMap { $0 }
 
@@ -331,52 +331,98 @@ enum WorkoutGoalProgressResolver {
 
         case .duration:
             let currentSeconds: Double? = {
-                let sessionMax = matchingSessions.compactMap { session -> Double? in
+                let periodStart = periodStartDate(for: goal, now: Date())
+                let sessionValues = matchingSessions
+                    .filter { session in periodStart.map { session.loggedAt >= $0 } ?? true }
+                    .compactMap { session -> Double? in
                     guard let durationMinutes = session.durationMinutes, durationMinutes > 0 else { return nil }
                     return durationMinutes * 60
-                }.max()
-
-                if goal.trimmedActivityName != nil {
-                    let entryMax = matchingEntries.compactMap { entry -> Double? in
-                        guard let durationSeconds = entry.durationSeconds, durationSeconds > 0 else { return nil }
-                        return Double(durationSeconds)
-                    }.max()
-                    return max(entryMax ?? 0, sessionMax ?? 0) == 0 ? nil : max(entryMax ?? 0, sessionMax ?? 0)
                 }
 
-                let workoutMax = matchingWorkouts.map(\.duration).filter { $0 > 0 }.max()
-                return max(workoutMax ?? 0, sessionMax ?? 0) == 0 ? nil : max(workoutMax ?? 0, sessionMax ?? 0)
+                if goal.hasActivityScope {
+                    let entryValues = matchingEntries
+                        .filter { entry in periodStart.map { progressDate(for: entry) >= $0 } ?? true }
+                        .compactMap { entry -> Double? in
+                        let durationSeconds = entry.trackedDurationSeconds
+                        guard durationSeconds > 0 else { return nil }
+                        return Double(durationSeconds)
+                    }
+                    let workoutValues = matchingWorkouts
+                        .filter { workout in periodStart.map { (workout.completedAt ?? workout.startedAt) >= $0 } ?? true }
+                        .filter { workoutLevelMatchesActivityScope(for: goal, in: $0) }
+                        .filter { !hasLoggedMatchingEntries(for: goal, in: $0) }
+                        .map(\.duration)
+                        .filter { $0 > 0 }
+                    return currentNumericValue(entryValues + workoutValues + sessionValues, cumulative: periodStart != nil)
+                }
+
+                let workoutValues = matchingWorkouts
+                    .filter { workout in periodStart.map { (workout.completedAt ?? workout.startedAt) >= $0 } ?? true }
+                    .map(\.duration)
+                    .filter { $0 > 0 }
+                return currentNumericValue(workoutValues + sessionValues, cumulative: periodStart != nil)
             }()
 
             return numericInsight(
                 for: goal,
                 currentBaseValue: currentSeconds,
                 formattedCurrentValue: currentSeconds.map { formatDuration(seconds: $0, unit: goal.targetUnit) },
-                supportingText: latestSupportingNote ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
+                supportingText: latestSupportingNote
+                    ?? (trimmedSuccessCriteria.isEmpty ? nil : trimmedSuccessCriteria)
+                    ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
             )
 
         case .distance:
-            let entryMeters = matchingEntries.compactMap { entry -> Double? in
-                guard let distanceMeters = entry.distanceMeters, distanceMeters > 0 else { return nil }
-                return distanceMeters
-            }.max()
-            let sessionMeters = matchingSessions.compactMap { session -> Double? in
-                guard let distanceMeters = session.distanceMeters, distanceMeters > 0 else { return nil }
-                return distanceMeters
-            }.max()
-            let currentMeters = max(entryMeters ?? 0, sessionMeters ?? 0) == 0 ? nil : max(entryMeters ?? 0, sessionMeters ?? 0)
+            let periodStart = periodStartDate(for: goal, now: Date())
+            let entryMeters = matchingEntries
+                .filter { entry in periodStart.map { progressDate(for: entry) >= $0 } ?? true }
+                .compactMap { entry -> Double? in
+                    let distanceMeters = entry.trackedDistanceMeters
+                    guard distanceMeters > 0 else { return nil }
+                    return distanceMeters
+                }
+            let sessionMeters = matchingSessions
+                .filter { session in periodStart.map { session.loggedAt >= $0 } ?? true }
+                .compactMap { session -> Double? in
+                    guard let distanceMeters = session.distanceMeters, distanceMeters > 0 else { return nil }
+                    return distanceMeters
+                }
+            let currentMeters = currentNumericValue(entryMeters + sessionMeters, cumulative: periodStart != nil)
 
             return numericInsight(
                 for: goal,
                 currentBaseValue: currentMeters,
                 formattedCurrentValue: currentMeters.map { formatDistance(meters: $0, unit: goal.targetUnit) },
-                supportingText: latestSupportingNote ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
+                supportingText: latestSupportingNote
+                    ?? (trimmedSuccessCriteria.isEmpty ? nil : trimmedSuccessCriteria)
+                    ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
+            )
+
+        case .count:
+            let periodStart = periodStartDate(for: goal, now: Date())
+            let entryCounts = matchingEntries
+                .filter { entry in periodStart.map { progressDate(for: entry) >= $0 } ?? true }
+                .map(countValue)
+                .filter { $0 > 0 }
+            let sessionCounts = matchingSessions
+                .filter { session in periodStart.map { session.loggedAt >= $0 } ?? true }
+                .map(countValue)
+                .filter { $0 > 0 }
+            let currentCount = currentNumericValue(entryCounts + sessionCounts, cumulative: periodStart != nil)
+
+            return numericInsight(
+                for: goal,
+                currentBaseValue: currentCount,
+                formattedCurrentValue: currentCount.map { formatCount($0, unit: goal.targetUnit) },
+                supportingText: latestSupportingNote
+                    ?? (trimmedSuccessCriteria.isEmpty ? nil : trimmedSuccessCriteria)
+                    ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
             )
 
         case .weight:
             let currentKg: Double?
             let liveEntryMax = matchingEntries
-                .flatMap(\.sets)
+                .flatMap { entry in entry.sets.filter { $0.completed && !$0.isWarmup } }
                 .compactMap(\.weightKg)
                 .filter { $0 > 0 }
                 .max()
@@ -406,7 +452,7 @@ enum WorkoutGoalProgressResolver {
                 let activityNormalizedName = goal.trimmedActivityName?.goalNormalizedKey
                 let entryWeights = (atCreation?.entries ?? [])
                     .filter { activityNormalizedName == nil || $0.exerciseName.goalNormalizedKey == activityNormalizedName }
-                    .flatMap(\.sets)
+                    .flatMap { entry in entry.sets.filter { $0.completed && !$0.isWarmup } }
                     .compactMap(\.weightKg)
                     .filter { $0 > 0 }
                 autoBaselineKg = entryWeights.max()
@@ -420,7 +466,9 @@ enum WorkoutGoalProgressResolver {
                 formattedCurrentValue: currentKg.map {
                     formatWeight(kg: $0, unit: goal.targetUnit, useLbsFallback: useLbs)
                 },
-                supportingText: latestSupportingNote ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes),
+                supportingText: latestSupportingNote
+                    ?? (trimmedSuccessCriteria.isEmpty ? nil : trimmedSuccessCriteria)
+                    ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes),
                 autoBaselineBaseValue: autoBaselineKg
             )
         }
@@ -468,6 +516,9 @@ enum WorkoutGoalProgressResolver {
             progressFraction = 1.0
         } else if let current = currentDisplayValue, let baseline = effectiveBaseline, targetValue != baseline {
             progressFraction = min(max((current - baseline) / (targetValue - baseline), 0), 1)
+        } else if let current = currentDisplayValue,
+                  goal.goalKind == .duration || goal.goalKind == .distance || goal.goalKind == .count {
+            progressFraction = min(max(current / targetValue, 0), 1)
         } else {
             progressFraction = nil
         }
@@ -494,9 +545,7 @@ enum WorkoutGoalProgressResolver {
 
     private static func signal(from workout: LiveWorkout) -> RecentWorkoutSignal? {
         guard let note = latestNote(in: workout), !note.isEmpty else { return nil }
-        let subtitle = [workout.type.displayName, workout.displayFocusSummary, workout.formattedDuration]
-            .filter { !$0.isEmpty }
-            .joined(separator: " • ")
+        let subtitle = workout.workoutContextSummarySegments.joined(separator: " • ")
 
         return RecentWorkoutSignal(
             title: workout.name,
@@ -508,10 +557,7 @@ enum WorkoutGoalProgressResolver {
 
     private static func signal(from session: WorkoutSession) -> RecentWorkoutSignal? {
         guard session.hasSignalNote else { return nil }
-        let subtitle = [session.displayTypeName, session.formattedDuration, session.formattedDistance]
-            .compactMap { $0 }
-            .filter { !$0.isEmpty }
-            .joined(separator: " • ")
+        let subtitle = session.historyDetailSegments.joined(separator: " • ")
 
         return RecentWorkoutSignal(
             title: session.displayName,
@@ -519,6 +565,13 @@ enum WorkoutGoalProgressResolver {
             note: session.trimmedNotes,
             date: session.loggedAt
         )
+    }
+
+    private static func workoutActivityTokens(_ workout: LiveWorkout) -> Set<String> {
+        let values = [workout.name] + workout.focusAreas + (workout.entries ?? []).flatMap { entry in
+            [entry.exerciseName, entry.activityTypeName] + entry.targetTags
+        }
+        return Set(values.map(\.goalNormalizedKey).filter { !$0.isEmpty })
     }
 
     private static func latestNote(in workout: LiveWorkout) -> String? {
@@ -536,6 +589,104 @@ enum WorkoutGoalProgressResolver {
     private static func latestNote(in session: WorkoutSession) -> String? {
         let note = session.trimmedNotes
         return note.isEmpty ? nil : note
+    }
+
+    private static func hasCompletedProgress(
+        for goal: WorkoutGoal,
+        in workout: LiveWorkout
+    ) -> Bool {
+        guard workout.completedAt != nil else {
+            return false
+        }
+        if goal.tracksGeneratedPlanAdherence {
+            return goal.matchesGeneratedPlanTemplate(workout: workout)
+                && hasLoggedGeneratedPlanProgress(in: workout)
+        }
+        guard goal.matches(workout: workout) else {
+            return false
+        }
+
+        guard goal.hasActivityScope else {
+            return true
+        }
+
+        if hasLoggedMatchingEntries(for: goal, in: workout) {
+            return true
+        }
+        if hasPlannedMatchingEntries(for: goal, in: workout) {
+            return false
+        }
+        return workoutLevelMatchesActivityScope(for: goal, in: workout)
+    }
+
+    private static func hasLoggedMatchingEntries(
+        for goal: WorkoutGoal,
+        in workout: LiveWorkout
+    ) -> Bool {
+        (workout.entries ?? []).contains {
+            goal.matches(entry: $0) && $0.hasExercisePreferenceSignal
+        }
+    }
+
+    private static func hasLoggedGeneratedPlanProgress(in workout: LiveWorkout) -> Bool {
+        (workout.entries ?? []).contains { $0.hasExercisePreferenceSignal }
+    }
+
+    private static func hasPlannedMatchingEntries(
+        for goal: WorkoutGoal,
+        in workout: LiveWorkout
+    ) -> Bool {
+        (workout.entries ?? []).contains {
+            guard goal.matches(entry: $0), !$0.hasExercisePreferenceSignal else { return false }
+            return $0.isPlannedActivityGuidance || !$0.plannedActivitySummarySegments.isEmpty
+        }
+    }
+
+    private static func isSessionProgressCandidate(
+        _ session: WorkoutSession,
+        for goal: WorkoutGoal
+    ) -> Bool {
+        guard !goal.tracksGeneratedPlanAdherence else { return false }
+        guard goal.matches(session: session) else { return false }
+        guard !goal.hasActivityScope else { return true }
+
+        return session.sourceIsHealthKit
+            || session.healthKitWorkoutID != nil
+            || session.healthKitWorkoutType != nil
+    }
+
+    private static func workoutLevelMatchesActivityScope(
+        for goal: WorkoutGoal,
+        in workout: LiveWorkout
+    ) -> Bool {
+        guard goal.hasActivityScope else { return false }
+
+        let workoutTokens = Set(
+            ([workout.name] + workout.focusAreas)
+                .map(\.goalNormalizedKey)
+                .filter { !$0.isEmpty }
+        )
+
+        if let activityName = goal.trimmedActivityName?.goalNormalizedKey,
+           !activityName.isEmpty,
+           workoutTokens.contains(activityName) {
+            return true
+        }
+
+        let activityTags = Set(goal.linkedActivityTags.map(\.goalNormalizedKey).filter { !$0.isEmpty })
+        if !activityTags.isEmpty,
+           !activityTags.isDisjoint(with: workoutTokens) {
+            return true
+        }
+
+        guard goal.trimmedActivityName == nil,
+              activityTags.isEmpty,
+              goal.linkedActivityRole == nil,
+              goal.linkedActivityKind != nil else {
+            return false
+        }
+
+        return goal.matches(workout: workout)
     }
 
     private static func latestNote(
@@ -581,6 +732,8 @@ enum WorkoutGoalProgressResolver {
             default:
                 return baseValue / 1000
             }
+        case .count:
+            return baseValue
         case .weight:
             switch unit.lowercased() {
             case "lbs", "lb":
@@ -604,6 +757,10 @@ enum WorkoutGoalProgressResolver {
         return formatTarget(converted, unit: displayUnit)
     }
 
+    private static func formatCount(_ value: Double, unit: String) -> String {
+        formatTarget(value, unit: unit.isEmpty ? "count" : unit)
+    }
+
     private static func formatWeight(kg: Double, unit: String, useLbsFallback: Bool) -> String {
         let displayUnitStr = unit.isEmpty ? (useLbsFallback ? "lbs" : "kg") : unit
         let weightUnit: WeightUnit = (displayUnitStr.lowercased() == "lbs" || displayUnitStr.lowercased() == "lb") ? .lbs : .kg
@@ -613,9 +770,10 @@ enum WorkoutGoalProgressResolver {
 
     static func formatTarget(_ value: Double, unit: String) -> String {
         let trimmedUnit = unit.trimmingCharacters(in: .whitespacesAndNewlines)
+        let roundedValue = value.rounded()
         let formattedValue: String
-        if value.truncatingRemainder(dividingBy: 1) == 0 {
-            formattedValue = "\(Int(value.rounded()))"
+        if abs(value - roundedValue) < 0.000_001 {
+            formattedValue = "\(Int(roundedValue))"
         } else {
             formattedValue = String(format: "%.1f", value)
         }
@@ -638,26 +796,47 @@ enum WorkoutGoalProgressResolver {
             return FrequencyProgressSnapshot(currentCount: nil, progressFraction: nil, periodRangeText: nil)
         }
 
-        let calendar = Calendar.current
-        let periodCount = max(goal.periodCount ?? 1, 1)
-        let periodUnit = goal.periodUnit ?? .week
+        let periodStart = periodStartDate(for: goal, now: now) ?? Calendar.current.startOfDay(for: now)
 
-        let periodStart: Date
-        switch periodUnit {
-        case .day:
-            let startOfToday = calendar.startOfDay(for: now)
-            periodStart = calendar.date(byAdding: .day, value: -(periodCount - 1), to: startOfToday) ?? startOfToday
-        case .week:
-            let currentWeek = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? calendar.startOfDay(for: now)
-            periodStart = calendar.date(byAdding: .weekOfYear, value: -(periodCount - 1), to: currentWeek) ?? currentWeek
-        case .month:
-            let currentMonth = calendar.dateInterval(of: .month, for: now)?.start ?? calendar.startOfDay(for: now)
-            periodStart = calendar.date(byAdding: .month, value: -(periodCount - 1), to: currentMonth) ?? currentMonth
+        let workoutCount: Int
+        if goal.tracksGeneratedPlanAdherence {
+            workoutCount = Set(workouts.compactMap { workout -> UUID? in
+                let progressDate = workout.completedAt ?? workout.startedAt
+                guard progressDate >= periodStart,
+                      goal.matchesGeneratedPlanTemplate(workout: workout),
+                      hasLoggedGeneratedPlanProgress(in: workout) else {
+                    return nil
+                }
+                return workout.sourcePlanTemplateID
+            }).count
+        } else if goal.hasActivityScope && frequencyGoalCountsActivityEntries(goal) {
+            workoutCount = workouts.reduce(0) { count, workout in
+                let entryCount = (workout.entries ?? []).filter { entry in
+                    guard goal.matches(entry: entry),
+                          entry.hasExercisePreferenceSignal else {
+                        return false
+                    }
+                    let progressDate = entry.completedAt ?? workout.completedAt ?? workout.startedAt
+                    return progressDate >= periodStart
+                }.count
+
+                if entryCount > 0 {
+                    return count + entryCount
+                }
+
+                let progressDate = workout.completedAt ?? workout.startedAt
+                guard progressDate >= periodStart,
+                      !hasPlannedMatchingEntries(for: goal, in: workout),
+                      workoutLevelMatchesActivityScope(for: goal, in: workout) else {
+                    return count
+                }
+                return count + 1
+            }
+        } else {
+            workoutCount = workouts
+                .filter { ($0.completedAt ?? $0.startedAt) >= periodStart }
+                .count
         }
-
-        let workoutCount = workouts
-            .filter { ($0.completedAt ?? $0.startedAt) >= periodStart }
-            .count
         let sessionCount = sessions
             .filter { $0.loggedAt >= periodStart }
             .count
@@ -671,6 +850,72 @@ enum WorkoutGoalProgressResolver {
             progressFraction: progressFraction,
             periodRangeText: periodRangeText
         )
+    }
+
+    private static func frequencyGoalCountsActivityEntries(_ goal: WorkoutGoal) -> Bool {
+        guard goal.hasActivityScope else { return false }
+
+        let normalizedUnit = goal.targetUnit
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        return !(normalizedUnit.contains("session") || normalizedUnit.contains("workout"))
+    }
+
+    private static func periodStartDate(for goal: WorkoutGoal, now: Date) -> Date? {
+        guard goal.periodUnit != nil || goal.periodCount != nil else { return nil }
+        let calendar = Calendar.current
+        let periodCount = max(goal.periodCount ?? 1, 1)
+        let periodUnit = goal.periodUnit ?? .week
+
+        switch periodUnit {
+        case .day:
+            let startOfToday = calendar.startOfDay(for: now)
+            return calendar.date(byAdding: .day, value: -(periodCount - 1), to: startOfToday) ?? startOfToday
+        case .week:
+            let currentWeek = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? calendar.startOfDay(for: now)
+            return calendar.date(byAdding: .weekOfYear, value: -(periodCount - 1), to: currentWeek) ?? currentWeek
+        case .month:
+            let currentMonth = calendar.dateInterval(of: .month, for: now)?.start ?? calendar.startOfDay(for: now)
+            return calendar.date(byAdding: .month, value: -(periodCount - 1), to: currentMonth) ?? currentMonth
+        }
+    }
+
+    private static func currentNumericValue(_ values: [Double], cumulative: Bool) -> Double? {
+        let positiveValues = values.filter { $0 > 0 }
+        guard !positiveValues.isEmpty else { return nil }
+        return cumulative ? positiveValues.reduce(0, +) : positiveValues.max()
+    }
+
+    nonisolated private static func countValue(for entry: LiveWorkoutEntry) -> Double {
+        if entry.isStrength {
+            let completedReps = entry.completedSets?
+                .map(\.reps)
+                .filter { $0 > 0 }
+                .reduce(0, +) ?? 0
+            return Double(completedReps)
+        }
+
+        let segmentReps = entry.activitySegments
+            .compactMap(\.reps)
+            .filter { $0 > 0 }
+            .reduce(0, +)
+        let segmentCount = entry.activitySegments.filter(\.hasLoggedData).count
+        return Double(segmentReps > 0 ? segmentReps : segmentCount)
+    }
+
+    nonisolated private static func countValue(for session: WorkoutSession) -> Double {
+        if session.reps > 0 {
+            return Double(session.reps)
+        }
+        if session.sets > 0 {
+            return Double(session.sets)
+        }
+        return 0
+    }
+
+    private static func progressDate(for entry: LiveWorkoutEntry) -> Date {
+        entry.completedAt ?? entry.workout?.completedAt ?? entry.workout?.startedAt ?? .distantPast
     }
 }
 
@@ -694,7 +939,7 @@ struct SessionGoalsCard: View {
             }
 
             if goals.isEmpty {
-                Text("Add an optional goal for this session type or a specific activity. Trai can use it during the workout, and completed sessions can show note-based progress toward it.")
+                Text("Add a goal Trai can follow during this session.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -714,8 +959,8 @@ struct SessionGoalsCard: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
 
-                            if !goal.trimmedNotes.isEmpty {
-                                Text(goal.trimmedNotes)
+                            if let supportingSummary = goal.supportingSummary {
+                                Text(supportingSummary)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
@@ -916,7 +1161,24 @@ struct WorkoutGoalsOverviewSection: View {
         Array(signals.prefix(canCreateGoalsWithTrai ? 2 : 3))
     }
 
+    @ViewBuilder
     var body: some View {
+        if !canCreateGoalsWithTrai {
+            VStack(spacing: 12) {
+                overviewContent
+                    .traiCard(glow: .activity)
+
+                if !(insights.isEmpty && signals.isEmpty) {
+                    lockedUpsellCard
+                }
+            }
+        } else {
+            overviewContent
+                .traiCard(glow: .activity)
+        }
+    }
+
+    private var overviewContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             if canCreateGoalsWithTrai {
                 TraiSectionHeader("Goals & Signals", icon: "scope") {
@@ -949,7 +1211,6 @@ struct WorkoutGoalsOverviewSection: View {
                 }
             }
         }
-        .traiCard(glow: .activity)
     }
 
     private var emptyStateCard: some View {
@@ -982,13 +1243,15 @@ struct WorkoutGoalsOverviewSection: View {
             if let firstSignal = visibleSignals.first {
                 signalRow(firstSignal)
             }
-
-            ProUpsellInlineCard(
-                source: .workoutPlan,
-                actionTitle: "Unlock Trai Pro",
-                action: onUnlockPro
-            )
         }
+    }
+
+    private var lockedUpsellCard: some View {
+        ProUpsellInlineCard(
+            source: .workoutPlan,
+            actionTitle: "Unlock Trai Pro",
+            action: onUnlockPro
+        )
     }
 
     private func featuredGoalCard(_ insight: WorkoutGoalInsight) -> some View {
@@ -1020,19 +1283,8 @@ struct WorkoutGoalsOverviewSection: View {
             }
 
             if let progressFraction = insight.progressFraction {
-                VStack(alignment: .leading, spacing: 6) {
-                    ProgressView(value: progressFraction)
-                        .tint(insight.goal.status == .completed ? .green : TraiColors.flame)
-
-                    HStack {
-                        if let current = insight.currentValueText {
-                            compactMetric(label: "Current", value: current)
-                        }
-                        if let target = insight.targetValueText {
-                            compactMetric(label: "Target", value: target)
-                        }
-                    }
-                }
+                ProgressView(value: progressFraction)
+                    .tint(insight.goal.status == .completed ? .green : TraiColors.flame)
             }
 
             if insight.goal.goalKind == .milestone {
@@ -1176,20 +1428,6 @@ struct WorkoutGoalsOverviewSection: View {
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
     }
 
-    private func compactMetric(label: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(.quaternarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-    }
 }
 
 private struct ActivityItem: Identifiable {
@@ -1293,7 +1531,7 @@ struct WorkoutGoalDetailSheet: View {
                 ActivityItem(
                     date: s.loggedAt,
                     name: s.displayName,
-                    detail: [s.displayTypeName, s.formattedDuration, s.formattedDistance].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " • "),
+                    detail: s.historyDetailSegments.joined(separator: " • "),
                     workout: nil,
                     session: s
                 )
@@ -1314,7 +1552,7 @@ struct WorkoutGoalDetailSheet: View {
                     if !recentActivityItems.isEmpty {
                         sessionsSection
                     }
-                    if !relatedSignals.isEmpty || !goal.trimmedNotes.isEmpty {
+                    if !relatedSignals.isEmpty || goal.supportingSummary != nil {
                         notesSection
                     }
                 }
@@ -1541,32 +1779,28 @@ struct WorkoutGoalDetailSheet: View {
             TraiSectionHeader("Notes", icon: "text.quote")
                 .padding(.bottom, 12)
 
-            if !goal.trimmedNotes.isEmpty {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "circle.hexagongrid.circle")
-                        .font(.subheadline)
-                        .foregroundStyle(TraiColors.brandAccent)
-                        .frame(width: 32, height: 32)
-                        .background(TraiColors.brandAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+            let successCriteria = goal.trimmedSuccessCriteria
+            let goalNotes = goal.trimmedNotes
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack {
-                            Text("Goal notes")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            if let promptDate = goal.lastCheckInPromptAt {
-                                Text(promptDate, format: .dateTime.month(.abbreviated).day())
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                        Text(goal.trimmedNotes)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(6)
-                    }
+            if !successCriteria.isEmpty {
+                goalContextRow(
+                    title: "Success criteria",
+                    text: successCriteria,
+                    icon: "checklist.checked"
+                )
+
+                if !goalNotes.isEmpty || !relatedSignals.isEmpty {
+                    Divider().padding(.vertical, 12)
                 }
+            }
+
+            if !goalNotes.isEmpty {
+                goalContextRow(
+                    title: "Goal notes",
+                    text: goalNotes,
+                    icon: "circle.hexagongrid.circle",
+                    showsCheckInDate: true
+                )
 
                 if !relatedSignals.isEmpty {
                     Divider().padding(.vertical, 12)
@@ -1596,6 +1830,39 @@ struct WorkoutGoalDetailSheet: View {
             }
         }
         .traiCard()
+    }
+
+    private func goalContextRow(
+        title: String,
+        text: String,
+        icon: String,
+        showsCheckInDate: Bool = false
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.subheadline)
+                .foregroundStyle(TraiColors.brandAccent)
+                .frame(width: 32, height: 32)
+                .background(TraiColors.brandAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if showsCheckInDate, let promptDate = goal.lastCheckInPromptAt {
+                        Text(promptDate, format: .dateTime.month(.abbreviated).day())
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                Text(text)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(6)
+            }
+        }
     }
 }
 
@@ -1686,11 +1953,14 @@ struct AddWorkoutGoalSheet: View {
     @State private var scope: GoalScope = .session
     @State private var selectedWorkoutType: WorkoutMode
     @State private var activityName = ""
+    @State private var activityTagsText = ""
+    @State private var selectedActivityRole: WorkoutPlan.TrainingBlock.Role?
     @State private var targetValueText = ""
     @State private var baselineValueText = ""
     @State private var targetUnit: String
     @State private var periodUnit: WorkoutGoal.PeriodUnit = .week
     @State private var periodCountText = "1"
+    @State private var successCriteria = ""
     @State private var targetDateEnabled = false
     @State private var targetDate = Calendar.current.date(byAdding: .day, value: 42, to: Date()) ?? Date()
     @State private var checkInCadenceDaysText = ""
@@ -1726,9 +1996,11 @@ struct AddWorkoutGoalSheet: View {
         self.editingGoal = existing
         _title = State(initialValue: existing.title)
         _goalKind = State(initialValue: existing.goalKind)
-        _scope = State(initialValue: existing.trimmedActivityName != nil ? .activity : .session)
+        _scope = State(initialValue: existing.hasActivityScope ? .activity : .session)
         _selectedWorkoutType = State(initialValue: existing.linkedWorkoutType ?? .custom)
         _activityName = State(initialValue: existing.linkedActivityName ?? "")
+        _activityTagsText = State(initialValue: existing.linkedActivityTags.joined(separator: ", "))
+        _selectedActivityRole = State(initialValue: existing.linkedActivityRole)
         _targetValueText = State(initialValue: Self.formatDoubleForField(existing.targetValue))
         _baselineValueText = State(initialValue: Self.formatDoubleForField(existing.baselineValue))
         _targetUnit = State(
@@ -1738,6 +2010,7 @@ struct AddWorkoutGoalSheet: View {
         )
         _periodUnit = State(initialValue: existing.periodUnit ?? .week)
         _periodCountText = State(initialValue: existing.periodCount.map { "\($0)" } ?? "1")
+        _successCriteria = State(initialValue: existing.successCriteria)
         _targetDateEnabled = State(initialValue: existing.targetDate != nil)
         _targetDate = State(initialValue: existing.targetDate ?? Calendar.current.date(byAdding: .day, value: 42, to: Date()) ?? Date())
         _checkInCadenceDaysText = State(initialValue: existing.checkInCadenceDays.map { "\($0)" } ?? "")
@@ -1761,15 +2034,27 @@ struct AddWorkoutGoalSheet: View {
             return ["min", "hr"]
         case .distance:
             return prefersMetricWeight ? ["km", "m"] : ["mi", "km"]
+        case .count:
+            return ["reps", "attempts", "rounds"]
         case .weight:
             return prefersMetricWeight ? ["kg", "lbs"] : ["lbs", "kg"]
         }
     }
 
     private var isSaveDisabled: Bool {
-        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-        (scope == .activity && activityName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ||
+        let hasActivityScope = !activityName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            !activityTagsText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            selectedActivityRole != nil
+        return title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        (scope == .activity && !hasActivityScope) ||
         (goalKind.supportsNumericTarget && Double(targetValueText.trimmingCharacters(in: .whitespacesAndNewlines)) == nil)
+    }
+
+    private var parsedActivityTags: [String] {
+        activityTagsText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     var body: some View {
@@ -1781,6 +2066,11 @@ struct AddWorkoutGoalSheet: View {
                             .font(.headline)
 
                         TextField("e.g. Send the blue V5 clean, Hold a 60 minute flow, Hit 225 on bench", text: $title)
+                            .padding(12)
+                            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+
+                        TextField("Success criteria", text: $successCriteria, axis: .vertical)
+                            .lineLimit(1...3)
                             .padding(12)
                             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
 
@@ -1809,7 +2099,7 @@ struct AddWorkoutGoalSheet: View {
                     .traiCard()
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Label("Track Against", systemImage: "figure.walk.motion")
+                        Label("Track", systemImage: "figure.walk.motion")
                             .font(.headline)
 
                         Picker("Scope", selection: $scope) {
@@ -1832,14 +2122,20 @@ struct AddWorkoutGoalSheet: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Text(scope == .session ? "This goal will follow your \(selectedWorkoutType.displayName.lowercased()) sessions." : "Attach this goal to a specific activity name so recent notes and metrics are more focused.")
+                        Text(scope == .session ? "This goal will follow your \(selectedWorkoutType.displayName.lowercased()) sessions." : "Tie it to a movement, activity, or part of a workout.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
                         if scope == .activity {
-                            TextField("Activity name", text: $activityName)
+                            TextField("Movement or activity (optional)", text: $activityName)
                                 .padding(12)
                                 .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+
+                            TextField("Related focus (optional, comma separated)", text: $activityTagsText)
+                                .padding(12)
+                                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+
+                            activityRoleMenu
 
                             if !activitySuggestions.isEmpty {
                                 FlowLayout(spacing: 8) {
@@ -1875,7 +2171,7 @@ struct AddWorkoutGoalSheet: View {
                                 .pickerStyle(.segmented)
                             }
 
-                            if goalKind != .frequency {
+                            if goalKind == .weight {
                                 TextField(
                                     "Starting point (optional, e.g. \(targetUnit.isEmpty ? "130" : "130 \(targetUnit)"))",
                                     text: $baselineValueText
@@ -1889,7 +2185,7 @@ struct AddWorkoutGoalSheet: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            if goalKind == .frequency {
+                            if goalKind.usesPeriodTarget {
                                 HStack(spacing: 10) {
                                     TextField("Period count", text: $periodCountText)
                                         .keyboardType(.numberPad)
@@ -1951,7 +2247,7 @@ struct AddWorkoutGoalSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", systemImage: "checkmark") {
                         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                        let baseline = goalKind != .frequency
+                        let baseline = goalKind == .weight
                             ? Double(baselineValueText.trimmingCharacters(in: .whitespacesAndNewlines))
                             : nil
 
@@ -1962,6 +2258,9 @@ struct AddWorkoutGoalSheet: View {
                             existing.linkedActivityName = scope == .activity
                                 ? activityName.trimmingCharacters(in: .whitespacesAndNewlines)
                                 : nil
+                            existing.linkedActivityTags = scope == .activity ? parsedActivityTags : []
+                            existing.linkedActivityKind = nil
+                            existing.linkedActivityRole = scope == .activity ? selectedActivityRole : nil
                             existing.targetValue = goalKind.supportsNumericTarget
                                 ? Double(targetValueText.trimmingCharacters(in: .whitespacesAndNewlines))
                                 : nil
@@ -1970,6 +2269,7 @@ struct AddWorkoutGoalSheet: View {
                             existing.periodCount = goalKind.usesPeriodTarget
                                 ? Int(periodCountText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 1
                                 : nil
+                            existing.successCriteria = successCriteria.trimmingCharacters(in: .whitespacesAndNewlines)
                             existing.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
                             existing.targetDate = targetDateEnabled ? targetDate : nil
                             existing.checkInCadenceDays = Int(checkInCadenceDaysText.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -1981,10 +2281,14 @@ struct AddWorkoutGoalSheet: View {
                                 goalKind: goalKind,
                                 linkedWorkoutType: selectedWorkoutType,
                                 linkedActivityName: scope == .activity ? activityName : nil,
+                                linkedActivityTags: scope == .activity ? parsedActivityTags : [],
+                                linkedActivityKind: nil,
+                                linkedActivityRole: scope == .activity ? selectedActivityRole : nil,
                                 targetValue: goalKind.supportsNumericTarget ? Double(targetValueText.trimmingCharacters(in: .whitespacesAndNewlines)) : nil,
                                 targetUnit: goalKind.supportsNumericTarget ? targetUnit : "",
                                 periodUnit: goalKind.usesPeriodTarget ? periodUnit : nil,
                                 periodCount: goalKind.usesPeriodTarget ? Int(periodCountText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 1 : nil,
+                                successCriteria: successCriteria.trimmingCharacters(in: .whitespacesAndNewlines),
                                 notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
                                 targetDate: targetDateEnabled ? targetDate : nil,
                                 checkInCadenceDays: Int(checkInCadenceDaysText.trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -2003,6 +2307,26 @@ struct AddWorkoutGoalSheet: View {
         .traiSheetBranding()
     }
 
+    private var activityRoleMenu: some View {
+        Menu {
+            Button("Anywhere in workout") {
+                selectedActivityRole = nil
+            }
+            ForEach(WorkoutPlan.TrainingBlock.Role.allCases) { role in
+                Button {
+                    selectedActivityRole = role
+                } label: {
+                    Label(role.placementDisplayName, systemImage: role.iconName)
+                }
+            }
+        } label: {
+            Label(selectedActivityRole?.placementDisplayName ?? "Anywhere in workout", systemImage: selectedActivityRole?.iconName ?? "slider.horizontal.3")
+                .font(.caption.weight(.semibold))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.traiSecondary(size: .compact, fullWidth: true))
+    }
+
     private static func defaultUnit(for kind: WorkoutGoal.GoalKind, prefersMetricWeight: Bool) -> String {
         switch kind {
         case .milestone:
@@ -2013,6 +2337,8 @@ struct AddWorkoutGoalSheet: View {
             return "min"
         case .distance:
             return prefersMetricWeight ? "km" : "mi"
+        case .count:
+            return "reps"
         case .weight:
             return prefersMetricWeight ? "kg" : "lbs"
         }

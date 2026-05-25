@@ -13,10 +13,103 @@ struct WorkoutPlan: Codable, Equatable {
     let splitType: SplitType
     let daysPerWeek: Int
     let templates: [WorkoutTemplate]
+    let planIntent: PlanIntent?
     let rationale: String
     let guidelines: [String]
     let progressionStrategy: ProgressionStrategy
+    let modalityProgression: ModalityProgression?
     let warnings: [String]?
+
+    init(
+        splitType: SplitType,
+        daysPerWeek: Int,
+        templates: [WorkoutTemplate],
+        planIntent: PlanIntent? = nil,
+        rationale: String,
+        guidelines: [String],
+        progressionStrategy: ProgressionStrategy,
+        modalityProgression: ModalityProgression? = nil,
+        warnings: [String]? = nil
+    ) {
+        self.splitType = splitType
+        self.daysPerWeek = daysPerWeek
+        self.templates = templates
+        self.planIntent = planIntent
+        self.rationale = rationale
+        self.guidelines = guidelines
+        self.progressionStrategy = progressionStrategy
+        self.modalityProgression = modalityProgression
+        self.warnings = warnings
+    }
+
+    func normalizedForDurableBlocks() -> WorkoutPlan {
+        let durableTemplates = templates.map { template in
+            WorkoutTemplate(
+                id: template.id,
+                name: template.name,
+                sessionType: template.sessionType,
+                focusAreas: template.focusAreas,
+                targetMuscleGroups: template.targetMuscleGroups,
+                exercises: template.exercises,
+                blocks: template.blocks.isEmpty ? template.displayBlocks : template.blocks,
+                estimatedDurationMinutes: template.estimatedDurationMinutes,
+                order: template.order,
+                notes: template.notes
+            )
+        }
+
+        return WorkoutPlan(
+            splitType: splitType,
+            daysPerWeek: daysPerWeek,
+            templates: durableTemplates,
+            planIntent: planIntent,
+            rationale: rationale,
+            guidelines: guidelines,
+            progressionStrategy: progressionStrategy,
+            modalityProgression: modalityProgression,
+            warnings: warnings
+        )
+    }
+
+    // MARK: - Plan Intent
+
+    struct PlanIntent: Codable, Equatable {
+        struct SupportiveCardioConstraint: Codable, Equatable {
+            let role: TrainingBlock.Role
+            let maximumPlacements: Int?
+
+            init(role: TrainingBlock.Role, maximumPlacements: Int? = nil) {
+                self.role = role
+                self.maximumPlacements = maximumPlacements
+            }
+        }
+
+        let primaryFocus: String
+        let supportingFocuses: [String]
+        let sessionAllocation: String
+        let honoredInputs: [String]
+        let avoided: [String]
+        let supportiveCardioConstraint: SupportiveCardioConstraint?
+        let summary: String
+
+        init(
+            primaryFocus: String,
+            supportingFocuses: [String] = [],
+            sessionAllocation: String,
+            honoredInputs: [String] = [],
+            avoided: [String] = [],
+            supportiveCardioConstraint: SupportiveCardioConstraint? = nil,
+            summary: String
+        ) {
+            self.primaryFocus = primaryFocus
+            self.supportingFocuses = supportingFocuses
+            self.sessionAllocation = sessionAllocation
+            self.honoredInputs = honoredInputs
+            self.avoided = avoided
+            self.supportiveCardioConstraint = supportiveCardioConstraint
+            self.summary = summary
+        }
+    }
 
     // MARK: - Split Type
 
@@ -79,6 +172,7 @@ struct WorkoutPlan: Codable, Equatable {
         let focusAreas: [String]
         let targetMuscleGroups: [String]
         let exercises: [ExerciseTemplate]
+        let blocks: [TrainingBlock]
         let estimatedDurationMinutes: Int
         let order: Int
         let notes: String?
@@ -90,6 +184,7 @@ struct WorkoutPlan: Codable, Equatable {
             case focusAreas
             case targetMuscleGroups
             case exercises
+            case blocks
             case estimatedDurationMinutes
             case order
             case notes
@@ -102,6 +197,7 @@ struct WorkoutPlan: Codable, Equatable {
             focusAreas: [String]? = nil,
             targetMuscleGroups: [String],
             exercises: [ExerciseTemplate],
+            blocks: [TrainingBlock]? = nil,
             estimatedDurationMinutes: Int,
             order: Int,
             notes: String? = nil
@@ -114,6 +210,13 @@ struct WorkoutPlan: Codable, Equatable {
                 .filter { !$0.isEmpty }
             self.targetMuscleGroups = targetMuscleGroups
             self.exercises = exercises
+            self.blocks = blocks?.normalizedForDisplay ?? Self.defaultBlocks(
+                sessionType: sessionType,
+                focusAreas: self.focusAreas,
+                exercises: exercises,
+                durationMinutes: estimatedDurationMinutes,
+                notes: notes
+            )
             self.estimatedDurationMinutes = estimatedDurationMinutes
             self.order = order
             self.notes = notes
@@ -121,13 +224,17 @@ struct WorkoutPlan: Codable, Equatable {
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
             name = try container.decode(String.self, forKey: .name)
             targetMuscleGroups = try container.decodeIfPresent([String].self, forKey: .targetMuscleGroups) ?? []
             exercises = try container.decodeIfPresent([ExerciseTemplate].self, forKey: .exercises) ?? []
             estimatedDurationMinutes = try container.decode(Int.self, forKey: .estimatedDurationMinutes)
             order = try container.decode(Int.self, forKey: .order)
             notes = try container.decodeIfPresent(String.self, forKey: .notes)
+            id = container.decodeStableUUIDIfPresent(
+                forKey: .id,
+                namespace: "workout-template",
+                fallbackSeed: "\(order)-\(name)"
+            )
 
             let decodedFocusAreas = try container.decodeIfPresent([String].self, forKey: .focusAreas) ?? targetMuscleGroups
             focusAreas = decodedFocusAreas
@@ -136,17 +243,64 @@ struct WorkoutPlan: Codable, Equatable {
 
             sessionType = try container.decodeIfPresent(WorkoutMode.self, forKey: .sessionType)
                 ?? WorkoutMode.infer(from: name, focusAreas: focusAreas, targetMuscleGroups: targetMuscleGroups)
+            let decodedBlocks = try container.decodeIfPresent([TrainingBlock].self, forKey: .blocks) ?? []
+            blocks = decodedBlocks.normalizedForDisplay
         }
 
-        var exerciseCount: Int { exercises.count }
+        nonisolated var structuredExercises: [ExerciseTemplate] {
+            if !exercises.isEmpty { return exercises }
+            return displayBlocks
+                .flatMap(\.exercises)
+                .sorted { $0.order < $1.order }
+        }
 
-        var muscleGroupsDisplay: String {
-            (focusAreas.isEmpty ? targetMuscleGroups : focusAreas)
+        nonisolated var exerciseCount: Int { structuredExercises.count }
+
+        nonisolated var resolvedTargetMuscleGroups: [String] {
+            let explicitTargets = targetMuscleGroups
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !explicitTargets.isEmpty {
+                return explicitTargets
+            }
+
+            var seen: Set<String> = []
+            return structuredExercises.compactMap { exercise in
+                let value = exercise.muscleGroup.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !value.isEmpty else { return nil }
+                let key = value.lowercased()
+                guard seen.insert(key).inserted else { return nil }
+                return value
+            }
+        }
+
+        nonisolated var displayBlocks: [TrainingBlock] {
+            blocks.isEmpty
+                ? Self.defaultBlocks(
+                    sessionType: sessionType,
+                    focusAreas: focusAreas,
+                    exercises: exercises,
+                    durationMinutes: estimatedDurationMinutes,
+                    notes: notes
+                )
+                : blocks.normalizedForDisplay
+        }
+
+        nonisolated var primaryBlockSummary: String {
+            displayBlocks
+                .prefix(3)
+                .map(\.shortSummary)
+                .filter { !$0.isEmpty }
+                .joined(separator: " • ")
+        }
+
+        nonisolated var muscleGroupsDisplay: String {
+            (focusAreas.isEmpty ? resolvedTargetMuscleGroups : focusAreas)
                 .map(Self.formatTargetGroupName)
                 .joined(separator: " • ")
         }
 
-        var focusAreasDisplay: String {
+        nonisolated var focusAreasDisplay: String {
             muscleGroupsDisplay
         }
 
@@ -170,6 +324,347 @@ struct WorkoutPlan: Codable, Equatable {
                 return normalized.localizedCapitalized
             }
         }
+
+        private nonisolated static func defaultBlocks(
+            sessionType: WorkoutMode,
+            focusAreas: [String],
+            exercises: [ExerciseTemplate],
+            durationMinutes: Int,
+            notes: String?
+        ) -> [TrainingBlock] {
+            if !exercises.isEmpty {
+                let kind = TrainingBlock.BlockKind(sessionType: sessionType)
+                let activityName = defaultActivityName(sessionType: sessionType, focusAreas: focusAreas)
+                    ?? kind.displayName
+                return [
+                    TrainingBlock(
+                        kind: kind,
+                        title: activityName,
+                        detail: exercises.prefix(3).map(\.exerciseName).joined(separator: ", "),
+                        exercises: exercises,
+                        activityTypeName: activityName,
+                        activityTags: defaultActivityTags(
+                            sessionType: sessionType,
+                            activityName: activityName,
+                            focusAreas: focusAreas
+                        ),
+                        durationMinutes: durationMinutes,
+                        intensity: nil,
+                        target: nil,
+                        order: 0,
+                        notes: notes
+                    )
+                ]
+            }
+
+            let activityName = defaultActivityName(
+                sessionType: sessionType,
+                focusAreas: focusAreas
+            )
+            let title = activityName ?? sessionType.displayName
+            return [
+                TrainingBlock(
+                    kind: TrainingBlock.BlockKind(sessionType: sessionType),
+                    title: title,
+                    detail: notes ?? "\(durationMinutes) minutes",
+                    exercises: [],
+                    activityTypeName: activityName,
+                    activityTags: defaultActivityTags(
+                        sessionType: sessionType,
+                        activityName: activityName,
+                        focusAreas: focusAreas
+                    ),
+                    durationMinutes: durationMinutes,
+                    intensity: nil,
+                    target: nil,
+                    order: 0,
+                    notes: notes
+                )
+            ]
+        }
+
+        private nonisolated static func defaultActivityName(
+            sessionType: WorkoutMode,
+            focusAreas: [String]
+        ) -> String? {
+            guard !sessionType.supportsMuscleTargets else { return nil }
+            return focusAreas
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .first { !$0.isEmpty }
+                .map(formatTargetGroupName)
+        }
+
+        private nonisolated static func defaultActivityTags(
+            sessionType: WorkoutMode,
+            activityName: String?,
+            focusAreas: [String]
+        ) -> [String] {
+            guard !sessionType.supportsMuscleTargets else { return [] }
+            var seen: Set<String> = []
+            let values = [activityName, sessionType.displayName] + focusAreas.map(Optional.some)
+            return values
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .map(formatTargetGroupName)
+                .filter { seen.insert(defaultActivityKey($0)).inserted }
+        }
+
+        private nonisolated static func defaultActivityKey(_ value: String) -> String {
+            value
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: " ", with: "")
+        }
+    }
+
+    // MARK: - Training Block
+
+    struct TrainingBlock: Codable, Equatable, Identifiable {
+        let id: UUID
+        let kind: BlockKind
+        let role: Role
+        let title: String
+        let detail: String
+        let exercises: [ExerciseTemplate]
+        let activityTypeName: String?
+        let activityTags: [String]
+        let durationMinutes: Int?
+        let intensity: String?
+        let target: String?
+        let order: Int
+        let notes: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case kind
+            case role
+            case title
+            case detail
+            case exercises
+            case activityTypeName
+            case activityTags
+            case durationMinutes
+            case intensity
+            case target
+            case order
+            case notes
+        }
+
+        nonisolated enum BlockKind: String, Codable, CaseIterable, Identifiable {
+            case strength
+            case cardio
+            case conditioning
+            case skill
+            case mobility
+            case recovery
+            case sportPractice
+            case custom
+
+            nonisolated var id: String { rawValue }
+
+            nonisolated var displayName: String {
+                switch self {
+                case .strength: "Strength"
+                case .cardio: "Cardio"
+                case .conditioning: "Conditioning"
+                case .skill: "Sport"
+                case .mobility: "Mobility"
+                case .recovery: "Recovery"
+                case .sportPractice: "Sport"
+                case .custom: "Activity"
+                }
+            }
+
+            nonisolated var iconName: String {
+                switch self {
+                case .strength: "dumbbell.fill"
+                case .cardio: "figure.run"
+                case .conditioning: "bolt.heart.fill"
+                case .skill: "scope"
+                case .mobility: "figure.mind.and.body"
+                case .recovery: "heart.text.square.fill"
+                case .sportPractice: "sportscourt.fill"
+                case .custom: "slider.horizontal.3"
+                }
+            }
+
+            nonisolated init(sessionType: WorkoutMode) {
+                switch sessionType {
+                case .strength:
+                    self = .strength
+                case .cardio:
+                    self = .cardio
+                case .hiit:
+                    self = .conditioning
+                case .climbing:
+                    self = .skill
+                case .yoga, .pilates, .flexibility, .mobility:
+                    self = .mobility
+                case .recovery:
+                    self = .recovery
+                case .mixed:
+                    self = .custom
+                case .custom:
+                    self = .custom
+                }
+            }
+        }
+
+        nonisolated enum Role: String, Codable, CaseIterable, Identifiable {
+            case main
+            case warmup
+            case accessory
+            case finisher
+            case cooldown
+            case custom
+
+            nonisolated var id: String { rawValue }
+
+            nonisolated var displayName: String {
+                switch self {
+                case .main: "Main"
+                case .warmup: "Warm-up"
+                case .accessory: "Support"
+                case .finisher: "Finish"
+                case .cooldown: "Cool down"
+                case .custom: "Custom placement"
+                }
+            }
+
+            nonisolated var placementDisplayName: String {
+                switch self {
+                case .main: "Main work"
+                case .warmup: "Warm-up"
+                case .accessory: "Support work"
+                case .finisher: "End of workout"
+                case .cooldown: "Cool-down"
+                case .custom: "Custom placement"
+                }
+            }
+
+            nonisolated var iconName: String {
+                switch self {
+                case .main: "target"
+                case .warmup: "figure.walk"
+                case .accessory: "plus.circle"
+                case .finisher: "timer"
+                case .cooldown: "figure.cooldown"
+                case .custom: "slider.horizontal.3"
+                }
+            }
+
+            nonisolated static func defaultRole(for kind: BlockKind) -> Role {
+                switch kind {
+                case .custom:
+                    return .custom
+                case .strength, .cardio, .conditioning, .skill, .mobility, .recovery, .sportPractice:
+                    return .main
+                }
+            }
+
+        }
+
+        nonisolated init(
+            id: UUID = UUID(),
+            kind: BlockKind,
+            role: Role? = nil,
+            title: String,
+            detail: String,
+            exercises: [ExerciseTemplate] = [],
+            activityTypeName: String? = nil,
+            activityTags: [String] = [],
+            durationMinutes: Int? = nil,
+            intensity: String? = nil,
+            target: String? = nil,
+            order: Int,
+            notes: String? = nil
+        ) {
+            self.id = id
+            self.kind = kind
+            self.role = role ?? Role.defaultRole(for: kind)
+            self.title = title
+            self.detail = detail
+            self.exercises = exercises
+            self.activityTypeName = activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            self.activityTags = activityTags
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            self.durationMinutes = durationMinutes
+            self.intensity = intensity
+            self.target = target
+            self.order = order
+            self.notes = notes
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let rawKind = try container.decode(String.self, forKey: .kind)
+            let decodedKind = BlockKind(rawValue: rawKind)
+            let legacyPlacementRole = Role(rawValue: rawKind)
+            if let decodedKind {
+                kind = decodedKind
+            } else if let legacyPlacementRole {
+                switch legacyPlacementRole {
+                case .warmup:
+                    kind = .mobility
+                case .cooldown:
+                    kind = .recovery
+                default:
+                    kind = .custom
+                }
+            } else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .kind,
+                    in: container,
+                    debugDescription: "Training block kind must be a stable enum value."
+                )
+            }
+            role = try container.decodeIfPresent(Role.self, forKey: .role)
+                ?? legacyPlacementRole
+                ?? Role.defaultRole(for: kind)
+            title = try container.decode(String.self, forKey: .title)
+            detail = try container.decode(String.self, forKey: .detail)
+            exercises = try container.decodeIfPresent([ExerciseTemplate].self, forKey: .exercises) ?? []
+            activityTypeName = try container.decodeIfPresent(String.self, forKey: .activityTypeName)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty
+            activityTags = (try container.decodeIfPresent([String].self, forKey: .activityTags) ?? [])
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            durationMinutes = try container.decodeIfPresent(Int.self, forKey: .durationMinutes)
+            intensity = try container.decodeIfPresent(String.self, forKey: .intensity)
+            target = try container.decodeIfPresent(String.self, forKey: .target)
+            order = try container.decode(Int.self, forKey: .order)
+            notes = try container.decodeIfPresent(String.self, forKey: .notes)
+            id = container.decodeStableUUIDIfPresent(
+                forKey: .id,
+                namespace: "training-block",
+                fallbackSeed: "\(order)-\(kind.rawValue)-\(title)"
+            )
+        }
+
+        nonisolated var shortSummary: String {
+            let trimmedTitle = displayActivityName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let durationMinutes, durationMinutes > 0 {
+                return "\(trimmedTitle.isEmpty ? kind.displayName : trimmedTitle) \(durationMinutes)m"
+            }
+            return trimmedTitle.isEmpty ? kind.displayName : trimmedTitle
+        }
+
+        nonisolated var displayActivityName: String {
+            if let activityTypeName, !activityTypeName.isEmpty {
+                return activityTypeName
+            }
+
+            let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedTitle.isEmpty {
+                return trimmedTitle
+            }
+
+            return kind.displayName
+        }
     }
 
     // MARK: - Exercise Template
@@ -184,6 +679,18 @@ struct WorkoutPlan: Codable, Equatable {
         let restSeconds: Int?
         let notes: String?
         let order: Int
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case exerciseName
+            case muscleGroup
+            case defaultSets
+            case defaultReps
+            case repRange
+            case restSeconds
+            case notes
+            case order
+        }
 
         init(
             id: UUID = UUID(),
@@ -205,6 +712,23 @@ struct WorkoutPlan: Codable, Equatable {
             self.restSeconds = restSeconds
             self.notes = notes
             self.order = order
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            exerciseName = try container.decode(String.self, forKey: .exerciseName)
+            muscleGroup = try container.decode(String.self, forKey: .muscleGroup)
+            defaultSets = try container.decode(Int.self, forKey: .defaultSets)
+            defaultReps = try container.decode(Int.self, forKey: .defaultReps)
+            repRange = try container.decodeIfPresent(String.self, forKey: .repRange)
+            restSeconds = try container.decodeIfPresent(Int.self, forKey: .restSeconds)
+            notes = try container.decodeIfPresent(String.self, forKey: .notes)
+            order = try container.decode(Int.self, forKey: .order)
+            id = container.decodeStableUUIDIfPresent(
+                forKey: .id,
+                namespace: "exercise-template",
+                fallbackSeed: "\(order)-\(exerciseName)"
+            )
         }
 
         var setsRepsDisplay: String {
@@ -245,6 +769,72 @@ struct WorkoutPlan: Codable, Equatable {
         )
     }
 
+    struct ModalityProgression: Codable, Equatable {
+        let focus: ProgressionFocus
+        let weeklyProgression: String
+        let targets: [ProgressionTarget]
+
+        enum ProgressionFocus: String, Codable, CaseIterable {
+            case strength
+            case volume
+            case endurance
+            case skill
+            case mobility
+            case consistency
+            case mixed
+
+            var displayName: String {
+                switch self {
+                case .strength: "Strength"
+                case .volume: "Volume"
+                case .endurance: "Endurance"
+                case .skill: "Technique"
+                case .mobility: "Mobility"
+                case .consistency: "Consistency"
+                case .mixed: "Mixed"
+                }
+            }
+        }
+
+        struct ProgressionTarget: Codable, Equatable, Identifiable {
+            let id: UUID
+            let label: String
+            let metric: String
+            let direction: String
+
+            private enum CodingKeys: String, CodingKey {
+                case id
+                case label
+                case metric
+                case direction
+            }
+
+            init(
+                id: UUID = UUID(),
+                label: String,
+                metric: String,
+                direction: String
+            ) {
+                self.id = id
+                self.label = label
+                self.metric = metric
+                self.direction = direction
+            }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                label = try container.decode(String.self, forKey: .label)
+                metric = try container.decode(String.self, forKey: .metric)
+                direction = try container.decode(String.self, forKey: .direction)
+                id = container.decodeStableUUIDIfPresent(
+                    forKey: .id,
+                    namespace: "progression-target",
+                    fallbackSeed: "\(label)-\(metric)"
+                )
+            }
+        }
+    }
+
     // MARK: - JSON Serialization
 
     func toJSON() -> String? {
@@ -269,9 +859,99 @@ struct WorkoutPlan: Codable, Equatable {
         splitType: .pushPullLegs,
         daysPerWeek: 3,
         templates: [],
+        planIntent: nil,
         rationale: "",
         guidelines: [],
         progressionStrategy: .defaultStrategy,
+        modalityProgression: nil,
         warnings: nil
     )
+}
+
+extension WorkoutPlan {
+    func containsVisibleActivityIdentity(matching aliases: [String]) -> Bool {
+        let visibleKeys = Set(visibleActivityIdentityValues
+            .map(\.goalNormalizedKey)
+            .filter { !$0.isEmpty })
+        guard !visibleKeys.isEmpty else { return false }
+
+        return aliases
+            .map(\.goalNormalizedKey)
+            .filter { !$0.isEmpty }
+            .contains { visibleKeys.contains($0) }
+    }
+
+    var visibleActivityIdentityValues: [String] {
+        templates.flatMap { template in
+            var values: [String] = [
+                template.name,
+                template.sessionType.displayName
+            ]
+            values.append(contentsOf: template.focusAreas)
+            values.append(contentsOf: template.displayBlocks.flatMap { block in
+                var blockValues: [String] = []
+                if let activityTypeName = block.activityTypeName {
+                    blockValues.append(activityTypeName)
+                }
+                blockValues.append(contentsOf: block.activityTags)
+                blockValues.append(contentsOf: block.exercises.map(\.exerciseName))
+                return blockValues
+            })
+            return values
+        }
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+    }
+}
+
+private extension Array where Element == WorkoutPlan.TrainingBlock {
+    nonisolated var normalizedForDisplay: [WorkoutPlan.TrainingBlock] {
+        sorted { $0.order < $1.order }.enumerated().map { index, block in
+            WorkoutPlan.TrainingBlock(
+                id: block.id,
+                kind: block.kind,
+                role: block.role,
+                title: block.title,
+                detail: block.detail,
+                exercises: block.exercises,
+                activityTypeName: block.activityTypeName,
+                activityTags: block.activityTags,
+                durationMinutes: block.durationMinutes,
+                intensity: block.intensity,
+                target: block.target,
+                order: index,
+                notes: block.notes
+            )
+        }
+    }
+}
+
+private extension String {
+    nonisolated var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
+}
+
+private extension KeyedDecodingContainer {
+    func decodeStableUUIDIfPresent(
+        forKey key: Key,
+        namespace: String,
+        fallbackSeed: String
+    ) -> UUID {
+        if let uuid = try? decodeIfPresent(UUID.self, forKey: key) {
+            return uuid
+        }
+
+        if let rawID = try? decodeIfPresent(String.self, forKey: key) {
+            let trimmedID = rawID.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let uuid = UUID(uuidString: trimmedID) {
+                return uuid
+            }
+            if !trimmedID.isEmpty {
+                return StableUUID.from("\(namespace):\(trimmedID)")
+            }
+        }
+
+        return StableUUID.from("\(namespace):\(fallbackSeed)")
+    }
 }

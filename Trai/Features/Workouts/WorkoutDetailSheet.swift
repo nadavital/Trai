@@ -14,13 +14,16 @@ struct WorkoutDetailSheet: View {
     @Environment(\.appTabSelection) private var appTabSelection
     @Environment(\.modelContext) private var modelContext
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingActionKind) private var pendingChatActionKind: String = ""
     @Query(sort: \ExerciseHistory.performedAt, order: .reverse) private var allExerciseHistory: [ExerciseHistory]
     @Query private var profiles: [UserProfile]
     @State private var isEditingNotes = false
     @State private var noteDraft = ""
+    @State private var presentedAccountSetupContext: AccountSetupContext?
 
     private struct WorkoutStatItem: Identifiable {
         let id = UUID()
@@ -72,7 +75,7 @@ struct WorkoutDetailSheet: View {
     }
 
     private var workoutCategoryTitle: String {
-        workout.displayTypeName
+        workout.activityContextSegments.prefix(2).joined(separator: " • ")
     }
 
     private var statsItems: [WorkoutStatItem] {
@@ -81,7 +84,7 @@ struct WorkoutDetailSheet: View {
         if workout.sets > 0 {
             items.append(WorkoutStatItem(
                 value: "\(workout.sets)",
-                label: "Sets",
+                label: workout.setMetricLabel,
                 icon: "square.stack.3d.up.fill",
                 color: .blue
             ))
@@ -90,7 +93,7 @@ struct WorkoutDetailSheet: View {
         if workout.reps > 0 {
             items.append(WorkoutStatItem(
                 value: "\(workout.reps)",
-                label: "Reps",
+                label: workout.repMetricLabel,
                 icon: "repeat",
                 color: .green
             ))
@@ -146,7 +149,7 @@ struct WorkoutDetailSheet: View {
 
     private var detailItems: [DetailItem] {
         var items: [DetailItem] = [
-            DetailItem(label: "Type", value: workout.displayTypeName)
+            DetailItem(label: "Activity", value: workout.activityContextSegments.joined(separator: ", "))
         ]
 
         if workout.isStrengthTraining, let volume = workout.totalVolume {
@@ -213,6 +216,9 @@ struct WorkoutDetailSheet: View {
                     .labelStyle(.iconOnly)
                 }
             }
+        }
+        .sheet(item: $presentedAccountSetupContext) { context in
+            AccountSetupView(context: context)
         }
     }
 
@@ -517,9 +523,23 @@ struct WorkoutDetailSheet: View {
             HapticManager.lightTap()
             return
         }
+        guard accountSessionService?.isAuthenticated != false else {
+            presentedAccountSetupContext = .aiFeatures
+            HapticManager.lightTap()
+            return
+        }
+        guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            dismiss()
+            DispatchQueue.main.async {
+                appTabSelection.wrappedValue = .trai
+            }
+            HapticManager.selectionChanged()
+            return
+        }
 
         pendingChatPrompt = workout.traiReviewPrompt
         pendingChatLaunchLabel = "Reviewing your latest session..."
+        pendingChatActionKind = ""
         BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: "engagement.review_workout_session_with_trai",
             domain: .engagement,

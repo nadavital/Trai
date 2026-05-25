@@ -491,6 +491,7 @@ private struct FoodLogReviewStepView: View {
     @State private var isLoadingRefinement = false
     @State private var refinementErrorMessage: String?
     @State private var isSaving = false
+    @State private var analyzedDescription: String?
     @Query private var profiles: [UserProfile]
 
     var body: some View {
@@ -516,6 +517,9 @@ private struct FoodLogReviewStepView: View {
         .task(id: autoAnalyzeKey) {
             guard shouldAutoAnalyzeDescription else { return }
             analyzeFood()
+        }
+        .onChange(of: draft.description) { _, newValue in
+            resetAnalysisIfNotesChanged(to: newValue)
         }
     }
 
@@ -580,6 +584,7 @@ private struct FoodLogReviewStepView: View {
                     description: trimmedDescription.isEmpty ? nil : trimmedDescription
                 )
                 draft.analysisResult = result
+                analyzedDescription = trimmedDescription
                 HapticManager.success()
             } catch {
                 analysisErrorMessage = error.aiUserFacingMessage(
@@ -588,6 +593,23 @@ private struct FoodLogReviewStepView: View {
                 HapticManager.error()
             }
         }
+    }
+
+    private func resetAnalysisIfNotesChanged(to description: String) {
+        guard draft.inputSource != .memorySuggestion,
+              !isAnalyzing,
+              draft.analysisResult != nil || draft.refinedSuggestion != nil else {
+            return
+        }
+
+        let nextDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard nextDescription != analyzedDescription else { return }
+
+        draft.analysisResult = nil
+        draft.refinedSuggestion = nil
+        analysisErrorMessage = nil
+        refinementErrorMessage = nil
+        analyzedDescription = nil
     }
 
     private func refineFood(_ correction: String) {

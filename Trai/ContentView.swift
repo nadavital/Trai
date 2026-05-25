@@ -51,7 +51,7 @@ struct ContentView: View {
     }
 
     private var hasCompletedOnboarding: Bool {
-        AppLaunchArguments.isUITesting
+        (AppLaunchArguments.isUITesting && !AppLaunchArguments.shouldRunOnboardingFlowUITest)
             || cachedOnboardingReady
             || !completedProfiles.isEmpty
     }
@@ -59,7 +59,8 @@ struct ContentView: View {
     /// Fast query-backed readiness used for first paint.
     /// Cached readiness is validated in `runStartupFlow()`.
     private var hasCompletedOnboardingFromQuery: Bool {
-        AppLaunchArguments.isUITesting || !completedProfiles.isEmpty
+        (AppLaunchArguments.isUITesting && !AppLaunchArguments.shouldRunOnboardingFlowUITest)
+            || !completedProfiles.isEmpty
     }
 
     var body: some View {
@@ -95,7 +96,7 @@ struct ContentView: View {
 
     @MainActor
     private func runStartupFlow() async {
-        guard !AppLaunchArguments.isUITesting else { return }
+        guard !AppLaunchArguments.isUITesting || AppLaunchArguments.shouldRunOnboardingFlowUITest else { return }
 
         let interval = PerformanceTrace.begin("content_startup_flow", category: .launch)
         defer { PerformanceTrace.end("content_startup_flow", interval, category: .launch) }
@@ -532,8 +533,8 @@ struct MainTabView: View {
                 outcome: .opened,
                 metadata: ["source": "deep_link"]
             )
-        case .workout(let templateName):
-            startWorkoutFromIntent(name: templateName ?? "custom")
+        case .workout(let templateID, let templateName):
+            startWorkoutFromIntent(templateID: templateID, name: templateName)
         case .chat:
             selectTab(.trai)
         }
@@ -551,7 +552,7 @@ struct MainTabView: View {
         handleRoute(route)
     }
 
-    private func startWorkoutFromIntent(name: String) {
+    private func startWorkoutFromIntent(templateID: UUID?, name: String?) {
         // Guard: Don't start a new workout if one is already active
         guard activeWorkout == nil else {
             // Show the existing workout instead
@@ -559,10 +560,25 @@ struct MainTabView: View {
             return
         }
 
-        let workout = workoutTemplateService.createWorkoutForIntent(
+        guard let workout = workoutTemplateService.createWorkoutForIntent(
+            templateID: templateID,
             name: name,
             modelContext: modelContext
-        )
+        ) else {
+            BehaviorTracker(modelContext: modelContext).record(
+                actionKey: BehaviorActionKey.startWorkout,
+                domain: .workout,
+                surface: .intent,
+                outcome: .dismissed,
+                metadata: [
+                    "source": "deep_link",
+                    "reason": "stale_template_id",
+                    "template_id": templateID?.uuidString ?? "",
+                    "name": name ?? ""
+                ]
+            )
+            return
+        }
 
         if AppLaunchArguments.isUITesting, AppLaunchArguments.shouldUseLiveWorkoutUITestPreset {
             applyLiveWorkoutUITestPresetIfNeeded(to: workout)

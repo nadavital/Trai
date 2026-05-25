@@ -17,14 +17,14 @@ extension OnboardingView {
         let profile = UserProfile()
 
         // Basic info
-        profile.name = userName.trimmingCharacters(in: .whitespaces)
+        profile.name = resolvedProfileName
         profile.dateOfBirth = dateOfBirth
         profile.gender = (gender ?? .notSpecified).rawValue
 
         // Biometrics (always store in metric)
         profile.heightCm = parseHeight()
         profile.currentWeightKg = parseWeight(weightValue)
-        profile.targetWeightKg = parseWeight(targetWeightValue)
+        profile.targetWeightKg = shouldCollectTargetWeight ? parseWeight(targetWeightValue) : nil
         profile.usesMetricHeight = usesMetricHeight
         profile.usesMetricWeight = usesMetricWeight
 
@@ -38,8 +38,9 @@ extension OnboardingView {
 
         // Macro tracking preferences
         profile.enabledMacros = enabledMacros
-        profile.syncFoodToHealthKit = syncFoodToHealthKit
-        profile.syncWeightToHealthKit = syncWeightToHealthKit
+        let hasHealthAccess = healthKitService?.isAuthorized == true
+        profile.syncFoodToHealthKit = hasHealthAccess && syncFoodToHealthKit
+        profile.syncWeightToHealthKit = hasHealthAccess && syncWeightToHealthKit
 
         // Nutrition targets (from adjusted values or plan)
         profile.dailyCalorieGoal = Int(adjustedCalories) ?? 2000
@@ -56,14 +57,26 @@ extension OnboardingView {
         }
 
         // Workout plan (if user created one)
-        if let workoutPlan = generatedWorkoutPlan {
+        let durableGeneratedWorkoutPlan = generatedWorkoutPlan?.normalizedForDurableBlocks()
+        if let workoutPlan = durableGeneratedWorkoutPlan {
             profile.workoutPlan = workoutPlan
+            workoutPlanDraft.applyPreferences(to: profile, generatedPlan: workoutPlan)
         }
 
         profile.hasCompletedOnboarding = true
         modelContext.insert(profile)
 
-        if let workoutPlan = generatedWorkoutPlan {
+        if let workoutPlan = durableGeneratedWorkoutPlan {
+            for goal in WorkoutGoal.generatedGoalsToInsert(
+                generatedWorkoutGoals,
+                existingGoals: [],
+                for: workoutPlan
+            ) {
+                modelContext.insert(goal)
+            }
+        }
+
+        if let workoutPlan = durableGeneratedWorkoutPlan {
             WorkoutPlanHistoryService.archivePlan(
                 workoutPlan,
                 profile: profile,
@@ -76,6 +89,7 @@ extension OnboardingView {
             try modelContext.save()
             UserDefaults.standard.set(true, forKey: AppLaunchArguments.onboardingCompletedCacheKey)
             clearOnboardingDraft()
+            WidgetDataProvider.shared.scheduleRefresh()
         } catch {
             print("Failed to persist onboarding profile: \(error)")
         }
@@ -84,6 +98,23 @@ extension OnboardingView {
         Task {
             await parseAndCreateMemories()
         }
+    }
+
+    var resolvedProfileName: String {
+        let typedName = userName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !typedName.isEmpty {
+            return typedName
+        }
+
+        let accountName = accountSessionService?.currentUserDisplayName
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !accountName.isEmpty,
+           accountName != "Not signed in",
+           !accountName.contains("@") {
+            return accountName
+        }
+
+        return "Trai User"
     }
 
     // MARK: - Memory Creation

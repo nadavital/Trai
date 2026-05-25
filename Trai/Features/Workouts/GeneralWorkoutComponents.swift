@@ -8,6 +8,18 @@ import SwiftUI
 struct GeneralSessionOverviewCard: View {
     let workout: LiveWorkout
 
+    private var primaryTitle: String {
+        workout.displayFocusAreas.first ?? workout.type.displayName
+    }
+
+    private var subtitle: String {
+        primaryTitle == workout.type.displayName ? "Activity session" : "\(workout.type.displayName) session"
+    }
+
+    private var supportingFocusAreas: [String] {
+        workout.displayFocusAreas.filter { $0.goalNormalizedKey != primaryTitle.goalNormalizedKey }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
@@ -18,10 +30,10 @@ struct GeneralSessionOverviewCard: View {
                     .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(workout.type.displayName)
+                    Text(primaryTitle)
                         .font(.headline)
 
-                    Text("Flexible session workspace")
+                    Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -29,9 +41,9 @@ struct GeneralSessionOverviewCard: View {
                 Spacer()
             }
 
-            if !workout.focusAreas.isEmpty {
+            if !supportingFocusAreas.isEmpty {
                 FlowLayout(spacing: 8) {
-                    ForEach(workout.focusAreas, id: \.self) { focus in
+                    ForEach(supportingFocusAreas, id: \.self) { focus in
                         Text(focus)
                             .font(.caption)
                             .padding(.horizontal, 10)
@@ -41,7 +53,7 @@ struct GeneralSessionOverviewCard: View {
                 }
             }
 
-            Text("Track notes, log activities as you go, and ask Trai questions with full session context.")
+            Text("Log activities and notes with full session context.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -77,18 +89,18 @@ struct SessionNotesCard: View {
 
 struct GeneralActivityCard: View {
     let entry: LiveWorkoutEntry
-    var allowsCompletionToggle: Bool = true
     var allowsDeletion: Bool = true
     var showsEditableFields: Bool = true
+    var isPlannedGuidance: Bool = false
     let onUpdateNotes: (String) -> Void
     let onUpdateDuration: (Int?) -> Void
-    let onToggleComplete: () -> Void
     let onDelete: () -> Void
 
     private var durationMinutesBinding: Binding<String> {
         Binding(
             get: {
-                guard let seconds = entry.durationSeconds, seconds > 0 else { return "" }
+                let seconds = entry.trackedDurationSeconds
+                guard seconds > 0 else { return "" }
                 return String(seconds / 60)
             },
             set: { newValue in
@@ -109,25 +121,56 @@ struct GeneralActivityCard: View {
         )
     }
 
+    private var hasLoggedData: Bool {
+        entry.completedAt != nil || entry.hasExercisePreferenceSignal
+    }
+
+    private var statusText: String {
+        if let completedAt = entry.completedAt {
+            return "Logged \(completedAt.formatted(date: .omitted, time: .shortened))"
+        }
+        if hasLoggedData {
+            return "Logged in this workout"
+        }
+        return "Added to this workout"
+    }
+
+    private var metadataChips: [ActivityMetadataChip] {
+        guard !isPlannedGuidance else { return [] }
+
+        var chips: [ActivityMetadataChip] = []
+
+        func appendUnique(title: String, icon: String) {
+            let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !normalized.isEmpty,
+                  !chips.contains(where: { $0.title.lowercased() == normalized }) else {
+                return
+            }
+            chips.append(ActivityMetadataChip(title: title, icon: icon))
+        }
+
+        let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
+            appendUnique(title: activityName, icon: entry.activityIconName)
+        }
+        return chips
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: isPlannedGuidance ? 8 : 12) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: entry.activityIconName)
                     .font(.subheadline)
-                    .foregroundStyle(entry.completedAt != nil ? .green : .secondary)
+                    .foregroundStyle(hasLoggedData ? .green : .secondary)
                     .frame(width: 34, height: 34)
                     .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(entry.exerciseName)
-                        .font(.headline)
+                        .font(isPlannedGuidance ? .subheadline.weight(.semibold) : .headline)
 
-                    if let completedAt = entry.completedAt {
-                        Text("Completed \(completedAt.formatted(date: .omitted, time: .shortened))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("In progress")
+                    if !isPlannedGuidance {
+                        Text(statusText)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -135,22 +178,26 @@ struct GeneralActivityCard: View {
 
                 Spacer()
 
-                if allowsCompletionToggle {
-                    Button(action: onToggleComplete) {
-                        Image(systemName: entry.completedAt != nil ? "checkmark.circle.fill" : "circle")
-                            .font(.title3)
-                            .foregroundStyle(entry.completedAt != nil ? .green : .secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                if allowsDeletion {
+                if allowsDeletion && !isPlannedGuidance {
                     Button(role: .destructive, action: onDelete) {
                         Image(systemName: "trash")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                }
+            }
+
+            if !metadataChips.isEmpty {
+                FlowLayout(spacing: 8) {
+                    ForEach(metadataChips) { chip in
+                        Label(chip.title, systemImage: chip.icon)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color(.tertiarySystemFill), in: Capsule())
+                    }
                 }
             }
 
@@ -179,7 +226,7 @@ struct GeneralActivityCard: View {
                         .padding(.vertical, 10)
                         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
                 }
-            } else {
+            } else if !isPlannedGuidance {
                 VStack(alignment: .leading, spacing: 8) {
                     if let duration = entry.formattedDuration {
                         Label(duration, systemImage: "clock")
@@ -199,21 +246,47 @@ struct GeneralActivityCard: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .padding(isPlannedGuidance ? 14 : 16)
+        .background(Color(.secondarySystemBackground).opacity(isPlannedGuidance ? 0.72 : 1))
+        .clipShape(.rect(cornerRadius: isPlannedGuidance ? 14 : 16))
     }
+}
+
+private struct ActivityMetadataChip: Identifiable {
+    let id = UUID()
+    let title: String
+    let icon: String
 }
 
 struct AddGeneralActivitySheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let title: String
-    let onAdd: (String, String, Int?) -> Void
+    let onAdd: (String, String, Int?, WorkoutPlan.TrainingBlock.BlockKind, WorkoutPlan.TrainingBlock.Role) -> Void
 
     @State private var activityName = ""
     @State private var activityNotes = ""
     @State private var durationMinutes = ""
+    @State private var selectedCategory: Exercise.Category = .custom
+    @State private var selectedRole: WorkoutPlan.TrainingBlock.Role = .main
+
+    private var placementOptions: [(role: WorkoutPlan.TrainingBlock.Role, label: String)] {
+        [
+            .main,
+            .warmup,
+            .accessory,
+            .finisher,
+            .cooldown
+        ].map { ($0, $0.displayName) }
+    }
+
+    private var categoryOptions: [Exercise.Category] {
+        Exercise.Category.userFacingCases.filter { $0 != .strength }
+    }
+
+    private var selectedKind: WorkoutPlan.TrainingBlock.BlockKind {
+        selectedCategory.liveWorkoutActivityKind ?? .custom
+    }
 
     var body: some View {
         NavigationStack {
@@ -226,6 +299,45 @@ struct AddGeneralActivitySheet: View {
                         TextField("e.g. V4 bouldering, Flow block, Breathing work", text: $activityName)
                             .padding(12)
                             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+
+                        FlowLayout(spacing: 8) {
+                            ForEach(categoryOptions) { category in
+                                Button {
+                                    selectedCategory = category
+                                    HapticManager.selectionChanged()
+                                } label: {
+                                    Label(category.displayName, systemImage: category.iconName)
+                                        .font(.caption.weight(.semibold))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            selectedCategory == category ? Color.accentColor : Color(.tertiarySystemFill),
+                                            in: Capsule()
+                                        )
+                                        .foregroundStyle(selectedCategory == category ? .white : .primary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        FlowLayout(spacing: 8) {
+                            ForEach(placementOptions, id: \.role) { option in
+                                Button {
+                                    selectedRole = option.role
+                                } label: {
+                                    Text(option.label)
+                                        .font(.caption.weight(.semibold))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            selectedRole == option.role ? Color.accentColor : Color(.tertiarySystemFill),
+                                            in: Capsule()
+                                        )
+                                        .foregroundStyle(selectedRole == option.role ? .white : .primary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
                     .padding()
                     .background(Color(.secondarySystemBackground))
@@ -273,7 +385,9 @@ struct AddGeneralActivitySheet: View {
                         onAdd(
                             activityName,
                             activityNotes,
-                            Int(durationMinutes.trimmingCharacters(in: .whitespacesAndNewlines)).map { $0 * 60 }
+                            Int(durationMinutes.trimmingCharacters(in: .whitespacesAndNewlines)).map { $0 * 60 },
+                            selectedKind,
+                            selectedRole
                         )
                         dismiss()
                     }

@@ -10,17 +10,18 @@ import Foundation
 enum AppRoute: Equatable, Codable {
     case logFood
     case logWeight
-    case workout(templateName: String?)
+    case workout(templateID: UUID?, templateName: String?)
     case chat
 
-    static let scheme = "trai"
-    private static let workoutTemplateQueryName = "template"
+    nonisolated static let scheme = "trai"
+    nonisolated private static let workoutTemplateIDQueryName = "template_id"
+    nonisolated private static let workoutTemplateQueryName = "template"
 
-    static var appURL: URL {
+    nonisolated static var appURL: URL {
         URL(string: "\(scheme)://")!
     }
 
-    var url: URL {
+    nonisolated var url: URL {
         var components = URLComponents()
         components.scheme = Self.scheme
 
@@ -29,10 +30,17 @@ enum AppRoute: Equatable, Codable {
             components.host = "logfood"
         case .logWeight:
             components.host = "logweight"
-        case .workout(let templateName):
+        case .workout(let templateID, let templateName):
             components.host = "workout"
-            if let templateName, !templateName.isEmpty {
-                components.queryItems = [URLQueryItem(name: Self.workoutTemplateQueryName, value: templateName)]
+            var queryItems: [URLQueryItem] = []
+            if let templateID {
+                queryItems.append(URLQueryItem(name: Self.workoutTemplateIDQueryName, value: templateID.uuidString))
+                if let templateName, !templateName.isEmpty {
+                    queryItems.append(URLQueryItem(name: Self.workoutTemplateQueryName, value: templateName))
+                }
+            }
+            if !queryItems.isEmpty {
+                components.queryItems = queryItems
             }
         case .chat:
             components.host = "chat"
@@ -41,7 +49,7 @@ enum AppRoute: Equatable, Codable {
         return components.url ?? Self.appURL
     }
 
-    var urlString: String {
+    nonisolated var urlString: String {
         url.absoluteString
     }
 
@@ -62,10 +70,22 @@ enum AppRoute: Equatable, Codable {
             self = .logWeight
         case "workout":
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            let templateName = components?.queryItems?
+            let templateIDValue = components?.queryItems?
+                .first(where: { $0.name == Self.workoutTemplateIDQueryName })?
+                .value?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let parsedTemplateID = templateIDValue.flatMap(UUID.init(uuidString:))
+            if templateIDValue?.isEmpty == false && parsedTemplateID == nil {
+                return nil
+            }
+            if parsedTemplateID == nil,
+               components?.queryItems?.contains(where: { $0.name == Self.workoutTemplateQueryName }) == true {
+                return nil
+            }
+            let templateName = parsedTemplateID == nil ? nil : components?.queryItems?
                 .first(where: { $0.name == Self.workoutTemplateQueryName })?
                 .value
-            self = .workout(templateName: templateName)
+            self = .workout(templateID: parsedTemplateID, templateName: templateName)
         case "chat":
             self = .chat
         default:
@@ -98,7 +118,7 @@ enum PendingAppRouteStore {
 
         if let workoutName = defaults.string(forKey: SharedStorageKeys.LegacyLaunchIntents.startWorkout) {
             defaults.removeObject(forKey: SharedStorageKeys.LegacyLaunchIntents.startWorkout)
-            return .workout(templateName: workoutName == "custom" ? nil : workoutName)
+            return workoutName == "custom" ? .workout(templateID: nil, templateName: nil) : nil
         }
 
         return nil

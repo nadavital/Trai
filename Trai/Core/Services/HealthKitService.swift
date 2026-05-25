@@ -140,6 +140,18 @@ final class HealthKitService {
         from healthKitWorkouts: [WorkoutSession],
         searchBufferMinutes: Int = 0
     ) -> WorkoutSession? {
+        Self.bestOverlappingWorkout(
+            for: workout,
+            from: healthKitWorkouts,
+            searchBufferMinutes: searchBufferMinutes
+        )
+    }
+
+    static func bestOverlappingWorkout(
+        for workout: LiveWorkout,
+        from healthKitWorkouts: [WorkoutSession],
+        searchBufferMinutes: Int = 0
+    ) -> WorkoutSession? {
         let buffer = Double(searchBufferMinutes) * 60
         let ourStart = workout.startedAt.addingTimeInterval(-buffer)
         let ourEnd = (workout.completedAt ?? Date()).addingTimeInterval(buffer)
@@ -150,12 +162,28 @@ final class HealthKitService {
             return hkStart <= ourEnd && hkEnd >= ourStart
         }
 
-        let strengthWorkouts = overlapping.filter {
-            $0.healthKitWorkoutType?.lowercased().contains("strength") == true ||
-            $0.healthKitWorkoutType?.lowercased().contains("weight") == true
+        let bestMatch = overlapping.max { lhs, rhs in
+            healthKitMergeScore(for: lhs, matching: workout) < healthKitMergeScore(for: rhs, matching: workout)
         }
+        guard let bestMatch,
+              healthKitMergeScore(for: bestMatch, matching: workout).0 > 0 else {
+            return nil
+        }
+        return bestMatch
+    }
 
-        return strengthWorkouts.first ?? overlapping.first
+    private static func healthKitMergeScore(
+        for healthKitWorkout: WorkoutSession,
+        matching workout: LiveWorkout
+    ) -> (TimeInterval, Int, TimeInterval) {
+        let actualStart = workout.startedAt
+        let actualEnd = workout.completedAt ?? Date()
+        let hkStart = healthKitWorkout.loggedAt
+        let hkEnd = healthKitEndDate(for: healthKitWorkout)
+        let overlap = max(0, min(actualEnd, hkEnd).timeIntervalSince(max(actualStart, hkStart)))
+        let typeScore = healthKitWorkout.matchesWorkoutMode(workout.type) ? 1 : 0
+        let startDistance = -abs(hkStart.timeIntervalSince(actualStart))
+        return (overlap, typeScore, startDistance)
     }
 
     // MARK: - Weight
@@ -216,9 +244,19 @@ final class HealthKitService {
 
                 let sessions = (samples as? [HKWorkout])?.map { workout -> WorkoutSession in
                     let session = WorkoutSession()
+                    let metadata = workout.metadata ?? [:]
+                    let activityNames = Self.metadataStringList(from: metadata, keys: ["activity_names"])
+                    let activityTags = Self.metadataStringList(from: metadata, keys: ["activity_names", "activity_tags", "activity_focus"])
+                    let trimmedWorkoutName = (metadata["workout_name"] as? String)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    let workoutName = trimmedWorkoutName.isEmpty ? nil : trimmedWorkoutName
+
                     session.healthKitWorkoutID = workout.uuid.uuidString
                     session.healthKitWorkoutType = workout.workoutActivityType.name
-                    session.exerciseName = workout.workoutActivityType.name
+                    session.exerciseName = workoutName
+                        ?? activityNames.first
+                        ?? workout.workoutActivityType.name
+                    session.importedActivityTags = activityTags
                     session.durationMinutes = workout.duration / 60
                     session.loggedAt = workout.startDate
                     session.sourceIsHealthKit = true
@@ -279,6 +317,10 @@ final class HealthKitService {
             try await builder.addSamples([energySample])
         }
 
+        if let metadata, !metadata.isEmpty {
+            try await builder.addMetadata(metadata)
+        }
+
         try await builder.endCollection(at: endDate)
 
         let workout = try await builder.finishWorkout()
@@ -290,53 +332,79 @@ final class HealthKitService {
     func saveLiveWorkout(_ workout: LiveWorkout) async throws {
         guard let completedAt = workout.completedAt else { return }
 
-        // Map workout type to HealthKit activity type
-        let activityType: HKWorkoutActivityType
-        switch workout.type {
-        case .strength:
-            activityType = .traditionalStrengthTraining
-        case .cardio:
-            activityType = .mixedCardio
-        case .hiit:
-            activityType = .highIntensityIntervalTraining
-        case .climbing:
-            activityType = .climbing
-        case .yoga:
-            activityType = .yoga
-        case .pilates:
-            activityType = .pilates
-        case .flexibility:
-            activityType = .flexibility
-        case .mobility:
-            activityType = .cooldown
-        case .mixed:
-            activityType = .functionalStrengthTraining
-        case .recovery:
-            activityType = .cooldown
-        case .custom:
-            activityType = .other
-        }
-
-        // Calculate estimated calories (rough estimate based on duration and intensity)
-        let durationMinutes = workout.duration / 60
-        let estimatedCalories = durationMinutes * 5.0 // ~5 cal/min for strength training
-
-        let metadata: [String: Any] = [
-            HKMetadataKeyWorkoutBrandName: "Trai",
-            "workout_name": workout.name,
-            "muscle_groups": workout.muscleGroups.map(\.rawValue).joined(separator: ","),
-            "total_volume_kg": workout.totalVolume,
-            "total_sets": workout.totalSets
-        ]
+        let metadata = Self.liveWorkoutMetadata(for: workout)
 
         _ = try await saveWorkout(
-            type: activityType,
+            type: Self.healthKitActivityType(for: workout),
             startDate: workout.startedAt,
             endDate: completedAt,
             duration: workout.duration,
-            totalEnergyBurned: estimatedCalories,
+            totalEnergyBurned: workout.healthKitCalories,
             metadata: metadata
         )
+    }
+
+    static func healthKitActivityType(for workout: LiveWorkout) -> HKWorkoutActivityType {
+        let inferredActivityType = inferredHealthKitActivityType(for: workout)
+
+        switch workout.type {
+        case .strength:
+            return .traditionalStrengthTraining
+        case .hiit:
+            return .highIntensityIntervalTraining
+        case .climbing:
+            return .climbing
+        case .yoga:
+            return .yoga
+        case .pilates:
+            return .pilates
+        case .flexibility:
+            return .flexibility
+        case .mobility, .recovery:
+            return .cooldown
+        case .mixed:
+            return workout.entrySummaryStats.strengthEntryCount > 0
+                ? .functionalStrengthTraining
+                : inferredActivityType ?? .other
+        case .cardio, .custom:
+            break
+        }
+
+        return inferredActivityType ?? (workout.type == .cardio ? .mixedCardio : .other)
+    }
+
+    private static func inferredHealthKitActivityType(for workout: LiveWorkout) -> HKWorkoutActivityType? {
+        let semanticTokens = ([workout.name] + workout.focusAreas + (workout.entries ?? []).flatMap { entry in
+            [entry.exerciseName, entry.activityTypeName] + entry.targetTags
+        })
+        .joined(separator: " ")
+        .lowercased()
+
+        if semanticTokens.contains("climb") || semanticTokens.contains("boulder") {
+            return .climbing
+        }
+        if semanticTokens.contains("run") || semanticTokens.contains("jog") {
+            return .running
+        }
+        if semanticTokens.contains("cycle") || semanticTokens.contains("bike") {
+            return .cycling
+        }
+        if semanticTokens.contains("swim") {
+            return .swimming
+        }
+        if semanticTokens.contains("walk") || semanticTokens.contains("hike") {
+            return .walking
+        }
+        if semanticTokens.contains("rowing") || semanticTokens.contains("rower") {
+            return .rowing
+        }
+        if semanticTokens.contains("yoga") {
+            return .yoga
+        }
+        if semanticTokens.contains("pilates") {
+            return .pilates
+        }
+        return nil
     }
 
     // MARK: - Nutrition
@@ -710,10 +778,97 @@ final class HealthKitService {
         return false
     }
 
-    private func healthKitEndDate(for workout: WorkoutSession) -> Date {
+    nonisolated private static func metadataStringList(from metadata: [String: Any], keys: [String]) -> [String] {
+        keys.flatMap { key -> [String] in
+            switch metadata[key] {
+            case let value as String:
+                return value
+                    .components(separatedBy: CharacterSet(charactersIn: ",|"))
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            case let values as [String]:
+                return values
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            default:
+                return []
+            }
+        }
+        .dedupedHealthKitMetadataValues()
+    }
+
+    private static func healthKitEndDate(for workout: WorkoutSession) -> Date {
         guard let duration = workout.durationMinutes, duration > 0 else {
             return workout.loggedAt.addingTimeInterval(60 * 60)
         }
         return workout.loggedAt.addingTimeInterval(duration * 60)
+    }
+}
+
+extension HealthKitService {
+    static func liveWorkoutMetadata(for workout: LiveWorkout) -> [String: Any] {
+        let stats = workout.entrySummaryStats
+        let activityEntries = (workout.entries ?? [])
+            .filter(\.isLoggedActivity)
+        let activityNames = activityEntries
+            .map { entry in
+                let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+                return activityName.isEmpty ? entry.exerciseName : activityName
+            }
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .dedupedHealthKitMetadataValues()
+        let activityTags = (workout.displayFocusAreas + activityEntries.flatMap(\.targetTags))
+            .dedupedHealthKitMetadataValues()
+        let activityDurationSeconds = activityEntries.reduce(0) { $0 + $1.trackedDurationSeconds }
+        let activityDistanceMeters = activityEntries.reduce(0.0) { $0 + $1.trackedDistanceMeters }
+
+        var metadata: [String: Any] = [
+            HKMetadataKeyWorkoutBrandName: "Trai",
+            "workout_name": workout.name,
+            "muscle_groups": workout.muscleGroups.map(\.rawValue).joined(separator: ","),
+            "activity_focus": workout.displayFocusAreas.joined(separator: ","),
+            "summary_segments": workout.historySummarySegments.joined(separator: " | "),
+            "entry_count": stats.entryCount,
+            "workout_item_count": stats.entryCount,
+            "exercise_count": stats.strengthEntryCount,
+            "activity_count": stats.activityEntryCount,
+            "logged_activity_count": stats.loggedActivityCount,
+            "total_volume_kg": workout.totalVolume,
+            "total_sets": workout.totalSets
+        ]
+
+        if !activityNames.isEmpty {
+            metadata["activity_names"] = activityNames.joined(separator: ",")
+        }
+        if !activityTags.isEmpty {
+            metadata["activity_tags"] = activityTags.joined(separator: ",")
+        }
+        if activityDurationSeconds > 0 {
+            metadata["activity_duration_minutes"] = activityDurationSeconds / 60
+        }
+        if activityDistanceMeters > 0 {
+            metadata["activity_distance_meters"] = activityDistanceMeters
+        }
+
+        return metadata
+    }
+}
+
+private extension Array where Element == String {
+    nonisolated func dedupedHealthKitMetadataValues() -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in self {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = String(String.UnicodeScalarView(
+                trimmed
+                    .lowercased()
+                    .unicodeScalars
+                    .filter { CharacterSet.alphanumerics.contains($0) }
+            ))
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
     }
 }

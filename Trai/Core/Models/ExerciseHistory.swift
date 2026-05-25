@@ -44,6 +44,24 @@ final class ExerciseHistory {
     /// Reference to the source workout entry
     var sourceWorkoutEntryId: UUID?
 
+    /// User-facing activity type for non-strength and mixed tracking contexts.
+    var activityTypeNameRaw: String = ""
+
+    /// Broad fallback kind copied from the live workout entry.
+    var activityKindRaw: String = ""
+
+    /// Comma-separated target tags copied from the live workout entry.
+    var activityTagsRaw: String = ""
+
+    /// Comma-separated tracking fields copied from the live workout entry.
+    var trackingFieldsRaw: String = ""
+
+    /// Logged duration for non-strength activity entries.
+    var durationSeconds: Int = 0
+
+    /// Logged distance for non-strength activity entries.
+    var distanceMeters: Double = 0
+
     /// Rep pattern as comma-separated values (e.g., "12,10,8")
     var repPattern: String?
 
@@ -53,22 +71,44 @@ final class ExerciseHistory {
     init() {}
 
     init(from entry: LiveWorkoutEntry, performedAt: Date = Date()) {
+        update(from: entry, performedAt: performedAt)
+    }
+
+    func update(from entry: LiveWorkoutEntry, performedAt: Date = Date()) {
         self.exerciseId = entry.exerciseId
         self.exerciseName = entry.exerciseName
         self.performedAt = performedAt
+        self.sourceWorkoutEntryId = entry.id
+        self.activityTypeName = entry.activityTypeName
+        self.activityKind = entry.activityKind ?? WorkoutPlan.TrainingBlock.BlockKind.liveWorkoutFallbackKind(for: entry.exerciseType)
+        self.activityTags = entry.targetTags
+        self.trackingFields = entry.trackingFields
+        self.durationSeconds = entry.trackedDurationSeconds
+        self.distanceMeters = entry.trackedDistanceMeters
 
+        if entry.isStrength {
+            updateStrengthMetrics(from: entry)
+        } else {
+            updateActivityMetrics(from: entry)
+        }
+    }
+
+    private func updateStrengthMetrics(from entry: LiveWorkoutEntry) {
         if let best = entry.bestSet {
             // Use pre-computed clean values from SetData
             self.bestSetWeightKg = WeightUtility.round(best.weightKg, unit: .kg)
             self.bestSetWeightLbs = WeightUtility.round(best.weightLbs, unit: .lbs)
             self.bestSetReps = best.reps
+        } else {
+            self.bestSetWeightKg = 0
+            self.bestSetWeightLbs = 0
+            self.bestSetReps = 0
         }
 
         self.totalVolume = entry.totalVolume
         self.totalSets = entry.completedSets?.count ?? 0
         self.totalReps = entry.totalReps
         self.estimatedOneRepMax = entry.estimatedOneRepMax
-        self.sourceWorkoutEntryId = entry.id
 
         // Store rep and weight patterns from completed sets
         if let completedSets = entry.completedSets, !completedSets.isEmpty {
@@ -77,7 +117,44 @@ final class ExerciseHistory {
                 let rounded = WeightUtility.round(set.weightKg, unit: .kg)
                 return String(format: "%.1f", rounded)
             }.joined(separator: ",")
+        } else {
+            self.repPattern = nil
+            self.weightPattern = nil
         }
+    }
+
+    private func updateActivityMetrics(from entry: LiveWorkoutEntry) {
+        let loggedSegments = entry.activitySegments.filter(\.hasLoggedData)
+        let loggedSets = entry.sets.filter { !$0.isWarmup && $0.hasLoggedData }
+        let segmentWeights = loggedSegments
+            .compactMap(\.weightKg)
+            .filter { $0 > 0 }
+        let setWeights = loggedSets
+            .map(\.weightKg)
+            .filter { $0 > 0 }
+        let segmentReps = loggedSegments
+            .compactMap(\.reps)
+            .filter { $0 > 0 }
+        let setReps = loggedSets
+            .map(\.reps)
+            .filter { $0 > 0 }
+        let weights = segmentWeights + setWeights
+        let reps = segmentReps + setReps
+
+        self.bestSetWeightKg = weights.max() ?? 0
+        self.bestSetWeightLbs = bestSetWeightKg > 0
+            ? WeightUtility.round(bestSetWeightKg * WeightUtility.kgToLbs, unit: .lbs)
+            : 0
+        self.bestSetReps = reps.max() ?? 0
+        self.totalVolume = 0
+        self.totalSets = loggedSegments.count + loggedSets.count
+        self.totalReps = reps.reduce(0, +)
+        self.estimatedOneRepMax = nil
+        self.repPattern = reps.isEmpty ? nil : reps.map(String.init).joined(separator: ",")
+        self.weightPattern = weights.isEmpty ? nil : weights.map { weightKg in
+            let rounded = WeightUtility.round(weightKg, unit: .kg)
+            return String(format: "%.1f", rounded)
+        }.joined(separator: ",")
     }
 
     /// Get rep pattern as array of integers
@@ -96,6 +173,175 @@ final class ExerciseHistory {
 // MARK: - Computed Properties
 
 extension ExerciseHistory {
+    var activityTypeName: String {
+        get { activityTypeNameRaw.trimmingCharacters(in: .whitespacesAndNewlines) }
+        set { activityTypeNameRaw = newValue.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
+    var activityKind: WorkoutPlan.TrainingBlock.BlockKind? {
+        get {
+            let rawValue = activityKindRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !rawValue.isEmpty else { return nil }
+            return WorkoutPlan.TrainingBlock.BlockKind(rawValue: rawValue)
+        }
+        set {
+            activityKindRaw = newValue?.rawValue ?? ""
+        }
+    }
+
+    var activityTags: [String] {
+        get {
+            activityTagsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            activityTagsRaw = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ",")
+        }
+    }
+
+    var trackingFields: [Exercise.TrackingField] {
+        get {
+            trackingFieldsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .compactMap(Exercise.TrackingField.init(rawValue:))
+        }
+        set {
+            trackingFieldsRaw = newValue
+                .map(\.rawValue)
+                .joined(separator: ",")
+        }
+    }
+
+    var semanticActivityTokens: Set<String> {
+        Set(
+            ([exerciseName, activityTypeName, activityKind?.displayName ?? ""] + activityTags)
+                .map(\.goalNormalizedKey)
+                .filter { !$0.isEmpty }
+        )
+    }
+
+    var hasStrengthMetrics: Bool {
+        let isStrengthRecord = activityKind == .strength || (
+            activityKind == nil &&
+            durationSeconds == 0 &&
+            distanceMeters == 0
+        )
+        guard isStrengthRecord else { return false }
+        return bestSetWeightKg > 0 || bestSetReps > 0 || totalVolume > 0 || totalSets > 0 || totalReps > 0
+    }
+
+    var hasActivityMetrics: Bool {
+        !hasStrengthMetrics && (
+            durationSeconds > 0 ||
+            distanceMeters > 0 ||
+            totalSets > 0 ||
+            totalReps > 0
+        )
+    }
+
+    func suggestionSummary(usesMetricWeight: Bool) -> String? {
+        if hasActivityMetrics {
+            var parts: [String] = []
+            if durationSeconds > 0 {
+                parts.append(Self.formatDuration(seconds: durationSeconds))
+            }
+            if distanceMeters > 0 {
+                parts.append(Self.formatDistance(meters: distanceMeters))
+            }
+            if totalReps > 0 {
+                parts.append("\(totalReps) \(activityCountLabel(for: totalReps))")
+            } else if totalSets > 0 {
+                parts.append("\(totalSets) \(activitySegmentLabel(for: totalSets))")
+            }
+            return parts.isEmpty ? nil : parts.prefix(2).joined(separator: " • ")
+        }
+
+        guard bestSetWeightKg > 0, bestSetReps > 0 else { return nil }
+        let unit = WeightUnit(usesMetric: usesMetricWeight)
+        let displayWeight = WeightUtility.displayInt(bestSetWeightKg, displayUnit: unit)
+        return "\(displayWeight) \(unit.symbol) \u{00D7} \(bestSetReps)"
+    }
+
+    private func activityCountLabel(for value: Int) -> String {
+        let label: String
+        switch activityKind {
+        case .sportPractice, .skill:
+            label = "attempt"
+        case .conditioning:
+            label = "round"
+        default:
+            label = "rep"
+        }
+        return value == 1 ? label : "\(label)s"
+    }
+
+    private func activitySegmentLabel(for value: Int) -> String {
+        let label = activityKind == .conditioning ? "round" : "segment"
+        return value == 1 ? label : "\(label)s"
+    }
+
+    private static func formatDuration(seconds: Int) -> String {
+        let minutes = seconds / 60
+        if minutes >= 60 {
+            let hours = minutes / 60
+            let remainder = minutes % 60
+            return remainder > 0 ? "\(hours)h \(remainder)m" : "\(hours)h"
+        }
+        return "\(minutes)m"
+    }
+
+    private static func formatDistance(meters: Double) -> String {
+        if meters >= 1000 {
+            return String(format: "%.1f km", meters / 1000)
+        }
+        return "\(Int(meters.rounded())) m"
+    }
+
+    static func records(
+        from workout: LiveWorkout,
+        performedAt: Date? = nil
+    ) -> [ExerciseHistory] {
+        guard let entries = workout.entries else { return [] }
+        let date = performedAt ?? workout.completedAt ?? workout.startedAt
+        return entries.compactMap { entry in
+            guard entry.hasExercisePreferenceSignal else { return nil }
+            return ExerciseHistory(from: entry, performedAt: date)
+        }
+    }
+
+    static func recordsToInsert(
+        from workout: LiveWorkout,
+        existingHistories: [ExerciseHistory],
+        performedAt: Date? = nil
+    ) -> [ExerciseHistory] {
+        let candidateRecords = records(from: workout, performedAt: performedAt)
+        guard !candidateRecords.isEmpty else { return [] }
+
+        let existingSourceEntryIDs = Set(existingHistories.compactMap(\.sourceWorkoutEntryId))
+        let legacyHistoriesByExercise = Dictionary(
+            grouping: existingHistories.filter { $0.sourceWorkoutEntryId == nil },
+            by: \.exerciseName
+        )
+
+        return candidateRecords.filter { record in
+            if let sourceWorkoutEntryId = record.sourceWorkoutEntryId,
+               existingSourceEntryIDs.contains(sourceWorkoutEntryId) {
+                return false
+            }
+
+            let legacyMatches = legacyHistoriesByExercise[record.exerciseName] ?? []
+            return !legacyMatches.contains { existing in
+                abs(existing.performedAt.timeIntervalSince(record.performedAt)) <= 60
+            }
+        }
+    }
+
     /// Best set volume (weight × reps)
     var bestSetVolume: Double {
         bestSetWeightKg * Double(bestSetReps)
@@ -239,7 +485,18 @@ struct ExercisePerformanceSnapshot {
     let repsPR: ExerciseHistory?
     let volumePR: ExerciseHistory?
     let estimatedOneRepMax: Double?
+    let activityDurationPR: ExerciseHistory?
+    let activityDistancePR: ExerciseHistory?
+    let activityCountPR: ExerciseHistory?
     let totalSessions: Int
+
+    var hasStrengthRecords: Bool {
+        weightPR != nil || repsPR != nil || volumePR != nil || estimatedOneRepMax != nil
+    }
+
+    var hasActivityRecords: Bool {
+        activityDurationPR != nil || activityDistancePR != nil || activityCountPR != nil
+    }
 }
 
 enum ExercisePerformanceService {
@@ -294,15 +551,18 @@ enum ExercisePerformanceService {
         history: [ExerciseHistory],
         volumePRMode: UserProfile.VolumePRMode = .perSet
     ) -> ExercisePerformanceSnapshot? {
-        guard !history.isEmpty else { return nil }
+        let strengthHistory = history.filter(\.hasStrengthMetrics)
+        let activityHistory = history.filter(\.hasActivityMetrics)
+        let trackableHistory = strengthHistory + activityHistory
+        guard !trackableHistory.isEmpty else { return nil }
 
         return ExercisePerformanceSnapshot(
             exerciseName: exerciseName,
-            lastSession: mostRecentRecord(in: history),
-            weightPR: bestWeightRecord(in: history),
-            repsPR: bestRepsRecord(in: history),
-            volumePR: bestVolumeRecord(in: history, mode: volumePRMode),
-            estimatedOneRepMax: history
+            lastSession: mostRecentRecord(in: trackableHistory),
+            weightPR: bestWeightRecord(in: strengthHistory),
+            repsPR: bestRepsRecord(in: strengthHistory),
+            volumePR: bestVolumeRecord(in: strengthHistory, mode: volumePRMode),
+            estimatedOneRepMax: strengthHistory
                 .compactMap { entry in
                     entry.estimatedOneRepMax ??
                         LiveWorkoutEntry.estimatedOneRepMax(
@@ -312,7 +572,10 @@ enum ExercisePerformanceService {
                 }
                 .filter { $0 > 0 }
                 .max(),
-            totalSessions: history.count
+            activityDurationPR: bestActivityDurationRecord(in: activityHistory),
+            activityDistancePR: bestActivityDistanceRecord(in: activityHistory),
+            activityCountPR: bestActivityCountRecord(in: activityHistory),
+            totalSessions: trackableHistory.count
         )
     }
 
@@ -343,6 +606,24 @@ enum ExercisePerformanceService {
             .max { lhs, rhs in
                 isVolumeRecordWorse(lhs, rhs, mode: mode)
             }
+    }
+
+    static func bestActivityDurationRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
+        history
+            .filter { $0.durationSeconds > 0 }
+            .max(by: isActivityDurationRecordWorse(_:_:))
+    }
+
+    static func bestActivityDistanceRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
+        history
+            .filter { $0.distanceMeters > 0 }
+            .max(by: isActivityDistanceRecordWorse(_:_:))
+    }
+
+    static func bestActivityCountRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
+        history
+            .filter { $0.totalReps > 0 || $0.totalSets > 0 }
+            .max(by: isActivityCountRecordWorse(_:_:))
     }
 
     private static func mostRecentRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
@@ -408,6 +689,56 @@ enum ExercisePerformanceService {
     }
 
     nonisolated private static func isRecentRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+        if lhs.performedAt != rhs.performedAt {
+            return lhs.performedAt < rhs.performedAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    nonisolated private static func isActivityDurationRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+        if lhs.durationSeconds != rhs.durationSeconds {
+            return lhs.durationSeconds < rhs.durationSeconds
+        }
+        if lhs.distanceMeters != rhs.distanceMeters {
+            return lhs.distanceMeters < rhs.distanceMeters
+        }
+        if lhs.totalReps != rhs.totalReps {
+            return lhs.totalReps < rhs.totalReps
+        }
+        if lhs.performedAt != rhs.performedAt {
+            return lhs.performedAt < rhs.performedAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    nonisolated private static func isActivityDistanceRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+        if lhs.distanceMeters != rhs.distanceMeters {
+            return lhs.distanceMeters < rhs.distanceMeters
+        }
+        if lhs.durationSeconds != rhs.durationSeconds {
+            return lhs.durationSeconds < rhs.durationSeconds
+        }
+        if lhs.totalReps != rhs.totalReps {
+            return lhs.totalReps < rhs.totalReps
+        }
+        if lhs.performedAt != rhs.performedAt {
+            return lhs.performedAt < rhs.performedAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    nonisolated private static func isActivityCountRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+        let lhsCount = max(lhs.totalReps, lhs.totalSets)
+        let rhsCount = max(rhs.totalReps, rhs.totalSets)
+        if lhsCount != rhsCount {
+            return lhsCount < rhsCount
+        }
+        if lhs.durationSeconds != rhs.durationSeconds {
+            return lhs.durationSeconds < rhs.durationSeconds
+        }
+        if lhs.distanceMeters != rhs.distanceMeters {
+            return lhs.distanceMeters < rhs.distanceMeters
+        }
         if lhs.performedAt != rhs.performedAt {
             return lhs.performedAt < rhs.performedAt
         }

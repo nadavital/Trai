@@ -2,7 +2,7 @@
 //  CustomExercisesView.swift
 //  Trai
 //
-//  Manage custom exercises - view, edit, and delete
+//  Manage reusable exercises and activities - view, edit, and delete
 //
 
 import SwiftUI
@@ -22,12 +22,23 @@ struct CustomExercisesView: View {
         if searchText.isEmpty {
             return customExercises
         }
-        return customExercises.filter { $0.name.localizedStandardContains(searchText) }
+        return customExercises.filter { exercise in
+            exercise.name.localizedStandardContains(searchText)
+                || exercise.activityTypeName.localizedStandardContains(searchText)
+                || exercise.activityAliases.contains { $0.localizedStandardContains(searchText) }
+                || exercise.targetTags.contains { $0.localizedStandardContains(searchText) }
+                || exercise.exerciseCategory.displayName.localizedStandardContains(searchText)
+                || exercise.trackingFields.contains { $0.displayName.localizedStandardContains(searchText) }
+                || (exercise.displayEquipment?.localizedStandardContains(searchText) ?? false)
+        }
     }
 
-    private var exercisesByMuscle: [String: [Exercise]] {
+    private var exercisesByTarget: [String: [Exercise]] {
         Dictionary(grouping: filteredExercises) { exercise in
-            exercise.muscleGroup ?? "Other"
+            let activityName = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return activityName.isEmpty
+                ? Exercise.defaultActivityTypeName(for: exercise.name, category: exercise.exerciseCategory)
+                : activityName
         }
     }
 
@@ -36,24 +47,24 @@ struct CustomExercisesView: View {
             if customExercises.isEmpty {
                 VStack(spacing: 16) {
                     ContentUnavailableView(
-                        "No Custom Exercises",
+                        "No Custom Items",
                         systemImage: "dumbbell",
-                        description: Text("Custom exercises you create will appear here")
+                        description: Text("Exercises and activities you create will appear here")
                     )
 
-                    Button("Add Exercise", systemImage: "plus") {
+                    Button("Add Item", systemImage: "plus") {
                         showingAddCustomExercise = true
                     }
-                    .buttonStyle(.traiSecondary(color: .orange, fullWidth: false))
+                    .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: false))
                 }
                 .frame(maxWidth: .infinity)
                 .listRowBackground(Color.clear)
             } else if filteredExercises.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else {
-                ForEach(exercisesByMuscle.keys.sorted(), id: \.self) { muscleGroup in
-                    Section(muscleGroup.capitalized) {
-                        ForEach(exercisesByMuscle[muscleGroup] ?? []) { exercise in
+                ForEach(exercisesByTarget.keys.sorted(), id: \.self) { target in
+                    Section(target) {
+                        ForEach(exercisesByTarget[target] ?? []) { exercise in
                             ExerciseManagementRow(exercise: exercise)
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button(role: .destructive) {
@@ -68,8 +79,8 @@ struct CustomExercisesView: View {
                 }
             }
         }
-        .searchable(text: $searchText, prompt: "Search exercises")
-        .navigationTitle("Custom Exercises")
+        .searchable(text: $searchText, prompt: "Search exercises and activities")
+        .navigationTitle("Exercise Library")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Add", systemImage: "plus") {
@@ -81,12 +92,16 @@ struct CustomExercisesView: View {
             fetchCustomExercises()
         }
         .sheet(isPresented: $showingAddCustomExercise) {
-            AddCustomExerciseSheet(initialName: "") { name, muscleGroup, category, secondaryMuscles in
+            AddCustomExerciseSheet(initialName: "") { name, activityTypeName, activityAliases, muscleGroup, category, secondaryMuscles, targetTags, trackingFields in
                 addCustomExercise(
                     name: name,
+                    activityTypeName: activityTypeName,
+                    activityAliases: activityAliases,
                     muscleGroup: muscleGroup,
                     category: category,
-                    secondaryMuscles: secondaryMuscles
+                    secondaryMuscles: secondaryMuscles,
+                    targetTags: targetTags,
+                    trackingFields: trackingFields
                 )
             }
             .traiSheetBranding()
@@ -130,22 +145,56 @@ struct CustomExercisesView: View {
 
     private func addCustomExercise(
         name: String,
+        activityTypeName: String,
+        activityAliases: [String] = [],
         muscleGroup: Exercise.MuscleGroup?,
         category: Exercise.Category,
-        secondaryMuscles: [String]? = nil
+        secondaryMuscles: [String]? = nil,
+        targetTags: [String] = [],
+        trackingFields: [Exercise.TrackingField] = []
     ) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        let resolvedCategory = category.userFacingEquivalent
+        let resolvedActivityName = activityTypeName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayActivityName = resolvedActivityName.isEmpty
+            ? Exercise.defaultActivityTypeName(for: trimmed, category: resolvedCategory)
+            : resolvedActivityName
 
         if let existing = existingExercise(named: trimmed) {
-            if existing.exerciseCategory == .strength,
-               existing.targetMuscleGroup == nil,
-               category == .strength,
-               let muscleGroup {
-                existing.targetMuscleGroup = muscleGroup
+            let canSafelyRefreshCategory = existing.isCustom
+                || existing.sessions?.isEmpty != false
+                || existing.exerciseCategory == .custom
+            if canSafelyRefreshCategory {
+                existing.exerciseCategory = resolvedCategory
             }
-            if let secondaryMuscles, !secondaryMuscles.isEmpty, (existing.secondaryMuscles?.isEmpty ?? true) {
+            existing.isCustom = true
+            if existing.exerciseCategory == .strength {
+                if existing.targetMuscleGroup == nil,
+                   let muscleGroup {
+                    existing.targetMuscleGroup = muscleGroup
+                }
+            } else {
+                existing.muscleGroup = nil
+            }
+            if let secondaryMuscles,
+               !secondaryMuscles.isEmpty,
+               existing.exerciseCategory == .strength,
+               (existing.secondaryMuscles?.isEmpty ?? true) {
                 existing.secondaryMuscles = secondaryMuscles.joined(separator: ",")
+            } else if existing.exerciseCategory != .strength {
+                existing.secondaryMuscles = nil
+            }
+            if !targetTags.isEmpty {
+                existing.targetTags = targetTags
+            }
+            if !trackingFields.isEmpty {
+                existing.trackingFields = trackingFields
+            }
+            existing.activityTypeName = displayActivityName
+            if !activityAliases.isEmpty {
+                existing.activityAliases = activityAliases
             }
             try? modelContext.save()
             fetchCustomExercises()
@@ -155,10 +204,14 @@ struct CustomExercisesView: View {
 
         let exercise = Exercise(
             name: trimmed,
-            category: category,
-            muscleGroup: category == .strength ? muscleGroup : nil
+            category: resolvedCategory,
+            muscleGroup: resolvedCategory == .strength ? muscleGroup : nil
         )
         exercise.isCustom = true
+        exercise.activityTypeName = displayActivityName
+        exercise.activityAliases = activityAliases
+        exercise.targetTags = targetTags.isEmpty ? Exercise.defaultTargetTags(for: resolvedCategory) : targetTags
+        exercise.trackingFields = trackingFields.isEmpty ? Exercise.defaultTrackingFields(for: resolvedCategory) : trackingFields
         if let secondaryMuscles, !secondaryMuscles.isEmpty {
             exercise.secondaryMuscles = secondaryMuscles.joined(separator: ",")
         }
@@ -193,20 +246,20 @@ private struct ExerciseManagementRow: View {
                     .font(.body)
 
                 HStack(spacing: 8) {
-                    Text(exercise.category.capitalized)
+                    Text(displayActivityName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    if let muscleGroup = exercise.muscleGroup {
+                    if let target = exercise.targetTags.first {
                         Text("•")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
-                        Text(muscleGroup.capitalized)
+                        Text(target)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
 
-                    if let equipment = exercise.equipmentName {
+                    if let equipment = exercise.displayEquipment {
                         Text("•")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
@@ -218,17 +271,14 @@ private struct ExerciseManagementRow: View {
             }
 
             Spacer()
-
-            // Custom badge
-            Text("Custom")
-                .font(.caption2)
-                .fontWeight(.medium)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.purple.opacity(0.15))
-                .foregroundStyle(.purple)
-                .clipShape(.capsule)
         }
         .padding(.vertical, 4)
+    }
+
+    private var displayActivityName: String {
+        let activityName = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return activityName.isEmpty
+            ? Exercise.defaultActivityTypeName(for: exercise.name, category: exercise.exerciseCategory)
+            : activityName
     }
 }

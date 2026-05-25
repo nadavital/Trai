@@ -22,9 +22,11 @@ struct LiveWorkoutDetailSheet: View {
     @Environment(\.appTabSelection) private var appTabSelection
     @Environment(\.modelContext) private var modelContext
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingActionKind) private var pendingChatActionKind: String = ""
     @Query(sort: \ExerciseHistory.performedAt, order: .reverse)
     private var allExerciseHistory: [ExerciseHistory]
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
@@ -39,33 +41,40 @@ struct LiveWorkoutDetailSheet: View {
     @State private var showingGoalSheet = false
     @State private var selectedGoal: WorkoutGoal?
     @State private var originalEntryIDs: Set<UUID> = []
+    @State private var presentedAccountSetupContext: AccountSetupContext?
 
     private var sortedEntries: [LiveWorkoutEntry] {
         (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
     }
 
+    private var visibleEntries: [LiveWorkoutEntry] {
+        isEditing ? sortedEntries : sortedEntries.filter(\.hasExercisePreferenceSignal)
+    }
+
+    private var entryStats: LiveWorkout.EntrySummaryStats {
+        workout.entrySummaryStats
+    }
+
     private var entryCount: Int {
-        sortedEntries.count
+        entryStats.entryCount
     }
 
     private var totalSets: Int {
-        sortedEntries.reduce(0) { $0 + $1.sets.count }
+        entryStats.totalSets
     }
 
     private var completedSets: Int {
         sortedEntries.reduce(0) { $0 + ($1.completedSets?.count ?? 0) }
     }
 
-    private var completedActivities: Int {
-        sortedEntries.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count
-    }
-
     private var maxWeightKg: Double? {
         sortedEntries.flatMap(\.sets).compactMap(\.weightKg).filter { $0 > 0 }.max()
     }
 
-    private var durationMinutes: Int {
-        Int(workout.duration / 60)
+    private var durationMinutes: Int { entryStats.durationMinutes }
+
+    private var activityMetricStats: [WorkoutActivityMetricDisplayStat] {
+        entryStats.activityMetricSegments.prefix(2).compactMap(WorkoutActivityMetricDisplayStat.init(segment:))
     }
 
     private var volumePRMode: UserProfile.VolumePRMode {
@@ -80,11 +89,11 @@ struct LiveWorkoutDetailSheet: View {
         if usesFlexibleSessionPresentation {
             return "Activities"
         }
-        return sortedEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
+        return visibleEntries.contains(where: { !$0.isStrength }) ? "Workout Log" : "Exercises"
     }
 
     private var addButtonLabel: String {
-        usesFlexibleSessionPresentation ? "Add Activity" : "Add Exercise"
+        usesFlexibleSessionPresentation ? "Add Activity" : "Add Item"
     }
 
     private var activitySuggestions: [String] {
@@ -152,8 +161,8 @@ struct LiveWorkoutDetailSheet: View {
                     }
 
                     // Exercises list
-                    if !sortedEntries.isEmpty {
-                        exercisesSection(entries: sortedEntries)
+                    if !visibleEntries.isEmpty {
+                        exercisesSection(entries: visibleEntries)
                     }
 
                     // Notes (if any)
@@ -227,13 +236,17 @@ struct LiveWorkoutDetailSheet: View {
                     .traiSheetBranding()
             }
             .sheet(isPresented: $showingExercisePicker) {
-                ExerciseListView(targetMuscleGroups: targetExerciseMuscleGroups) { exercise in
+                ExerciseListView(
+                    targetMuscleGroups: targetExerciseMuscleGroups,
+                    targetActivityCategories: targetActivityCategories,
+                    targetActivityTypes: targetActivityTypeNames
+                ) { exercise in
                     addExercise(exercise)
                 }
             }
             .sheet(isPresented: $showingGeneralActivitySheet) {
-                AddGeneralActivitySheet(title: "Add Activity") { name, notes, durationSeconds in
-                    addGeneralActivity(name: name, notes: notes, durationSeconds: durationSeconds)
+                AddGeneralActivitySheet(title: "Add Activity") { name, notes, durationSeconds, kind, role in
+                    addGeneralActivity(name: name, notes: notes, durationSeconds: durationSeconds, kind: kind, role: role)
                 }
             }
             .sheet(isPresented: $showingGoalSheet) {
@@ -257,6 +270,9 @@ struct LiveWorkoutDetailSheet: View {
                 )
                 .traiSheetBranding()
             }
+        }
+        .sheet(item: $presentedAccountSetupContext) { context in
+            AccountSetupView(context: context)
         }
         .traiSheetBranding()
     }
@@ -328,36 +344,44 @@ struct LiveWorkoutDetailSheet: View {
             }
 
             // Stats row
-            HStack(spacing: 16) {
+            FlowLayout(spacing: 10) {
                 if durationMinutes > 0 {
                     StatPill(icon: "clock.fill", value: formatDuration(Double(durationMinutes)), label: "time", color: .blue)
                 }
 
-                if usesFlexibleSessionPresentation {
-                    StatPill(
-                        icon: "list.bullet.rectangle",
-                        value: "\(entryCount)",
-                        label: entryCount == 1 ? "activity" : "activities",
-                        color: .green
-                    )
-                    StatPill(
-                        icon: "checkmark.circle.fill",
-                        value: "\(completedActivities)",
-                        label: completedActivities == 1 ? "done" : "done",
-                        color: .orange
-                    )
-                } else {
+                if entryStats.strengthEntryCount > 0 {
                     StatPill(
                         icon: "dumbbell.fill",
-                        value: "\(entryCount)",
-                        label: entryCount == 1 ? "exercise" : "exercises",
+                        value: "\(entryStats.strengthEntryCount)",
+                        label: entryStats.strengthEntryCount == 1 ? "exercise" : "exercises",
                         color: .green
                     )
+                }
+
+                if entryStats.activityEntryCount > 0 {
+                    StatPill(
+                        icon: "list.bullet.rectangle",
+                        value: "\(entryStats.activityEntryCount)",
+                        label: entryStats.activityEntryCount == 1 ? "activity" : "activities",
+                        color: .orange
+                    )
+                }
+
+                ForEach(activityMetricStats) { metric in
+                    StatPill(
+                        icon: metric.icon,
+                        value: metric.value,
+                        label: metric.label.lowercased(),
+                        color: .orange
+                    )
+                }
+
+                if totalSets > 0 {
                     StatPill(
                         icon: "square.stack.3d.up.fill",
                         value: "\(totalSets)",
                         label: totalSets == 1 ? "set" : "sets",
-                        color: .orange
+                        color: .green
                     )
                 }
 
@@ -418,12 +442,10 @@ struct LiveWorkoutDetailSheet: View {
                     if usesFlexibleSessionPresentation || !entry.isStrength {
                         GeneralActivityCard(
                             entry: entry,
-                            allowsCompletionToggle: isEditing,
                             allowsDeletion: isEditing,
                             showsEditableFields: isEditing,
                             onUpdateNotes: { updateNotes(for: entry, notes: $0) },
                             onUpdateDuration: { updateDuration(for: entry, seconds: $0) },
-                            onToggleComplete: { toggleCompletion(for: entry) },
                             onDelete: { removeExercise(entry) }
                         )
                     } else {
@@ -519,6 +541,27 @@ struct LiveWorkoutDetailSheet: View {
         }
     }
 
+    private var targetActivityCategories: [Exercise.Category] {
+        var seen = Set<Exercise.Category>()
+        return sortedEntries.compactMap { entry in
+            guard !entry.isStrength,
+                  seen.insert(entry.resolvedActivityCategory).inserted else { return nil }
+            return entry.resolvedActivityCategory
+        }
+    }
+
+    private var targetActivityTypeNames: [String] {
+        var seen = Set<String>()
+        var values: [String] = []
+        for rawValue in workout.focusAreas + sortedEntries.flatMap({ [$0.activityTypeName] + $0.targetTags }) {
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = Exercise.normalizedActivityKey(trimmed)
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
+            values.append(trimmed)
+        }
+        return values
+    }
+
     private func addExercise(_ exercise: Exercise) {
         if workout.entries == nil {
             workout.entries = []
@@ -526,25 +569,33 @@ struct LiveWorkoutDetailSheet: View {
 
         let newOrder = workout.entries?.count ?? 0
         let entry = LiveWorkoutEntry(exercise: exercise, orderIndex: newOrder)
-        let lastPerformance = allExerciseHistory.first { $0.exerciseName == exercise.name }
+        if exercise.exerciseCategory == .strength {
+            let lastPerformance = allExerciseHistory.first { $0.exerciseName == exercise.name }
 
-        let suggestedReps = lastPerformance?.repPatternArray.first ?? lastPerformance?.bestSetReps ?? 10
-        let suggestedWeightKg = lastPerformance?.weightPatternArray.first ?? lastPerformance?.bestSetWeightKg ?? 0
-        let cleanWeight = WeightUtility.cleanWeightFromKg(suggestedWeightKg)
+            let suggestedReps = lastPerformance?.repPatternArray.first ?? lastPerformance?.bestSetReps ?? 10
+            let suggestedWeightKg = lastPerformance?.weightPatternArray.first ?? lastPerformance?.bestSetWeightKg ?? 0
+            let cleanWeight = WeightUtility.cleanWeightFromKg(suggestedWeightKg)
 
-        entry.addSet(LiveWorkoutEntry.SetData(
-            reps: suggestedReps,
-            weight: cleanWeight,
-            completed: true,
-            isWarmup: false
-        ))
+            entry.addSet(LiveWorkoutEntry.SetData(
+                reps: suggestedReps,
+                weight: cleanWeight,
+                completed: true,
+                isWarmup: false
+            ))
+        }
 
         modelContext.insert(entry)
         workout.entries?.append(entry)
         HapticManager.selectionChanged()
     }
 
-    private func addGeneralActivity(name: String, notes: String, durationSeconds: Int?) {
+    private func addGeneralActivity(
+        name: String,
+        notes: String,
+        durationSeconds: Int?,
+        kind: WorkoutPlan.TrainingBlock.BlockKind,
+        role: WorkoutPlan.TrainingBlock.Role
+    ) {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
 
@@ -555,10 +606,15 @@ struct LiveWorkoutDetailSheet: View {
         let entry = LiveWorkoutEntry(
             exerciseName: trimmedName,
             orderIndex: workout.entries?.count ?? 0,
-            exerciseType: exerciseTypeForWorkout
+            exerciseType: kind.liveWorkoutExerciseType
         )
         entry.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         entry.durationSeconds = durationSeconds
+        entry.activityKind = kind
+        entry.activityRole = role
+        entry.activityTypeName = trimmedName
+        entry.targetTags = [trimmedName]
+        entry.plannedDurationSeconds = durationSeconds
         if durationSeconds != nil {
             entry.completedAt = Date()
         }
@@ -574,9 +630,23 @@ struct LiveWorkoutDetailSheet: View {
             HapticManager.lightTap()
             return
         }
+        guard accountSessionService?.isAuthenticated != false else {
+            presentedAccountSetupContext = .aiFeatures
+            HapticManager.lightTap()
+            return
+        }
+        guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            dismiss()
+            DispatchQueue.main.async {
+                appTabSelection.wrappedValue = .trai
+            }
+            HapticManager.selectionChanged()
+            return
+        }
 
         pendingChatPrompt = workout.traiReviewPrompt
         pendingChatLaunchLabel = "Reviewing your latest workout..."
+        pendingChatActionKind = ""
         BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: "engagement.review_completed_workout_with_trai",
             domain: .engagement,
@@ -661,24 +731,6 @@ struct LiveWorkoutDetailSheet: View {
         entry.durationSeconds = seconds
     }
 
-    private func toggleCompletion(for entry: LiveWorkoutEntry) {
-        entry.completedAt = entry.completedAt == nil ? Date() : nil
-        HapticManager.selectionChanged()
-    }
-
-    private var exerciseTypeForWorkout: String {
-        switch workout.type {
-        case .cardio, .climbing:
-            return "cardio"
-        case .yoga, .pilates, .flexibility, .mobility, .recovery:
-            return "flexibility"
-        case .strength, .mixed, .hiit:
-            return "strength"
-        case .custom:
-            return "general"
-        }
-    }
-
     private func toggleGoalCompletion(_ goal: WorkoutGoal) {
         if goal.status == .completed {
             goal.markActive()
@@ -693,6 +745,7 @@ struct LiveWorkoutDetailSheet: View {
     private func syncExerciseHistory() {
         guard let entries = workout.entries else { return }
         let currentEntryIDs = Set(entries.map(\.id))
+        let performedAt = workout.completedAt ?? workout.startedAt
 
         // Remove stale history for entries deleted in this sheet.
         let removedEntryIDs = originalEntryIDs.subtracting(currentEntryIDs)
@@ -707,36 +760,35 @@ struct LiveWorkoutDetailSheet: View {
         for entry in entries {
             // Find existing history entry for this workout entry
             if let history = allExerciseHistory.first(where: { $0.sourceWorkoutEntryId == entry.id }) {
-                // Delete history if the edited exercise has no completed working sets.
-                guard let completedSets = entry.completedSets, !completedSets.isEmpty else {
+                // Delete history if the edited item no longer has trackable work.
+                guard entry.hasExercisePreferenceSignal else {
                     modelContext.delete(history)
                     continue
                 }
 
-                // Update history with current entry data
-                if let best = entry.bestSet {
-                    history.bestSetWeightKg = WeightUtility.round(best.weightKg, unit: .kg)
-                    history.bestSetWeightLbs = WeightUtility.round(best.weightLbs, unit: .lbs)
-                    history.bestSetReps = best.reps
+                history.update(from: entry, performedAt: performedAt)
+            } else if let legacyHistory = legacyHistory(for: entry, performedAt: performedAt) {
+                guard entry.hasExercisePreferenceSignal else {
+                    modelContext.delete(legacyHistory)
+                    continue
                 }
-                history.exerciseId = entry.exerciseId
-                history.exerciseName = entry.exerciseName
-                history.performedAt = workout.completedAt ?? workout.startedAt
-                history.totalVolume = entry.totalVolume
-                history.totalSets = completedSets.count
-                history.totalReps = entry.totalReps
-                history.estimatedOneRepMax = entry.estimatedOneRepMax
 
-                // Update rep and weight patterns
-                history.repPattern = completedSets.map { "\($0.reps)" }.joined(separator: ",")
-                history.weightPattern = completedSets.map { set -> String in
-                    let rounded = WeightUtility.round(set.weightKg, unit: .kg)
-                    return String(format: "%.1f", rounded)
-                }.joined(separator: ",")
-            } else if entry.completedSets?.isEmpty == false {
-                let newHistory = ExerciseHistory(from: entry, performedAt: workout.completedAt ?? workout.startedAt)
+                legacyHistory.update(from: entry, performedAt: performedAt)
+            } else if entry.hasExercisePreferenceSignal {
+                let newHistory = ExerciseHistory(from: entry, performedAt: performedAt)
                 modelContext.insert(newHistory)
             }
+        }
+    }
+
+    private func legacyHistory(for entry: LiveWorkoutEntry, performedAt: Date) -> ExerciseHistory? {
+        allExerciseHistory.first { history in
+            guard history.sourceWorkoutEntryId == nil,
+                  history.exerciseName == entry.exerciseName else {
+                return false
+            }
+
+            return abs(history.performedAt.timeIntervalSince(performedAt)) <= 60
         }
     }
 }

@@ -49,7 +49,7 @@ struct WorkoutTrendDetailSheet: View {
         var distribution: [String: Int] = [:]
 
         for workout in completedWorkouts.prefix(20) {
-            distribution[workout.type.displayName, default: 0] += 1
+            distribution[workout.historyDistributionLabel, default: 0] += 1
         }
 
         return distribution.sorted { $0.value > $1.value }
@@ -73,7 +73,7 @@ struct WorkoutTrendDetailSheet: View {
                     WorkoutTrendChart(
                         data: last7DaysData,
                         metric: .items,
-                        title: "Logged Workout Items"
+                        title: "Logged Items"
                     )
 
                     // Duration trend
@@ -148,7 +148,7 @@ struct WorkoutTrendDetailSheet: View {
 
                 StatItem(
                     value: "\(weekStats.items)",
-                    label: "Items",
+                    label: "Logged",
                     icon: "list.bullet.rectangle",
                     color: .blue
                 )
@@ -183,7 +183,7 @@ struct WorkoutTrendDetailSheet: View {
 
     private var sessionTypeCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Session Types")
+            Text("Training Focus")
                 .font(.headline)
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 8) {
@@ -283,22 +283,25 @@ private struct StatItem: View {
 private struct RecentWorkoutRow: View {
     let workout: LiveWorkout
 
-    private var entryCount: Int {
-        workout.entries?.count ?? 0
+    private var activitySummary: String? {
+        let duration = workout.formattedDuration
+        let segments = workout.historySummarySegments
+            .filter { $0 != duration }
+            .prefix(2)
+        let summary = segments.joined(separator: " • ")
+        return summary.isEmpty ? nil : summary
     }
 
-    private var activitySummary: String? {
-        if workout.totalSets > 0 {
-            return "\(workout.totalSets) \(workout.totalSets == 1 ? "set" : "sets")"
+    private var activitySummaryIcon: String {
+        if workout.entrySummaryStats.activityEntryCount > 0 {
+            return "list.bullet.rectangle"
         }
-
-        guard entryCount > 0 else { return nil }
-        return "\(entryCount) \(entryCount == 1 ? "item" : "items")"
+        return "repeat"
     }
 
     private var secondaryChips: [String] {
-        if !workout.focusAreas.isEmpty {
-            return Array(workout.focusAreas.prefix(2))
+        if !workout.displayFocusAreas.isEmpty {
+            return Array(workout.displayFocusAreas.prefix(2))
         }
 
         if !workout.muscleGroups.isEmpty {
@@ -323,7 +326,7 @@ private struct RecentWorkoutRow: View {
                     Label(workout.formattedDuration, systemImage: "clock")
 
                     if let activitySummary {
-                        Label(activitySummary, systemImage: workout.totalSets > 0 ? "repeat" : "list.bullet.rectangle")
+                        Label(activitySummary, systemImage: activitySummaryIcon)
                     }
                 }
                 .font(.caption)

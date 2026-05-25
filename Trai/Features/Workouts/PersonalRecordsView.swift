@@ -2,7 +2,7 @@
 //  PersonalRecordsView.swift
 //  Trai
 //
-//  Personal Records (PR) management screen showing personal bests for exercises
+//  Personal Records (PR) management screen showing personal bests for exercises and activities
 //
 
 import SwiftUI
@@ -86,6 +86,14 @@ struct PersonalRecordsView: View {
         return grouped
     }
 
+    private var activityPRs: [ExercisePR] {
+        filteredPRs.filter { $0.muscleGroup == nil && $0.isActivityRecord }
+    }
+
+    private var otherPRs: [ExercisePR] {
+        filteredPRs.filter { $0.muscleGroup == nil && !$0.isActivityRecord }
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -99,7 +107,7 @@ struct PersonalRecordsView: View {
             }
             .navigationTitle("Personal Records")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search exercises")
+            .searchable(text: $searchText, prompt: "Search records")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done", systemImage: "xmark") {
@@ -173,9 +181,9 @@ struct PersonalRecordsView: View {
                 Section {
                     HStack {
                         StatBox(
-                            title: "Exercises",
+                            title: "Records",
                             value: "\(visiblePRs.count)",
-                            icon: "dumbbell.fill"
+                            icon: "trophy.fill"
                         )
 
                         StatBox(
@@ -185,9 +193,9 @@ struct PersonalRecordsView: View {
                         )
 
                         StatBox(
-                            title: "Muscle Groups",
-                            value: "\(visibleMuscleGroups.count)",
-                            icon: "figure.strengthtraining.traditional"
+                            title: "Groups",
+                            value: "\(visibleMuscleGroups.count + (activityPRs.isEmpty ? 0 : 1))",
+                            icon: "rectangle.3.group.fill"
                         )
                     }
                     .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 6, trailing: 12))
@@ -223,11 +231,22 @@ struct PersonalRecordsView: View {
                         }
                     }
 
-                    // Exercises without mapped muscle group
-                    let noMuscleGroup = visiblePRs.filter { $0.muscleGroup == nil }
-                    if !noMuscleGroup.isEmpty {
+                    if !activityPRs.isEmpty {
                         Section {
-                            PRCardRow(prs: noMuscleGroup, useLbs: useLbs, volumePRMode: volumePRMode) { pr in
+                            PRCardRow(prs: activityPRs, useLbs: useLbs, volumePRMode: volumePRMode) { pr in
+                                selectedExercise = pr
+                            }
+                            .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 4, trailing: 0))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                        } header: {
+                            PRSectionHeader(title: "Activities", iconName: "figure.mixed.cardio")
+                        }
+                    }
+
+                    if !otherPRs.isEmpty {
+                        Section {
+                            PRCardRow(prs: otherPRs, useLbs: useLbs, volumePRMode: volumePRMode) { pr in
                                 selectedExercise = pr
                             }
                             .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 4, trailing: 0))
@@ -302,7 +321,7 @@ private enum PRSortOption: String, CaseIterable, Identifiable {
         case .recentActivity:
             return "Recent Activity"
         case .weightPR:
-            return "Heaviest Weight"
+            return "Top Record"
         case .volumePR:
             return volumePRMode.sortLabel
         case .alphabetical:
@@ -336,8 +355,21 @@ struct ExercisePR: Identifiable {
     // Estimated 1RM
     let estimated1RM: Double?
 
+    // Activity PRs
+    let maxDurationSeconds: Int
+    let maxDurationDate: Date?
+    let maxDistanceMeters: Double
+    let maxDistanceDate: Date?
+    let maxActivityCount: Int
+    let maxActivityCountDate: Date?
+    let maxActivityCountLabel: String
+
     let totalSessions: Int
     let lastPerformed: Date
+
+    var isActivityRecord: Bool {
+        maxDurationSeconds > 0 || maxDistanceMeters > 0 || maxActivityCount > 0
+    }
 
     /// Create an ExercisePR from exercise history entries
     static func from(
@@ -373,9 +405,39 @@ struct ExercisePR: Identifiable {
             maxVolume: snapshot.volumePR?.volumeValue(for: volumePRMode) ?? 0,
             maxVolumeDate: snapshot.volumePR?.performedAt,
             estimated1RM: snapshot.estimatedOneRepMax,
+            maxDurationSeconds: snapshot.activityDurationPR?.durationSeconds ?? 0,
+            maxDurationDate: snapshot.activityDurationPR?.performedAt,
+            maxDistanceMeters: snapshot.activityDistancePR?.distanceMeters ?? 0,
+            maxDistanceDate: snapshot.activityDistancePR?.performedAt,
+            maxActivityCount: snapshot.activityCountPR.map { max($0.totalReps, $0.totalSets) } ?? 0,
+            maxActivityCountDate: snapshot.activityCountPR?.performedAt,
+            maxActivityCountLabel: activityCountLabel(for: snapshot.activityCountPR),
             totalSessions: snapshot.totalSessions,
             lastPerformed: snapshot.lastSession?.performedAt ?? Date()
         )
+    }
+
+    private static func activityCountLabel(for record: ExerciseHistory?) -> String {
+        guard let record else { return "reps" }
+        if record.totalReps > 0 {
+            switch record.activityKind {
+            case .sportPractice, .skill:
+                return record.totalReps == 1 ? "attempt" : "attempts"
+            case .conditioning:
+                return record.totalReps == 1 ? "round" : "rounds"
+            case .mobility, .recovery:
+                return record.totalReps == 1 ? "rep" : "reps"
+            case .cardio, .custom, .strength, .none:
+                return record.totalReps == 1 ? "rep" : "reps"
+            }
+        }
+
+        switch record.activityKind {
+        case .conditioning:
+            return record.totalSets == 1 ? "round" : "rounds"
+        default:
+            return record.totalSets == 1 ? "segment" : "segments"
+        }
     }
 }
 
@@ -487,6 +549,33 @@ private struct ExercisePRCard: View {
         return "\(formatVolume(pr.maxVolume)) \(weightUnit)\(suffix)"
     }
 
+    private var activityPrimarySummary: String {
+        if pr.maxDistanceMeters > 0 {
+            return formatDistance(pr.maxDistanceMeters)
+        }
+        if pr.maxDurationSeconds > 0 {
+            return formatDuration(pr.maxDurationSeconds)
+        }
+        if pr.maxActivityCount > 0 {
+            return "\(pr.maxActivityCount) \(pr.maxActivityCountLabel)"
+        }
+        return "\(pr.totalSessions) sessions"
+    }
+
+    private var activitySecondaryMetrics: [(String, String, Color)] {
+        var metrics: [(String, String, Color)] = []
+        if pr.maxDurationSeconds > 0 {
+            metrics.append(("clock.fill", formatDuration(pr.maxDurationSeconds), .blue))
+        }
+        if pr.maxDistanceMeters > 0 {
+            metrics.append(("map.fill", formatDistance(pr.maxDistanceMeters), .green))
+        }
+        if pr.maxActivityCount > 0 {
+            metrics.append(("repeat", "\(pr.maxActivityCount) \(pr.maxActivityCountLabel)", .orange))
+        }
+        return Array(metrics.prefix(2))
+    }
+
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 10) {
@@ -506,30 +595,45 @@ private struct ExercisePRCard: View {
                         .foregroundStyle(.tertiary)
                 }
 
-                Text(weightPRSummary)
+                Text(pr.isActivityRecord ? activityPrimarySummary : weightPRSummary)
                     .font(.title3)
                     .bold()
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
 
-                HStack {
-                    HStack(spacing: 4) {
-                        Image(systemName: PRMetricKind.reps.iconName)
-                            .foregroundStyle(PRMetricKind.reps.color)
-                        Text("\(pr.maxReps) reps")
+                if pr.isActivityRecord {
+                    HStack {
+                        ForEach(Array(activitySecondaryMetrics.enumerated()), id: \.offset) { _, metric in
+                            HStack(spacing: 4) {
+                                Image(systemName: metric.0)
+                                    .foregroundStyle(metric.2)
+                                Text(metric.1)
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            Spacer()
+                        }
                     }
+                } else {
+                    HStack {
+                        HStack(spacing: 4) {
+                            Image(systemName: PRMetricKind.reps.iconName)
+                                .foregroundStyle(PRMetricKind.reps.color)
+                            Text("\(pr.maxReps) reps")
+                        }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+
+                        HStack(spacing: 4) {
+                            Image(systemName: PRMetricKind.volume.iconName)
+                                .foregroundStyle(PRMetricKind.volume.color)
+                            Text(formattedVolumeWithUnit)
+                        }
                         .font(.caption)
                         .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    HStack(spacing: 4) {
-                        Image(systemName: PRMetricKind.volume.iconName)
-                            .foregroundStyle(PRMetricKind.volume.color)
-                        Text(formattedVolumeWithUnit)
                     }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -541,6 +645,23 @@ private struct ExercisePRCard: View {
         .frame(height: 126)
         .frame(width: 214, alignment: .leading)
         .foregroundStyle(.primary)
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        if minutes >= 60 {
+            let hours = minutes / 60
+            let remainder = minutes % 60
+            return remainder > 0 ? "\(hours)h \(remainder)m" : "\(hours)h"
+        }
+        return "\(minutes)m"
+    }
+
+    private func formatDistance(_ meters: Double) -> String {
+        if meters >= 1000 {
+            return String(format: "%.1f km", meters / 1000)
+        }
+        return "\(Int(meters.rounded())) m"
     }
 }
 
@@ -571,8 +692,8 @@ struct PRDetailSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                // Progress chart (only show if enough data)
-                if history.count >= 2 {
+                // Progress chart (only show strength charts when enough data exists)
+                if history.count >= 2, !pr.isActivityRecord {
                     Section {
                         ExerciseTrendsChart(
                             history: history,
@@ -584,11 +705,14 @@ struct PRDetailSheet: View {
                     }
                 }
 
-                // PR Stats - Compact 2x2 Grid
                 Section {
-                    PRStatsGrid(pr: pr, useLbs: useLbs, volumePRMode: volumePRMode)
+                    if pr.isActivityRecord {
+                        ActivityRecordStatsGrid(pr: pr)
+                    } else {
+                        PRStatsGrid(pr: pr, useLbs: useLbs, volumePRMode: volumePRMode)
+                    }
                 } header: {
-                    Text("Personal Records")
+                    Text(pr.isActivityRecord ? "Activity Records" : "Personal Records")
                 }
 
                 // History with swipe-to-delete
@@ -597,8 +721,10 @@ struct PRDetailSheet: View {
                         HistoryRow(entry: entry, useLbs: useLbs)
                             .contentShape(Rectangle())
                             .contextMenu {
-                                Button("Edit", systemImage: "pencil") {
-                                    historyToEdit = entry
+                                if entry.hasStrengthMetrics {
+                                    Button("Edit", systemImage: "pencil") {
+                                        historyToEdit = entry
+                                    }
                                 }
                                 Button("Delete", systemImage: "trash", role: .destructive) {
                                     historyToDelete = entry
@@ -764,6 +890,64 @@ struct PRStatsGrid: View {
     }
 }
 
+struct ActivityRecordStatsGrid: View {
+    let pr: ExercisePR
+
+    var body: some View {
+        Grid(horizontalSpacing: 16, verticalSpacing: 12) {
+            GridRow {
+                PRStatCell(
+                    icon: "clock.fill",
+                    iconColor: .blue,
+                    label: "Duration",
+                    value: pr.maxDurationSeconds > 0 ? formatDuration(pr.maxDurationSeconds) : "--",
+                    detail: pr.maxDurationDate?.formatted(date: .abbreviated, time: .omitted) ?? ""
+                )
+                PRStatCell(
+                    icon: "map.fill",
+                    iconColor: .green,
+                    label: "Distance",
+                    value: pr.maxDistanceMeters > 0 ? formatDistance(pr.maxDistanceMeters) : "--",
+                    detail: pr.maxDistanceDate?.formatted(date: .abbreviated, time: .omitted) ?? ""
+                )
+            }
+            GridRow {
+                PRStatCell(
+                    icon: "repeat",
+                    iconColor: .orange,
+                    label: pr.maxActivityCountLabel.capitalized,
+                    value: pr.maxActivityCount > 0 ? "\(pr.maxActivityCount)" : "--",
+                    detail: pr.maxActivityCountDate?.formatted(date: .abbreviated, time: .omitted) ?? ""
+                )
+                PRStatCell(
+                    icon: "calendar",
+                    iconColor: .accentColor,
+                    label: "Sessions",
+                    value: "\(pr.totalSessions)",
+                    detail: "logged"
+                )
+            }
+        }
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        if minutes >= 60 {
+            let hours = minutes / 60
+            let remainder = minutes % 60
+            return remainder > 0 ? "\(hours)h \(remainder)m" : "\(hours)h"
+        }
+        return "\(minutes)m"
+    }
+
+    private func formatDistance(_ meters: Double) -> String {
+        if meters >= 1000 {
+            return String(format: "%.1f km", meters / 1000)
+        }
+        return "\(Int(meters.rounded())) m"
+    }
+}
+
 struct PRStatCell: View {
     let icon: String
     let iconColor: Color
@@ -820,18 +1004,106 @@ struct HistoryRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 50, alignment: .leading)
 
-            Text(isBodyweightEntry
-                 ? "BW × \(entry.bestSetReps)"
-                 : "\(displayWeight(entry.bestSetWeightKg)) \(weightUnit) × \(entry.bestSetReps)")
+            Text(primarySummary)
                 .font(.subheadline)
                 .bold()
 
             Spacer()
 
-            Text("\(entry.totalSets)s • \(entry.totalReps)r")
+            Text(secondarySummary)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var primarySummary: String {
+        guard !entry.hasActivityMetrics else { return activityPrimarySummary }
+        return isBodyweightEntry
+            ? "BW × \(entry.bestSetReps)"
+            : "\(displayWeight(entry.bestSetWeightKg)) \(weightUnit) × \(entry.bestSetReps)"
+    }
+
+    private var secondarySummary: String {
+        guard !entry.hasActivityMetrics else { return activitySecondarySummary }
+        return "\(entry.totalSets)s • \(entry.totalReps)r"
+    }
+
+    private var activityPrimarySummary: String {
+        if entry.distanceMeters > 0 {
+            return formatDistance(entry.distanceMeters)
+        }
+        if entry.durationSeconds > 0 {
+            return formatDuration(entry.durationSeconds)
+        }
+        if entry.totalReps > 0 {
+            return "\(entry.totalReps) \(countLabel(for: entry.totalReps))"
+        }
+        return "\(entry.totalSets) segments"
+    }
+
+    private var activitySecondarySummary: String {
+        var parts: [String] = []
+        let primaryKind = activityPrimaryKind
+        let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
+            parts.append(activityName)
+        }
+        if entry.durationSeconds > 0, primaryKind != .duration {
+            parts.append(formatDuration(entry.durationSeconds))
+        }
+        if entry.distanceMeters > 0, primaryKind != .distance {
+            parts.append(formatDistance(entry.distanceMeters))
+        }
+        if entry.totalReps > 0, primaryKind != .count {
+            parts.append("\(entry.totalReps) \(countLabel(for: entry.totalReps))")
+        } else if entry.totalSets > 0 {
+            parts.append("\(entry.totalSets) segments")
+        }
+        return parts.isEmpty ? "Activity" : parts.joined(separator: " • ")
+    }
+
+    private var activityPrimaryKind: ActivityPrimaryKind {
+        if entry.distanceMeters > 0 { return .distance }
+        if entry.durationSeconds > 0 { return .duration }
+        if entry.totalReps > 0 { return .count }
+        return .segments
+    }
+
+    private enum ActivityPrimaryKind {
+        case duration
+        case distance
+        case count
+        case segments
+    }
+
+    private func countLabel(for value: Int) -> String {
+        let label: String
+        switch entry.activityKind {
+        case .sportPractice, .skill:
+            label = "attempt"
+        case .conditioning:
+            label = "round"
+        default:
+            label = "rep"
+        }
+        return value == 1 ? label : "\(label)s"
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        if minutes >= 60 {
+            let hours = minutes / 60
+            let remainder = minutes % 60
+            return remainder > 0 ? "\(hours)h \(remainder)m" : "\(hours)h"
+        }
+        return "\(minutes)m"
+    }
+
+    private func formatDistance(_ meters: Double) -> String {
+        if meters >= 1000 {
+            return String(format: "%.1f km", meters / 1000)
+        }
+        return "\(Int(meters.rounded())) m"
     }
 }
 

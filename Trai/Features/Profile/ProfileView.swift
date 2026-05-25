@@ -14,15 +14,21 @@ struct ProfileView: View {
     @Query private var loggedFoodEntries: [FoodEntry]
     @Query private var loggedChatMessages: [ChatMessage]
     @Query private var todaysWorkouts: [WorkoutSession]
+    @Query private var todaysLiveWorkouts: [LiveWorkout]
 
     @Environment(\.appTabSelection) private var appTabSelection
     @Environment(\.modelContext) var modelContext
-    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(AccountSessionService.self) var accountSessionService: AccountSessionService?
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(ProUpsellCoordinator.self) var proUpsellCoordinator: ProUpsellCoordinator?
     @State var showPlanSheet = false
     @State var showSettingsSheet = false
     @State var customRemindersCount = 0
+    @State var standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+    @State var standardGeneratedWorkoutPlan: WorkoutPlan?
+    @State var standardGeneratedWorkoutGoals: [WorkoutGoal] = []
+    @State private var standardWorkoutPlanSetupBase: WorkoutPlan?
+    @State var standardWorkoutPlanAIService = AIService()
 
     // Workout plan management sheets
     @State var showPlanSetupSheet = false
@@ -39,7 +45,8 @@ struct ProfileView: View {
     @State private var isProfileTabVisible = false
     @State private var latencyProbeEntries: [String] = []
     @State private var tabActivationPolicy = TabActivationPolicy(minimumDwellMilliseconds: 0)
-    @State private var presentedAccountSetupContext: AccountSetupContext?
+    @State var presentedAccountSetupContext: AccountSetupContext?
+    @State private var workoutPlanSaveError: WorkoutPlanSaveError?
 
     // For navigating to Trai tab with plan review
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
@@ -70,6 +77,7 @@ struct ProfileView: View {
         self.onSelectTab = onSelectTab
         let now = Date()
         let startOfToday = Calendar.current.startOfDay(for: now)
+        let endOfToday = Calendar.current.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
 
         var profileDescriptor = FetchDescriptor<UserProfile>()
         profileDescriptor.fetchLimit = 1
@@ -109,12 +117,27 @@ struct ProfileView: View {
         )
         todaysWorkoutDescriptor.fetchLimit = 1
         _todaysWorkouts = Query(todaysWorkoutDescriptor)
+
+        var todaysLiveWorkoutDescriptor = FetchDescriptor<LiveWorkout>(
+            predicate: #Predicate<LiveWorkout> { workout in
+                (workout.startedAt >= startOfToday && workout.startedAt < endOfToday)
+                    || (workout.completedAt != nil && workout.completedAt! >= startOfToday && workout.completedAt! < endOfToday)
+            },
+            sortBy: [SortDescriptor(\LiveWorkout.startedAt, order: .reverse)]
+        )
+        todaysLiveWorkoutDescriptor.fetchLimit = 1
+        _todaysLiveWorkouts = Query(todaysLiveWorkoutDescriptor)
     }
 
     var profile: UserProfile? { profiles.first }
 
     var hasWorkoutToday: Bool {
-        !todaysWorkouts.isEmpty
+        let interval = WorkoutDayTargetContext.dayInterval()
+        return WorkoutDayTargetContext.hasWorkout(
+            in: interval,
+            workoutSessions: todaysWorkouts,
+            liveWorkouts: todaysLiveWorkouts
+        ) || isActiveWorkoutInProgress
     }
 
     private var isProfileTabActive: Bool {
@@ -133,6 +156,19 @@ struct ProfileView: View {
     var memoryCount: Int { activeMemoriesCount }
     var conversationCount: Int { chatConversationCount }
     var canAccessAIFeatures: Bool { monetizationService?.canAccessAIFeatures ?? true }
+    var standardWorkoutPlanSetupContext: OnboardingWorkoutPlanUserContext {
+        let profile = self.profile
+        return OnboardingWorkoutPlanUserContext(
+            name: profile?.name ?? "User",
+            age: profile?.age ?? 30,
+            gender: profile?.genderValue ?? .notSpecified,
+            goal: profile?.goal ?? .maintenance,
+            activityLevel: profile?.activityLevelValue ?? .moderate,
+            nutritionContext: OnboardingWorkoutPlanUserContext.nutritionContext(from: profile),
+            memoryContext: workoutPlanMemoryContext(),
+            activeWorkoutGoalContext: OnboardingWorkoutPlanUserContext.activeGoalContext(from: activeWorkoutGoalsForPlanSetup())
+        )
+    }
     private var hasClaimableLocalProgress: Bool {
         guard let profile else { return false }
         return profile.hasWorkoutPlan
@@ -205,8 +241,17 @@ struct ProfileView: View {
                     .traiSheetBranding()
                 }
             }
-            .sheet(isPresented: $showPlanSetupSheet) {
-                WorkoutPlanChatFlow()
+            .sheet(isPresented: $showPlanSetupSheet, onDismiss: resetStandardWorkoutPlanSetupState) {
+                WorkoutPlanSetupChoiceFlow(
+                    draft: $standardWorkoutPlanDraft,
+                    generatedPlanForReview: $standardGeneratedWorkoutPlan,
+                    generatedPlanGoalsForReview: $standardGeneratedWorkoutGoals,
+                    context: standardWorkoutPlanSetupContext,
+                    aiService: standardWorkoutPlanAIService,
+                    canAccessAIFeatures: canAccessAIFeatures,
+                    onComplete: saveStandardWorkoutPlan,
+                    onBack: { showPlanSetupSheet = false }
+                )
                     .traiSheetBranding()
             }
             .sheet(isPresented: $showPlanEditSheet) {
@@ -218,6 +263,13 @@ struct ProfileView: View {
             .sheet(item: $presentedAccountSetupContext) { context in
                 AccountSetupView(context: context)
                     .traiSheetBranding()
+            }
+            .alert(item: $workoutPlanSaveError) { error in
+                Alert(
+                    title: Text("Workout Plan Not Saved"),
+                    message: Text(error.message),
+                    dismissButton: .default(Text("OK"))
+                )
             }
             .onAppear {
                 handleProfileTabSelectionChange(to: appTabSelection.wrappedValue, trackOpen: true)
@@ -235,7 +287,9 @@ struct ProfileView: View {
                 }
             }
             .onChange(of: showPlanSetupSheet) { _, isShowing in
-                if !isShowing {
+                if isShowing {
+                    standardWorkoutPlanSetupBase = profile?.workoutPlan
+                } else {
                     markProfileMetricsRefreshNeeded(delayMilliseconds: 180)
                 }
             }
@@ -290,11 +344,6 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Finish setting up your Trai account")
                 .font(.traiHeadline(20))
-
-            Text("Your health, profile, and logs remain stored locally on this device. Adding an account supports billing and cloud Trai AI; when you use AI features, only selected context and photos needed for the request are sent.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 12) {
                 Button {
@@ -747,6 +796,118 @@ struct ProfileView: View {
         .shadow(color: TraiColors.ember.opacity(0.24), radius: 8, y: 3)
     }
 
+    func saveStandardWorkoutPlan(
+        _ plan: WorkoutPlan,
+        generatedGoals: [WorkoutGoal],
+        mode: WorkoutPlanSetupMode,
+        draftSnapshot: OnboardingWorkoutPlanDraft
+    ) {
+        guard let profile else { return }
+        guard WorkoutPlanEditSheet.canSaveSetupPlan(
+            savedPlan: profile.workoutPlan,
+            setupBase: standardWorkoutPlanSetupBase
+        ) else {
+            workoutPlanSaveError = WorkoutPlanSaveError(
+                message: "Your workout plan changed while setup was open. Reopen the latest plan before saving changes."
+            )
+            HapticManager.error()
+            return
+        }
+        let hadExistingPlan = profile.workoutPlan != nil
+        let durablePlan = plan.normalizedForDurableBlocks()
+
+        WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
+            profile: profile,
+            reason: .chatAdjustment,
+            modelContext: modelContext,
+            replacingWith: durablePlan
+        )
+
+        profile.workoutPlan = durablePlan
+        draftSnapshot.applyPreferences(to: profile, generatedPlan: durablePlan)
+        refreshExistingGeneratedPlanAdherenceGoals(for: durablePlan)
+
+        if mode == .proAI {
+            insertGeneratedWorkoutGoals(generatedGoals, for: durablePlan)
+        }
+
+        if !hadExistingPlan {
+            WorkoutPlanHistoryService.archivePlan(
+                durablePlan,
+                profile: profile,
+                reason: .chatCreate,
+                modelContext: modelContext
+            )
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            workoutPlanSaveError = WorkoutPlanSaveError(message: error.localizedDescription)
+            HapticManager.error()
+            return
+        }
+        resetStandardWorkoutPlanSetupState()
+        showPlanSetupSheet = false
+        WidgetDataProvider.shared.scheduleRefresh()
+        HapticManager.success()
+    }
+
+    private func workoutPlanMemoryContext() -> [String] {
+        let descriptor = FetchDescriptor<CoachMemory>(
+            predicate: #Predicate<CoachMemory> { memory in
+                memory.isActive
+            },
+            sortBy: [
+                SortDescriptor(\CoachMemory.importance, order: .reverse),
+                SortDescriptor(\CoachMemory.createdAt, order: .reverse)
+            ]
+        )
+        let memories = (try? modelContext.fetch(descriptor)) ?? []
+        return memories
+            .filter {
+                $0.topic == .workout || $0.topic == .general || $0.category == .goal || $0.category == .context || $0.category == .restriction
+            }
+            .prefix(8)
+            .map(\.promptFormat)
+    }
+
+    private func activeWorkoutGoalsForPlanSetup() -> [WorkoutGoal] {
+        let descriptor = FetchDescriptor<WorkoutGoal>(
+            predicate: #Predicate<WorkoutGoal> { goal in
+                goal.statusRaw == "active"
+            },
+            sortBy: [SortDescriptor(\WorkoutGoal.updatedAt, order: .reverse)]
+        )
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) {
+        for goal in WorkoutGoal.generatedGoalsToInsert(
+            goals,
+            existingGoals: activeWorkoutGoalsForPlanSetup(),
+            for: plan
+        ) {
+            modelContext.insert(goal)
+        }
+    }
+
+    private func refreshExistingGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
+        WorkoutGoal.refreshGeneratedPlanAdherenceGoals(activeWorkoutGoalsForPlanSetup(), for: plan)
+    }
+
+    private func resetStandardWorkoutPlanSetupState() {
+        standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+        standardGeneratedWorkoutPlan = nil
+        standardGeneratedWorkoutGoals = []
+        standardWorkoutPlanSetupBase = nil
+    }
+}
+
+private struct WorkoutPlanSaveError: Identifiable {
+    let id = UUID()
+    let message: String
 }
 
 #Preview {

@@ -7,6 +7,17 @@
 
 import Foundation
 
+enum OnboardingPlanInputInvalidation {
+    static func shouldResetGeneratedPlanState(
+        oldSignature: String?,
+        newSignature: String?,
+        hasNutritionState: Bool,
+        hasWorkoutReviewState: Bool
+    ) -> Bool {
+        oldSignature != newSignature && (hasNutritionState || hasWorkoutReviewState)
+    }
+}
+
 extension OnboardingView {
     // MARK: - Plan Generation
 
@@ -29,6 +40,21 @@ extension OnboardingView {
         Task { @MainActor in
             let plan: NutritionPlan
 
+            #if DEBUG
+            if AppLaunchArguments.shouldRunOnboardingFlowUITest {
+                plan = NutritionPlan.createDefault(from: request)
+            } else if !(monetizationService?.canAccessAIFeatures ?? true) {
+                plan = NutritionPlan.createDefault(from: request)
+            } else {
+                do {
+                    plan = try await aiService.generateNutritionPlan(request: request)
+                } catch {
+                    // Fall back to calculated plan
+                    print("⚠️ Plan generation failed, using fallback: \(error.localizedDescription)")
+                    plan = NutritionPlan.createDefault(from: request)
+                }
+            }
+            #else
             if !(monetizationService?.canAccessAIFeatures ?? true) {
                 plan = NutritionPlan.createDefault(from: request)
             } else {
@@ -40,6 +66,7 @@ extension OnboardingView {
                     plan = NutritionPlan.createDefault(from: request)
                 }
             }
+            #endif
 
             let elapsed = generationStartedAt.duration(to: clock.now)
             if elapsed < minimumLoadingDuration {
@@ -90,7 +117,7 @@ extension OnboardingView {
         }
 
         return PlanGenerationRequest(
-            name: userName.trimmingCharacters(in: .whitespaces),
+            name: resolvedProfileName,
             age: age,
             gender: gender ?? .notSpecified,
             heightCm: heightCm,
@@ -111,8 +138,14 @@ extension OnboardingView {
 
     func handlePlanInputChange(from oldValue: String?, to newValue: String?) {
         guard oldValue != newValue else { return }
-        guard generatedPlan != nil || lastGeneratedPlanInputSignature != nil || planError != nil else { return }
+        guard OnboardingPlanInputInvalidation.shouldResetGeneratedPlanState(
+            oldSignature: oldValue,
+            newSignature: newValue,
+            hasNutritionState: generatedPlan != nil || lastGeneratedPlanInputSignature != nil || planError != nil,
+            hasWorkoutReviewState: generatedWorkoutPlan != nil || !generatedWorkoutGoals.isEmpty
+        ) else { return }
         resetGeneratedPlanState()
+        resetGeneratedWorkoutPlanReviewState()
     }
 
     func resetGeneratedPlanState() {
@@ -123,6 +156,11 @@ extension OnboardingView {
         adjustedCarbs = ""
         adjustedFat = ""
         lastGeneratedPlanInputSignature = nil
+    }
+
+    func resetGeneratedWorkoutPlanReviewState() {
+        generatedWorkoutPlan = nil
+        generatedWorkoutGoals = []
     }
 
     func planInputSignature(for request: PlanGenerationRequest) -> String {

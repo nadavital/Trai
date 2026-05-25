@@ -62,6 +62,12 @@ struct ExerciseCard: View {
                     }
                 } label: {
                     HStack {
+                        Image(systemName: "dumbbell.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.accent)
+                            .frame(width: 28, height: 28)
+                            .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+
                         VStack(alignment: .leading, spacing: 2) {
                             Text(entry.exerciseName)
                                 .font(.headline)
@@ -179,13 +185,14 @@ struct ExerciseCard: View {
 
                     // Add set button
                     Button(action: onAddSet) {
-                        HStack {
+                        HStack(spacing: 8) {
                             Image(systemName: "plus.circle.fill")
                             Text("Add Set")
                         }
-                        .font(.subheadline)
-                        .foregroundStyle(.tint)
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.traiTertiary(color: .accentColor, fullWidth: true))
                     .accessibilityIdentifier("liveWorkoutAddSetButton")
                     .padding(.top, 4)
                 }

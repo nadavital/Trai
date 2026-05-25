@@ -11,21 +11,38 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
     let goalKindRaw: String
     let linkedWorkoutTypeRaw: String?
     let linkedActivityName: String?
+    let linkedActivityTags: [String]?
+    let linkedActivityKindRaw: String?
+    let linkedActivityRoleRaw: String?
     let targetValue: Double?
     let targetUnit: String?
     let periodUnitRaw: String?
     let periodCount: Int?
+    let successCriteria: String?
     let notes: String?
     let targetDateISO8601: String?
     let checkInCadenceDays: Int?
+    var tracksGeneratedPlanAdherence: Bool? = nil
+    var generatedPlanBlockIDs: [UUID]? = nil
 
     var id: String {
-        [
+        let tagKey = linkedActivityTags?.joined(separator: ",") ?? ""
+        let blockKey = generatedPlanBlockIDs?
+            .map(\.uuidString)
+            .sorted()
+            .joined(separator: ",") ?? ""
+        let parts: [String] = [
             title,
             goalKindRaw,
             linkedWorkoutTypeRaw ?? "",
-            linkedActivityName ?? ""
-        ].joined(separator: "|")
+            linkedActivityName ?? "",
+            tagKey,
+            linkedActivityKindRaw ?? "",
+            linkedActivityRoleRaw ?? "",
+            tracksGeneratedPlanAdherence == true ? "planAdherence" : "",
+            blockKey
+        ]
+        return parts.joined(separator: "|")
     }
 
     var goalKind: WorkoutGoal.GoalKind {
@@ -59,13 +76,19 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
             goalKind: goalKind,
             linkedWorkoutType: linkedWorkoutType,
             linkedActivityName: linkedActivityName?.trimmingCharacters(in: .whitespacesAndNewlines),
+            linkedActivityTags: linkedActivityTags ?? [],
+            linkedActivityKind: linkedActivityKindRaw.flatMap(WorkoutPlan.TrainingBlock.BlockKind.init(rawValue:)),
+            linkedActivityRole: linkedActivityRoleRaw.flatMap(WorkoutPlan.TrainingBlock.Role.init(rawValue:)),
             targetValue: goalKind.supportsNumericTarget ? targetValue : nil,
             targetUnit: goalKind.supportsNumericTarget ? (targetUnit ?? "") : "",
-            periodUnit: goalKind.usesPeriodTarget ? periodUnit : nil,
-            periodCount: goalKind.usesPeriodTarget ? periodCount : nil,
+            periodUnit: periodTrackingGoalKinds.contains(goalKind) ? periodUnit : nil,
+            periodCount: periodTrackingGoalKinds.contains(goalKind) ? periodCount : nil,
+            successCriteria: successCriteria?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             notes: notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? rationale,
             targetDate: targetDate,
-            checkInCadenceDays: checkInCadenceDays
+            checkInCadenceDays: checkInCadenceDays,
+            tracksGeneratedPlanAdherence: tracksGeneratedPlanAdherence == true,
+            generatedPlanBlockIDs: generatedPlanBlockIDs ?? []
         )
     }
 }
@@ -84,7 +107,10 @@ struct WorkoutGoalRecommendationContextBuilder {
             .sorted { ($0.completedAt ?? $0.startedAt) > ($1.completedAt ?? $1.startedAt) }
             .prefix(4)
             .map { workout in
-                let detail = [workout.type.displayName, workout.displayFocusSummary, workout.formattedDuration]
+                let activityDetails = recentActivityDetails(for: workout)
+                let detailParts = [workout.displayFocusSummary, workout.type.displayName, workout.formattedDuration]
+                    + Array(activityDetails.prefix(3))
+                let detail = detailParts
                     .filter { !$0.isEmpty }
                     .joined(separator: " • ")
                 return "\(workout.name) (\(detail))"
@@ -94,14 +120,76 @@ struct WorkoutGoalRecommendationContextBuilder {
             .sorted { $0.loggedAt > $1.loggedAt }
             .prefix(4)
             .map { session in
-                let detail = [session.inferredWorkoutMode.displayName, session.formattedDuration, session.formattedDistance]
-                    .compactMap { $0 }
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " • ")
+                let detail = session.historyDetailSegments.joined(separator: " • ")
                 return "\(session.displayName) (\(detail))"
             }
 
         return Array((live + imported).prefix(6))
+    }
+
+    private static func recentActivityDetails(for workout: LiveWorkout) -> [String] {
+        (workout.entries ?? [])
+            .filter { !$0.isStrength && $0.hasExercisePreferenceSignal }
+            .sorted { $0.orderIndex < $1.orderIndex }
+            .map { entry in
+                let details = goalContextActivitySummarySegments(for: entry)
+                    .prefix(4)
+                return ([entry.exerciseName] + Array(details)).joined(separator: " ")
+            }
+    }
+
+    private static func goalContextActivitySummarySegments(for entry: LiveWorkoutEntry) -> [String] {
+        var segments: [String] = []
+        let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
+            segments.append(activityName)
+        }
+        let durationSeconds = entry.trackedDurationSeconds
+        if durationSeconds > 0 {
+            segments.append("\(durationSeconds / 60) min")
+        }
+        if let distance = entry.formattedDistance {
+            segments.append(distance)
+        }
+        let loggedSegments = entry.activitySegments.filter(\.hasLoggedData)
+        if loggedSegments.count > 1 {
+            segments.append("\(loggedSegments.count) \(pluralized(goalContextSegmentLabel(for: entry), count: loggedSegments.count))")
+        }
+        let countTotal = loggedSegments
+            .compactMap(\.reps)
+            .filter { $0 > 0 }
+            .reduce(0, +)
+        if countTotal > 0 {
+            segments.append("\(countTotal) \(pluralized(goalContextCountLabel(for: entry), count: countTotal))")
+        }
+        return segments
+    }
+
+    private static func goalContextSegmentLabel(for entry: LiveWorkoutEntry) -> String {
+        switch entry.resolvedActivityCategory {
+        case .conditioning:
+            return "round"
+        default:
+            return "segment"
+        }
+    }
+
+    private static func goalContextCountLabel(for entry: LiveWorkoutEntry) -> String {
+        switch entry.resolvedActivityCategory {
+        case .sportPractice:
+            return "attempt"
+        case .conditioning:
+            return "round"
+        case .mobility, .recovery:
+            return "rep"
+        default:
+            return "rep"
+        }
+    }
+
+    private static func pluralized(_ label: String, count: Int) -> String {
+        guard count != 1 else { return label }
+        return label.hasSuffix("s") ? label : "\(label)s"
     }
 
     static func recentTrainingSummary(
@@ -167,9 +255,10 @@ struct WorkoutGoalRecommendationContextBuilder {
         history: [ExerciseHistory],
         prefersMetricWeight: Bool
     ) -> [String] {
-        let snapshots = ExercisePerformanceService.snapshots(from: history)
+        let snapshots = ExercisePerformanceService.snapshots(from: history.filter(\.hasStrengthMetrics))
+        let strengthExerciseNames = Set(snapshots.keys.map(\.goalNormalizedKey))
 
-        return snapshots.values
+        let strengthSummaries = snapshots.values
             .sorted { lhs, rhs in
                 if lhs.totalSessions != rhs.totalSessions {
                     return lhs.totalSessions > rhs.totalSessions
@@ -199,6 +288,85 @@ struct WorkoutGoalRecommendationContextBuilder {
 
                 return parts.joined(separator: " • ")
             }
+
+        let activitySummaries = activityExerciseSummaries(
+            from: history.filter { record in
+                !record.hasStrengthMetrics &&
+                !strengthExerciseNames.contains(record.exerciseName.goalNormalizedKey)
+            }
+        )
+
+        return Array((strengthSummaries + activitySummaries).prefix(10))
+    }
+
+    private static func activityExerciseSummaries(from history: [ExerciseHistory]) -> [String] {
+        let grouped = Dictionary(grouping: history) { $0.exerciseName }
+
+        return grouped.compactMap { exerciseName, records -> (String, Int, Date)? in
+            let trackable = records.filter { record in
+                record.durationSeconds > 0 ||
+                record.distanceMeters > 0 ||
+                record.totalSets > 0 ||
+                record.totalReps > 0
+            }
+            guard !trackable.isEmpty else { return nil }
+
+            let latest = trackable.max { $0.performedAt < $1.performedAt }
+            let totalDuration = trackable.map(\.durationSeconds).reduce(0, +)
+            let totalDistance = trackable.map(\.distanceMeters).reduce(0, +)
+            let totalSegments = trackable.map(\.totalSets).reduce(0, +)
+            let totalCount = trackable.map(\.totalReps).reduce(0, +)
+            let countLabel = activityHistoryCountLabel(for: latest)
+
+            var parts: [String] = ["\(exerciseName): \(trackable.count) sessions"]
+            if let latest {
+                let activityName = latest.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !activityName.isEmpty, activityName.goalNormalizedKey != exerciseName.goalNormalizedKey {
+                    parts.append(activityName)
+                }
+                parts.append("last \(latest.formattedDate)")
+            }
+            if totalDuration > 0 {
+                parts.append("\(totalDuration / 60) min total")
+            }
+            if totalDistance > 0 {
+                parts.append(formatActivityDistance(totalDistance))
+            }
+            if totalCount > 0 {
+                parts.append("\(totalCount) \(pluralized(countLabel, count: totalCount)) total")
+            } else if totalSegments > 0 {
+                parts.append("\(totalSegments) \(pluralized("segment", count: totalSegments)) total")
+            }
+
+            return (parts.joined(separator: " • "), trackable.count, latest?.performedAt ?? .distantPast)
+        }
+        .sorted { lhs, rhs in
+            if lhs.1 != rhs.1 {
+                return lhs.1 > rhs.1
+            }
+            return lhs.2 > rhs.2
+        }
+        .map(\.0)
+    }
+
+    private static func activityHistoryCountLabel(for record: ExerciseHistory?) -> String {
+        switch record?.activityKind {
+        case .sportPractice, .skill:
+            return "attempt"
+        case .conditioning:
+            return "round"
+        case .mobility, .recovery:
+            return "rep"
+        default:
+            return "rep"
+        }
+    }
+
+    private static func formatActivityDistance(_ meters: Double) -> String {
+        if meters >= 1000 {
+            return String(format: "%.1f km total", meters / 1000)
+        }
+        return "\(Int(meters.rounded())) m total"
     }
 }
 
@@ -207,6 +375,7 @@ extension AIService {
         goalTitle: String,
         goalKind: String,
         goalScope: String,
+        successCriteria: String?,
         currentProgress: String?,
         targetSummary: String?,
         recentSessionSummaries: [String],
@@ -220,6 +389,7 @@ extension AIService {
             Goal: \(goalTitle)
             Kind: \(goalKind)
             Scope: \(goalScope)
+            Success criteria: \(successCriteria?.isEmpty == false ? successCriteria! : "Not specified")
             Current progress: \(currentProgress ?? "Not yet measured")
             Target: \(targetSummary ?? "No specific target set")
             Recent related sessions: \(recentSessionSummaries.isEmpty ? "None yet" : recentSessionSummaries.joined(separator: " | "))
@@ -275,30 +445,55 @@ extension AIService {
             let prompt = """
             You are helping set workout goals inside Trai.
 
-            Create 1-2 workout goals that feel lightweight, motivating, and directly tied to what the user is already doing.
+            Create 0-2 workout goals that feel lightweight, motivating, and directly tied to what the user is already doing. One strong goal is better than two weak goals. Returning no goals is acceptable when the context does not support a specific, useful, trackable goal.
 
             Rules:
             - Suggest at most 2 goals.
-            - Prefer one concrete milestone goal and optionally one consistency or progression goal.
+            - Prefer one concrete plan-specific goal. Add a second only when it captures a different, meaningful intent from the plan or user request.
             - Goals should feel meaningful over roughly the next 4-8 weeks unless the user asked for a different timeline.
             - Goals should usually represent something the user works toward over multiple sessions or multiple weeks, not a single routine completion.
-            - Do NOT suggest goals like "complete a push day", "finish a cardio workout", or anything that is already normal baseline behavior for a regular trainee.
+            - Do NOT suggest goals that merely restate a single normal workout task; goals should reflect a habit, milestone, progression target, or follow-up loop over time.
             - Do NOT suggest maintenance goals like "hold steady" unless the user is explicitly deloading, returning from injury, or asked for maintenance.
             - If the user already does a session type consistently, suggest progression, volume, duration, quality, or milestone goals instead of simple attendance.
             - Use frequency goals when the user's pattern or request is about consistency, e.g. 3 sessions per week.
-            - Good examples: "Send the blue V5 clean", "Build up to a 75 minute zone 2 session", "Work back toward 185 lbs for 5 on bench", "Climb 2 times each week for the next month", "Add 10 minutes to your weekly yoga flow sessions without extra breaks".
-            - Add a numeric goal only if the recent training data clearly supports it.
+            - Add a numeric goal only if the recent training data clearly supports it, unless the user explicitly asked for a frequency such as weekly cardio.
+            - Do not create exercise-specific weight-increase goals for new users or thin context unless recent sessions, exercise summaries, memory, or the user request includes a current baseline for that exercise.
+            - Do not infer a strength baseline just because an exercise appears in the plan.
+            - Weight/load goals require a known current baseline and should progress from that baseline.
+            - Do not create vague progression goals unless the structured target and successCriteria make the exact achievement verifiable from app data.
+            - Broad goals are allowed, but the intent must be accurate: title, target fields, linkedWorkoutType/linkedActivityName/linkedActivityTags/linkedActivityKindRaw/linkedActivityRoleRaw, and successCriteria should all describe the same behavior Trai can track.
+            - Set tracksGeneratedPlanAdherence true only when the goal tracks completion of the whole generated weekly plan structure, not a specific activity family, support block, exercise, or modality.
+            - If a goal is tied to a specific activity, exercise, modality, or support block from Current plan sessions, set generatedPlanBlockIDs to the matching blockID values from that plan context. These durable IDs are required for plan-specific activity goals so Trai does not guess from names or tags later.
+            - Leave generatedPlanBlockIDs empty for whole-plan adherence goals, goals based only on recent history, or goals that are not tied to a specific current-plan block.
+            - If the current plan includes a personalized constraint, habit, or recurring support block, prefer a goal for that specific plan behavior over generic progression.
+            - For a brand-new workout plan with little history, use goals that establish the plan: weekly structure adherence, named-day/session-type completion across several weeks, requested recurring habits, check-in cadence, or logging enough sessions for Trai to personalize the next revision.
+            - Every frequency, duration, distance, count, or weight goal must have a targetValue greater than 0 and a clear targetUnit.
+            - Use count goals for trackable reps, attempts, rounds, completed routes, laps, or segments when the app can count them from logged sets or activity segments.
+            - Every frequency, duration, distance, and count goal must also include periodUnitRaw and periodCount.
+            - For frequency and count goals, periodCount means the denominator period, not the goal horizon. Use periodCount 1 for "per week", "per day", or "per month"; use targetDateISO8601/checkInCadenceDays to express a 4-8 week horizon.
+            - For duration and distance goals, use periodUnitRaw/periodCount to describe the accumulation window, such as 45 min per week or 10 km per month.
+            - Every goal must include successCriteria: one concise sentence that says how Trai and the person using the app will know the goal is achieved. This is especially important for creative, skill, sport, form, consistency quality, or milestone goals that do not fit a simple numeric target.
+            - Write rationale, successCriteria, and notes directly to the person using the app with "you" and "your"; do not say "the user".
+            - Do not return vague frequency goals unless the structured fields make the tracked behavior clear.
+            - If you cannot make a goal trackable from the plan and context, choose a milestone goal or omit that suggestion.
             - Do not invent an unrealistic modality or activity.
+            - Do not name a modality, activity, exercise, or event that does not actually appear in the plan or context.
             - Avoid duplicating any existing goal.
             - If the user gave a specific ask, prioritize that.
-            - If the context is thin, prefer a broader but still meaningful goal over a vague or tiny one.
+            - If the context is thin, prefer a broader but still meaningful goal over a vague or tiny one, and return only one goal when a second would be filler.
             - If an exercise clearly appears as a recurring anchor movement in the history, it is okay to recommend an exercise-specific goal tied to linkedActivityName.
             - Use linkedWorkoutType when the goal is broad to a session type.
             - Use linkedActivityName when the goal is tied to a specific exercise or activity like a route, lift, or interval format.
+            - Use linkedActivityTags for semantic activity families, custom activity types, or personalized targets such as Climbing, grip, intervals, mobility, or technique.
+            - Use linkedActivityKindRaw and linkedActivityRoleRaw only as behavioral fallback metadata, such as support work, mobility warmups, skill accessories, or recovery cooldowns. For support work inside another workout, prefer linkedActivityTags plus linkedActivityRoleRaw when the activity has a meaningful semantic identity.
             - linkedWorkoutType must be one of: \(workoutModes)
-            - goalKind must be one of: milestone, frequency, duration, distance, weight
+            - linkedActivityKindRaw can be \(AIPromptBuilder.workoutGoalActivityKindPromptList). Warmup and cooldown are placement roles, not activity kinds.
+            - linkedActivityRoleRaw can be \(AIPromptBuilder.workoutGoalActivityRolePromptList).
+            - goalKind must be one of: milestone, frequency, duration, distance, count, weight
             - For milestone goals, leave targetValue and targetUnit empty.
-            - For frequency goals, targetValue should be the count, targetUnit should usually be "sessions", and periodUnitRaw should be day, week, or month.
+            - For frequency goals, targetValue must be the session/activity count, targetUnit should usually be "sessions" or another unit matching the tracked activity, periodUnitRaw must be day, week, or month, and periodCount must be 1.
+            - For duration and distance goals, periodUnitRaw must be day, week, or month and periodCount must be greater than 0.
+            - For count goals, targetUnit should be the thing being counted, such as reps, attempts, rounds, laps, routes, or segments.
             - When it helps, include a soft targetDateISO8601 roughly 4-8 weeks out.
             - checkInCadenceDays can be provided for more open-ended goals that should be revisited.
             - For weight goals, use \(prefersMetricWeight ? "kg by default" : "lbs by default") unless the user context clearly suggests the other unit.
@@ -311,7 +506,7 @@ extension AIService {
             - Current plan sessions: \(plannedSessions.isEmpty ? "None" : plannedSessions.joined(separator: " | "))
             - Recent sessions: \(recentSessions.isEmpty ? "None" : recentSessions.joined(separator: " | "))
             - Recent training summary: \(recentTrainingSummary.isEmpty ? "None" : recentTrainingSummary.joined(separator: " | "))
-            - Exercise summaries: \(exerciseSummaries.isEmpty ? "None" : exerciseSummaries.joined(separator: " | "))
+            - Exercise/activity summaries: \(exerciseSummaries.isEmpty ? "None" : exerciseSummaries.joined(separator: " | "))
             - Relevant memory/context: \(memoryContext.isEmpty ? "None" : memoryContext.joined(separator: " | "))
             - Existing workout goals: \(existingGoals.isEmpty ? "None" : existingGoals.joined(separator: " | "))
             - User request: \(trimmedIntent?.isEmpty == false ? trimmedIntent! : "No extra request. Suggest the best fit from context.")
@@ -323,56 +518,7 @@ extension AIService {
                     "suggestions": [
                         "type": "array",
                         "maxItems": 2,
-                        "items": [
-                            "type": "object",
-                            "properties": [
-                                "title": ["type": "string"],
-                                "rationale": ["type": "string"],
-                                "goalKindRaw": [
-                                    "type": "string",
-                                    "enum": WorkoutGoal.GoalKind.allCases.map(\.rawValue)
-                                ],
-                                "linkedWorkoutTypeRaw": [
-                                    "type": "string",
-                                    "enum": WorkoutMode.allCases.map(\.rawValue),
-                                    "nullable": true
-                                ],
-                                "linkedActivityName": [
-                                    "type": "string",
-                                    "nullable": true
-                                ],
-                                "targetValue": [
-                                    "type": "number",
-                                    "nullable": true
-                                ],
-                                "targetUnit": [
-                                    "type": "string",
-                                    "nullable": true
-                                ],
-                                "periodUnitRaw": [
-                                    "type": "string",
-                                    "enum": WorkoutGoal.PeriodUnit.allCases.map(\.rawValue),
-                                    "nullable": true
-                                ],
-                                "periodCount": [
-                                    "type": "integer",
-                                    "nullable": true
-                                ],
-                                "notes": [
-                                    "type": "string",
-                                    "nullable": true
-                                ],
-                                "targetDateISO8601": [
-                                    "type": "string",
-                                    "nullable": true
-                                ],
-                                "checkInCadenceDays": [
-                                    "type": "integer",
-                                    "nullable": true
-                                ]
-                            ],
-                            "required": ["title", "rationale", "goalKindRaw"]
-                        ]
+                        "items": AIPromptBuilder.workoutGoalSuggestionSchema
                     ]
                 ],
                 "required": ["suggestions"]
@@ -400,7 +546,122 @@ extension AIService {
                 throw AIServiceError.invalidResponse
             }
 
-            return try JSONDecoder().decode(WorkoutGoalSuggestionResponse.self, from: data).suggestions
+            let decoded = try JSONDecoder().decode(WorkoutGoalSuggestionResponse.self, from: data)
+            return WorkoutGoalSuggestion.validatedUnique(decoded.suggestions)
         }
+    }
+}
+
+extension WorkoutGoalSuggestion {
+    static func validatedUnique(_ suggestions: [WorkoutGoalSuggestion]) -> [WorkoutGoalSuggestion] {
+        var seenKeys: Set<String> = []
+        return suggestions.compactMap { suggestion in
+            guard suggestion.isTrackableAndSpecific else { return nil }
+            let key = suggestion.normalizedDeduplicationKey
+            guard seenKeys.insert(key).inserted else { return nil }
+            return suggestion
+        }
+    }
+
+    var normalizedDeduplicationKey: String {
+        let tagKey = linkedActivityTags?
+            .map(\.goalNormalizedKey)
+            .sorted()
+            .joined(separator: ",") ?? ""
+        let blockKey = generatedPlanBlockIDs?
+            .map(\.uuidString)
+            .sorted()
+            .joined(separator: ",") ?? ""
+        let parts: [String] = [
+            title.goalNormalizedKey,
+            goalKind.rawValue,
+            linkedWorkoutTypeRaw?.goalNormalizedKey ?? "",
+            linkedActivityName?.goalNormalizedKey ?? "",
+            tagKey,
+            linkedActivityKindRaw ?? "",
+            linkedActivityRoleRaw ?? "",
+            tracksGeneratedPlanAdherence == true ? "planAdherence" : "",
+            blockKey
+        ]
+        return parts.joined(separator: "|")
+    }
+
+    var isTrackableAndSpecific: Bool {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return false }
+        guard successCriteria?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else { return false }
+        guard hasTrackableScope else { return false }
+
+        switch goalKind {
+        case .milestone:
+            return true
+        case .frequency:
+            guard let targetValue,
+                  targetValue > 0,
+                  let targetUnit,
+                  !targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  periodUnit != nil,
+                  let periodCount,
+                  periodCount == 1 else {
+                return false
+            }
+            return true
+        case .duration, .distance, .count, .weight:
+            guard let targetValue,
+                  targetValue > 0,
+                  let targetUnit,
+                  !targetUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return false
+            }
+            if goalKind == .duration || goalKind == .distance {
+                guard periodUnit != nil,
+                      let periodCount,
+                      periodCount > 0 else {
+                    return false
+                }
+            } else if goalKind == .count {
+                guard periodUnit != nil,
+                      let periodCount,
+                      periodCount == 1 else {
+                    return false
+                }
+            }
+            return true
+        }
+    }
+
+    private var hasTrackableScope: Bool {
+        if tracksGeneratedPlanAdherence == true {
+            return true
+        }
+
+        if generatedPlanBlockIDs?.isEmpty == false {
+            return true
+        }
+
+        if linkedWorkoutType != nil {
+            return true
+        }
+
+        if linkedActivityKindRaw.flatMap(WorkoutPlan.TrainingBlock.BlockKind.init(rawValue:)) != nil {
+            return true
+        }
+
+        let activityName = linkedActivityName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !activityName.isEmpty {
+            return true
+        }
+
+        let activityTags = linkedActivityTags?
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+        if !activityTags.isEmpty {
+            return true
+        }
+        return false
+    }
+
+    private var periodTrackingGoalKinds: Set<WorkoutGoal.GoalKind> {
+        [.frequency, .duration, .distance, .count]
     }
 }

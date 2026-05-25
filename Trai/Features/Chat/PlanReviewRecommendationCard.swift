@@ -10,6 +10,7 @@ import SwiftUI
 struct PlanReviewRecommendationCard: View {
     let recommendation: PlanRecommendation
     let message: String
+    var isReviewDisabled: Bool = false
     let onReviewPlan: () -> Void
     let onDismiss: () -> Void
 
@@ -111,6 +112,8 @@ struct PlanReviewRecommendationCard: View {
                     .padding(.vertical, 12)
                 }
                 .buttonStyle(.traiPrimary(color: accentColor))
+                .opacity(isReviewDisabled ? 0.55 : 1)
+                .disabled(isReviewDisabled)
             }
         }
         .padding(16)

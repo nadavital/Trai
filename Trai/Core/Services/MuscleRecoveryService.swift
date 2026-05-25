@@ -441,10 +441,10 @@ final class MuscleRecoveryService {
         _ template: WorkoutPlan.WorkoutTemplate,
         recoveryInfo: [MuscleRecoveryInfo]
     ) -> (score: Double, reason: String) {
-        let templateMuscles = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
+        let templateMuscles = recoveryMuscles(for: template)
 
         guard !templateMuscles.isEmpty else {
-            return (0.5, "Unknown muscle groups")
+            return nonMuscleTemplateScore(template)
         }
 
         // Get recovery status for each target muscle
@@ -493,6 +493,45 @@ final class MuscleRecoveryService {
         }
 
         return (score, reason)
+    }
+
+    private func recoveryMuscles(
+        for template: WorkoutPlan.WorkoutTemplate
+    ) -> [LiveWorkout.MuscleGroup] {
+        guard template.sessionType.supportsMuscleTargets else { return [] }
+
+        var groups: [LiveWorkout.MuscleGroup] = []
+        var seen: Set<LiveWorkout.MuscleGroup> = []
+        for target in template.resolvedTargetMuscleGroups {
+            let mappedGroups = LiveWorkout.MuscleGroup.fromTargetString(target)
+            for group in mappedGroups where shouldUseRecoveryMuscle(group, for: target) && !seen.contains(group) {
+                groups.append(group)
+                seen.insert(group)
+            }
+        }
+        return groups
+    }
+
+    private func shouldUseRecoveryMuscle(
+        _ group: LiveWorkout.MuscleGroup,
+        for rawTarget: String
+    ) -> Bool {
+        guard group == .fullBody else { return true }
+        let compactTarget = rawTarget
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        return compactTarget == "fullbody"
+    }
+
+    private func nonMuscleTemplateScore(
+        _ template: WorkoutPlan.WorkoutTemplate
+    ) -> (score: Double, reason: String) {
+        let focus = template.focusAreasDisplay.trimmingCharacters(in: .whitespacesAndNewlines)
+        let label = focus.isEmpty ? template.sessionType.displayName : focus
+        return (1.0, "\(label) from your plan")
     }
 
     /// Get the recommended template ID from a plan

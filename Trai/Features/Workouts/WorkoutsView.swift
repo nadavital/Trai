@@ -13,6 +13,7 @@ struct WorkoutsView: View {
         let name: String
         let type: LiveWorkout.WorkoutType
         let muscles: [LiveWorkout.MuscleGroup]
+        let focusAreas: [String]
     }
 
     // MARK: - Queries
@@ -41,6 +42,7 @@ struct WorkoutsView: View {
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
+    @AppStorage("pendingWorkoutPlanSetupRequest") private var pendingWorkoutPlanSetupRequest = false
 
     // MARK: - Services
 
@@ -56,10 +58,18 @@ struct WorkoutsView: View {
     @State private var cachedLiveWorkoutsByDate: [(date: Date, workouts: [LiveWorkout])] = []
     @State private var suggestedWorkoutGoals: [WorkoutGoalSuggestion] = []
     @State private var celebratedWorkoutGoal: WorkoutGoal?
+    @State private var standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+    @State private var standardGeneratedWorkoutPlan: WorkoutPlan?
+    @State private var standardGeneratedWorkoutGoals: [WorkoutGoal] = []
+    @State private var standardWorkoutPlanSetupBase: WorkoutPlan?
+    @State private var standardWorkoutPlanAIService = AIService()
+    @State private var standardWorkoutPlanSaveError: StandardWorkoutPlanSaveError?
 
     // MARK: - Sheet States
 
     @State private var showingPlanSetup = false
+    @State private var showingStandardPlanSetup = false
+    @State private var showingWorkoutPlanEdit = false
     @State private var showingMuscleRecoveryDetail = false
     @State private var showingWorkoutDetail: WorkoutSession?
     @State private var showingLiveWorkoutDetail: LiveWorkout?
@@ -165,6 +175,20 @@ struct WorkoutsView: View {
 
     private var canAccessAIFeatures: Bool {
         monetizationService?.canAccessAIFeatures ?? true
+    }
+
+    private var standardWorkoutPlanSetupContext: OnboardingWorkoutPlanUserContext {
+        let profile = userProfile
+        return OnboardingWorkoutPlanUserContext(
+            name: profile?.name ?? "User",
+            age: profile?.age ?? 30,
+            gender: profile?.genderValue ?? .notSpecified,
+            goal: profile?.goal ?? .maintenance,
+            activityLevel: profile?.activityLevelValue ?? .moderate,
+            nutritionContext: OnboardingWorkoutPlanUserContext.nutritionContext(from: profile),
+            memoryContext: workoutGoalMemoryContext(),
+            activeWorkoutGoalContext: OnboardingWorkoutPlanUserContext.activeGoalContext(from: activeWorkoutGoals)
+        )
     }
 
     private var activeWorkoutGoals: [WorkoutGoal] {
@@ -283,27 +307,50 @@ struct WorkoutsView: View {
         return parts.joined(separator: "|")
     }
 
+    private var workoutPlanEditAction: (() -> Void)? {
+        guard workoutPlan != nil else { return nil }
+        return presentWorkoutPlanEdit
+    }
+
+    @ViewBuilder
+    private var workoutPlanEditSheet: some View {
+        if let workoutPlan {
+            WorkoutPlanEditSheet(currentPlan: workoutPlan)
+                .traiSheetBranding()
+        }
+    }
+
     // MARK: - Body
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    WorkoutsQuickActionsRow(
+                        onPersonalRecords: { showingPersonalRecords = true },
+                        onCustomExercises: { showingCustomExercises = true },
+                        onRecovery: { showingMuscleRecoveryDetail = true }
+                    )
+
                     StartWorkoutSection(
                         templates: workoutPlan?.templates ?? [],
                         recoveryScores: templateScores,
                         recommendedTemplateId: recommendedTemplateId,
                         onStartTemplate: startWorkoutFromTemplate,
                         onStartCustomWorkout: { showingCustomWorkoutSetup = true },
-                        onCreatePlan: workoutPlan == nil ? { showingPlanSetup = true } : nil,
-                        onEditPlan: workoutPlan != nil ? { showingPlanSetup = true } : nil
+                        onCreatePlan: workoutPlan == nil ? { showingStandardPlanSetup = true } : nil,
+                        onEditPlan: workoutPlanEditAction
                     )
 
-                    WorkoutsQuickActionsRow(
-                        onPersonalRecords: { showingPersonalRecords = true },
-                        onCustomExercises: { showingCustomExercises = true },
-                        onRecovery: { showingMuscleRecoveryDetail = true }
-                    )
+                    if workoutPlan != nil, !canAccessAIFeatures {
+                        ProUpsellInlineCard(
+                            source: .workoutPlan,
+                            actionTitle: "Unlock Pro Coaching",
+                            action: {
+                                proUpsellCoordinator?.present(source: .workoutPlan)
+                            }
+                        )
+                    }
 
                     WorkoutGoalsOverviewSection(
                         insights: workoutGoalInsights,
@@ -324,7 +371,7 @@ struct WorkoutsView: View {
                         liveWorkoutsByDate: liveWorkoutsByDate,
                         activeGoals: activeWorkoutGoals,
                         onWorkoutTap: { showingWorkoutDetail = $0 },
-                        onLiveWorkoutTap: { showingLiveWorkoutDetail = $0 },
+                        onLiveWorkoutTap: openLiveWorkout,
                         onDelete: deleteWorkout,
                         onDeleteLiveWorkout: deleteLiveWorkout
                     )
@@ -352,6 +399,15 @@ struct WorkoutsView: View {
                 seedHistoryCachesFromCurrentQueriesIfNeeded()
                 schedulePendingRefreshesIfNeeded()
                 scheduleCloudKitHistoryReconciliationIfNeeded()
+                consumePendingWorkoutPlanSetupRequest()
+            }
+            .onChange(of: pendingWorkoutPlanSetupRequest) { _, _ in
+                consumePendingWorkoutPlanSetupRequest()
+            }
+            .onChange(of: showingStandardPlanSetup) { _, isShowing in
+                if isShowing {
+                    standardWorkoutPlanSetupBase = userProfile?.workoutPlan
+                }
             }
             .onChange(of: workoutPlan) {
                 markRecoveryRefreshNeeded(delayMilliseconds: 140)
@@ -394,6 +450,22 @@ struct WorkoutsView: View {
                 WorkoutPlanChatFlow(currentPlanToEdit: workoutPlan)
                     .traiSheetBranding()
             }
+            .sheet(isPresented: $showingWorkoutPlanEdit) {
+                workoutPlanEditSheet
+            }
+            .sheet(isPresented: $showingStandardPlanSetup, onDismiss: resetStandardWorkoutPlanSetupState) {
+                WorkoutPlanSetupChoiceFlow(
+                    draft: $standardWorkoutPlanDraft,
+                    generatedPlanForReview: $standardGeneratedWorkoutPlan,
+                    generatedPlanGoalsForReview: $standardGeneratedWorkoutGoals,
+                    context: standardWorkoutPlanSetupContext,
+                    aiService: standardWorkoutPlanAIService,
+                    canAccessAIFeatures: canAccessAIFeatures,
+                    onComplete: saveStandardWorkoutPlan,
+                    onBack: { showingStandardPlanSetup = false }
+                )
+                .traiSheetBranding()
+            }
             .sheet(isPresented: $showingPersonalRecords) {
                 PersonalRecordsView()
                     .traiSheetBranding()
@@ -403,6 +475,13 @@ struct WorkoutsView: View {
                     CustomExercisesView()
                 }
                 .traiSheetBranding()
+            }
+            .alert(item: $standardWorkoutPlanSaveError) { error in
+                Alert(
+                    title: Text("Workout Plan Not Saved"),
+                    message: Text(error.message),
+                    dismissButton: .default(Text("OK"))
+                )
             }
             .sheet(isPresented: $showingMuscleRecoveryDetail) {
                 MuscleRecoveryDetailSheet(recoveryInfo: recoveryInfo)
@@ -445,7 +524,14 @@ struct WorkoutsView: View {
                         persistCachedGoalSuggestionSnapshot(suggestions)
                     }
                 ) { goals in
-                    for goal in goals {
+                    let goalsToInsert = workoutPlan.map {
+                        WorkoutGoal.generatedGoalsToInsert(
+                            goals,
+                            existingGoals: activeWorkoutGoals,
+                            for: $0
+                        )
+                    } ?? goals
+                    for goal in goalsToInsert {
                         modelContext.insert(goal)
                     }
                     try? modelContext.save()
@@ -463,8 +549,8 @@ struct WorkoutsView: View {
             }
             .sheet(isPresented: $showingCustomWorkoutSetup) {
                 CustomWorkoutSetupSheet(
-                    onStart: { name, type, muscles in
-                        queueCustomWorkoutStart(name: name, type: type, muscles: muscles)
+                    onStart: { name, type, muscles, focusAreas in
+                        queueCustomWorkoutStart(name: name, type: type, muscles: muscles, focusAreas: focusAreas)
                     },
                     orderedWorkoutTypes: personalizedWorkoutTypes
                 )
@@ -476,7 +562,8 @@ struct WorkoutsView: View {
                 startCustomWorkout(
                     name: pendingCustomWorkoutStart.name,
                     type: pendingCustomWorkoutStart.type,
-                    muscles: pendingCustomWorkoutStart.muscles
+                    muscles: pendingCustomWorkoutStart.muscles,
+                    focusAreas: pendingCustomWorkoutStart.focusAreas
                 )
             }
             .onChange(of: showingWorkoutSheet) { _, isShowing in
@@ -589,7 +676,6 @@ struct WorkoutsView: View {
         var bestScore = -Double.greatestFiniteMagnitude
 
         for template in plan.templates {
-            guard template.sessionType.supportsMuscleTargets else { continue }
             let scoredTemplate = recoveryService.scoreTemplate(template, recoveryInfo: latestRecoveryInfo)
             scores[template.id] = scoredTemplate
             if scoredTemplate.score > bestScore {
@@ -973,6 +1059,101 @@ struct WorkoutsView: View {
         HapticManager.selectionChanged()
     }
 
+    private func presentWorkoutPlanEdit() {
+        if canAccessAIFeatures {
+            showingPlanSetup = true
+        } else {
+            showingWorkoutPlanEdit = true
+        }
+        HapticManager.selectionChanged()
+    }
+
+    private func consumePendingWorkoutPlanSetupRequest() {
+        guard pendingWorkoutPlanSetupRequest else { return }
+        pendingWorkoutPlanSetupRequest = false
+
+        showingStandardPlanSetup = true
+        HapticManager.selectionChanged()
+    }
+
+    private func saveStandardWorkoutPlan(
+        _ plan: WorkoutPlan,
+        generatedGoals: [WorkoutGoal],
+        mode: WorkoutPlanSetupMode,
+        draftSnapshot: OnboardingWorkoutPlanDraft
+    ) {
+        guard let profile = userProfile else { return }
+        guard WorkoutPlanEditSheet.canSaveSetupPlan(
+            savedPlan: profile.workoutPlan,
+            setupBase: standardWorkoutPlanSetupBase
+        ) else {
+            standardWorkoutPlanSaveError = StandardWorkoutPlanSaveError(
+                message: "Your workout plan changed while setup was open. Reopen the latest plan before saving changes."
+            )
+            HapticManager.error()
+            return
+        }
+        let hadExistingPlan = profile.workoutPlan != nil
+        let durablePlan = plan.normalizedForDurableBlocks()
+
+        WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
+            profile: profile,
+            reason: .chatAdjustment,
+            modelContext: modelContext,
+            replacingWith: durablePlan
+        )
+
+        profile.workoutPlan = durablePlan
+        draftSnapshot.applyPreferences(to: profile, generatedPlan: durablePlan)
+        refreshExistingGeneratedPlanAdherenceGoals(for: durablePlan)
+
+        if mode == .proAI {
+            insertGeneratedWorkoutGoals(generatedGoals, for: durablePlan)
+        }
+
+        if !hadExistingPlan {
+            WorkoutPlanHistoryService.archivePlan(
+                durablePlan,
+                profile: profile,
+                reason: .chatCreate,
+                modelContext: modelContext
+            )
+        }
+
+        do {
+            try modelContext.save()
+            resetStandardWorkoutPlanSetupState()
+            showingStandardPlanSetup = false
+            WidgetDataProvider.shared.scheduleRefresh()
+            HapticManager.success()
+        } catch {
+            modelContext.rollback()
+            standardWorkoutPlanSaveError = StandardWorkoutPlanSaveError(message: error.localizedDescription)
+            HapticManager.error()
+        }
+    }
+
+    private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) {
+        for goal in WorkoutGoal.generatedGoalsToInsert(
+            goals,
+            existingGoals: activeWorkoutGoals,
+            for: plan
+        ) {
+            modelContext.insert(goal)
+        }
+    }
+
+    private func refreshExistingGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
+        WorkoutGoal.refreshGeneratedPlanAdherenceGoals(activeWorkoutGoals, for: plan)
+    }
+
+    private func resetStandardWorkoutPlanSetupState() {
+        standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+        standardGeneratedWorkoutPlan = nil
+        standardGeneratedWorkoutGoals = []
+        standardWorkoutPlanSetupBase = nil
+    }
+
     private func persistCachedGoalSuggestionSnapshot(_ suggestions: [WorkoutGoalSuggestion]) {
         let snapshot = CachedGoalSuggestionSnapshot(generatedAt: Date(), suggestions: suggestions)
         guard let data = try? JSONEncoder().encode(snapshot),
@@ -1141,7 +1322,12 @@ struct WorkoutsView: View {
             return
         }
 
-        let workout = templateService.createStartWorkout(from: template)
+        let workout = templateService.createWorkoutFromTemplate(
+            template,
+            progressionStrategy: workoutPlan?.progressionStrategy ?? .defaultStrategy,
+            modelContext: modelContext,
+            prefillStrengthExercises: true
+        )
         _ = templateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,
@@ -1162,10 +1348,22 @@ struct WorkoutsView: View {
         HapticManager.selectionChanged()
     }
 
+    private func openLiveWorkout(_ workout: LiveWorkout) {
+        if workout.isInProgress {
+            pendingTemplate = nil
+            pendingWorkout = workout
+            showingWorkoutSheet = true
+        } else {
+            showingLiveWorkoutDetail = workout
+        }
+        HapticManager.selectionChanged()
+    }
+
     private func startCustomWorkout(
         name: String = "Custom Workout",
         type: LiveWorkout.WorkoutType = .strength,
-        muscles: [LiveWorkout.MuscleGroup] = []
+        muscles: [LiveWorkout.MuscleGroup] = [],
+        focusAreas: [String] = []
     ) {
         if let activeWorkout {
             pendingWorkout = activeWorkout
@@ -1177,7 +1375,8 @@ struct WorkoutsView: View {
         let workout = templateService.createCustomWorkout(
             name: name,
             type: type,
-            muscles: muscles
+            muscles: muscles,
+            focusAreas: focusAreas
         )
         _ = templateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
@@ -1188,7 +1387,8 @@ struct WorkoutsView: View {
             relatedEntityId: workout.id,
             metadata: [
                 "type": "custom",
-                "workout_type": type.rawValue
+                "workout_type": type.rawValue,
+                "focus_areas": focusAreas.joined(separator: ",")
             ]
         )
 
@@ -1201,14 +1401,16 @@ struct WorkoutsView: View {
     private func queueCustomWorkoutStart(
         name: String,
         type: LiveWorkout.WorkoutType,
-        muscles: [LiveWorkout.MuscleGroup]
+        muscles: [LiveWorkout.MuscleGroup],
+        focusAreas: [String]
     ) {
-        let request = PendingCustomWorkoutStart(name: name, type: type, muscles: muscles)
+        let request = PendingCustomWorkoutStart(name: name, type: type, muscles: muscles, focusAreas: focusAreas)
         guard showingCustomWorkoutSetup else {
             startCustomWorkout(
                 name: request.name,
                 type: request.type,
-                muscles: request.muscles
+                muscles: request.muscles,
+                focusAreas: request.focusAreas
             )
             return
         }
@@ -1323,6 +1525,11 @@ struct WorkoutsView: View {
             try? modelContext.save()
         }
     }
+}
+
+private struct StandardWorkoutPlanSaveError: Identifiable {
+    let id = UUID()
+    let message: String
 }
 
 // MARK: - Preview

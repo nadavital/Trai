@@ -87,16 +87,16 @@ struct StatsRectangularView: View {
                         .font(.caption2)
                     Text("Workout done")
                         .font(.caption2)
-                } else if let workout = entry.data.recommendedWorkout {
+                } else if let workout = entry.data.actionableRecommendedWorkoutName {
                     Image(systemName: "figure.run")
                         .font(.caption2)
                     Text(workout)
                         .font(.caption2)
                         .lineLimit(1)
                 } else {
-                    Image(systemName: "dumbbell.fill")
+                    Image(systemName: "figure.run")
                         .font(.caption2)
-                    Text("\(entry.data.readyMuscleCount) muscles ready")
+                    Text("Ready to train")
                         .font(.caption2)
                 }
             }
@@ -124,11 +124,21 @@ struct StatsInlineWidget: Widget {
 struct StatsInlineView: View {
     let entry: TraiWidgetEntry
 
-    var body: some View {
-        let calPct = Int(entry.data.calorieProgress * 100)
-        let proPct = Int(entry.data.proteinProgress * 100)
+    private var workoutStatusText: String {
+        if entry.data.todayWorkoutCompleted {
+            return "workout done"
+        }
+        if let workout = entry.data.actionableRecommendedWorkoutName {
+            return workout
+        }
+        return "ready to train"
+    }
 
-        Text("\(calPct)% cal | \(proPct)% protein | \(entry.data.readyMuscleCount) ready")
+    var body: some View {
+        let calorieText = "\(Int(entry.data.calorieProgress * 100))% cal"
+        let proteinText = "\(Int(entry.data.proteinProgress * 100))% protein"
+
+        Text("\(calorieText) | \(proteinText) | \(workoutStatusText)")
     }
 }
 
@@ -148,6 +158,7 @@ private enum LockScreenWidgetPreviewData {
         fatGoal: 65,
         readyMuscleCount: 5,
         recommendedWorkout: "Push Day",
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 3,
         todayWorkoutCompleted: false,
         lastUpdated: Date()
@@ -164,6 +175,7 @@ private enum LockScreenWidgetPreviewData {
         fatGoal: 65,
         readyMuscleCount: 5,
         recommendedWorkout: "Push Day",
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 3,
         todayWorkoutCompleted: false,
         lastUpdated: Date()
@@ -180,6 +192,7 @@ private enum LockScreenWidgetPreviewData {
         fatGoal: 65,
         readyMuscleCount: 7,
         recommendedWorkout: nil,
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 5,
         todayWorkoutCompleted: true,
         lastUpdated: Date()

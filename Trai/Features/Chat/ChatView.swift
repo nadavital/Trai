@@ -93,10 +93,14 @@ struct ChatView: View {
     @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest: Bool = false
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) var pendingChatLaunchLabel: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingFocusedFoodEntryId) var pendingFocusedFoodEntryId: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingActionKind) var pendingChatActionKind: String = ""
     @AppStorage(TraiCoachTone.storageKey) var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
     @State var isTemporarySession = false
     @State var temporaryMessages: [ChatMessage] = []
     @State var processingMealSuggestionKeys: Set<MealSuggestionKey> = []
+    @State var focusedFoodEntryContext: AIService.FocusedFoodEntryContext?
+    @State var isPreparingFirstMessageTransition = false
 
     // Plan assessment
     @State var planAssessmentService = PlanAssessmentService()
@@ -110,6 +114,7 @@ struct ChatView: View {
 
     // Task tracking for cancellation
     @State var currentMessageTask: Task<Void, Never>?
+    @State var currentMessageRequestID: UUID?
 
     let sessionTimeoutHours: Double = 1.5
 
@@ -321,21 +326,78 @@ struct ChatView: View {
         profile?.enabledMacros ?? MacroType.defaultEnabled
     }
 
+    private var hasWorkoutContextForTargets: Bool {
+        let interval = WorkoutDayTargetContext.dayInterval()
+        return workoutContext != nil || WorkoutDayTargetContext.hasWorkout(
+            in: interval,
+            workoutSessions: recentWorkouts,
+            liveWorkouts: liveWorkouts
+        )
+    }
+
+    private var currentCalorieTarget: Int? {
+        profile?.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutContextForTargets)
+    }
+
+    private var currentProteinTarget: Int? {
+        profile?.dailyProteinGoal
+    }
+
+    private var currentCarbsTarget: Int? {
+        profile?.dailyCarbsGoal
+    }
+
+    private var currentFatTarget: Int? {
+        profile?.dailyFatGoal
+    }
+
+    private var currentFiberTarget: Int? {
+        profile?.dailyFiberGoal
+    }
+
+    private var currentSugarTarget: Int? {
+        profile?.dailySugarGoal
+    }
+
+    private var currentCalorieTargetForPlanEdit: Int {
+        currentCalorieTarget ?? 0
+    }
+
+    private var currentProteinTargetForPlanEdit: Int {
+        currentProteinTarget ?? 0
+    }
+
+    private var currentCarbsTargetForPlanEdit: Int {
+        currentCarbsTarget ?? 0
+    }
+
+    private var currentFatTargetForPlanEdit: Int {
+        currentFatTarget ?? 0
+    }
+
+    private var currentFiberTargetForPlanEdit: Int {
+        currentFiberTarget ?? 0
+    }
+
+    private var currentSugarTargetForPlanEdit: Int {
+        currentSugarTarget ?? 0
+    }
+
     private var smartStarterContext: SmartStarterContext {
         return SmartStarterContext(
             userName: profile?.name ?? "",
             todayFoodCount: smartStarterTodayFoodCount,
             todayCalories: smartStarterTodayCalories,
-            calorieGoal: profile?.dailyCalorieGoal ?? 2000,
+            calorieGoal: currentCalorieTarget,
             todayProtein: smartStarterTodayProtein,
-            proteinGoal: profile?.dailyProteinGoal ?? 150,
+            proteinGoal: currentProteinTarget,
             lastWorkoutDate: smartStarterLastWorkoutDate,
             hasActiveWorkout: workoutContext != nil,
             goalType: profile?.goal.rawValue ?? "maintenance"
         )
     }
 
-    private var hasPendingStartupActions: Bool {
+    var hasPendingStartupActions: Bool {
         pendingPlanReviewRequest
             || pendingWorkoutPlanReviewRequest
             || !pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -388,14 +450,18 @@ struct ChatView: View {
             isLoading: isLoading,
             isStreamingResponse: isStreamingResponse,
             isTemporarySession: isTemporarySession,
+            isPreparingFirstMessage: isPreparingFirstMessageTransition,
             smartStarterContext: smartStarterContext,
             currentActivity: currentActivity,
-            currentCalories: profile?.dailyCalorieGoal,
-            currentProtein: profile?.dailyProteinGoal,
-            currentCarbs: profile?.dailyCarbsGoal,
-            currentFat: profile?.dailyFatGoal,
-            currentFiber: profile?.dailyFiberGoal,
-            currentSugar: profile?.dailySugarGoal,
+            currentCalories: currentCalorieTarget,
+            currentProtein: currentProteinTarget,
+            currentCarbs: currentCarbsTarget,
+            currentFat: currentFatTarget,
+            currentFiber: currentFiberTarget,
+            currentSugar: currentSugarTarget,
+            currentNutritionPlanUpdatedAt: profile?.aiPlanGeneratedAt,
+            currentWorkoutPlanUpdatedAt: profile?.workoutPlanGeneratedAt,
+            currentWorkoutPlanTemplateIDs: profile?.workoutPlan.map { plan in Set(plan.templates.map(\.id)) },
             enabledMacros: enabledMacrosValue,
             planRecommendation: pendingPlanRecommendation,
             planRecommendationMessage: planRecommendationMessage,
@@ -438,6 +504,100 @@ struct ChatView: View {
         )
     }
 
+    private var chatNavigationStack: some View {
+        NavigationStack {
+            ChatRootView(
+                content: chatContentAnyView,
+                inputBar: chatInputBarAnyView,
+                isInputFocused: isInputFocusedBinding,
+                isLoading: isLoading,
+                messageCount: currentSessionMessages.count,
+                lastMessageId: currentSessionMessages.last?.id,
+                selectedPhotoItem: selectedPhotoItem,
+                onPhotoSelected: handleSelectedPhotoItem,
+                onAppear: {
+                    handleChatTabAppear()
+                },
+                onSessionIdChange: {
+                    rebuildSessionMessages()
+                },
+                onTemporaryChange: {
+                    rebuildSessionMessages()
+                },
+                onTemporaryMessagesChange: {
+                    rebuildSessionMessages()
+                },
+                onAllMessagesChange: {
+                    if suppressAutomaticMessageCacheRebuild {
+                        rebuildSessionMessages(preferLiveQueryData: true)
+                        return
+                    }
+                    scheduleMessageCacheRebuild()
+                },
+                currentSessionIdString: currentSessionIdString,
+                isTemporarySession: isTemporarySession,
+                temporaryMessagesCount: temporaryMessages.count,
+                allMessagesFingerprint: allMessagesWindowFingerprint,
+                chatSessions: chatSessions,
+                onToggleTemporaryMode: {
+                    toggleTemporaryMode()
+                    HapticManager.lightTap()
+                },
+                onSelectSession: switchToSession,
+                onClearHistory: clearAllChats,
+                onNewChat: { startNewSession() },
+                showingCamera: $showingCamera,
+                onCameraImage: { image in selectedImage = image },
+                enlargedImage: $enlargedImage,
+                editingMealSuggestion: $editingMealSuggestion,
+                enabledMacrosValue: enabledMacrosValue,
+                onAcceptMeal: { meal, message in acceptMealSuggestion(meal, for: message) },
+                editingPlanSuggestion: $editingPlanSuggestion,
+                currentCalories: currentCalorieTargetForPlanEdit,
+                currentProtein: currentProteinTargetForPlanEdit,
+                currentCarbs: currentCarbsTargetForPlanEdit,
+                currentFat: currentFatTargetForPlanEdit,
+                currentFiber: currentFiberTargetForPlanEdit,
+                currentSugar: currentSugarTargetForPlanEdit,
+                onAcceptPlan: { plan, message in acceptPlanSuggestion(plan, for: message) },
+                viewingFoodEntry: viewingFoodEntry,
+                viewingLoggedMealId: $viewingLoggedMealId,
+                onAskTraiAboutLoggedMeal: openLoggedMealWithTrai,
+                viewingAppliedPlan: $viewingAppliedPlan
+            )
+        }
+    }
+
+    private func openLoggedMealWithTrai(
+        prompt: String,
+        focusedContext: AIService.FocusedFoodEntryContext
+    ) {
+        let launchLabel = "Opening this meal with Trai..."
+        guard !isLoading, currentMessageTask == nil else {
+            queuePendingLoggedMealPrompt(prompt, launchLabel: launchLabel, focusedEntryId: focusedContext.entryId)
+            HapticManager.selectionChanged()
+            return
+        }
+        startNewSession(silent: true)
+        focusedFoodEntryContext = focusedContext
+        guard sendAppInitiatedPrompt(
+            prompt,
+            launchLabel: launchLabel
+        ) else {
+            queuePendingLoggedMealPrompt(prompt, launchLabel: launchLabel, focusedEntryId: focusedContext.entryId)
+            return
+        }
+        HapticManager.selectionChanged()
+    }
+
+    private func queuePendingLoggedMealPrompt(_ prompt: String, launchLabel: String, focusedEntryId: UUID) {
+        guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        pendingChatPrompt = prompt
+        pendingChatLaunchLabel = launchLabel
+        pendingFocusedFoodEntryId = focusedEntryId.uuidString
+        pendingChatActionKind = ""
+    }
+
     func mealSuggestionKey(for meal: SuggestedFoodEntry, in message: ChatMessage) -> MealSuggestionKey {
         MealSuggestionKey(messageId: message.id, mealId: meal.id)
     }
@@ -451,65 +611,7 @@ struct ChatView: View {
             if requiresAuthenticatedAccountForTraiChat {
                 AccountSetupView(context: .aiFeatures, showsDismissButton: false)
             } else if canAccessTraiChat {
-                NavigationStack {
-                    ChatRootView(
-                        content: chatContentAnyView,
-                        inputBar: chatInputBarAnyView,
-                        isInputFocused: isInputFocusedBinding,
-                        messageCount: currentSessionMessages.count,
-                        lastMessageId: currentSessionMessages.last?.id,
-                        selectedPhotoItem: selectedPhotoItem,
-                        onPhotoSelected: handleSelectedPhotoItem,
-                        onAppear: {
-                            handleChatTabAppear()
-                        },
-                        onSessionIdChange: {
-                            rebuildSessionMessages()
-                        },
-                        onTemporaryChange: {
-                            rebuildSessionMessages()
-                        },
-                        onTemporaryMessagesChange: {
-                            rebuildSessionMessages()
-                        },
-                        onAllMessagesChange: {
-                            if suppressAutomaticMessageCacheRebuild {
-                                rebuildSessionMessages(preferLiveQueryData: true)
-                                return
-                            }
-                            scheduleMessageCacheRebuild()
-                        },
-                        currentSessionIdString: currentSessionIdString,
-                        isTemporarySession: isTemporarySession,
-                        temporaryMessagesCount: temporaryMessages.count,
-                        allMessagesFingerprint: allMessagesWindowFingerprint,
-                        chatSessions: chatSessions,
-                        onToggleTemporaryMode: {
-                            toggleTemporaryMode()
-                            HapticManager.lightTap()
-                        },
-                        onSelectSession: switchToSession,
-                        onClearHistory: clearAllChats,
-                        onNewChat: { startNewSession() },
-                        showingCamera: $showingCamera,
-                        onCameraImage: { image in selectedImage = image },
-                        enlargedImage: $enlargedImage,
-                        editingMealSuggestion: $editingMealSuggestion,
-                        enabledMacrosValue: enabledMacrosValue,
-                        onAcceptMeal: { meal, message in acceptMealSuggestion(meal, for: message) },
-                        editingPlanSuggestion: $editingPlanSuggestion,
-                        currentCalories: profile?.dailyCalorieGoal ?? 2000,
-                        currentProtein: profile?.dailyProteinGoal ?? 150,
-                        currentCarbs: profile?.dailyCarbsGoal ?? 200,
-                        currentFat: profile?.dailyFatGoal ?? 65,
-                        currentFiber: profile?.dailyFiberGoal ?? 30,
-                        currentSugar: profile?.dailySugarGoal ?? 50,
-                        onAcceptPlan: { plan, message in acceptPlanSuggestion(plan, for: message) },
-                        viewingFoodEntry: viewingFoodEntry,
-                        viewingLoggedMealId: $viewingLoggedMealId,
-                        viewingAppliedPlan: $viewingAppliedPlan
-                    )
-                }
+                chatNavigationStack
             } else {
                 ProUpsellView(source: .chat, showsDismissButton: false)
             }
@@ -597,11 +699,11 @@ struct ChatView: View {
     private var chatInputBar: some View {
         VStack(spacing: 0) {
             // Show suggestion rows when chat is empty (not in incognito)
-            if currentSessionMessages.isEmpty && !isTemporarySession {
+            if currentSessionMessages.isEmpty && !isTemporarySession && !isPreparingFirstMessageTransition {
                 SuggestionRowsView(
                     context: smartStarterContext,
                     suggestionUsage: suggestionUsage,
-                    onSuggestionTapped: sendMessage,
+                    onSuggestionTapped: { _ = sendMessage($0) },
                     onTrackTap: trackSuggestionTap
                 )
                 .transition(.opacity)
@@ -611,6 +713,7 @@ struct ChatView: View {
                 selectedImage: $selectedImage,
                 selectedPhotoItem: $selectedPhotoItem,
                 isLoading: isLoading,
+                isInputDisabled: hasPendingStartupActions,
                 onSend: { text in sendMessage(text) },
                 onStop: stopGenerating,
                 onTakePhoto: { showingCamera = true },
@@ -619,6 +722,7 @@ struct ChatView: View {
             )
         }
         .animation(.easeInOut(duration: 0.25), value: isTemporarySession)
+        .animation(.easeInOut(duration: 0.18), value: isPreparingFirstMessageTransition)
     }
 
     private var chatContentAnyView: AnyView {
@@ -763,6 +867,17 @@ struct ChatView: View {
                 "temporary": isTemporarySession ? 1 : 0
             ]
         )
+    }
+
+    func appendOptimisticSessionMessages(_ messages: [ChatMessage]) {
+        guard !messages.isEmpty else { return }
+        let existingMessageIDs = Set(cachedSessionMessages.map(\.id))
+        let newMessages = messages.filter { !existingMessageIDs.contains($0.id) }
+        guard !newMessages.isEmpty else { return }
+
+        cachedSessionMessages.append(contentsOf: newMessages)
+        cachedSessionMessages.sort { $0.timestamp < $1.timestamp }
+        cachedMessagesBySession[currentSessionId] = cachedSessionMessages
     }
 
     private func recentMessagesForCurrentSession(limit: Int) -> [ChatMessage] {
@@ -985,6 +1100,7 @@ private struct ChatScrollContainer: View {
     let content: AnyView
     let inputBar: AnyView
     @Binding var isInputFocused: Bool
+    let isLoading: Bool
     let messageCount: Int
     let lastMessageId: UUID?
 
@@ -998,10 +1114,14 @@ private struct ChatScrollContainer: View {
                 isInputFocused = false
             }
             .onChange(of: messageCount) { _, _ in
-                if let lastMessageId {
-                    withAnimation {
-                        proxy.scrollTo(lastMessageId, anchor: .bottom)
-                    }
+                scrollToBottom(proxy)
+            }
+            .onChange(of: lastMessageId) { _, _ in
+                scrollToBottom(proxy)
+            }
+            .onChange(of: isLoading) { _, loading in
+                if loading {
+                    scrollToBottom(proxy)
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -1011,6 +1131,10 @@ private struct ChatScrollContainer: View {
         .background(alignment: .bottom) {
             ChatBottomFadeBackdrop()
         }
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        proxy.scrollTo(ChatContentList.bottomAnchorID, anchor: .bottom)
     }
 }
 
@@ -1039,6 +1163,7 @@ private struct ChatRootView: View {
     let content: AnyView
     let inputBar: AnyView
     @Binding var isInputFocused: Bool
+    let isLoading: Bool
     let messageCount: Int
     let lastMessageId: UUID?
     let selectedPhotoItem: PhotosPickerItem?
@@ -1073,6 +1198,7 @@ private struct ChatRootView: View {
     let onAcceptPlan: (PlanUpdateSuggestionEntry, ChatMessage) -> Void
     let viewingFoodEntry: FoodEntry?
     @Binding var viewingLoggedMealId: UUID?
+    let onAskTraiAboutLoggedMeal: (String, AIService.FocusedFoodEntryContext) -> Void
     @Binding var viewingAppliedPlan: PlanUpdateSuggestionEntry?
 
     var body: some View {
@@ -1080,6 +1206,7 @@ private struct ChatRootView: View {
             content: content,
             inputBar: inputBar,
             isInputFocused: $isInputFocused,
+            isLoading: isLoading,
             messageCount: messageCount,
             lastMessageId: lastMessageId
         )
@@ -1141,7 +1268,11 @@ private struct ChatRootView: View {
         ) { plan, message in
             onAcceptPlan(plan, message)
         }
-        .chatViewFoodEntrySheet(viewingEntry: viewingFoodEntry, viewingLoggedMealId: $viewingLoggedMealId)
+        .chatViewFoodEntrySheet(
+            viewingEntry: viewingFoodEntry,
+            viewingLoggedMealId: $viewingLoggedMealId,
+            onAskTrai: onAskTraiAboutLoggedMeal
+        )
         .sheet(item: $viewingAppliedPlan) { plan in
             PlanUpdateDetailSheet(plan: plan)
                 .traiSheetBranding()
@@ -1155,6 +1286,7 @@ private struct ChatContentSection: View {
     let isLoading: Bool
     let isStreamingResponse: Bool
     let isTemporarySession: Bool
+    let isPreparingFirstMessage: Bool
     let smartStarterContext: SmartStarterContext
     let currentActivity: String?
     let currentCalories: Int?
@@ -1163,6 +1295,9 @@ private struct ChatContentSection: View {
     let currentFat: Int?
     let currentFiber: Int?
     let currentSugar: Int?
+    let currentNutritionPlanUpdatedAt: Date?
+    let currentWorkoutPlanUpdatedAt: Date?
+    let currentWorkoutPlanTemplateIDs: Set<UUID>?
     let enabledMacros: Set<MacroType>
     let planRecommendation: PlanRecommendation?
     let planRecommendationMessage: String?
@@ -1200,6 +1335,7 @@ private struct ChatContentSection: View {
             isLoading: isLoading,
             isStreamingResponse: isStreamingResponse,
             isTemporarySession: isTemporarySession,
+            isPreparingFirstMessage: isPreparingFirstMessage,
             smartStarterContext: smartStarterContext,
             currentActivity: currentActivity,
             currentCalories: currentCalories,
@@ -1208,6 +1344,9 @@ private struct ChatContentSection: View {
             currentFat: currentFat,
             currentFiber: currentFiber,
             currentSugar: currentSugar,
+            currentNutritionPlanUpdatedAt: currentNutritionPlanUpdatedAt,
+            currentWorkoutPlanUpdatedAt: currentWorkoutPlanUpdatedAt,
+            currentWorkoutPlanTemplateIDs: currentWorkoutPlanTemplateIDs,
             enabledMacros: enabledMacros,
             planRecommendation: planRecommendation,
             planRecommendationMessage: planRecommendationMessage,

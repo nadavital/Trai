@@ -7,7 +7,7 @@ final class Exercise {
     var id: UUID = UUID()
     var name: String = ""
 
-    /// Category: "strength", "cardio", or "flexibility"
+    /// Category: "strength", "cardio", "conditioning", "mobility", "skill", "sportPractice", "recovery", "flexibility", or "custom"
     var category: String = "strength"
 
     /// Target muscle group (for strength exercises)
@@ -24,6 +24,23 @@ final class Exercise {
 
     /// Whether this is a custom exercise created by the user
     var isCustom: Bool = false
+
+    /// Comma-separated targeting tags. Strength tags usually mirror muscle groups;
+    /// other categories use intent tags like endurance, steady cardio, skill, or recovery.
+    var targetTagsRaw: String = ""
+
+    /// Comma-separated tracking fields that decide which live-workout inputs this exercise shows.
+    var trackingFieldsRaw: String = ""
+
+    /// User-facing activity type, such as "Climbing", "Cycling", or "Mobility Flow".
+    /// The broad category remains a behavioral fallback, not the identity users see.
+    var activityTypeNameRaw: String = ""
+
+    /// Comma-separated aliases Trai can use to dedupe and suggest this activity semantically.
+    var activityAliasesRaw: String = ""
+
+    /// Optional HealthKit workout activity type name for exports/import matching.
+    var healthKitActivityTypeRaw: String?
 
     var createdAt: Date = Date()
 
@@ -51,7 +68,13 @@ extension Exercise {
     enum Category: String, CaseIterable, Identifiable {
         case strength = "strength"
         case cardio = "cardio"
+        case conditioning = "conditioning"
+        case mobility = "mobility"
+        case skill = "skill"
+        case sportPractice = "sportPractice"
+        case recovery = "recovery"
         case flexibility = "flexibility"
+        case custom = "custom"
 
         var id: String { rawValue }
 
@@ -59,22 +82,482 @@ extension Exercise {
             switch self {
             case .strength: "Strength"
             case .cardio: "Cardio"
+            case .conditioning: "Conditioning"
+            case .mobility: "Mobility"
+            case .skill: "Sport"
+            case .sportPractice: "Sport"
+            case .recovery: "Recovery"
             case .flexibility: "Flexibility"
+            case .custom: "Custom"
+            }
+        }
+
+        var trackingTemplateName: String {
+            switch self {
+            case .strength:
+                return "Weighted sets"
+            case .cardio:
+                return "Timed distance"
+            case .conditioning:
+                return "Rounds"
+            case .mobility, .flexibility:
+                return "Mobility flow"
+            case .skill, .sportPractice:
+                return "Attempts"
+            case .recovery:
+                return "Recovery"
+            case .custom:
+                return "Custom metrics"
+            }
+        }
+
+        nonisolated var iconName: String {
+            switch self {
+            case .strength: "dumbbell.fill"
+            case .cardio: "figure.run"
+            case .conditioning: "bolt.heart.fill"
+            case .mobility: "figure.mind.and.body"
+            case .skill: "figure.climbing"
+            case .sportPractice: "sportscourt.fill"
+            case .recovery: "heart.text.square.fill"
+            case .flexibility: "figure.flexibility"
+            case .custom: "slider.horizontal.3"
+            }
+        }
+
+        var liveWorkoutActivityKind: WorkoutPlan.TrainingBlock.BlockKind? {
+            switch self {
+            case .strength:
+                return .strength
+            case .cardio:
+                return .cardio
+            case .conditioning:
+                return .conditioning
+            case .mobility, .flexibility:
+                return .mobility
+            case .skill:
+                return .skill
+            case .sportPractice:
+                return .sportPractice
+            case .recovery:
+                return .recovery
+            case .custom:
+                return .custom
+            }
+        }
+
+        static var userFacingCases: [Category] {
+            [.strength, .cardio, .conditioning, .mobility, .sportPractice, .recovery, .custom]
+        }
+
+        nonisolated var userFacingEquivalent: Category {
+            switch self {
+            case .skill:
+                return .sportPractice
+            case .flexibility:
+                return .mobility
+            default:
+                return self
+            }
+        }
+
+        var suggestionCategories: Set<Category> {
+            switch self {
+            case .sportPractice, .skill:
+                return [.skill, .sportPractice]
+            case .mobility, .flexibility:
+                return [.mobility, .flexibility]
+            default:
+                return [self]
+            }
+        }
+
+        nonisolated static func normalized(from rawValue: String?) -> Category? {
+            guard let rawValue else { return nil }
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let exact = Category(rawValue: trimmed) {
+                return exact
+            }
+
+            let token = rawValue
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: " ", with: "")
+
+            switch token {
+            case "strength", "lifting", "weights", "weighttraining", "resistancetraining":
+                return .strength
+            case "cardio", "endurance", "aerobic", "run", "running", "jog", "jogging", "cycle", "cycling", "bike", "biking", "row", "rowing", "swim", "swimming", "walk", "walking", "stairclimber", "elliptical", "jumprope":
+                return .cardio
+            case "conditioning", "hiit", "circuit":
+                return .conditioning
+            case "mobility", "stretching", "stretch", "yoga", "flow":
+                return .mobility
+            case "sport", "sports", "sportpractice", "practice", "climbing", "bouldering", "boxing", "basketball", "tennis", "soccer", "padel":
+                return .sportPractice
+            case "recovery", "recover", "cooldown", "easy":
+                return .recovery
+            case "flexibility":
+                return .flexibility
+            case "custom", "activity", "other":
+                return .custom
+            default:
+                let words = normalizedActivityWords(from: rawValue)
+                if activityWords(words, containAnyOf: [
+                    "run", "running", "jog", "jogging", "cycle", "cycling", "bike", "biking",
+                    "rowing", "rower", "swim", "swimming", "walk", "walking",
+                    "stair", "stairclimber", "elliptical", "jumprope"
+                ]) {
+                    return .cardio
+                }
+                if activityWords(words, containAnyOf: [
+                    "climb", "climbing", "boulder", "bouldering", "boxing", "basketball",
+                    "tennis", "soccer", "padel", "pickleball"
+                ]) {
+                    return .sportPractice
+                }
+                return nil
+            }
+        }
+
+        fileprivate nonisolated static func normalizedActivityWords(from rawValue: String) -> Set<String> {
+            let words = rawValue
+                .lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            let compact = rawValue
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: " ", with: "")
+            return Set(words + [compact])
+        }
+
+        fileprivate nonisolated static func activityWords(_ words: Set<String>, containAnyOf aliases: [String]) -> Bool {
+            aliases.contains { words.contains($0) }
+        }
+    }
+
+    var exerciseCategory: Category {
+        get { Category.normalized(from: category) ?? .custom }
+        set { category = newValue.rawValue }
+    }
+
+    enum TrackingField: String, CaseIterable, Identifiable {
+        case sets
+        case reps
+        case weight
+        case duration
+        case distance
+        case notes
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .sets: "Sets"
+            case .reps: "Reps"
+            case .weight: "Weight"
+            case .duration: "Duration"
+            case .distance: "Distance"
+            case .notes: "Notes"
             }
         }
 
         var iconName: String {
             switch self {
-            case .strength: "dumbbell.fill"
-            case .cardio: "heart.fill"
-            case .flexibility: "figure.flexibility"
+            case .sets: "number"
+            case .reps: "repeat"
+            case .weight: "scalemass.fill"
+            case .duration: "clock.fill"
+            case .distance: "map.fill"
+            case .notes: "note.text"
+            }
+        }
+
+        static var userConfigurableCases: [TrackingField] {
+            [.sets, .reps, .weight, .duration, .distance, .notes]
+        }
+
+        static let maximumPrimaryMetrics = 3
+
+        var isPrimaryMetric: Bool {
+            switch self {
+            case .sets, .reps, .weight, .duration, .distance:
+                return true
+            case .notes:
+                return false
             }
         }
     }
 
-    var exerciseCategory: Category {
-        get { Category(rawValue: category) ?? .strength }
-        set { category = newValue.rawValue }
+    var trackingFields: [TrackingField] {
+        get {
+            let fields = trackingFieldsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .compactMap(TrackingField.init(rawValue:))
+            return fields.isEmpty ? Self.defaultTrackingFields(for: exerciseCategory) : Self.normalizedTrackingFields(fields, for: exerciseCategory)
+        }
+        set {
+            trackingFieldsRaw = Self.normalizedTrackingFields(newValue, for: exerciseCategory).map(\.rawValue).joined(separator: ",")
+        }
+    }
+
+    var targetTags: [String] {
+        get {
+            let stored = targetTagsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !stored.isEmpty { return stored }
+            if let targetMuscleGroup {
+                return [targetMuscleGroup.displayName]
+            }
+            return Self.defaultTargetTags(for: exerciseCategory)
+        }
+        set {
+            targetTagsRaw = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ",")
+        }
+    }
+
+    static func defaultTrackingFields(for category: Category) -> [TrackingField] {
+        switch category {
+        case .strength:
+            return [.sets, .weight, .reps]
+        case .cardio:
+            return [.duration, .distance]
+        case .conditioning:
+            return [.duration, .reps, .notes]
+        case .mobility, .flexibility, .recovery:
+            return [.duration, .notes]
+        case .skill, .sportPractice:
+            return [.duration, .reps, .notes]
+        case .custom:
+            return [.duration, .notes]
+        }
+    }
+
+    static func trackingFieldOptions(for category: Category) -> [TrackingField] {
+        switch category {
+        case .strength:
+            return [.sets, .reps, .weight, .notes]
+        case .cardio, .conditioning, .mobility, .flexibility, .skill, .sportPractice, .recovery, .custom:
+            return TrackingField.userConfigurableCases
+        }
+    }
+
+    static func normalizedTrackingFields(_ fields: [TrackingField], for category: Category) -> [TrackingField] {
+        let fallback = defaultTrackingFields(for: category)
+        let allowed = Set(trackingFieldOptions(for: category))
+        var seen: Set<TrackingField> = []
+        let unique = fields.compactMap { field -> TrackingField? in
+            guard allowed.contains(field), seen.insert(field).inserted else { return nil }
+            return field
+        }
+
+        let source = unique.isEmpty ? fallback : unique
+        let metrics = source.filter(\.isPrimaryMetric).prefix(TrackingField.maximumPrimaryMetrics)
+        let includesNotes = source.contains(.notes)
+        let normalized = Array(metrics) + (includesNotes ? [.notes] : [])
+        return normalized.isEmpty ? fallback : normalized
+    }
+
+    static func targetOptions(for category: Category) -> [String] {
+        switch category {
+        case .strength:
+            return MuscleGroup.allCases.map(\.displayName)
+        case .cardio:
+            return ["Distance", "Speed", "Intervals", "Hills", "Easy Effort"]
+        case .conditioning:
+            return ["Power", "Intervals", "Core", "Full Body", "Explosive"]
+        case .mobility:
+            return ["Hips", "Shoulders", "Ankles", "Back", "Warm-Up"]
+        case .skill:
+            return ["Technique", "Power", "Endurance", "Balance", "Consistency"]
+        case .sportPractice:
+            return ["Technique", "Power", "Endurance", "Agility", "Consistency"]
+        case .recovery:
+            return ["Easy Movement", "Breathing", "Cooldown", "Walking", "Mobility"]
+        case .flexibility:
+            return ["Hamstrings", "Hips", "Shoulders", "Back", "Cooldown"]
+        case .custom:
+            return ["Technique", "Endurance", "Power", "Speed", "Consistency", "Control"]
+        }
+    }
+
+    static func targetOptions(
+        for category: Category,
+        activityTypeName: String?,
+        exerciseName: String?
+    ) -> [String] {
+        let defaults = targetOptions(for: category)
+        let activityOptions = activitySpecificTargetOptions(
+            category: category,
+            activityTypeName: activityTypeName,
+            exerciseName: exerciseName
+        )
+        var seen: Set<String> = []
+        return (activityOptions + defaults)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { seen.insert($0.goalNormalizedKey).inserted }
+    }
+
+    private static func activitySpecificTargetOptions(
+        category: Category,
+        activityTypeName: String?,
+        exerciseName: String?
+    ) -> [String] {
+        let text = [activityTypeName, exerciseName]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .joined(separator: " ")
+            .lowercased()
+
+        guard !text.isEmpty else { return [] }
+        let words = Category.normalizedActivityWords(from: text)
+
+        if Category.activityWords(words, containAnyOf: ["climb", "climbing", "boulder", "bouldering"]) {
+            return ["Technique", "Grip", "Power", "Endurance", "Mobility"]
+        }
+
+        if Category.activityWords(words, containAnyOf: ["padel", "tennis", "pickleball"]) {
+            return ["Footwork", "Reaction", "Agility", "Power", "Consistency"]
+        }
+
+        if Category.activityWords(words, containAnyOf: ["basketball", "soccer", "football"]) {
+            return ["Skill", "Footwork", "Agility", "Conditioning", "Consistency"]
+        }
+
+        if Category.activityWords(words, containAnyOf: ["boxing", "martial"]) {
+            return ["Technique", "Footwork", "Power", "Conditioning", "Reaction"]
+        }
+
+        if Category.activityWords(words, containAnyOf: [
+            "run", "running", "cycle", "cycling", "bike", "biking", "rowing", "rower", "swim", "swimming"
+        ]) {
+            return ["Endurance", "Intervals", "Speed", "Distance", "Easy Effort"]
+        }
+
+        if Category.activityWords(words, containAnyOf: ["yoga", "pilates", "mobility", "stretch", "stretching"]) {
+            return ["Hips", "Shoulders", "Back", "Control", "Recovery"]
+        }
+
+        switch category.userFacingEquivalent {
+        case .sportPractice:
+            return ["Technique", "Agility", "Power", "Endurance", "Consistency"]
+        case .cardio:
+            return ["Endurance", "Intervals", "Distance", "Speed", "Easy Effort"]
+        case .mobility:
+            return ["Hips", "Shoulders", "Back", "Control", "Recovery"]
+        default:
+            return []
+        }
+    }
+
+    static func defaultTargetTags(for category: Category) -> [String] {
+        []
+    }
+
+    var activityTypeName: String {
+        get {
+            let explicit = activityTypeNameRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            return explicit.isEmpty ? Self.defaultActivityTypeName(for: name, category: exerciseCategory) : explicit
+        }
+        set {
+            activityTypeNameRaw = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    var activityAliases: [String] {
+        get {
+            activityAliasesRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            activityAliasesRaw = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ",")
+        }
+    }
+
+    var activityMatchingTokens: Set<String> {
+        let values = [name, activityTypeName, exerciseCategory.rawValue, exerciseCategory.displayName, equipmentName ?? ""]
+            + targetTags
+            + activityAliases
+        return Set(values.map(Self.normalizedActivityKey).filter { !$0.isEmpty })
+    }
+
+    func matchesActivityFocus(_ focus: String) -> Bool {
+        let key = Self.normalizedActivityKey(focus)
+        guard !key.isEmpty else { return false }
+        return activityMatchingTokens.contains(key)
+    }
+
+    static func normalizedActivityKey(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+    }
+
+    static func defaultActivityTypeName(for exerciseName: String, category: Category) -> String {
+        if category == .strength {
+            return "Strength"
+        }
+        let words = Category.normalizedActivityWords(from: exerciseName)
+        if Category.activityWords(words, containAnyOf: ["boulder", "bouldering", "climb", "climbing"]) {
+            return "Climbing"
+        }
+        if Category.activityWords(words, containAnyOf: ["run", "running", "jog", "jogging"]) {
+            return "Running"
+        }
+        if Category.activityWords(words, containAnyOf: ["cycle", "cycling", "bike", "biking"]) {
+            return "Cycling"
+        }
+        if Category.activityWords(words, containAnyOf: ["rowing", "rower"]) {
+            return "Rowing"
+        }
+        if Category.activityWords(words, containAnyOf: ["swim", "swimming"]) {
+            return "Swimming"
+        }
+        if Category.activityWords(words, containAnyOf: ["yoga"]) {
+            return "Yoga"
+        }
+        if Category.activityWords(words, containAnyOf: ["walk", "walking"]) {
+            return "Walking"
+        }
+        if Category.activityWords(words, containAnyOf: ["padel"]) {
+            return "Padel"
+        }
+        if Category.activityWords(words, containAnyOf: ["pickleball"]) {
+            return "Pickleball"
+        }
+        if Category.activityWords(words, containAnyOf: ["tennis"]) {
+            return "Tennis"
+        }
+        if Category.activityWords(words, containAnyOf: ["boxing"]) {
+            return "Boxing"
+        }
+        if Category.activityWords(words, containAnyOf: ["basketball"]) {
+            return "Basketball"
+        }
+        if Category.activityWords(words, containAnyOf: ["soccer", "football"]) {
+            return "Soccer"
+        }
+        let trimmedName = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedName.isEmpty ? category.displayName : trimmedName
     }
 }
 
@@ -165,7 +648,7 @@ extension Exercise {
         ("Bent Over Row", "strength", "back", "Barbell"),
         ("Lat Pulldown", "strength", "back", "Lat Pulldown Machine"),
         ("Pull-Ups", "strength", "back", "Pull-Up Bar"),
-        ("Rowing Machine", "strength", "back", "Cable Row Machine"),
+        ("Seated Cable Row", "strength", "back", "Cable Row Machine"),
 
         // Shoulders
         ("Overhead Press", "strength", "shoulders", "Barbell / Dumbbells"),
@@ -193,10 +676,36 @@ extension Exercise {
         // Cardio
         ("Running", "cardio", nil, "Treadmill / Outdoor"),
         ("Cycling", "cardio", nil, "Stationary Bike / Outdoor"),
+        ("Walking", "cardio", nil, "Treadmill / Outdoor"),
+        ("Incline Walk", "cardio", nil, "Treadmill"),
         ("Swimming", "cardio", nil, "Pool"),
         ("Rowing", "cardio", nil, "Rowing Machine"),
+        ("Elliptical", "cardio", nil, "Elliptical"),
+        ("Stair Climber", "cardio", nil, "Stair Climber"),
         ("Jump Rope", "cardio", nil, "Jump Rope"),
-        ("HIIT", "cardio", nil, "Various"),
+        ("Steady Cardio", "cardio", nil, "Treadmill / Bike / Outdoor"),
+
+        // Conditioning
+        ("Intervals", "conditioning", nil, "Treadmill / Bike / Rower"),
+        ("Sled Push", "conditioning", nil, "Sled"),
+        ("Battle Ropes", "conditioning", nil, "Battle Ropes"),
+        ("Kettlebell Swings", "conditioning", nil, "Kettlebell"),
+        ("Circuit Training", "conditioning", nil, "Various"),
+
+        // Skill / sport practice
+        ("Bouldering", "sportPractice", nil, "Climbing Wall"),
+        ("Top Rope Climbing", "sportPractice", nil, "Climbing Wall"),
+        ("Padel Drills", "sportPractice", nil, "Padel Court"),
+        ("Tennis Drills", "sportPractice", nil, "Tennis Court"),
+        ("Basketball Shooting", "sportPractice", nil, "Basketball Court"),
+        ("Boxing Rounds", "sportPractice", nil, "Gloves / Bag"),
+
+        // Mobility / recovery
+        ("Hip Mobility Flow", "mobility", nil, "Mat / Bodyweight"),
+        ("Shoulder Mobility Flow", "mobility", nil, "Band / Bodyweight"),
+        ("Ankle Mobility", "mobility", nil, "Bodyweight"),
+        ("Breathwork", "recovery", nil, "Mat"),
+        ("Easy Recovery Walk", "recovery", nil, "Outdoor / Treadmill"),
 
         // Flexibility
         ("Yoga", "flexibility", nil, "Yoga Mat"),

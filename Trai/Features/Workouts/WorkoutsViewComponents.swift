@@ -136,6 +136,13 @@ private struct FeaturedStartWorkoutCard: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
+
+                    if !template.primaryBlockSummary.isEmpty {
+                        Text(template.primaryBlockSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer(minLength: 0)
@@ -164,13 +171,13 @@ private struct MoreSessionsCard: View {
                         Button("Edit", systemImage: "pencil", action: onEditPlan)
                             .buttonStyle(.traiTertiary(size: .compact, height: 28))
                     }
-                    Button("Custom", systemImage: "plus", action: onStartCustomWorkout)
-                        .buttonStyle(.traiTertiary(size: .compact, height: 28))
                 }
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
+                    CustomSessionCard(onTap: onStartCustomWorkout)
+
                     ForEach(templates) { template in
                         SessionCard(
                             name: template.name,
@@ -203,33 +210,67 @@ private struct SessionCard: View {
     let onTap: () -> Void
 
     var body: some View {
+        let indicatorColor = recoveryColor ?? accentColor
+
         Button(action: onTap) {
             HStack(spacing: 10) {
                 Image(systemName: icon)
                     .font(.caption.bold())
-                    .foregroundStyle(accentColor)
+                    .foregroundStyle(indicatorColor)
                     .frame(width: 30, height: 30)
-                    .background(accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+                    .background(indicatorColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
 
                 Text(name)
                     .font(.traiLabel(13))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
 
                 Spacer(minLength: 0)
-
-                if let recoveryColor {
-                    Circle()
-                        .fill(recoveryColor)
-                        .frame(width: 7, height: 7)
-                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .frame(width: 158)
-            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+            .frame(width: 128, height: 62)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.tertiarySystemFill))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(indicatorColor.opacity(recoveryColor == nil ? 0 : 0.06))
+                    )
+            )
         }
         .buttonStyle(TraiPressStyle())
+    }
+}
+
+private struct CustomSessionCard: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.accent)
+                    .frame(width: 28, height: 28)
+                    .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+
+                Text("Custom")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 62, height: 62)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(
+                        Color.secondary.opacity(0.45),
+                        style: StrokeStyle(lineWidth: 1, dash: [4, 4])
+                    )
+            )
+        }
+        .buttonStyle(TraiPressStyle())
+        .accessibilityLabel("Start custom workout")
     }
 }
 
@@ -249,7 +290,7 @@ private struct StartWorkoutCreatePlanCard: View {
                         .font(.traiHeadline(16))
                         .foregroundStyle(.primary)
 
-                    Text("Let Trai build sessions around your goals and preferred workout styles.")
+                    Text("Set up a week you can start now, then unlock Trai Pro when you want coaching and adjustments over time.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)

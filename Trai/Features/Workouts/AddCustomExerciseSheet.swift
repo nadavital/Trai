@@ -2,25 +2,35 @@
 //  AddCustomExerciseSheet.swift
 //  Trai
 //
-//  Sheet for adding custom exercises with AI analysis
+//  Sheet for adding custom exercises and activities with AI analysis
 //
 
 import SwiftUI
+import SwiftData
 
-// MARK: - Add Custom Exercise Sheet
+// MARK: - Add Custom Exercise or Activity Sheet
 
 struct AddCustomExerciseSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
 
     let initialName: String
-    let onSave: (String, Exercise.MuscleGroup?, Exercise.Category, [String]?) -> Void
+    let onSave: (String, String, [String], Exercise.MuscleGroup?, Exercise.Category, [String]?, [String], [Exercise.TrackingField]) -> Void
 
     @State private var exerciseName: String = ""
+    @State private var activityTypeName: String = ""
+    @State private var lastAutoActivityTypeName: String = ""
     @State private var selectedCategory: Exercise.Category = .strength
-    @State private var selectedMuscleGroup: Exercise.MuscleGroup?
+    @State private var selectedTargets: Set<String> = []
+    @State private var selectedTrackingFields: Set<Exercise.TrackingField> = Set(Exercise.defaultTrackingFields(for: .strength))
+    @State private var customTargetText = ""
+    @State private var savedActivityGroups: [String] = []
+    @State private var isAddingActivityGroup = false
+    @State private var newActivityGroupText = ""
+    @State private var didCustomizeTrackingFields = false
 
     // AI Analysis state
     @State private var aiService = AIService()
@@ -28,6 +38,9 @@ struct AddCustomExerciseSheet: View {
     @State private var analysisResult: ExerciseAnalysis?
     @State private var hasAnalyzed = false
     @State private var presentedAccountSetupContext: AccountSetupContext?
+    @State private var isCategoryExpanded = false
+    @State private var isTargetsExpanded = false
+    @State private var isTrackingExpanded = false
 
     @FocusState private var isNameFocused: Bool
 
@@ -43,25 +56,23 @@ struct AddCustomExerciseSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
-                    nameInputCard
+                    exerciseSetupCard
                         .traiCard(cornerRadius: 16)
 
-                    aiAnalysisCard
+                    trackingDisclosure
                         .traiCard(cornerRadius: 16)
 
-                    categorySelector
+                    targetDisclosure
                         .traiCard(cornerRadius: 16)
 
-                    if selectedCategory == .strength {
-                        muscleGroupSelector
-                            .traiCard(cornerRadius: 16)
-                    }
+                    detailsDisclosure
+                        .traiCard(cornerRadius: 16)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
             }
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle("New Exercise")
+            .navigationTitle("New Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -72,8 +83,18 @@ struct AddCustomExerciseSheet: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add", systemImage: "checkmark") {
-                        onSave(exerciseName, selectedMuscleGroup, selectedCategory, analysisResult?.secondaryMuscles)
+                        onSave(
+                            exerciseName,
+                            resolvedActivityTypeName,
+                            resolvedActivityAliases,
+                            primaryMuscleGroup,
+                            resolvedExerciseCategory,
+                            secondaryMuscleGroups,
+                            Array(selectedTargets).sorted(),
+                            orderedSelectedTrackingFields
+                        )
                         HapticManager.success()
+                        dismiss()
                     }
                     .labelStyle(.iconOnly)
                     .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -81,6 +102,11 @@ struct AddCustomExerciseSheet: View {
             }
             .onAppear {
                 exerciseName = initialName
+                loadSavedActivityGroups()
+                if let inferredCategory = Exercise.Category.normalized(from: initialName) {
+                    selectedCategory = inferredCategory.userFacingEquivalent
+                }
+                resetDefaultsForSelectedCategory()
                 if canAccessExerciseAI
                     && !requiresAuthenticatedAccountForExerciseAI
                     && !initialName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -100,11 +126,11 @@ struct AddCustomExerciseSheet: View {
 
     // MARK: - Name Input Card
 
-    private var nameInputCard: some View {
+    private var exerciseSetupCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Exercise Name", icon: "figure.strengthtraining.traditional")
+            sectionHeader("Exercise or Activity", icon: "figure.run")
 
-            TextField("e.g. Incline DB Press", text: $exerciseName)
+            TextField("e.g. Incline DB Press, Rowing, Bouldering", text: $exerciseName)
                 .textInputAutocapitalization(.words)
                 .font(.traiHeadline(18))
                 .padding(12)
@@ -115,7 +141,84 @@ struct AddCustomExerciseSheet: View {
                         hasAnalyzed = false
                         analysisResult = nil
                     }
+                    inferTrackingTemplateIfNeeded()
+                    if shouldReplaceDefaultActivityName {
+                        applyDefaultActivityTypeName()
+                    }
                 }
+
+            if !canAccessExerciseAI {
+                lockedExerciseAnalysisCard
+            } else {
+                aiAnalysisCard
+            }
+        }
+    }
+
+    private var activityGroupPickerContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Activity Group")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        isAddingActivityGroup.toggle()
+                        if !isAddingActivityGroup {
+                            newActivityGroupText = ""
+                        }
+                    }
+                    HapticManager.selectionChanged()
+                } label: {
+                    Label("New", systemImage: "plus")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderless)
+                .tint(.accentColor)
+            }
+
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(activityGroupOptions, id: \.self) { group in
+                        TargetButton(
+                            title: group,
+                            icon: group == resolvedActivityTypeName ? "checkmark" : nil,
+                            isSelected: group.goalNormalizedKey == resolvedActivityTypeName.goalNormalizedKey
+                        ) {
+                            selectActivityGroup(group)
+                        }
+                    }
+                }
+                .padding(.vertical, 1)
+            }
+            .scrollIndicators(.hidden)
+
+            if isAddingActivityGroup {
+                HStack(spacing: 8) {
+                    TextField("New activity group", text: $newActivityGroupText)
+                        .textInputAutocapitalization(.words)
+                        .font(.traiLabel(14))
+                        .padding(.horizontal, 12)
+                        .frame(height: 38)
+                        .background(Color(.tertiarySystemBackground), in: Capsule())
+                        .onSubmit(commitNewActivityGroup)
+
+                    Button {
+                        commitNewActivityGroup()
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .font(.traiLabel(13).weight(.semibold))
+                            .frame(width: 38, height: 38)
+                            .background(Color.accentColor.opacity(0.16), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(newActivityGroupText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
     }
 
@@ -123,19 +226,10 @@ struct AddCustomExerciseSheet: View {
 
     private var aiAnalysisCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if !canAccessExerciseAI {
-                ProUpsellInlineCard(
-                    source: .exerciseAnalysis,
-                    actionTitle: "Unlock Trai Pro"
-                ) {
-                    proUpsellCoordinator?.present(source: .exerciseAnalysis)
-                }
-            } else if isAnalyzing {
-                sectionHeader("Trai Analysis", icon: "circle.hexagongrid.circle")
-
+            if isAnalyzing {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Analyzing exercise...")
+                    Text("Analyzing item...")
                         .font(.traiHeadline(15))
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -143,8 +237,6 @@ struct AddCustomExerciseSheet: View {
                 .padding(12)
                 .background(TraiColors.brandAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
             } else if let analysis = analysisResult {
-                sectionHeader("Trai Analysis", icon: "circle.hexagongrid.circle")
-
                 VStack(alignment: .leading, spacing: 10) {
                     Text(analysis.description)
                         .font(.traiHeadline(15))
@@ -169,8 +261,6 @@ struct AddCustomExerciseSheet: View {
                 .padding(12)
                 .background(TraiColors.brandAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
             } else {
-                sectionHeader("Trai Analysis", icon: "circle.hexagongrid.circle")
-
                 Button {
                     Task { await analyzeExercise() }
                 } label: {
@@ -183,54 +273,189 @@ struct AddCustomExerciseSheet: View {
         }
     }
 
-    // MARK: - Category Selector
-
-    private var categorySelector: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Category", icon: "square.grid.2x2")
-
-            HStack(spacing: 8) {
-                ForEach(Exercise.Category.allCases) { category in
-                    CategoryButton(
-                        category: category,
-                        isSelected: selectedCategory == category
-                    ) {
-                        withAnimation(.snappy(duration: 0.2)) {
-                            selectedCategory = category
-                            HapticManager.selectionChanged()
-                        }
-                    }
-                }
-            }
+    private var lockedExerciseAnalysisCard: some View {
+        ProUpsellInlineCard(
+            source: .exerciseAnalysis,
+            title: "Let Trai set it up",
+            message: "Identify the movement or activity, choose targets, and pick the right tracking fields automatically.",
+            systemImage: "circle.hexagongrid.circle.fill",
+            actionTitle: "Unlock Trai Pro",
+            usesIconContainer: false
+        ) {
+            proUpsellCoordinator?.present(source: .exerciseAnalysis)
         }
     }
 
-    // MARK: - Muscle Group Selector
+    // MARK: - Category Selector
 
-    private var muscleGroupSelector: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Target Muscle", icon: "figure.strengthtraining.traditional")
+    // MARK: - Target Selector
 
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 10) {
-                ForEach(Exercise.MuscleGroup.allCases) { muscle in
-                    MuscleButton(
-                        muscle: muscle,
-                        isSelected: selectedMuscleGroup == muscle
+    private var targetPickerContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            FlowLayout(spacing: 8) {
+                ForEach(visibleTargetOptions, id: \.self) { target in
+                    TargetButton(
+                        title: target,
+                        isSelected: selectedTargets.contains(target)
                     ) {
                         withAnimation(.snappy(duration: 0.2)) {
-                            if selectedMuscleGroup == muscle {
-                                selectedMuscleGroup = nil
+                            if selectedTargets.contains(target) {
+                                selectedTargets.remove(target)
                             } else {
-                                selectedMuscleGroup = muscle
+                                selectedTargets.insert(target)
                             }
                             HapticManager.selectionChanged()
                         }
                     }
                 }
+            }
+
+            HStack(spacing: 8) {
+                TextField("Add a target", text: $customTargetText)
+                    .textInputAutocapitalization(.words)
+                    .font(.traiLabel(14))
+                    .padding(.horizontal, 12)
+                    .frame(height: 38)
+                    .background(Color(.tertiarySystemBackground), in: Capsule())
+
+                Button {
+                    addCustomTarget()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.traiLabel(13).weight(.semibold))
+                        .frame(width: 38, height: 38)
+                        .background(Color.accentColor.opacity(0.16), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(customTargetText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+    }
+
+    private var trackingFieldPickerContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            FlowLayout(spacing: 8) {
+                ForEach(TrackingPreset.all) { preset in
+                    TrackingPresetButton(
+                        preset: preset,
+                        isSelected: isTrackingPresetSelected(preset)
+                    ) {
+                        applyTrackingPreset(preset)
+                    }
+                }
+            }
+
+            selectedTrackingPresetSummary
+        }
+    }
+
+    private var targetDisclosure: some View {
+        collapsibleManualSection(
+            isExpanded: $isTargetsExpanded,
+            title: "Targets",
+            icon: resolvedExerciseCategory.iconName,
+            summary: selectedTargets.isEmpty ? "None selected" : selectedTargets.sorted().prefix(3).joined(separator: ", ")
+        ) {
+            targetPickerContent
+        }
+    }
+
+    private var trackingDisclosure: some View {
+        collapsibleManualSection(
+            isExpanded: $isTrackingExpanded,
+            title: "Track",
+            icon: "slider.horizontal.3",
+            summary: orderedSelectedTrackingFields.map(trackingFieldTitle).joined(separator: ", ")
+        ) {
+            trackingFieldPickerContent
+        }
+    }
+
+    private var detailsDisclosure: some View {
+        collapsibleManualSection(
+            isExpanded: $isCategoryExpanded,
+            title: "Details",
+            icon: resolvedExerciseCategory.iconName,
+            summary: resolvedActivityTypeName
+        ) {
+            activityGroupPickerContent
+        }
+    }
+
+    private var selectedTrackingPresetSummary: some View {
+        let preset = selectedTrackingPreset
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: preset.icon)
+                .font(.traiLabel(13).weight(.semibold))
+                .foregroundStyle(.accent)
+                .frame(width: 28, height: 28)
+                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(preset.title)
+                    .font(.traiLabel(13).weight(.semibold))
+
+                FlowLayout(spacing: 6) {
+                    ForEach(preset.fieldLabels, id: \.self) { label in
+                        Text(label)
+                            .font(.traiLabel(11).weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .frame(height: 24)
+                            .background(Color(.tertiarySystemFill), in: Capsule())
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func collapsibleManualSection<Content: View>(
+        isExpanded: Binding<Bool>,
+        title: String,
+        icon: String,
+        summary: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.snappy(duration: 0.2)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: icon)
+                        .font(.subheadline)
+                        .foregroundStyle(.accent)
+                        .frame(width: 28, height: 28)
+                        .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.traiHeadline())
+                            .foregroundStyle(.primary)
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: isExpanded.wrappedValue ? "chevron.up" : "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                content()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -264,82 +489,490 @@ struct AddCustomExerciseSheet: View {
             hasAnalyzed = true
 
             withAnimation(.snappy(duration: 0.2)) {
-                if let category = Exercise.Category(rawValue: analysis.category) {
-                    selectedCategory = category
+                if let category = Exercise.Category.normalized(from: analysis.category) {
+                    selectedCategory = category.userFacingEquivalent
+                    resetDefaultsForSelectedCategory()
+                }
+
+                if let analyzedActivityType = analysis.activityTypeName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !analyzedActivityType.isEmpty {
+                    selectActivityGroup(analyzedActivityType, shouldHaptic: false)
+                    lastAutoActivityTypeName = ""
+                } else {
+                    applyDefaultActivityTypeName()
+                }
+
+                if let targetTags = analysis.targetTags, !targetTags.isEmpty {
+                    selectedTargets = Set(targetTags.map(Self.displayTargetTag))
+                }
+
+                if let fields = analysis.trackingFields?
+                    .compactMap(Exercise.TrackingField.init(rawValue:)),
+                   !fields.isEmpty {
+                    let preset = TrackingPreset.bestFit(category: selectedCategory, requestedFields: fields)
+                    selectedCategory = preset.category
+                    selectedTrackingFields = Set(preset.fields)
                 }
 
                 if let muscleGroupStr = analysis.muscleGroup,
                    let muscleGroup = Exercise.MuscleGroup(rawValue: muscleGroupStr) {
-                    selectedMuscleGroup = muscleGroup
+                    selectedTargets.insert(muscleGroup.displayName)
                 }
             }
         } catch {
             print("Exercise analysis failed: \(error)")
         }
     }
+
+    private var primaryMuscleGroup: Exercise.MuscleGroup? {
+        selectedMuscleTargets.first
+    }
+
+    private var secondaryMuscleGroups: [String]? {
+        guard resolvedExerciseCategory == .strength else { return nil }
+        let secondary = selectedMuscleTargets.dropFirst().map(\.rawValue)
+        if !secondary.isEmpty {
+            return Array(secondary)
+        }
+
+        let rawAnalyzed = analysisResult?.secondaryMuscles?
+            .compactMap(Self.normalizedMuscleGroupRawValue) ?? []
+        let analyzed = Self.dedupedNormalizedValues(rawAnalyzed)
+        return analyzed.isEmpty ? nil : analyzed
+    }
+
+    private var selectedMuscleTargets: [Exercise.MuscleGroup] {
+        selectedTargets
+            .compactMap { target in
+                Exercise.MuscleGroup.allCases.first { $0.displayName == target || $0.rawValue == target }
+            }
+            .sorted { $0.displayName < $1.displayName }
+    }
+
+    private var orderedSelectedTrackingFields: [Exercise.TrackingField] {
+        let selected = Exercise.trackingFieldOptions(for: resolvedExerciseCategory).filter { selectedTrackingFields.contains($0) }
+        return Exercise.normalizedTrackingFields(selected, for: resolvedExerciseCategory)
+    }
+
+    private var resolvedActivityTypeName: String {
+        let explicit = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard explicit.isEmpty else { return explicit }
+        return Exercise.defaultActivityTypeName(for: exerciseName, category: resolvedExerciseCategory)
+    }
+
+    private var resolvedActivityAliases: [String] {
+        analysisResult?.activityAliases?
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+    }
+
+    private var visibleTargetOptions: [String] {
+        let defaults = Exercise.targetOptions(
+            for: resolvedExerciseCategory,
+            activityTypeName: resolvedActivityTypeName,
+            exerciseName: exerciseName
+        )
+        let extra = selectedTargets
+            .filter { !defaults.contains($0) }
+            .sorted()
+        return defaults + extra
+    }
+
+    private var activityGroupOptions: [String] {
+        let defaults = defaultActivityGroupOptions
+        let selected = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Self.dedupedNormalizedValues(savedActivityGroups + defaults + [selected])
+    }
+
+    private var defaultActivityGroupOptions: [String] {
+        let category = resolvedExerciseCategory.userFacingEquivalent
+        var options = [
+            Exercise.defaultActivityTypeName(for: exerciseName, category: resolvedExerciseCategory),
+            category.displayName
+        ]
+
+        switch category {
+        case .strength:
+            options += ["Strength Training", "Accessory Work"]
+        case .cardio:
+            options += ["Running", "Cycling", "Rowing", "Swimming"]
+        case .mobility, .flexibility:
+            options += ["Mobility Flow", "Stretching", "Yoga"]
+        case .recovery:
+            options += ["Recovery", "Breathwork", "Sauna"]
+        case .conditioning:
+            options += ["Conditioning", "Circuit Training", "HIIT"]
+        case .skill:
+            options += ["Skill Practice", "Technique Work"]
+        case .sportPractice:
+            options += ["Basketball", "Tennis", "Pickleball", "Climbing"]
+        case .custom:
+            options += ["Custom Activity"]
+        }
+
+        return options
+    }
+
+    private var resolvedExerciseCategory: Exercise.Category {
+        return selectedCategory.userFacingEquivalent
+    }
+
+    private var selectedTrackingPreset: TrackingPreset {
+        TrackingPreset.bestFit(
+            category: resolvedExerciseCategory,
+            requestedFields: orderedSelectedTrackingFields
+        )
+    }
+
+    private func resetDefaultsForSelectedCategory() {
+        let defaults = Exercise.defaultTargetTags(for: selectedCategory)
+        selectedTargets = Set(defaults)
+        selectedTrackingFields = Set(Exercise.defaultTrackingFields(for: selectedCategory))
+        if shouldReplaceDefaultActivityName {
+            applyDefaultActivityTypeName()
+        }
+    }
+
+    private var shouldReplaceDefaultActivityName: Bool {
+        let trimmed = activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lastAuto = lastAutoActivityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty
+            || (!lastAuto.isEmpty && trimmed.goalNormalizedKey == lastAuto.goalNormalizedKey)
+            || trimmed == Exercise.defaultActivityTypeName(for: exerciseName, category: .strength)
+            || Exercise.Category.userFacingCases.contains { category in
+                trimmed == category.displayName || trimmed == category.trackingTemplateName
+            }
+    }
+
+    private func applyDefaultActivityTypeName() {
+        let value = Exercise.defaultActivityTypeName(for: exerciseName, category: selectedCategory)
+        activityTypeName = value
+        lastAutoActivityTypeName = value
+    }
+
+    private func loadSavedActivityGroups() {
+        let descriptor = FetchDescriptor<Exercise>(sortBy: [SortDescriptor(\.name)])
+        let exercises = (try? modelContext.fetch(descriptor)) ?? []
+        savedActivityGroups = Self.dedupedNormalizedValues(exercises.map(\.activityTypeName))
+    }
+
+    private func selectActivityGroup(_ value: String, shouldHaptic: Bool = true) {
+        let group = Self.displayTargetTag(value)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !group.isEmpty else { return }
+        withAnimation(.snappy(duration: 0.2)) {
+            activityTypeName = group
+            if !savedActivityGroups.contains(where: { $0.goalNormalizedKey == group.goalNormalizedKey }) {
+                savedActivityGroups = Self.dedupedNormalizedValues(savedActivityGroups + [group])
+            }
+            isAddingActivityGroup = false
+            newActivityGroupText = ""
+        }
+        inferTrackingTemplateIfNeeded()
+        if shouldHaptic {
+            HapticManager.selectionChanged()
+        }
+    }
+
+    private func commitNewActivityGroup() {
+        let group = newActivityGroupText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !group.isEmpty else { return }
+        selectActivityGroup(group)
+    }
+
+    private func inferTrackingTemplateIfNeeded() {
+        guard !didCustomizeTrackingFields else { return }
+        let inferredCategory = [activityTypeName, exerciseName]
+            .compactMap(Exercise.Category.normalized(from:))
+            .first?
+            .userFacingEquivalent
+        guard let inferredCategory,
+            inferredCategory != selectedCategory else {
+            return
+        }
+        selectedCategory = inferredCategory
+        resetDefaultsForSelectedCategory()
+    }
+
+    private func addCustomTarget() {
+        let target = Self.displayTargetTag(customTargetText)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !target.isEmpty else { return }
+        withAnimation(.snappy(duration: 0.2)) {
+            selectedTargets.insert(target)
+            customTargetText = ""
+        }
+        HapticManager.selectionChanged()
+    }
+
+    private func applyTrackingPreset(_ preset: TrackingPreset) {
+        withAnimation(.snappy(duration: 0.2)) {
+            selectedCategory = preset.category
+            selectedTrackingFields = Set(preset.fields)
+            didCustomizeTrackingFields = true
+            if shouldReplaceDefaultActivityName {
+                applyDefaultActivityTypeName()
+            }
+        }
+        HapticManager.selectionChanged()
+    }
+
+    private func isTrackingPresetSelected(_ preset: TrackingPreset) -> Bool {
+        resolvedExerciseCategory == preset.category
+            && Set(orderedSelectedTrackingFields) == Set(preset.fields)
+    }
+
+    private func trackingFieldTitle(_ field: Exercise.TrackingField) -> String {
+        if field == .sets, resolvedExerciseCategory != .strength {
+            return "Segments"
+        }
+        guard field == .reps else { return field.displayName }
+        switch resolvedExerciseCategory {
+        case .cardio, .mobility, .flexibility, .recovery:
+            return "Reps"
+        case .conditioning:
+            return "Rounds"
+        case .skill, .sportPractice:
+            return "Attempts"
+        case .custom:
+            return "Reps"
+        default:
+            return field.displayName
+        }
+    }
+
+    nonisolated private static func displayTargetTag(_ tag: String) -> String {
+        tag
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .split(separator: " ")
+            .map { word in
+                word.prefix(1).uppercased() + word.dropFirst()
+            }
+            .joined(separator: " ")
+    }
+
+    nonisolated private static func normalizedMuscleGroupRawValue(_ value: String) -> String? {
+        let normalized = Exercise.normalizedActivityKey(value)
+        return Exercise.MuscleGroup.allCases.first { muscle in
+            Exercise.normalizedActivityKey(muscle.rawValue) == normalized
+                || Exercise.normalizedActivityKey(displayName(for: muscle)) == normalized
+        }?.rawValue
+    }
+
+    nonisolated private static func displayName(for muscle: Exercise.MuscleGroup) -> String {
+        switch muscle {
+        case .chest: "Chest"
+        case .back: "Back"
+        case .shoulders: "Shoulders"
+        case .biceps: "Biceps"
+        case .triceps: "Triceps"
+        case .legs: "Legs"
+        case .core: "Core"
+        case .fullBody: "Full Body"
+        }
+    }
+
+    nonisolated private static func dedupedNormalizedValues(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = Exercise.normalizedActivityKey(trimmed)
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
+    }
 }
 
-// MARK: - Category Button
+// MARK: - Tracking Preset
 
-private struct CategoryButton: View {
+private struct TrackingPreset: Identifiable {
+    let id: String
+    let title: String
+    let icon: String
     let category: Exercise.Category
+    let fields: [Exercise.TrackingField]
+
+    var fieldLabels: [String] {
+        fields
+            .map { field in
+                switch (category.userFacingEquivalent, field) {
+                case (.conditioning, .reps):
+                    return "Rounds"
+                case (.sportPractice, .reps), (.skill, .reps):
+                    return "Attempts"
+                default:
+                    return field.displayName
+                }
+            }
+    }
+
+    static let all: [TrackingPreset] = [
+        TrackingPreset(
+            id: "weighted_sets",
+            title: "Weighted Sets",
+            icon: "dumbbell.fill",
+            category: .strength,
+            fields: [.sets, .reps, .weight]
+        ),
+        TrackingPreset(
+            id: "timed_distance",
+            title: "Timed Distance",
+            icon: "figure.run",
+            category: .cardio,
+            fields: [.duration, .distance]
+        ),
+        TrackingPreset(
+            id: "rounds",
+            title: "Rounds",
+            icon: "bolt.heart.fill",
+            category: .conditioning,
+            fields: [.reps, .duration, .notes]
+        ),
+        TrackingPreset(
+            id: "attempts",
+            title: "Attempts",
+            icon: "sportscourt.fill",
+            category: .sportPractice,
+            fields: [.reps, .duration, .notes]
+        ),
+        TrackingPreset(
+            id: "duration_notes",
+            title: "Duration + Notes",
+            icon: "figure.mind.and.body",
+            category: .mobility,
+            fields: [.duration, .notes]
+        ),
+        TrackingPreset(
+            id: "notes_only",
+            title: "Notes Only",
+            icon: "note.text",
+            category: .custom,
+            fields: [.notes]
+        )
+    ]
+
+    static func bestFit(
+        category: Exercise.Category,
+        requestedFields: [Exercise.TrackingField]
+    ) -> TrackingPreset {
+        let category = category.userFacingEquivalent
+        let requested = Set(requestedFields)
+
+        if let exact = all.first(where: {
+            $0.category.userFacingEquivalent == category && Set($0.fields) == requested
+        }) {
+            return exact
+        }
+
+        if requested.contains(.sets) || requested.contains(.weight) {
+            return all[0]
+        }
+
+        if requested.contains(.distance) {
+            return all[1]
+        }
+
+        if requested.contains(.reps), requested.contains(.duration) {
+            return category == .sportPractice ? all[3] : all[2]
+        }
+
+        if requested == Set([.notes]) {
+            return all[5]
+        }
+
+        if requested.contains(.duration) {
+            return all[4]
+        }
+
+        switch category {
+        case .strength:
+            return all[0]
+        case .cardio:
+            return all[1]
+        case .conditioning:
+            return all[2]
+        case .sportPractice:
+            return all[3]
+        case .mobility, .recovery:
+            return all[4]
+        case .custom:
+            return all[5]
+        case .skill, .flexibility:
+            return all[3]
+        }
+    }
+}
+
+private struct TrackingPresetButton: View {
+    let preset: TrackingPreset
     let isSelected: Bool
     let action: () -> Void
 
     var body: some View {
-        if isSelected {
-            Button(action: action) {
-                label
-            }
-            .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.18))
-        } else {
-            Button(action: action) {
-                label
-            }
-            .buttonStyle(.traiTertiary(color: .secondary, fullWidth: true))
-        }
-    }
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: preset.icon)
+                    .font(.traiLabel(12).weight(.semibold))
+                    .frame(width: 18)
 
-    private var label: some View {
-        VStack(spacing: 6) {
-            Image(systemName: category.iconName)
-                .font(.traiHeadline(18))
-            Text(category.displayName)
-                .font(.traiLabel(12))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(preset.title)
+                        .font(.traiLabel(12).weight(.semibold))
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 38)
+            .frame(maxWidth: 190, alignment: .leading)
+            .background(
+                isSelected ? Color.accentColor.opacity(0.18) : Color(.tertiarySystemFill),
+                in: RoundedRectangle(cornerRadius: 14)
+            )
+            .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
         }
-        .frame(maxWidth: .infinity)
+        .buttonStyle(.plain)
     }
 }
 
 // MARK: - Muscle Button
 
-private struct MuscleButton: View {
-    let muscle: Exercise.MuscleGroup
+private struct TargetButton: View {
+    let title: String
+    var icon: String?
     let isSelected: Bool
+    var isDisabled = false
     let action: () -> Void
 
     var body: some View {
-        if isSelected {
-            Button(action: action) {
-                label
-            }
-            .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fullWidth: true, fillOpacity: 0.18))
-        } else {
-            Button(action: action) {
-                label
-            }
-            .buttonStyle(.traiTertiary(color: .secondary, size: .compact, fullWidth: true))
+        Button(action: action) {
+            label
+                .padding(.horizontal, 12)
+                .frame(height: 36)
+                .frame(maxWidth: 190)
+                .background(
+                    isSelected ? Color.accentColor.opacity(0.18) : Color(.tertiarySystemFill),
+                    in: Capsule()
+                )
+                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
         }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.45 : 1)
     }
 
     private var label: some View {
-        VStack(spacing: 6) {
-            Image(systemName: muscle.iconName)
-                .font(.traiLabel(13))
-            Text(muscle.displayName)
+        HStack(spacing: 6) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.traiLabel(13))
+            }
+            Text(title)
                 .font(.traiLabel(11))
                 .lineLimit(1)
+                .truncationMode(.tail)
         }
-        .frame(maxWidth: .infinity, minHeight: 54)
     }
 }

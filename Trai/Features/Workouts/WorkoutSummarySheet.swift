@@ -48,12 +48,16 @@ struct WorkoutSummarySheet: View {
         (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
     }
 
-    private var usesFlexibleSessionPresentation: Bool {
-        !workout.type.prefersStructuredEntries && workout.totalSets == 0
+    private var loggedEntries: [LiveWorkoutEntry] {
+        sortedEntries.filter(\.hasExercisePreferenceSignal)
     }
 
-    private var completedActivityCount: Int {
-        sortedEntries.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count
+    private var entryStats: LiveWorkout.EntrySummaryStats {
+        workout.entrySummaryStats
+    }
+
+    private var usesFlexibleSessionPresentation: Bool {
+        !workout.type.prefersStructuredEntries && workout.totalSets == 0
     }
 
     private var summaryTitle: String {
@@ -64,7 +68,7 @@ struct WorkoutSummarySheet: View {
         if usesFlexibleSessionPresentation {
             return "Activities"
         }
-        return sortedEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
+        return loggedEntries.contains(where: { !$0.isStrength }) ? "Workout Log" : "Exercises"
     }
 
     private var goalInsights: [WorkoutGoalInsight] {
@@ -149,42 +153,25 @@ struct WorkoutSummarySheet: View {
                         .clipShape(.rect(cornerRadius: 16))
                     }
 
-                    // Stats
-                    VStack(spacing: 16) {
-                        SummaryStatRow(
-                            label: "Duration",
-                            value: workout.formattedDuration,
-                            icon: "clock.fill"
-                        )
-
-                        SummaryStatRow(
-                            label: usesFlexibleSessionPresentation ? "Activities" : "Exercises",
-                            value: "\(sortedEntries.count)",
-                            icon: usesFlexibleSessionPresentation ? "list.bullet.rectangle" : "dumbbell.fill"
-                        )
-
-                        SummaryStatRow(
-                            label: usesFlexibleSessionPresentation ? "Completed" : "Total Sets",
-                            value: usesFlexibleSessionPresentation ? "\(completedActivityCount)" : "\(workout.totalSets)",
-                            icon: usesFlexibleSessionPresentation ? "checkmark.circle.fill" : "square.stack.3d.up.fill"
-                        )
-                    }
-                    .traiCard()
+                    WorkoutSummaryStatsCard(
+                        formattedDuration: workout.formattedDuration,
+                        entryStats: entryStats
+                    )
 
                     // Exercises completed with full detail
-                    if !sortedEntries.isEmpty {
+                    if !loggedEntries.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
                             Text(entriesTitle)
                                 .font(.headline)
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                            ForEach(sortedEntries) { entry in
+                            ForEach(loggedEntries) { entry in
                                 if entry.isStrength {
                                     ExerciseSummaryRow(entry: entry, usesMetric: usesMetric) {
                                         selectedExercise = IdentifiableExerciseName(id: entry.exerciseName)
                                     }
                                 } else {
-                                    ActivitySummaryRow(entry: entry)
+                                    ActivitySummaryRow(entry: entry, usesMetric: usesMetric)
                                 }
                             }
                         }
@@ -314,12 +301,16 @@ struct WorkoutSummaryContent: View {
         (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
     }
 
-    private var usesFlexibleSessionPresentation: Bool {
-        !workout.type.prefersStructuredEntries && workout.totalSets == 0
+    private var loggedEntries: [LiveWorkoutEntry] {
+        sortedEntries.filter(\.hasExercisePreferenceSignal)
     }
 
-    private var completedActivityCount: Int {
-        sortedEntries.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count
+    private var entryStats: LiveWorkout.EntrySummaryStats {
+        workout.entrySummaryStats
+    }
+
+    private var usesFlexibleSessionPresentation: Bool {
+        !workout.type.prefersStructuredEntries && workout.totalSets == 0
     }
 
     private var summaryTitle: String {
@@ -330,7 +321,7 @@ struct WorkoutSummaryContent: View {
         if usesFlexibleSessionPresentation {
             return "Activities"
         }
-        return sortedEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
+        return loggedEntries.contains(where: { !$0.isStrength }) ? "Workout Log" : "Exercises"
     }
 
     private var goalInsights: [WorkoutGoalInsight] {
@@ -414,40 +405,23 @@ struct WorkoutSummaryContent: View {
                     .clipShape(.rect(cornerRadius: 16))
                 }
 
-                // Stats
-                VStack(spacing: 16) {
-                    SummaryStatRow(
-                        label: "Duration",
-                        value: workout.formattedDuration,
-                        icon: "clock.fill"
-                    )
-
-                    SummaryStatRow(
-                        label: usesFlexibleSessionPresentation ? "Activities" : "Exercises",
-                        value: "\(sortedEntries.count)",
-                        icon: usesFlexibleSessionPresentation ? "list.bullet.rectangle" : "dumbbell.fill"
-                    )
-
-                    SummaryStatRow(
-                        label: usesFlexibleSessionPresentation ? "Completed" : "Total Sets",
-                        value: usesFlexibleSessionPresentation ? "\(completedActivityCount)" : "\(workout.totalSets)",
-                        icon: usesFlexibleSessionPresentation ? "checkmark.circle.fill" : "square.stack.3d.up.fill"
-                    )
-                }
-                .traiCard()
+                WorkoutSummaryStatsCard(
+                    formattedDuration: workout.formattedDuration,
+                    entryStats: entryStats
+                )
 
                 // Exercises completed with full detail
-                if !sortedEntries.isEmpty {
+                if !loggedEntries.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(entriesTitle)
                             .font(.headline)
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                        ForEach(sortedEntries) { entry in
+                        ForEach(loggedEntries) { entry in
                             if entry.isStrength {
                                 ExerciseSummaryRow(entry: entry, usesMetric: usesMetric)
                             } else {
-                                ActivitySummaryRow(entry: entry)
+                                ActivitySummaryRow(entry: entry, usesMetric: usesMetric)
                             }
                         }
                     }
@@ -592,6 +566,90 @@ struct PRRow: View {
 
 // MARK: - Summary Stat Row
 
+private struct WorkoutSummaryStatsCard: View {
+    let formattedDuration: String
+    let entryStats: LiveWorkout.EntrySummaryStats
+
+    private var activityMetricStats: [WorkoutActivityMetricDisplayStat] {
+        entryStats.activityMetricSegments.prefix(2).compactMap(WorkoutActivityMetricDisplayStat.init(segment:))
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            SummaryStatRow(
+                label: "Duration",
+                value: formattedDuration,
+                icon: "clock.fill"
+            )
+
+            if entryStats.strengthEntryCount > 0 {
+                SummaryStatRow(
+                    label: "Exercises",
+                    value: "\(entryStats.strengthEntryCount)",
+                    icon: "dumbbell.fill"
+                )
+            }
+
+            if entryStats.activityEntryCount > 0 {
+                SummaryStatRow(
+                    label: "Activities",
+                    value: "\(entryStats.activityEntryCount)",
+                    icon: "list.bullet.rectangle"
+                )
+            }
+
+            ForEach(activityMetricStats) { metric in
+                SummaryStatRow(
+                    label: metric.label,
+                    value: metric.value,
+                    icon: metric.icon
+                )
+            }
+
+            if entryStats.totalSets > 0 {
+                SummaryStatRow(
+                    label: "Total Sets",
+                    value: "\(entryStats.totalSets)",
+                    icon: "square.stack.3d.up.fill"
+                )
+            }
+        }
+        .traiCard()
+    }
+}
+
+struct WorkoutActivityMetricDisplayStat: Identifiable {
+    let value: String
+    let label: String
+    let icon: String
+
+    var id: String { "\(value)-\(label)" }
+
+    nonisolated init?(segment: String) {
+        let parts = segment.split(separator: " ", maxSplits: 1)
+        guard let value = parts.first, !value.isEmpty else { return nil }
+
+        self.value = String(value)
+        self.label = parts.dropFirst().first.map { String($0).capitalized } ?? "Activity"
+        self.icon = Self.icon(for: self.label)
+    }
+
+    nonisolated private static func icon(for label: String) -> String {
+        switch label.lowercased() {
+        case "attempt", "attempts":
+            return "scope"
+        case "round", "rounds":
+            return "repeat"
+        case "rep", "reps", "count", "counts":
+            return "number"
+        case "segment", "segments":
+            return "square.stack.3d.up"
+        default:
+            return "chart.bar.fill"
+        }
+    }
+}
+
 struct SummaryStatRow: View {
     let label: String
     let value: String
@@ -691,9 +749,19 @@ struct ExerciseSummaryRow: View {
 
 struct ActivitySummaryRow: View {
     let entry: LiveWorkoutEntry
+    let usesMetric: Bool
 
     private var subtitleSegments: [String] {
         var segments: [String] = []
+
+        if let role = visibleActivityRole {
+            segments.append(role.placementDisplayName)
+        }
+
+        let activityName = entry.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activityName.isEmpty, activityName.goalNormalizedKey != entry.exerciseName.goalNormalizedKey {
+            segments.append(activityName)
+        }
 
         if let duration = entry.formattedDuration {
             segments.append(duration)
@@ -703,11 +771,21 @@ struct ActivitySummaryRow: View {
             segments.append(distance)
         }
 
-        if entry.completedAt != nil {
-            segments.append("Completed")
-        }
+        let summarySegments = entry.traiActivitySummarySegments(usesMetric: usesMetric)
+        let existingKeys = Set(segments.map(\.goalNormalizedKey))
+        segments.append(contentsOf: summarySegments.filter { !existingKeys.contains($0.goalNormalizedKey) })
 
         return segments
+    }
+
+    private var visibleActivityRole: WorkoutPlan.TrainingBlock.Role? {
+        guard let role = entry.activityRole else { return nil }
+        switch role {
+        case .main, .accessory, .custom:
+            return nil
+        case .warmup, .finisher, .cooldown:
+            return role
+        }
     }
 
     var body: some View {
@@ -715,7 +793,7 @@ struct ActivitySummaryRow: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: entry.activityIconName)
                     .font(.subheadline)
-                    .foregroundStyle(entry.completedAt != nil ? .green : .secondary)
+                    .foregroundStyle(entry.isLoggedActivity ? .green : .secondary)
                     .frame(width: 28, height: 28)
                     .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8))
 

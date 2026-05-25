@@ -46,8 +46,21 @@ struct WorkoutGoalAISheet: View {
 
     private var plannedSessionSummaries: [String] {
         (workoutPlan?.templates ?? []).prefix(6).map { template in
-            let detail = template.focusAreasDisplay.isEmpty ? template.sessionType.displayName : template.focusAreasDisplay
-            return "\(template.name) (\(template.sessionType.displayName) • \(detail))"
+            let blockDetail = template.blocks
+                .sorted { $0.order < $1.order }
+                .prefix(4)
+                .map { block in
+                    "\(block.title) [blockID=\(block.id.uuidString), kind=\(block.kind.rawValue), role=\(block.role.rawValue)]"
+                }
+                .joined(separator: ", ")
+            let detail = [
+                template.focusAreasDisplay.isEmpty ? template.sessionType.displayName : template.focusAreasDisplay,
+                template.primaryBlockSummary,
+                blockDetail
+            ]
+            .filter { !$0.isEmpty }
+            .joined(separator: " • ")
+            return "\(template.name) [templateID=\(template.id.uuidString)] (\(template.sessionType.displayName) • \(detail))"
         }
     }
 
@@ -70,7 +83,7 @@ struct WorkoutGoalAISheet: View {
         "Bench 185 for 5",
         "Climb 2x/week",
         "Send a V5 project",
-        "Build to 75 min zone 2"
+        "Build to a 75 min run"
     ]
 
     var body: some View {
@@ -87,7 +100,6 @@ struct WorkoutGoalAISheet: View {
                         ) {
                             proUpsellCoordinator?.present(source: .workoutPlan)
                         }
-                        .traiCard(cornerRadius: 16)
                     } else if isGenerating {
                         generatingCard
                             .traiCard(cornerRadius: 16)
@@ -345,6 +357,12 @@ private struct WorkoutGoalSuggestionCard: View {
             let targetUnit = suggestion.targetUnit ?? ""
             guard !targetUnit.isEmpty else { return nil }
             return "\(targetValue.formatted(.number.precision(.fractionLength(0...1)))) \(targetUnit)"
+        case .count:
+            let unit = (suggestion.targetUnit?.isEmpty == false ? suggestion.targetUnit! : "count")
+            let periodUnit = suggestion.periodUnit?.rawValue ?? "week"
+            let periodCount = max(suggestion.periodCount ?? 1, 1)
+            let periodText = periodCount == 1 ? periodUnit : "\(periodCount) \(periodUnit)s"
+            return "\(Int(targetValue.rounded())) \(unit) / \(periodText)"
         }
     }
 
@@ -384,6 +402,14 @@ private struct WorkoutGoalSuggestionCard: View {
 
                 if let targetLine {
                     Label(targetLine, systemImage: "target")
+                        .font(.traiLabel(12))
+                        .foregroundStyle(.secondary)
+                }
+
+                if let criteria = suggestion.successCriteria?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !criteria.isEmpty,
+                   criteria != targetLine {
+                    Label(criteria, systemImage: "checklist.checked")
                         .font(.traiLabel(12))
                         .foregroundStyle(.secondary)
                 }

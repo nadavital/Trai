@@ -60,6 +60,7 @@ struct DashboardView: View {
     @State private var reminderCompletionHistory: [ReminderCompletion] = []
     @State private var cachedRecommendedTemplateId: UUID?
     @State private var didPrimeInitialData = false
+    @State private var hasSettledActivationChecklistState = false
     @State private var coachContextRefreshTask: Task<Void, Never>?
     @State private var deferredInitialLoadTask: Task<Void, Never>?
     @State private var remindersLoadTask: Task<Void, Never>?
@@ -76,6 +77,7 @@ struct DashboardView: View {
     @State private var showingCalorieDetail = false
     @State private var showingMacroDetail = false
     @State private var entryToEdit: FoodEntry?
+    @State private var activationChecklistHealthError: String?
 
     // Workout sheet state
     @State private var showingWorkoutSheet = false
@@ -83,6 +85,7 @@ struct DashboardView: View {
     @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
     @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest = false
+    @AppStorage("pendingWorkoutPlanSetupRequest") private var pendingWorkoutPlanSetupRequest = false
     private static let dashboardHistoryWindowDays = 100
     private static let dashboardFastFoodWindowDays = 2
     private static let behaviorHistoryWindowDays = 90
@@ -103,6 +106,9 @@ struct DashboardView: View {
     }
     private static var remindersInitialLoadDelayMilliseconds: Int {
         AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1400 : 120
+    }
+    private static var activationChecklistStartupGraceMilliseconds: Int {
+        AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1600 : 650
     }
     private static var coachContextRefreshDelayMilliseconds: Int {
         AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1200 : 180
@@ -233,6 +239,19 @@ struct DashboardView: View {
     private let reminderHabitWindowDays = 30
 
     private var profile: UserProfile? { profiles.first }
+
+    private var hasLoggedFood: Bool {
+        !allFoodEntries.isEmpty
+    }
+
+    private var hasWorkoutPlan: Bool {
+        profile?.workoutPlan != nil
+    }
+
+    private var shouldShowActivationChecklist: Bool {
+        guard hasSettledActivationChecklistState, isViewingToday, profile != nil else { return false }
+        return !hasLoggedFood || !hasWorkoutPlan || healthKitService?.isAuthorized != true
+    }
 
     private var isDashboardTabActive: Bool {
         isDashboardTabVisible
@@ -366,6 +385,15 @@ struct DashboardView: View {
 
     private var selectedDayWorkoutCount: Int {
         selectedDayUniqueHealthKitWorkouts.count + selectedDayLiveWorkouts.count
+    }
+
+    private var selectedDayHasWorkoutForTargets: Bool {
+        let interval = WorkoutDayTargetContext.dayInterval(containing: selectedDate)
+        return WorkoutDayTargetContext.hasWorkout(
+            in: interval,
+            workoutSessions: selectedDayUniqueHealthKitWorkouts,
+            liveWorkouts: selectedDayLiveWorkouts
+        )
     }
 
     private var selectedDayWorkoutCalories: Int {
@@ -535,6 +563,12 @@ struct DashboardView: View {
                     delayMilliseconds: Self.deferredStartupWorkDelayMilliseconds
                 )
             }
+            .task(id: didPrimeInitialData) {
+                guard didPrimeInitialData, !hasSettledActivationChecklistState else { return }
+                try? await Task.sleep(for: .milliseconds(Self.activationChecklistStartupGraceMilliseconds))
+                guard !Task.isCancelled else { return }
+                hasSettledActivationChecklistState = true
+            }
             .onAppear {
                 if tabActivationPolicy.activeSince == nil {
                     tabActivationPolicy = TabActivationPolicy(
@@ -639,7 +673,7 @@ struct DashboardView: View {
             .sheet(isPresented: $showingCalorieDetail) {
                 CalorieDetailSheet(
                     entries: selectedDayFoodEntries,
-                    goal: profile?.dailyCalorieGoal ?? 2000,
+                    goal: profile?.effectiveCalorieGoal(hasWorkoutToday: selectedDayHasWorkoutForTargets) ?? 2_000,
                     isToday: isViewingToday,
                     historicalEntries: detailSheetHistoricalFoodEntries,
                     onAddFood: {
@@ -721,6 +755,26 @@ struct DashboardView: View {
         return latencyProbeEntries.isEmpty ? "pending" : latencyProbeEntries.joined(separator: " | ")
     }
 
+    private func connectHealthFromActivationChecklist() {
+        activationChecklistHealthError = nil
+        Task { @MainActor in
+            do {
+                try await healthKitService?.requestAuthorization()
+                guard let profile else { return }
+                profile.syncFoodToHealthKit = true
+                profile.syncWeightToHealthKit = true
+                try modelContext.save()
+            } catch {
+                activationChecklistHealthError = healthKitService?.authorizationError ?? error.localizedDescription
+            }
+        }
+    }
+
+    private func openWorkoutPlanSetupFromActivationChecklist() {
+        pendingWorkoutPlanSetupRequest = true
+        onSelectTab?(.workouts)
+    }
+
     @ViewBuilder
     private var dashboardTopSections: some View {
         DateNavigationBar(
@@ -743,6 +797,19 @@ struct DashboardView: View {
             )
             .traiEntrance(index: 1)
 
+            if shouldShowActivationChecklist {
+                OnboardingActivationChecklistCard(
+                    hasLoggedFood: hasLoggedFood,
+                    hasWorkoutPlan: hasWorkoutPlan,
+                    hasHealthAccess: healthKitService?.isAuthorized == true,
+                    healthError: activationChecklistHealthError,
+                    onLogFood: { openFoodCameraFromDashboard(source: "onboarding_checklist_log_food") },
+                    onCreateWorkoutPlan: openWorkoutPlanSetupFromActivationChecklist,
+                    onConnectHealth: connectHealthFromActivationChecklist
+                )
+                .traiEntrance(index: 2)
+            }
+
             if !todaysReminderItems.isEmpty {
                 TodaysRemindersCard(
                     reminders: todaysReminderItems,
@@ -751,7 +818,7 @@ struct DashboardView: View {
                     onViewAll: {}
                 )
                 .id("reminders-section")
-                .traiEntrance(index: 2)
+                .traiEntrance(index: 3)
             }
         }
     }
@@ -760,7 +827,7 @@ struct DashboardView: View {
     private var dashboardNutritionSections: some View {
         CalorieProgressCard(
             consumed: totalCalories,
-            goal: profile?.dailyCalorieGoal ?? 2000,
+            goal: profile?.effectiveCalorieGoal(hasWorkoutToday: selectedDayHasWorkoutForTargets) ?? 2_000,
             onTap: { openCalorieDetailFromDashboard(source: "calorie_progress_card") }
         )
         .traiEntrance(index: 3)
@@ -1028,8 +1095,9 @@ struct DashboardView: View {
         let selectedStart = calendar.startOfDay(for: selectedDate)
         guard let selectedEnd = calendar.date(byAdding: .day, value: 1, to: selectedStart) else { return }
 
-        cachedSelectedDayLiveWorkouts = liveWorkouts.filter {
-            $0.startedAt >= selectedStart && $0.startedAt < selectedEnd
+        cachedSelectedDayLiveWorkouts = liveWorkouts.filter { workout in
+            (workout.startedAt >= selectedStart && workout.startedAt < selectedEnd)
+                || workout.completedAt.map { $0 >= selectedStart && $0 < selectedEnd } == true
         }
         recordDashboardLatencyProbe(
             "refreshLiveWorkoutDateCache",
@@ -1663,7 +1731,12 @@ struct DashboardView: View {
     }
 
     private func startWorkoutFromTemplate(_ template: WorkoutPlan.WorkoutTemplate) {
-        let workout = workoutTemplateService.createStartWorkout(from: template)
+        let workout = workoutTemplateService.createWorkoutFromTemplate(
+            template,
+            progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
+            modelContext: modelContext,
+            prefillStrengthExercises: true
+        )
         _ = workoutTemplateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,
@@ -1726,7 +1799,12 @@ struct DashboardView: View {
             return
         }
 
-        let workout = workoutTemplateService.createStartWorkout(from: template)
+        let workout = workoutTemplateService.createWorkoutFromTemplate(
+            template,
+            progressionStrategy: plan.progressionStrategy,
+            modelContext: modelContext,
+            prefillStrengthExercises: true
+        )
         _ = workoutTemplateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,
@@ -1807,6 +1885,146 @@ private struct DashboardTopGradient: View {
         .offset(y: -140)
         .ignoresSafeArea(edges: .top)
         .allowsHitTesting(false)
+    }
+}
+
+private struct OnboardingActivationChecklistCard: View {
+    let hasLoggedFood: Bool
+    let hasWorkoutPlan: Bool
+    let hasHealthAccess: Bool
+    let healthError: String?
+    let onLogFood: () -> Void
+    let onCreateWorkoutPlan: () -> Void
+    let onConnectHealth: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Finish setting up Trai")
+                        .font(.headline)
+                    Text("A few quick wins after your first plan.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                ActivationChecklistProgressView(completedCount: completedCount, totalCount: 3)
+            }
+
+            VStack(spacing: 10) {
+                checklistRow(
+                    title: "Log your first meal",
+                    icon: "camera.fill",
+                    isComplete: hasLoggedFood,
+                    action: onLogFood
+                )
+
+                checklistRow(
+                    title: "Create a workout plan",
+                    icon: "figure.strengthtraining.traditional",
+                    isComplete: hasWorkoutPlan,
+                    action: onCreateWorkoutPlan
+                )
+
+                checklistRow(
+                    title: "Connect Apple Health",
+                    icon: "heart.fill",
+                    isComplete: hasHealthAccess,
+                    action: onConnectHealth
+                )
+            }
+
+            if let healthError, !healthError.isEmpty {
+                Text(healthError)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .traiCard(cornerRadius: 20)
+    }
+
+    private var completedCount: Int {
+        [hasLoggedFood, hasWorkoutPlan, hasHealthAccess].filter { $0 }.count
+    }
+
+    private func checklistRow(
+        title: String,
+        icon: String,
+        isComplete: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: isComplete ? {} : action) {
+            HStack(spacing: 12) {
+                Image(systemName: isComplete ? "checkmark.circle.fill" : icon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(isComplete ? .green : .accent)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        (isComplete ? Color.green : Color.accentColor).opacity(0.12),
+                        in: Circle()
+                    )
+
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                if !isComplete {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(12)
+            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isComplete)
+    }
+}
+
+private struct ActivationChecklistProgressView: View {
+    let completedCount: Int
+    let totalCount: Int
+
+    private var progress: Double {
+        guard totalCount > 0 else { return 0 }
+        return min(max(Double(completedCount) / Double(totalCount), 0), 1)
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color(.tertiarySystemFill), lineWidth: 4)
+
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(
+                    AngularGradient(
+                        colors: [
+                            TraiColors.brandAccent,
+                            TraiColors.blaze,
+                            TraiColors.brandAccent
+                        ],
+                        center: .center
+                    ),
+                    style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+
+            Text("\(completedCount)")
+                .font(.caption.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+        }
+        .frame(width: 38, height: 38)
+        .accessibilityLabel("Setup progress")
+        .accessibilityValue("\(completedCount) of \(totalCount) complete")
+        .animation(.easeInOut(duration: 0.25), value: completedCount)
     }
 }
 

@@ -18,6 +18,7 @@ nonisolated struct WidgetData: Codable {
     var fatGoal: Int
     var readyMuscleCount: Int
     var recommendedWorkout: String?
+    var recommendedWorkoutTemplateID: UUID?
     var workoutStreak: Int
     var todayWorkoutCompleted: Bool
     var lastUpdated: Date
@@ -33,6 +34,7 @@ nonisolated struct WidgetData: Codable {
         fatGoal: 65,
         readyMuscleCount: 0,
         recommendedWorkout: nil,
+        recommendedWorkoutTemplateID: nil,
         workoutStreak: 0,
         todayWorkoutCompleted: false,
         lastUpdated: Date()
@@ -79,6 +81,26 @@ nonisolated struct WidgetData: Codable {
 
     var calorieProgress: Double { progress(for: .calories) }
     var proteinProgress: Double { progress(for: .protein) }
+
+    var workoutActionRoute: AppRoute? {
+        guard !todayWorkoutCompleted else { return nil }
+        guard let recommendedWorkoutTemplateID else { return nil }
+        return .workout(
+            templateID: recommendedWorkoutTemplateID,
+            templateName: recommendedWorkout
+        )
+    }
+
+    var workoutActionURLString: String? {
+        workoutActionRoute?.urlString
+    }
+
+    var actionableRecommendedWorkoutName: String? {
+        guard workoutActionRoute != nil else { return nil }
+        let workoutName = recommendedWorkout?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let workoutName, !workoutName.isEmpty else { return nil }
+        return workoutName
+    }
 
     nonisolated enum Macro {
         case calories

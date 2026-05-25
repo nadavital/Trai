@@ -40,11 +40,68 @@ struct WorkoutPlanGenerationRequest {
     let injuries: String?             // "bad knee", "lower back issues"
     let preferences: String?          // "I love deadlifts", "hate burpees"
     let conversationContext: [String]? // Labeled notes from the intake conversation
+    let cardioSupportConstraint: CardioSupportConstraint?
+
+    init(
+        name: String,
+        age: Int,
+        gender: UserProfile.Gender,
+        goal: UserProfile.GoalType,
+        activityLevel: UserProfile.ActivityLevel,
+        workoutType: WorkoutType,
+        selectedWorkoutTypes: [WorkoutType]? = nil,
+        experienceLevel: ExperienceLevel? = nil,
+        equipmentAccess: EquipmentAccess? = nil,
+        availableDays: Int? = nil,
+        timePerWorkout: Int? = nil,
+        preferredSplit: PreferredSplit? = nil,
+        cardioTypes: [CardioType]? = nil,
+        customWorkoutType: String? = nil,
+        customExperience: String? = nil,
+        customEquipment: String? = nil,
+        customCardioType: String? = nil,
+        specificGoals: [String]? = nil,
+        weakPoints: [String]? = nil,
+        injuries: String? = nil,
+        preferences: String? = nil,
+        conversationContext: [String]? = nil,
+        cardioSupportConstraint: CardioSupportConstraint? = nil
+    ) {
+        self.name = name
+        self.age = age
+        self.gender = gender
+        self.goal = goal
+        self.activityLevel = activityLevel
+        self.workoutType = workoutType
+        self.selectedWorkoutTypes = selectedWorkoutTypes
+        self.experienceLevel = experienceLevel
+        self.equipmentAccess = equipmentAccess
+        self.availableDays = availableDays
+        self.timePerWorkout = timePerWorkout
+        self.preferredSplit = preferredSplit
+        self.cardioTypes = cardioTypes
+        self.customWorkoutType = customWorkoutType
+        self.customExperience = customExperience
+        self.customEquipment = customEquipment
+        self.customCardioType = customCardioType
+        self.specificGoals = specificGoals
+        self.weakPoints = weakPoints
+        self.injuries = injuries
+        self.preferences = preferences
+        self.conversationContext = conversationContext
+        self.cardioSupportConstraint = cardioSupportConstraint
+    }
 
     /// Whether cardio should be included in the plan
     var includesCardio: Bool {
         if let types = selectedWorkoutTypes {
             return types.contains(.cardio) || types.contains(.mixed) || types.contains(.hiit)
+        }
+        if let cardioTypes, !cardioTypes.isEmpty {
+            return true
+        }
+        if customWorkoutType?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            return false
         }
         return workoutType == .cardio || workoutType == .mixed || workoutType == .hiit
     }
@@ -55,7 +112,116 @@ struct WorkoutPlanGenerationRequest {
         return bounded
     }
 
+    var requestsCardioAsAccessory: Bool {
+        includesCardio && cardioSupportConstraint != nil
+    }
+
+    var requiresGenericCardioStructure: Bool {
+        guard includesCardio else { return false }
+        let selectedOnlyGenericCardio = (cardioTypes ?? []).isEmpty
+            || (cardioTypes ?? []).contains(.anyCardio)
+        return selectedOnlyGenericCardio
+    }
+
+    var limitsAccessoryCardioToOneSession: Bool {
+        guard let maximumPlacements = cardioSupportConstraint?.maximumPlacements else { return false }
+        return maximumPlacements == 1
+    }
+
+    var supportiveCardioRole: WorkoutPlan.TrainingBlock.Role {
+        cardioSupportConstraint?.role ?? .main
+    }
+
+    var generationDirectives: [String] {
+        var directives: [String] = []
+
+        if let availableDays {
+            directives.append("Return exactly \(availableDays) sessions.")
+        }
+
+        if requestsCardioAsAccessory {
+            directives.append("Primary focus is not standalone cardio; cardio should appear only as a supportive cardio block with role \(supportiveCardioRole.rawValue).")
+            directives.append("Dedicated cardio or HIIT templates are not allowed unless the user explicitly asks for them later.")
+            directives.append("Use finisher language only if the user explicitly asked for cardio at the end of a workout; otherwise describe supportive cardio by its purpose, such as endurance support, conditioning, intervals, or recovery.")
+        }
+
+        if limitsAccessoryCardioToOneSession {
+            directives.append("The user limited supportive cardio to one placement. Include exactly one cardio block with role \(supportiveCardioRole.rawValue) in the whole plan, on the requested day when one is named.")
+        }
+
+        if let selectedWorkoutTypes, selectedWorkoutTypes.count > 1 {
+            directives.append("Selected training styles are inputs, not equal session allocations. Use the personalization brief to decide priority and placement.")
+            directives.append("Every explicitly selected training style must remain visible in the returned plan as a dedicated template or meaningful block unless the personalization brief explicitly says that style should only be background support or avoided.")
+        }
+
+        let explicitActivityIdentities = requiredVisibleActivityIdentityGroups
+            .compactMap(\.first)
+        if !explicitActivityIdentities.isEmpty {
+            directives.append("Preserve explicit activity identities: \(explicitActivityIdentities.joined(separator: ", ")). Each one should appear as a real template, meaningful block, block activityTypeName, block activityTags, focusArea, exercise/activity name, or goal scope unless the personalization brief explicitly says that activity should only be supportive or avoided.")
+            directives.append("Do not replace a specific selected activity with only generic support work. For example, preserve the named activity itself instead of reducing it to generic strength accessories, conditioning, mobility, or grip work.")
+        }
+
+        if let preferredSplit, preferredSplit != .letTraiDecide {
+            directives.append("Use the requested split direction unless it conflicts with a higher-priority personalization answer.")
+        }
+
+        return directives
+    }
+
+    var requiredVisibleActivityIdentityGroups: [[String]] {
+        var groups: [[String]] = []
+
+        func appendGroup(_ values: [String]) {
+            let cleaned = values
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty && $0.goalNormalizedKey != WorkoutPlanGenerationRequest.CardioType.anyCardio.displayName.goalNormalizedKey }
+            guard !cleaned.isEmpty else { return }
+            let keys = Set(cleaned.map(\.goalNormalizedKey))
+            guard !groups.contains(where: { Set($0.map(\.goalNormalizedKey)) == keys }) else { return }
+            groups.append(cleaned)
+        }
+
+        for type in selectedWorkoutTypes ?? [workoutType] {
+            if let aliases = type.requiredVisibleIdentityAliases {
+                appendGroup(aliases)
+            }
+        }
+
+        cardioTypes?.forEach { type in
+            guard type != .anyCardio else { return }
+            appendGroup(type.visibleIdentityAliases)
+        }
+
+        if let customWorkoutType {
+            customWorkoutType
+                .components(separatedBy: CharacterSet(charactersIn: ",•\n"))
+                .forEach { appendGroup([$0]) }
+        }
+
+        if let customCardioType {
+            appendGroup([customCardioType])
+        }
+
+        return groups
+    }
+
+    func missingVisibleActivityIdentityDescriptions(in plan: WorkoutPlan) -> [String] {
+        requiredVisibleActivityIdentityGroups.compactMap { aliases in
+            plan.containsVisibleActivityIdentity(matching: aliases) ? nil : aliases.first
+        }
+    }
+
     // MARK: - Workout Type
+
+    struct CardioSupportConstraint {
+        let role: WorkoutPlan.TrainingBlock.Role
+        let maximumPlacements: Int?
+
+        init(role: WorkoutPlan.TrainingBlock.Role, maximumPlacements: Int? = nil) {
+            self.role = role
+            self.maximumPlacements = maximumPlacements
+        }
+    }
 
     enum WorkoutType: String, CaseIterable, Identifiable, Codable {
         case strength = "strength"
@@ -102,6 +268,17 @@ struct WorkoutPlanGenerationRequest {
 
         var shouldAskAboutCardioType: Bool {
             self == .cardio || self == .mixed
+        }
+
+        var requiredVisibleIdentityAliases: [String]? {
+            switch self {
+            case .hiit:
+                return ["HIIT", "Conditioning", "Intervals"]
+            case .flexibility:
+                return ["Flexibility", "Mobility", "Yoga"]
+            case .strength, .cardio, .mixed:
+                return nil
+            }
         }
     }
 
@@ -192,11 +369,36 @@ struct WorkoutPlanGenerationRequest {
             case .anyCardio: "heart.fill"
             }
         }
+
+        var visibleIdentityAliases: [String] {
+            switch self {
+            case .running:
+                return ["Running", "Run"]
+            case .cycling:
+                return ["Cycling", "Bike", "Biking"]
+            case .swimming:
+                return ["Swimming", "Swim"]
+            case .climbing:
+                return ["Climbing", "Bouldering", "Climb"]
+            case .rowing:
+                return ["Rowing", "Rower"]
+            case .walking:
+                return ["Walking", "Walk"]
+            case .stairClimber:
+                return ["Stair Climber", "Stairs"]
+            case .elliptical:
+                return ["Elliptical"]
+            case .jumpRope:
+                return ["Jump Rope", "Skipping"]
+            case .anyCardio:
+                return []
+            }
+        }
     }
 
     // MARK: - Equipment Access
 
-    enum EquipmentAccess: String, CaseIterable, Identifiable {
+    enum EquipmentAccess: String, Codable, CaseIterable, Identifiable {
         case fullGym = "fullGym"
         case homeAdvanced = "homeAdvanced"
         case homeBasic = "homeBasic"
@@ -207,8 +409,8 @@ struct WorkoutPlanGenerationRequest {
         var displayName: String {
             switch self {
             case .fullGym: "Full Gym"
-            case .homeAdvanced: "Home Gym (Advanced)"
-            case .homeBasic: "Home Gym (Basic)"
+            case .homeAdvanced: "Barbell Setup"
+            case .homeBasic: "Dumbbells/Bands"
             case .bodyweightOnly: "Bodyweight Only"
             }
         }
@@ -216,7 +418,7 @@ struct WorkoutPlanGenerationRequest {
         var description: String {
             switch self {
             case .fullGym: "Access to all machines, barbells, dumbbells, cables"
-            case .homeAdvanced: "Barbell, dumbbells, bench, pull-up bar"
+            case .homeAdvanced: "Rack, barbell, bench, pull-up bar"
             case .homeBasic: "Dumbbells and resistance bands"
             case .bodyweightOnly: "No equipment needed"
             }
@@ -234,7 +436,7 @@ struct WorkoutPlanGenerationRequest {
 
     // MARK: - Experience Level
 
-    enum ExperienceLevel: String, CaseIterable, Identifiable {
+    enum ExperienceLevel: String, Codable, CaseIterable, Identifiable {
         case beginner = "beginner"
         case intermediate = "intermediate"
         case advanced = "advanced"

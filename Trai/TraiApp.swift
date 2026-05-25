@@ -84,9 +84,32 @@ struct TraiApp: App {
 
         #if DEBUG
         if isUITesting {
-            monetizationService.setDebugPlan(.developer)
+            if AppLaunchArguments.shouldRunOnboardingFlowUITest {
+                UserDefaults.standard.set(false, forKey: AppLaunchArguments.onboardingCompletedCacheKey)
+                UserDefaults.standard.removeObject(forKey: "onboardingDraft")
+            }
+            if AppLaunchArguments.shouldUseLiveAIBackendForUITest {
+                appAccountService.setDebugBackendEnvironment(.localDevelopment)
+            }
+            if AppLaunchArguments.shouldUseFreePlanForUITest {
+                monetizationService.setDebugPlan(.free)
+                accountSessionService.signOut()
+            } else {
+                monetizationService.setDebugPlan(AppLaunchArguments.shouldUseProPlanForUITest ? .pro : .developer)
+                if !AppLaunchArguments.shouldUseLiveAIBackendForUITest {
+                    accountSessionService.setDebugAuthenticatedSession()
+                }
+            }
             monetizationService.resetQuotaForDebug()
-            accountSessionService.setDebugAuthenticatedSession()
+        }
+
+        if isUITesting && AppLaunchArguments.shouldUseLiveAIBackendForUITest {
+            Task { @MainActor in
+                await Self.prepareLiveAIBackendSessionForUITest(
+                    appAccountService: appAccountService,
+                    accountSessionService: accountSessionService
+                )
+            }
         }
         #endif
 
@@ -156,7 +179,8 @@ struct TraiApp: App {
             let container = modelContainer
             Task { @MainActor in
                 TraiApp.sharedModelContainer = container
-                if isUITesting {
+                ExerciseLibrarySeeder.ensureDefaults(in: container.mainContext)
+                if isUITesting && !AppLaunchArguments.shouldRunOnboardingFlowUITest {
                     seedUITestProfileIfNeeded(modelContainer: container)
                     if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {
                         seedAppStoreScreenshotDataIfNeeded(modelContainer: container)
@@ -172,6 +196,63 @@ struct TraiApp: App {
             fatalError("Failed to create ModelContainer: \(error)")
         }
     }
+
+    #if DEBUG
+    @MainActor
+    private static func prepareLiveAIBackendSessionForUITest(
+        appAccountService: AppAccountService,
+        accountSessionService: AccountSessionService
+    ) async {
+        appAccountService.setDebugBackendEnvironment(.localDevelopment)
+
+        do {
+            let bootstrap = try await TraiBackendClient.shared.exchangeAppleIdentity(
+                AppleIdentityExchangeRequest(
+                    installationID: appAccountService.installationID,
+                    appAccountToken: appAccountService.appAccountToken,
+                    identityToken: "ui-test-live-ai-token",
+                    authorizationCode: "ui-test-live-ai-code",
+                    rawNonce: nil,
+                    appleUserID: "ui-test-live-ai-\(appAccountService.installationID)",
+                    email: "ui-live-ai@trai.local",
+                    displayName: "Live AI Tester"
+                ),
+                environment: .localDevelopment
+            )
+            accountSessionService.setDebugAuthenticatedBootstrap(bootstrap)
+
+            try await applyLocalDeveloperSubscriptionOverrideForUITest(userID: bootstrap.session.userID)
+            await accountSessionService.refreshAccountFromBackend()
+        } catch {
+            print("⚠️ Failed to prepare live AI backend UI-test session: \(error.localizedDescription)")
+        }
+    }
+
+    private static func applyLocalDeveloperSubscriptionOverrideForUITest(userID: String) async throws {
+        guard let baseURL = TraiBackendClient.shared.baseURL(for: .localDevelopment) else {
+            throw BackendClientError.environmentNotConfigured
+        }
+
+        var request = URLRequest(url: baseURL.appending(path: "/v1/admin/subscription-override"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer local-dev-admin", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "userID": userID,
+            "plan": "developer",
+            "status": "active",
+            "source": "developer",
+            "reason": "local simulator live AI testing",
+            "createdBy": "trai-ios-ui-test"
+        ])
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw BackendClientError.invalidResponse
+        }
+    }
+    #endif
 
     var body: some Scene {
         WindowGroup {
@@ -480,6 +561,9 @@ struct TraiApp: App {
 
     @MainActor
     private func scheduleForegroundHealthKitSyncIfEligible() {
+        guard hasCompletedOnboardingProfile() else { return }
+        guard healthKitService.isAuthorized else { return }
+
         deferredHealthKitSyncTask?.cancel()
         deferredHealthKitSyncTask = Task(priority: .utility) { @MainActor in
             try? await Task.sleep(for: foregroundHealthKitSyncDelay)
@@ -491,6 +575,15 @@ struct TraiApp: App {
             ) else { return }
             await syncRecentWorkoutsFromHealthKit()
         }
+    }
+
+    @MainActor
+    private func hasCompletedOnboardingProfile() -> Bool {
+        var descriptor = FetchDescriptor<UserProfile>(
+            predicate: #Predicate<UserProfile> { $0.hasCompletedOnboarding == true }
+        )
+        descriptor.fetchLimit = 1
+        return ((try? modelContainer.mainContext.fetch(descriptor)) ?? []).isEmpty == false
     }
 
     @MainActor
@@ -783,7 +876,7 @@ private enum HomeScreenQuickAction: String, CaseIterable {
         case .logWeight:
             return .logWeight
         case .workout:
-            return .workout(templateName: nil)
+            return .workout(templateID: nil, templateName: nil)
         case .chat:
             return .chat
         }
@@ -1261,13 +1354,7 @@ private func migrateExistingWorkoutSets(modelContainer: ModelContainer) async {
     var fixedCount = 0
     var insertedHistoryCount = 0
     let historyDescriptor = FetchDescriptor<ExerciseHistory>()
-    let existingHistories = (try? context.fetch(historyDescriptor)) ?? []
-    var historyDatesByExercise: [String: [Date]] = Dictionary(
-        grouping: existingHistories,
-        by: \.exerciseName
-    ).mapValues { histories in
-        histories.map(\.performedAt).sorted()
-    }
+    var existingHistories = (try? context.fetch(historyDescriptor)) ?? []
 
     for (index, workout) in workouts.enumerated() {
         guard let entries = workout.entries else { continue }
@@ -1292,20 +1379,20 @@ private func migrateExistingWorkoutSets(modelContainer: ModelContainer) async {
                 entry.sets = updatedSets
                 fixedCount += 1
             }
-            guard let completedAt else { continue }
-
-            // Ensure ExerciseHistory exists for this entry around workout completion.
-            let completedSets = entry.sets.filter { $0.completed && !$0.isWarmup && $0.reps > 0 }
-            guard !completedSets.isEmpty else { continue }
-
-            let existingDates = historyDatesByExercise[entry.exerciseName] ?? []
-            guard !hasDateInWindow(existingDates, around: completedAt) else { continue }
-
-            let history = ExerciseHistory(from: entry, performedAt: completedAt)
-            context.insert(history)
-            insertedHistoryCount += 1
-            historyDatesByExercise[entry.exerciseName] = insertingSortedDate(completedAt, into: existingDates)
         }
+
+        guard let completedAt else { continue }
+
+        let missingHistory = ExerciseHistory.recordsToInsert(
+            from: workout,
+            existingHistories: existingHistories,
+            performedAt: completedAt
+        )
+        for history in missingHistory {
+            context.insert(history)
+        }
+        insertedHistoryCount += missingHistory.count
+        existingHistories.append(contentsOf: missingHistory)
 
         if index.isMultiple(of: 20) {
             await Task.yield()
@@ -1387,37 +1474,4 @@ private func migrateLegacyCloudImagesAndBackfillFoodEmoji(modelContainer: ModelC
     }
 
     UserDefaults.standard.set(true, forKey: migrationKey)
-}
-
-private func hasDateInWindow(_ dates: [Date], around target: Date, tolerance: TimeInterval = 60) -> Bool {
-    guard !dates.isEmpty else { return false }
-
-    let lowerBound = target.addingTimeInterval(-tolerance)
-    let upperBound = target.addingTimeInterval(tolerance)
-    let startIndex = lowerBoundIndex(for: lowerBound, in: dates)
-    guard startIndex < dates.count else { return false }
-    return dates[startIndex] <= upperBound
-}
-
-private func lowerBoundIndex(for value: Date, in dates: [Date]) -> Int {
-    var lower = 0
-    var upper = dates.count
-
-    while lower < upper {
-        let mid = (lower + upper) / 2
-        if dates[mid] < value {
-            lower = mid + 1
-        } else {
-            upper = mid
-        }
-    }
-
-    return lower
-}
-
-private func insertingSortedDate(_ value: Date, into dates: [Date]) -> [Date] {
-    var updated = dates
-    let insertIndex = lowerBoundIndex(for: value, in: updated)
-    updated.insert(value, at: insertIndex)
-    return updated
 }

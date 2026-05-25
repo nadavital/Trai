@@ -8,10 +8,13 @@
 import SwiftUI
 
 struct ChatContentList: View {
+    static let bottomAnchorID = "chatBottomAnchor"
+
     let messages: [ChatMessage]
     let isLoading: Bool
     let isStreamingResponse: Bool
     let isTemporarySession: Bool
+    let isPreparingFirstMessage: Bool
     var smartStarterContext: SmartStarterContext = SmartStarterContext()
     let currentActivity: String?
     let currentCalories: Int?
@@ -20,6 +23,9 @@ struct ChatContentList: View {
     let currentFat: Int?
     let currentFiber: Int?
     let currentSugar: Int?
+    let currentNutritionPlanUpdatedAt: Date?
+    let currentWorkoutPlanUpdatedAt: Date?
+    let currentWorkoutPlanTemplateIDs: Set<UUID>?
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     var planRecommendation: PlanRecommendation?
     var planRecommendationMessage: String?
@@ -82,6 +88,7 @@ struct ChatContentList: View {
                 PlanReviewRecommendationCard(
                     recommendation: recommendation,
                     message: message,
+                    isReviewDisabled: isLoading,
                     onReviewPlan: onReview,
                     onDismiss: onDismiss
                 )
@@ -93,11 +100,14 @@ struct ChatContentList: View {
             }
 
             if messages.isEmpty {
-                EmptyChatView(
-                    isLoading: isLoading,
-                    isTemporary: isTemporarySession,
-                    context: smartStarterContext
-                )
+                if !isPreparingFirstMessage {
+                    EmptyChatView(
+                        isLoading: isLoading,
+                        isTemporary: isTemporarySession,
+                        context: smartStarterContext
+                    )
+                    .transition(.opacity)
+                }
             } else {
                 ForEach(visibleMessages) { message in
                     VStack(spacing: 0) {
@@ -112,6 +122,9 @@ struct ChatContentList: View {
                             currentFat: currentFat,
                             currentFiber: currentFiber,
                             currentSugar: currentSugar,
+                            currentNutritionPlanUpdatedAt: currentNutritionPlanUpdatedAt,
+                            currentWorkoutPlanUpdatedAt: currentWorkoutPlanUpdatedAt,
+                            currentWorkoutPlanTemplateIDs: currentWorkoutPlanTemplateIDs,
                             enabledMacros: enabledMacros,
                             onAcceptMeal: { meal in
                                 onAcceptMeal(meal, message)
@@ -193,7 +206,12 @@ struct ChatContentList: View {
                 ThinkingIndicator(activity: currentActivity)
                     .padding(.horizontal)
             }
+
+            Color.clear
+                .frame(height: 1)
+                .id(Self.bottomAnchorID)
         }
+        .animation(.easeInOut(duration: 0.18), value: isPreparingFirstMessage)
     }
 
     private func shouldDisplayMessage(_ message: ChatMessage) -> Bool {

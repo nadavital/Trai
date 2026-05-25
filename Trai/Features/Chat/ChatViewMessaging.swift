@@ -32,6 +32,8 @@ extension ChatView {
         lastActivityTimestamp = Date().timeIntervalSince1970
         isTemporarySession = false
         temporaryMessages = []
+        focusedFoodEntryContext = nil
+        isPreparingFirstMessageTransition = false
         rebuildSessionMessages(preferLiveQueryData: true)
         if !silent {
             HapticManager.lightTap()
@@ -127,17 +129,59 @@ extension ChatView {
         }
     }
 
-    func sendMessage(_ text: String) {
+    @discardableResult
+    func sendMessage(_ text: String) -> Bool {
+        guard !isLoading,
+              currentMessageTask == nil,
+              !isPreparingFirstMessageTransition,
+              !hasPendingStartupActions else { return false }
+
         let hasText = !text.trimmingCharacters(in: .whitespaces).isEmpty
-        let hasImage = selectedImage != nil
+        let capturedImage = selectedImage
+        let hasImage = capturedImage != nil
 
-        guard hasText || hasImage else { return }
+        guard hasText || hasImage else { return false }
 
+        selectedImage = nil
+        selectedPhotoItem = nil
+        let pendingNutritionPlanSuggestionForContext = currentPendingNutritionPlanSuggestionForContext()
+        let pendingWorkoutPlanSuggestionForContext = currentPendingWorkoutPlanSuggestionForContext()
+
+        if !hasMessagesInCurrentSession && !isPreparingFirstMessageTransition {
+            isPreparingFirstMessageTransition = true
+            sendMessageAfterFirstFrameTransition(
+                text,
+                capturedImage: capturedImage,
+                pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
+                pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext
+            )
+            Task { @MainActor in
+                await Task.yield()
+                isPreparingFirstMessageTransition = false
+            }
+            return true
+        }
+
+        sendMessageAfterFirstFrameTransition(
+            text,
+            capturedImage: capturedImage,
+            pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
+            pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext
+        )
+        return true
+    }
+
+    private func sendMessageAfterFirstFrameTransition(
+        _ text: String,
+        capturedImage: UIImage?,
+        pendingNutritionPlanSuggestionForContext: PlanUpdateSuggestionEntry?,
+        pendingWorkoutPlanSuggestionForContext: WorkoutPlanSuggestionEntry?
+    ) {
         updateLastActivity()
         retirePendingPlanSuggestionsInCurrentSession()
 
         let previousMessages = Array(currentSessionMessages.suffix(10))
-        let imageData = selectedImage?.jpegData(compressionQuality: 0.8)
+        let imageData = capturedImage?.jpegData(compressionQuality: 0.8)
 
         let userMessage = ChatMessage(
             content: text,
@@ -148,7 +192,63 @@ extension ChatView {
 
         let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
         let baseContext = buildFitnessContext()
-        aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.todaysCalories)/\(baseContext.dailyCalorieGoal)"
+        aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.calorieContextSummary)"
+
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+            if isTemporarySession {
+                temporaryMessages.append(userMessage)
+                temporaryMessages.append(aiMessage)
+            } else {
+                modelContext.insert(userMessage)
+                modelContext.insert(aiMessage)
+            }
+            appendOptimisticSessionMessages([userMessage, aiMessage])
+        }
+
+        let requestID = UUID()
+        currentMessageRequestID = requestID
+        currentMessageTask = Task {
+            await performSendMessage(
+                text: text,
+                capturedImage: capturedImage,
+                previousMessages: previousMessages,
+                pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
+                pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext,
+                aiMessage: aiMessage,
+                requestID: requestID
+            )
+        }
+    }
+
+    @discardableResult
+    func sendAppInitiatedPrompt(
+        _ text: String,
+        launchLabel: String? = nil,
+        markNutritionPlanReviewedIfNoUpdate: Bool = false
+    ) -> Bool {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return false }
+        guard currentMessageTask == nil, !isLoading else { return false }
+
+        updateLastActivity()
+        let pendingNutritionPlanSuggestionForContext = currentPendingNutritionPlanSuggestionForContext()
+        let pendingWorkoutPlanSuggestionForContext = currentPendingWorkoutPlanSuggestionForContext()
+        retirePendingPlanSuggestionsInCurrentSession()
+        currentActivity = launchLabel ?? "Reviewing with Trai..."
+        isLoading = true
+
+        let previousMessages = Array(currentSessionMessages.suffix(10))
+        let userMessage = ChatMessage(
+            content: trimmedText,
+            isFromUser: true,
+            sessionId: currentSessionId
+        )
+        let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
+        let baseContext = buildFitnessContext()
+        aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.calorieContextSummary)"
+        if markNutritionPlanReviewedIfNoUpdate {
+            nutritionPlanReviewMessageIds.insert(aiMessage.id)
+        }
 
         if isTemporarySession {
             temporaryMessages.append(userMessage)
@@ -159,70 +259,40 @@ extension ChatView {
         }
         rebuildSessionMessages(preferLiveQueryData: true)
 
-        let capturedImage = selectedImage
-        selectedImage = nil
-        selectedPhotoItem = nil
-
-        currentMessageTask = Task {
-            await performSendMessage(
-                text: text,
-                capturedImage: capturedImage,
-                previousMessages: previousMessages,
-                aiMessage: aiMessage
-            )
-        }
-    }
-
-    func sendAppInitiatedPrompt(
-        _ text: String,
-        launchLabel: String? = nil,
-        markNutritionPlanReviewedIfNoUpdate: Bool = false
-    ) {
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
-
-        updateLastActivity()
-        retirePendingPlanSuggestionsInCurrentSession()
-        currentActivity = launchLabel ?? "Reviewing with Trai..."
-
-        let previousMessages = Array(currentSessionMessages.suffix(10))
-        let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
-        let baseContext = buildFitnessContext()
-        aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.todaysCalories)/\(baseContext.dailyCalorieGoal)"
-        if markNutritionPlanReviewedIfNoUpdate {
-            nutritionPlanReviewMessageIds.insert(aiMessage.id)
-        }
-
-        if isTemporarySession {
-            temporaryMessages.append(aiMessage)
-        } else {
-            modelContext.insert(aiMessage)
-        }
-        rebuildSessionMessages(preferLiveQueryData: true)
-
+        let requestID = UUID()
+        currentMessageRequestID = requestID
         currentMessageTask = Task {
             await performSendMessage(
                 text: trimmedText,
                 capturedImage: nil,
                 previousMessages: previousMessages,
-                aiMessage: aiMessage
+                pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
+                pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext,
+                aiMessage: aiMessage,
+                requestID: requestID
             )
         }
+        return true
     }
 
     func stopGenerating() {
         currentMessageTask?.cancel()
         currentMessageTask = nil
+        currentMessageRequestID = nil
         isLoading = false
         currentActivity = nil
         HapticManager.lightTap()
+        checkForPendingStartupActions()
     }
 
     func performSendMessage(
         text: String,
         capturedImage: UIImage?,
         previousMessages: [ChatMessage],
-        aiMessage: ChatMessage
+        pendingNutritionPlanSuggestionForContext: PlanUpdateSuggestionEntry?,
+        pendingWorkoutPlanSuggestionForContext: WorkoutPlanSuggestionEntry?,
+        aiMessage: ChatMessage,
+        requestID: UUID
     ) async {
         isLoading = true
         var latestStreamedText = ""
@@ -241,6 +311,7 @@ extension ChatView {
             let relevantMemories = activeMemories.filterForRelevance(message: text, maxCount: 10)
             let memoriesContext = relevantMemories.formatForPrompt()
             let coachContext = buildCompactCoachContext(now: Date())
+            let hasWorkoutForTargets = hasWorkoutLoggedToday(now: Date()) || workoutContext != nil
 
             // Fetch activity data from HealthKit
             let activityData = await fetchActivityData()
@@ -254,10 +325,13 @@ extension ChatView {
                 memoriesContext: memoriesContext,
                 coachContext: coachContext,
                 pendingSuggestion: pendingMealSuggestion?.meal,
-                pendingWorkoutPlanSuggestion: pendingWorkoutPlanSuggestion?.suggestion,
+                pendingNutritionPlanSuggestion: pendingNutritionPlanSuggestionForContext ?? currentPendingNutritionPlanSuggestionForContext(),
+                pendingWorkoutPlanSuggestion: pendingWorkoutPlanSuggestionForContext ?? currentPendingWorkoutPlanSuggestionForContext(),
                 isIncognitoMode: isTemporarySession,
                 activeWorkout: workoutContext,
-                activityData: activityData
+                activityData: activityData,
+                hasWorkoutToday: hasWorkoutForTargets,
+                focusedFoodEntry: focusedFoodEntryContext
             )
 
             let result = try await aiService.chatWithFunctions(
@@ -267,25 +341,30 @@ extension ChatView {
                 conversationHistory: previousMessages,
                 modelContext: modelContext,
                 onTextChunk: { chunk in
+                    guard currentMessageRequestID == requestID else { return }
                     latestStreamedText = chunk
                     let now = Date()
                     if now.timeIntervalSince(lastStreamRenderAt) >= 0.05 {
                         lastStreamRenderAt = now
                         Task { @MainActor in
+                            guard currentMessageRequestID == requestID else { return }
                             aiMessage.content = latestStreamedText
                         }
                     }
                 },
                 onFunctionCall: { functionName in
+                    guard currentMessageRequestID == requestID else { return }
                     currentActivity = friendlyFunctionName(functionName)
                 }
             )
 
+            guard currentMessageRequestID == requestID else { return }
             if !latestStreamedText.isEmpty {
                 aiMessage.content = latestStreamedText
             }
             handleChatResult(result, aiMessage: aiMessage)
         } catch {
+            guard currentMessageRequestID == requestID else { return }
             if error.isUserCancelledRequest {
                 // User cancelled - don't show an error bubble, just keep whatever streamed so far.
                 aiMessage.wasManuallyStopped = true
@@ -300,9 +379,12 @@ extension ChatView {
             nutritionPlanReviewMessageIds.remove(aiMessage.id)
         }
 
+        guard currentMessageRequestID == requestID else { return }
         isLoading = false
         currentActivity = nil
         currentMessageTask = nil
+        currentMessageRequestID = nil
+        checkForPendingStartupActions()
     }
 
     func handleChatResult(_ result: AIService.ChatFunctionResult, aiMessage: ChatMessage) {
@@ -389,11 +471,12 @@ extension ChatView {
         let totalCalories = todaysFoodEntries.reduce(0) { $0 + $1.calories }
         let totalProtein = todaysFoodEntries.reduce(0.0) { $0 + $1.proteinGrams }
         let recentWorkoutNames = Array(recentWorkouts.prefix(5).map { $0.displayName })
+        let hasWorkoutForTargets = hasWorkoutLoggedToday(now: Date()) || workoutContext != nil
 
         return FitnessContext(
             userGoal: profile?.goal.displayName ?? "Maintenance",
-            dailyCalorieGoal: profile?.dailyCalorieGoal ?? 2000,
-            dailyProteinGoal: profile?.dailyProteinGoal ?? 150,
+            dailyCalorieGoal: profile?.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutForTargets),
+            dailyProteinGoal: profile?.dailyProteinGoal,
             todaysCalories: totalCalories,
             todaysProtein: totalProtein,
             recentWorkouts: recentWorkoutNames,
@@ -403,6 +486,7 @@ extension ChatView {
     }
 
     func retryMessage(_ aiMessage: ChatMessage) {
+        guard !isLoading, currentMessageTask == nil else { return }
         guard let messageIndex = currentSessionMessages.firstIndex(where: { $0.id == aiMessage.id }),
               messageIndex > 0 else { return }
 
@@ -415,13 +499,28 @@ extension ChatView {
         let capturedImage = userMessage.imageData.flatMap { UIImage(data: $0) }
         let text = userMessage.content
         let previousMessages = Array(currentSessionMessages.prefix(messageIndex - 1).suffix(10))
+        let pendingNutritionPlanSuggestionForContext = ChatNutritionPlanSuggestionContext.latestFreshSuggestion(
+            in: Array(currentSessionMessages.prefix(messageIndex)),
+            currentPlanUpdatedAt: profile?.aiPlanGeneratedAt,
+            includeRetired: true
+        )
+        let pendingWorkoutPlanSuggestionForContext = ChatWorkoutPlanSuggestionContext.latestFreshSuggestion(
+            in: Array(currentSessionMessages.prefix(messageIndex)),
+            currentPlanUpdatedAt: profile?.workoutPlanGeneratedAt,
+            includeRetired: true
+        )
 
-        Task {
+        let requestID = UUID()
+        currentMessageRequestID = requestID
+        currentMessageTask = Task {
             await performSendMessage(
                 text: text,
                 capturedImage: capturedImage,
                 previousMessages: previousMessages,
-                aiMessage: aiMessage
+                pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
+                pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext,
+                aiMessage: aiMessage,
+                requestID: requestID
             )
         }
     }
@@ -448,9 +547,7 @@ extension ChatView {
         let hasWorkoutToday = hasWorkoutLoggedToday(now: now)
         let hasActiveWorkout = workoutContext != nil || liveWorkouts.contains(where: { $0.completedAt == nil })
 
-        let calorieGoal = profile?.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutToday || hasActiveWorkout)
-            ?? profile?.dailyCalorieGoal
-            ?? 2000
+        let calorieGoal = profile?.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutToday || hasActiveWorkout) ?? 2_000
         let proteinGoal = profile?.dailyProteinGoal ?? 150
         let readyMuscleCount = recoveryService
             .getRecoveryStatus(modelContext: modelContext)
@@ -545,20 +642,39 @@ extension ChatView {
     }
 
     private func hasWorkoutLoggedToday(now: Date) -> Bool {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: now)
-        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
-            return false
+        let interval = WorkoutDayTargetContext.dayInterval(containing: now)
+        return WorkoutDayTargetContext.hasWorkout(
+            in: interval,
+            workoutSessions: recentWorkouts,
+            liveWorkouts: liveWorkouts
+        )
+    }
+
+    private func currentPendingWorkoutPlanSuggestionForContext() -> WorkoutPlanSuggestionEntry? {
+        ChatWorkoutPlanSuggestionContext.latestFreshSuggestion(
+            in: currentSessionMessages,
+            currentPlanUpdatedAt: profile?.workoutPlanGeneratedAt
+        )
+    }
+
+    private func currentPendingNutritionPlanSuggestionForContext() -> PlanUpdateSuggestionEntry? {
+        ChatNutritionPlanSuggestionContext.latestFreshSuggestion(
+            in: currentSessionMessages,
+            currentPlanUpdatedAt: profile?.aiPlanGeneratedAt
+        )
+    }
+
+    private var hasMessagesInCurrentSession: Bool {
+        if isTemporarySession {
+            return !temporaryMessages.isEmpty
         }
 
-        let hasLoggedSession = recentWorkouts.contains { workout in
-            workout.loggedAt >= startOfDay && workout.loggedAt < endOfDay
-        }
-        let hasLiveWorkout = liveWorkouts.contains { workout in
-            workout.startedAt >= startOfDay && workout.startedAt < endOfDay
+        if !currentSessionMessages.isEmpty {
+            return true
         }
 
-        return hasLoggedSession || hasLiveWorkout
+        let sessionID = currentSessionId
+        return allMessages.contains { $0.sessionId == sessionID }
     }
 
     private func fetchActivityData() async -> AIService.ActivityData {
@@ -597,14 +713,10 @@ extension ChatView {
         let sessionSignals: [WorkoutNoteSignal] = recentWorkouts
             .filter { $0.loggedAt >= cutoff && $0.hasSignalNote }
             .map { workout in
-                let subtitle = [workout.displayTypeName, workout.formattedDuration, workout.formattedDistance]
-                    .compactMap { $0 }
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " • ")
                 return WorkoutNoteSignal(
                     date: workout.loggedAt,
                     title: workout.displayName,
-                    subtitle: subtitle,
+                    subtitle: workout.historyDetailSegments.joined(separator: " • "),
                     note: workout.trimmedNotes
                 )
             }
@@ -614,9 +726,7 @@ extension ChatView {
             .compactMap { workout in
                 let note = workout.notes.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !note.isEmpty else { return nil }
-                let subtitle = [workout.type.displayName, workout.displayFocusSummary, workout.formattedDuration]
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " • ")
+                let subtitle = workout.workoutContextSummarySegments.joined(separator: " • ")
                 return WorkoutNoteSignal(
                     date: workout.completedAt ?? workout.startedAt,
                     title: workout.name,
@@ -639,10 +749,13 @@ extension ChatView {
         activeWorkoutGoals
             .prefix(6)
             .map { goal in
+                let trackingSummary = goal.trackingSummary
+                let supportingSummary = goal.supportingSummary
                 let parts = [
                     goal.trimmedTitle,
                     goal.scopeSummary,
-                    goal.trackingSummary,
+                    trackingSummary,
+                    supportingSummary == trackingSummary ? nil : supportingSummary,
                     goal.horizonSummary
                 ].compactMap { $0 }
                 return "• " + parts.joined(separator: " • ")

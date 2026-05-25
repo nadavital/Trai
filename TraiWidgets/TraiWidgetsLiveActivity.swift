@@ -61,7 +61,7 @@ struct TraiWidgetsLiveActivity: Widget {
                     .font(.caption)
                     .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
             }
-            .widgetURL(AppRoute.workout(templateName: nil).url)
+            .widgetURL(AppRoute.workout(templateID: nil, templateName: nil).url)
         }
         .supplementalActivityFamilies([.small])
     }
@@ -122,7 +122,7 @@ private struct LockScreenWorkoutView: View {
             return firstWord
         }
 
-        return "Current set"
+        return "Current"
     }
 
     private var mediumFamilyBody: some View {
@@ -157,7 +157,7 @@ private struct LockScreenWorkoutView: View {
                                 .font(.caption2)
                                 .foregroundStyle(LiveActivityTheme.textSecondary)
                                 .lineLimit(1)
-                            Text("Current set")
+                            Text("Current")
                                 .font(.caption2)
                                 .foregroundStyle(LiveActivityTheme.textSecondary)
                                 .lineLimit(1)
@@ -168,7 +168,7 @@ private struct LockScreenWorkoutView: View {
 
                 Spacer(minLength: 8)
 
-                Text("\(context.state.completedSets)/\(context.state.totalSets)")
+                Text(context.state.progressDisplay)
                     .font(.system(.headline, design: .rounded, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(LiveActivityTheme.accent)
@@ -243,7 +243,7 @@ private struct LockScreenWorkoutView: View {
             }
             .frame(height: 5)
 
-            Text("\(context.state.completedSets)/\(context.state.totalSets)")
+            Text(context.state.progressDisplay)
                 .font(.caption2)
                 .monospacedDigit()
                 .foregroundStyle(LiveActivityTheme.textSecondary)
@@ -292,16 +292,15 @@ private struct LockScreenWorkoutView: View {
                                     .minimumScaleFactor(0.8)
                             }
 
-                            // Show current weight × reps if available
-                            if let setDisplay = context.state.currentSetDisplay {
+                            if let workDisplay = context.state.currentWorkDisplay {
                                 Text("•")
-                                .font(.caption2)
-                                .foregroundStyle(LiveActivityTheme.textTertiary)
-                                Text(setDisplay)
-                                .font(.caption)
-                                .foregroundStyle(LiveActivityTheme.accent)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
+                                    .font(.caption2)
+                                    .foregroundStyle(LiveActivityTheme.textTertiary)
+                                Text(workDisplay)
+                                    .font(.caption)
+                                    .foregroundStyle(LiveActivityTheme.accent)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
                             }
                         }
                     }
@@ -338,19 +337,19 @@ private struct LockScreenWorkoutView: View {
                             .frame(width: isMediumFamily ? 36 : 44, height: isMediumFamily ? 36 : 44)
                             .rotationEffect(.degrees(-90))
 
-                        Text("\(context.state.completedSets)")
+                        Text("\(context.state.progressCompletedValue)")
                             .font(.system(isMediumFamily ? .caption2 : .caption, design: .rounded, weight: .bold))
                             .monospacedDigit()
                     }
 
-                    Text("\(context.state.completedSets)/\(context.state.totalSets)")
+                    Text(context.state.progressDisplay)
                         .font(.caption2)
                         .monospacedDigit()
                         .foregroundStyle(LiveActivityTheme.textSecondary)
                         .lineLimit(1)
 
-                    // Volume if available
-                    if let volume = context.state.volumeDisplay {
+                    // Volume if available for the current strength exercise.
+                    if context.state.canUseSetShortcut, let volume = context.state.volumeDisplay {
                         Text(volume)
                             .font(.caption2)
                             .foregroundStyle(LiveActivityTheme.accent)
@@ -382,13 +381,15 @@ private struct LockScreenWorkoutView: View {
             // Action buttons
             if !isSupplementalFamily {
                 HStack(spacing: 12) {
-                    Button(intent: AddSetIntent()) {
-                        Label("Add Set", systemImage: "plus.circle.fill")
-                            .font(.caption)
-                            .frame(maxWidth: .infinity)
+                    if context.state.canUseSetShortcut {
+                        Button(intent: AddSetIntent()) {
+                            Label("Add Set", systemImage: "plus.circle.fill")
+                                .font(.caption)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(LiveActivityTheme.accent)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(LiveActivityTheme.accent)
 
                     Button(intent: TogglePauseIntent()) {
                         Label(
@@ -459,13 +460,13 @@ private struct ExpandedTrailingView: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
             // Volume display (no timer per user feedback)
-            if let volume = context.state.volumeDisplay {
+            if context.state.canUseSetShortcut, let volume = context.state.volumeDisplay {
                 Text(volume)
                     .font(.system(.title3, design: .rounded, weight: .bold))
                     .foregroundStyle(LiveActivityTheme.accent)
             }
 
-            Text(context.state.setsDisplay)
+            Text(context.state.progressDisplay)
                 .font(.caption)
                 .foregroundStyle(LiveActivityTheme.textSecondary)
         }
@@ -503,8 +504,8 @@ private struct ExpandedBottomView: View {
                                 .lineLimit(1)
                         }
 
-                        if let setDisplay = context.state.currentSetDisplay {
-                            Text(setDisplay)
+                        if let workDisplay = context.state.currentWorkDisplay {
+                            Text(workDisplay)
                                 .font(.caption2)
                                 .foregroundStyle(LiveActivityTheme.accent)
                         }
@@ -514,7 +515,7 @@ private struct ExpandedBottomView: View {
                 Spacer()
 
                 // Volume display
-                if let volume = context.state.volumeDisplay {
+                if context.state.canUseSetShortcut, let volume = context.state.volumeDisplay {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text("Volume")
                             .font(.caption2)
@@ -538,7 +539,7 @@ private struct CompactLeadingView: View {
                 .font(.caption)
                 .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
 
-            // Show current exercise instead of timer
+            // Show current workout item instead of timer
             if let exercise = context.state.currentExercise {
                 Text(exercise)
                     .font(.caption)
@@ -552,9 +553,10 @@ private struct CompactTrailingView: View {
     let context: ActivityViewContext<TraiWorkoutAttributes>
 
     var body: some View {
-        Text("\(context.state.completedSets)/\(context.state.totalSets)")
+        Text(context.state.progressDisplay)
             .font(.system(.caption, design: .rounded, weight: .semibold))
             .foregroundStyle(LiveActivityTheme.accent)
+            .lineLimit(1)
     }
 }
 
@@ -606,6 +608,26 @@ extension TraiWorkoutAttributes.ContentState {
             nextExercise: "Lateral Raises"
         )
     }
+
+    static var mixedActivity: TraiWorkoutAttributes.ContentState {
+        TraiWorkoutAttributes.ContentState(
+            elapsedSeconds: 1240,
+            currentExercise: "Climbing Technique Practice",
+            currentEquipment: nil,
+            currentDetail: "18:00 • 6 attempts",
+            completedSets: 0,
+            totalSets: 0,
+            heartRate: 118,
+            isPaused: false,
+            totalVolumeKg: nil,
+            totalVolumeLbs: nil,
+            nextExercise: "Mobility Flow",
+            progressCompleted: 1,
+            progressTotal: 3,
+            progressLabel: "items",
+            supportsSetShortcut: false
+        )
+    }
 }
 
 #if DEBUG
@@ -620,6 +642,10 @@ struct TraiWidgetsLiveActivity_Previews: PreviewProvider {
                 TraiWorkoutAttributes.preview
                     .previewContext(TraiWorkoutAttributes.ContentState.paused, viewKind: .content)
                     .previewDisplayName("Paused")
+
+                TraiWorkoutAttributes.preview
+                    .previewContext(TraiWorkoutAttributes.ContentState.mixedActivity, viewKind: .content)
+                    .previewDisplayName("Mixed Activity")
             }
         }
     }

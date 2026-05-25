@@ -36,7 +36,7 @@ nonisolated enum WorkoutMode: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    var iconName: String {
+    nonisolated var iconName: String {
         switch self {
         case .strength: "dumbbell.fill"
         case .cardio: "figure.run"
@@ -75,7 +75,7 @@ nonisolated enum WorkoutMode: String, Codable, CaseIterable, Identifiable {
         case .strength:
             return ["Push", "Pull", "Legs", "Upper", "Full Body"]
         case .cardio:
-            return ["Running", "Cycling", "Swimming", "Rowing", "Zone 2"]
+            return ["Running", "Cycling", "Swimming", "Rowing", "Steady Cardio"]
         case .hiit:
             return ["Intervals", "Conditioning", "Sprints", "Circuit"]
         case .climbing:
@@ -142,32 +142,34 @@ nonisolated enum WorkoutMode: String, Codable, CaseIterable, Identifiable {
     }
 
     static func infer(from sessionName: String, focusAreas: [String], targetMuscleGroups: [String]) -> WorkoutMode {
-        let tokens = ([sessionName] + focusAreas + targetMuscleGroups)
-            .joined(separator: " ")
-            .lowercased()
+        let words = activityWords(from: ([sessionName] + focusAreas + targetMuscleGroups).joined(separator: " "))
 
-        if tokens.contains("yoga") { return .yoga }
-        if tokens.contains("pilates") { return .pilates }
-        if tokens.contains("climb") || tokens.contains("boulder") { return .climbing }
-        if tokens.contains("hiit") || tokens.contains("interval") || tokens.contains("conditioning") { return .hiit }
-        if tokens.contains("mobility") { return .mobility }
-        if tokens.contains("flexibility") || tokens.contains("stretch") { return .flexibility }
-        if tokens.contains("recovery") || tokens.contains("cooldown") { return .recovery }
-        if tokens.contains("run")
-            || tokens.contains("cycle")
-            || tokens.contains("swim")
-            || tokens.contains("row")
-            || tokens.contains("cardio")
-            || tokens.contains("walk")
-            || tokens.contains("hike")
-            || tokens.contains("stair")
-            || tokens.contains("elliptical")
-            || tokens.contains("jump rope")
-            || tokens.contains("jumprope") {
+        if words.contains("yoga") { return .yoga }
+        if words.contains("pilates") { return .pilates }
+        if ["climb", "climbing", "boulder", "bouldering"].contains(where: words.contains) { return .climbing }
+        if ["hiit", "interval", "intervals", "conditioning"].contains(where: words.contains) { return .hiit }
+        if words.contains("mobility") { return .mobility }
+        if ["flexibility", "stretch", "stretching"].contains(where: words.contains) { return .flexibility }
+        if ["recovery", "cooldown"].contains(where: words.contains) { return .recovery }
+        if ["run", "running", "cycle", "cycling", "swim", "swimming", "rowing", "rower", "cardio", "walk", "walking", "hike", "hiking", "stair", "elliptical", "jumprope"].contains(where: words.contains) {
             return .cardio
         }
         if !targetMuscleGroups.isEmpty { return .strength }
         return .custom
+    }
+
+    private static func activityWords(from rawValue: String) -> Set<String> {
+        let words = rawValue
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let compact = rawValue
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        return Set(words + [compact])
     }
 
     static func personalizedOrder(

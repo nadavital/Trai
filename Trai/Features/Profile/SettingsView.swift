@@ -6,19 +6,29 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct SettingsView: View {
     @Bindable var profile: UserProfile
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(AppAccountService.self) private var appAccountService: AppAccountService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @State private var showPlanAdjustment = false
     @State private var showWorkoutPlanSetup = false
     @State private var showWorkoutPlanEdit = false
+    @State private var standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+    @State private var standardGeneratedWorkoutPlan: WorkoutPlan?
+    @State private var standardGeneratedWorkoutGoals: [WorkoutGoal] = []
+    @State private var standardWorkoutPlanSetupBase: WorkoutPlan?
+    @State private var standardWorkoutPlanAIService = AIService()
     @State private var pendingEnabledMacroReveal: MacroType?
     @State private var presentedAccountSetupContext: AccountSetupContext?
     @State private var isShowingDeleteAccountConfirmation = false
     @State private var accountActionError: AccountActionError?
+    @State private var workoutPlanSaveError: SettingsWorkoutPlanSaveError?
     @AppStorage("trai_coach_tone") private var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
 
     var body: some View {
@@ -338,6 +348,13 @@ struct SettingsView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+        .alert(item: $workoutPlanSaveError) { error in
+            Alert(
+                title: Text("Workout Plan Not Saved"),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
         .alert(item: $pendingEnabledMacroReveal) { macro in
             Alert(
                 title: Text("\(macro.displayName) target ready"),
@@ -348,9 +365,23 @@ struct SettingsView: View {
                 secondaryButton: .cancel(Text("Keep Target"))
             )
         }
-        .sheet(isPresented: $showWorkoutPlanSetup) {
-            WorkoutPlanChatFlow()
+        .sheet(isPresented: $showWorkoutPlanSetup, onDismiss: resetStandardWorkoutPlanSetupState) {
+            WorkoutPlanSetupChoiceFlow(
+                draft: $standardWorkoutPlanDraft,
+                generatedPlanForReview: $standardGeneratedWorkoutPlan,
+                generatedPlanGoalsForReview: $standardGeneratedWorkoutGoals,
+                context: standardWorkoutPlanSetupContext,
+                aiService: standardWorkoutPlanAIService,
+                canAccessAIFeatures: monetizationService?.canAccessAIFeatures ?? true,
+                onComplete: saveStandardWorkoutPlan,
+                onBack: { showWorkoutPlanSetup = false }
+            )
                 .traiSheetBranding()
+        }
+        .onChange(of: showWorkoutPlanSetup) { _, isShowing in
+            if isShowing {
+                standardWorkoutPlanSetupBase = profile.workoutPlan
+            }
         }
         .sheet(isPresented: $showWorkoutPlanEdit) {
             if let plan = profile.workoutPlan {
@@ -378,9 +409,134 @@ struct SettingsView: View {
         }
     }
 
+    private var standardWorkoutPlanSetupContext: OnboardingWorkoutPlanUserContext {
+        OnboardingWorkoutPlanUserContext(
+            name: profile.name,
+            age: profile.age ?? 30,
+            gender: profile.genderValue,
+            goal: profile.goal,
+            activityLevel: profile.activityLevelValue,
+            nutritionContext: OnboardingWorkoutPlanUserContext.nutritionContext(from: profile),
+            memoryContext: workoutPlanMemoryContext(),
+            activeWorkoutGoalContext: OnboardingWorkoutPlanUserContext.activeGoalContext(from: activeWorkoutGoalsForPlanSetup())
+        )
+    }
+
+    private func saveStandardWorkoutPlan(
+        _ plan: WorkoutPlan,
+        generatedGoals: [WorkoutGoal],
+        mode: WorkoutPlanSetupMode,
+        draftSnapshot: OnboardingWorkoutPlanDraft
+    ) {
+        guard WorkoutPlanEditSheet.canSaveSetupPlan(
+            savedPlan: profile.workoutPlan,
+            setupBase: standardWorkoutPlanSetupBase
+        ) else {
+            workoutPlanSaveError = SettingsWorkoutPlanSaveError(
+                message: "Your workout plan changed while setup was open. Reopen the latest plan before saving changes."
+            )
+            HapticManager.error()
+            return
+        }
+        let hadExistingPlan = profile.workoutPlan != nil
+        let durablePlan = plan.normalizedForDurableBlocks()
+
+        WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
+            profile: profile,
+            reason: .chatAdjustment,
+            modelContext: modelContext,
+            replacingWith: durablePlan
+        )
+
+        profile.workoutPlan = durablePlan
+        draftSnapshot.applyPreferences(to: profile, generatedPlan: durablePlan)
+        refreshExistingGeneratedPlanAdherenceGoals(for: durablePlan)
+
+        if mode == .proAI {
+            insertGeneratedWorkoutGoals(generatedGoals, for: durablePlan)
+        }
+
+        if !hadExistingPlan {
+            WorkoutPlanHistoryService.archivePlan(
+                durablePlan,
+                profile: profile,
+                reason: .chatCreate,
+                modelContext: modelContext
+            )
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            workoutPlanSaveError = SettingsWorkoutPlanSaveError(message: error.localizedDescription)
+            HapticManager.error()
+            return
+        }
+        resetStandardWorkoutPlanSetupState()
+        showWorkoutPlanSetup = false
+        WidgetDataProvider.shared.scheduleRefresh()
+        HapticManager.success()
+    }
+
+    private func workoutPlanMemoryContext() -> [String] {
+        let descriptor = FetchDescriptor<CoachMemory>(
+            predicate: #Predicate<CoachMemory> { memory in
+                memory.isActive
+            },
+            sortBy: [
+                SortDescriptor(\CoachMemory.importance, order: .reverse),
+                SortDescriptor(\CoachMemory.createdAt, order: .reverse)
+            ]
+        )
+        let memories = (try? modelContext.fetch(descriptor)) ?? []
+        return memories
+            .filter {
+                $0.topic == .workout || $0.topic == .general || $0.category == .goal || $0.category == .context || $0.category == .restriction
+            }
+            .prefix(8)
+            .map(\.promptFormat)
+    }
+
+    private func activeWorkoutGoalsForPlanSetup() -> [WorkoutGoal] {
+        let descriptor = FetchDescriptor<WorkoutGoal>(
+            predicate: #Predicate<WorkoutGoal> { goal in
+                goal.statusRaw == "active"
+            },
+            sortBy: [SortDescriptor(\WorkoutGoal.updatedAt, order: .reverse)]
+        )
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) {
+        for goal in WorkoutGoal.generatedGoalsToInsert(
+            goals,
+            existingGoals: activeWorkoutGoalsForPlanSetup(),
+            for: plan
+        ) {
+            modelContext.insert(goal)
+        }
+    }
+
+    private func refreshExistingGeneratedPlanAdherenceGoals(for plan: WorkoutPlan) {
+        WorkoutGoal.refreshGeneratedPlanAdherenceGoals(activeWorkoutGoalsForPlanSetup(), for: plan)
+    }
+
+    private func resetStandardWorkoutPlanSetupState() {
+        standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+        standardGeneratedWorkoutPlan = nil
+        standardGeneratedWorkoutGoals = []
+        standardWorkoutPlanSetupBase = nil
+    }
+
 }
 
 private struct AccountActionError: Identifiable {
+    let id = UUID()
+    let message: String
+}
+
+private struct SettingsWorkoutPlanSaveError: Identifiable {
     let id = UUID()
     let message: String
 }
@@ -415,6 +571,7 @@ private struct MacroToggleRow: View {
         }
         .buttonStyle(.plain)
     }
+
 }
 
 #Preview {

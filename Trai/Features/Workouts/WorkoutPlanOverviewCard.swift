@@ -12,18 +12,6 @@ struct WorkoutPlanOverviewCard: View {
     let onCreatePlan: () -> Void
     let onEditPlan: () -> Void
 
-    private func flexibleSessionCount(for plan: WorkoutPlan) -> Int {
-        plan.templates.filter { !$0.sessionType.prefersStructuredEntries }.count
-    }
-
-    private func summaryLabel(for plan: WorkoutPlan) -> String {
-        let flexibleCount = flexibleSessionCount(for: plan)
-        if flexibleCount > 0 {
-            return flexibleCount == 1 ? "flex day" : "flex days"
-        }
-        return "sessions"
-    }
-
     var body: some View {
         if let plan = workoutPlan {
             planOverviewView(plan)
@@ -74,8 +62,15 @@ struct WorkoutPlanOverviewCard: View {
                 PlanStatChip(
                     icon: "list.bullet.rectangle",
                     value: "\(plan.templates.count)",
-                    label: summaryLabel(for: plan)
+                    label: plan.templates.count == 1 ? "session" : "sessions"
                 )
+            }
+
+            if let intent = plan.planIntent, !intent.summary.isEmpty {
+                Text(intent.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
 
             // Template chips
@@ -182,6 +177,15 @@ struct TemplateChip: View {
             Text(template.name)
                 .font(.caption)
                 .bold()
+
+            if template.displayBlocks.count > 1 {
+                Text("\(template.displayBlocks.count)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color(.systemBackground).opacity(0.65), in: Capsule())
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

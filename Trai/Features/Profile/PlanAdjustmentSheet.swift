@@ -11,9 +11,11 @@ struct PlanAdjustmentSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appTabSelection) private var appTabSelection
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingActionKind) private var pendingChatActionKind: String = ""
 
     @State private var goalType: UserProfile.GoalType
     @State private var calories: Int
@@ -22,6 +24,7 @@ struct PlanAdjustmentSheet: View {
     @State private var fat: Int
     @State private var trainingDayCalories: Int?
     @State private var restDayCalories: Int?
+    @State private var presentedAccountSetupContext: AccountSetupContext?
 
     private var availableGoals: [UserProfile.GoalType] {
         [.loseWeight, .loseFat, .buildMuscle, .recomposition, .maintenance, .performance]
@@ -75,6 +78,9 @@ struct PlanAdjustmentSheet: View {
                     .labelStyle(.iconOnly)
                 }
             }
+        }
+        .sheet(item: $presentedAccountSetupContext) { context in
+            AccountSetupView(context: context)
         }
         .traiSheetBranding()
     }
@@ -130,8 +136,21 @@ struct PlanAdjustmentSheet: View {
     }
 
     private func openTraiCoach() {
+        guard accountSessionService?.isAuthenticated != false else {
+            presentedAccountSetupContext = .aiFeatures
+            return
+        }
+        guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            dismiss()
+            DispatchQueue.main.async {
+                appTabSelection.wrappedValue = .trai
+            }
+            HapticManager.selectionChanged()
+            return
+        }
         pendingChatPrompt = aiCoachPrompt
         pendingChatLaunchLabel = "Reviewing your nutrition plan..."
+        pendingChatActionKind = PendingTraiChatActionKind.nutritionPlanReview.rawValue
         dismiss()
         DispatchQueue.main.async {
             appTabSelection.wrappedValue = .trai
@@ -337,6 +356,7 @@ struct PlanAdjustmentSheet: View {
         profile.dailyFatGoal = fat
         profile.trainingDayCalories = trainingDayCalories
         profile.restDayCalories = restDayCalories
+        profile.aiPlanGeneratedAt = Date()
         HapticManager.success()
     }
 }

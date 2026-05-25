@@ -33,11 +33,103 @@ extension OnboardingView {
         var adjustedFat: String
         var lastGeneratedPlanInputSignature: String?
         var generatedWorkoutPlan: WorkoutPlan?
+        var generatedWorkoutGoals: [WorkoutGoalDraft]?
+        var workoutPlanDraft: OnboardingWorkoutPlanDraft?
+    }
+
+    struct WorkoutGoalDraft: Codable, Equatable {
+        var title: String
+        var goalKindRaw: String
+        var statusRaw: String
+        var linkedWorkoutTypeRaw: String?
+        var linkedActivityName: String?
+        var linkedActivityTags: [String]
+        var linkedActivityKindRaw: String?
+        var linkedActivityRoleRaw: String?
+        var targetValue: Double?
+        var targetUnit: String
+        var periodUnitRaw: String?
+        var periodCount: Int?
+        var successCriteria: String
+        var notes: String
+        var targetDate: Date?
+        var checkInCadenceDays: Int?
+        var baselineValue: Double?
+        var tracksGeneratedPlanAdherence: Bool
+        var generatedPlanTemplateIDsRaw: String
+        var generatedPlanBlockIDsRaw: String?
+        var requiresGeneratedPlanBlockScope: Bool?
+        var createdAt: Date
+        var updatedAt: Date
+        var completedAt: Date?
+        var lastCheckInPromptAt: Date?
+        var lastCelebratedAt: Date?
+
+        init(goal: WorkoutGoal) {
+            title = goal.title
+            goalKindRaw = goal.goalKindRaw
+            statusRaw = goal.statusRaw
+            linkedWorkoutTypeRaw = goal.linkedWorkoutTypeRaw
+            linkedActivityName = goal.linkedActivityName
+            linkedActivityTags = goal.linkedActivityTags
+            linkedActivityKindRaw = goal.linkedActivityKindRaw
+            linkedActivityRoleRaw = goal.linkedActivityRoleRaw
+            targetValue = goal.targetValue
+            targetUnit = goal.targetUnit
+            periodUnitRaw = goal.periodUnitRaw
+            periodCount = goal.periodCount
+            successCriteria = goal.successCriteria
+            notes = goal.notes
+            targetDate = goal.targetDate
+            checkInCadenceDays = goal.checkInCadenceDays
+            baselineValue = goal.baselineValue
+            tracksGeneratedPlanAdherence = goal.tracksGeneratedPlanAdherence
+            generatedPlanTemplateIDsRaw = goal.generatedPlanTemplateIDsRaw
+            generatedPlanBlockIDsRaw = goal.generatedPlanBlockIDsRaw
+            requiresGeneratedPlanBlockScope = goal.requiresGeneratedPlanBlockScope
+            createdAt = goal.createdAt
+            updatedAt = goal.updatedAt
+            completedAt = goal.completedAt
+            lastCheckInPromptAt = goal.lastCheckInPromptAt
+            lastCelebratedAt = goal.lastCelebratedAt
+        }
+
+        func workoutGoal() -> WorkoutGoal {
+            let goal = WorkoutGoal(
+                title: title,
+                goalKind: WorkoutGoal.GoalKind(rawValue: goalKindRaw) ?? .milestone,
+                status: WorkoutGoal.GoalStatus(rawValue: statusRaw) ?? .active,
+                linkedWorkoutType: linkedWorkoutTypeRaw.flatMap(WorkoutMode.init(rawValue:)),
+                linkedActivityName: linkedActivityName,
+                linkedActivityTags: linkedActivityTags,
+                linkedActivityKind: linkedActivityKindRaw.flatMap(WorkoutPlan.TrainingBlock.BlockKind.init(rawValue:)),
+                linkedActivityRole: linkedActivityRoleRaw.flatMap(WorkoutPlan.TrainingBlock.Role.init(rawValue:)),
+                targetValue: targetValue,
+                targetUnit: targetUnit,
+                periodUnit: periodUnitRaw.flatMap(WorkoutGoal.PeriodUnit.init(rawValue:)),
+                periodCount: periodCount,
+                successCriteria: successCriteria,
+                notes: notes,
+                targetDate: targetDate,
+                checkInCadenceDays: checkInCadenceDays,
+                baselineValue: baselineValue,
+                tracksGeneratedPlanAdherence: tracksGeneratedPlanAdherence
+            )
+            goal.generatedPlanTemplateIDsRaw = generatedPlanTemplateIDsRaw
+            goal.generatedPlanBlockIDsRaw = generatedPlanBlockIDsRaw ?? ""
+            goal.requiresGeneratedPlanBlockScope = requiresGeneratedPlanBlockScope ?? !goal.generatedPlanBlockIDs.isEmpty
+            goal.createdAt = createdAt
+            goal.updatedAt = updatedAt
+            goal.completedAt = completedAt
+            goal.lastCheckInPromptAt = lastCheckInPromptAt
+            goal.lastCelebratedAt = lastCelebratedAt
+            return goal
+        }
     }
 
     private static let onboardingDraftStorageKey = "onboardingDraft"
 
-    var onboardingDraftSnapshot: OnboardingDraft {
+    @MainActor var onboardingDraftSnapshot: OnboardingDraft {
         OnboardingDraft(
             currentStep: currentStep,
             userName: userName,
@@ -62,7 +154,9 @@ extension OnboardingView {
             adjustedCarbs: adjustedCarbs,
             adjustedFat: adjustedFat,
             lastGeneratedPlanInputSignature: lastGeneratedPlanInputSignature,
-            generatedWorkoutPlan: generatedWorkoutPlan
+            generatedWorkoutPlan: generatedWorkoutPlan,
+            generatedWorkoutGoals: generatedWorkoutGoals.map(WorkoutGoalDraft.init(goal:)),
+            workoutPlanDraft: workoutPlanDraft
         )
     }
 
@@ -78,7 +172,9 @@ extension OnboardingView {
         !activityNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
         !additionalGoalNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
         generatedPlan != nil ||
-        generatedWorkoutPlan != nil
+        generatedWorkoutPlan != nil ||
+        !generatedWorkoutGoals.isEmpty ||
+        workoutPlanDraft != OnboardingWorkoutPlanDraft()
     }
 
     func restoreDraftIfNeeded() {
@@ -113,14 +209,30 @@ extension OnboardingView {
         adjustedFat = draft.adjustedFat
         lastGeneratedPlanInputSignature = draft.lastGeneratedPlanInputSignature
         generatedWorkoutPlan = draft.generatedWorkoutPlan
+        generatedWorkoutGoals = draft.generatedWorkoutGoals?.map { $0.workoutGoal() } ?? []
+        if let restoredWorkoutPlanDraft = draft.workoutPlanDraft {
+            workoutPlanDraft = restoredWorkoutPlanDraft
+        }
 
         if let generatedPlan, adjustedCalories.isEmpty {
             populateAdjustedValues(from: generatedPlan)
         }
-        if generatedPlan == nil && draft.currentStep >= 8 {
-            currentStep = 7
+        if generatedPlan == nil && draft.currentStep >= totalSteps {
+            currentStep = max(totalSteps - 2, 0)
         } else {
             currentStep = min(draft.currentStep, totalSteps - 1)
+        }
+
+        recoverPlanReviewIfNeededAfterDraftRestore()
+    }
+
+    private func recoverPlanReviewIfNeededAfterDraftRestore() {
+        guard currentStepID == .nutritionPlan, generatedPlan == nil else { return }
+
+        if buildPlanRequest() != nil {
+            generatePlan()
+        } else {
+            currentStep = onboardingSteps.firstIndex(of: .activity) ?? max(totalSteps - 2, 0)
         }
     }
 

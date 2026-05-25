@@ -31,11 +31,56 @@ extension WorkoutPlan {
             splitType: splitType,
             daysPerWeek: request.availableDays ?? 3,
             templates: templates,
+            planIntent: PlanIntent(
+                primaryFocus: request.workoutType.displayName,
+                supportingFocuses: request.selectedWorkoutTypes?
+                    .filter { $0 != request.workoutType }
+                    .map(\.displayName) ?? [],
+                sessionAllocation: "\(templates.count) sessions based on available defaults",
+                honoredInputs: defaultHonoredInputs(from: request),
+                avoided: [],
+                summary: rationale
+            ),
             rationale: rationale,
             guidelines: guidelines,
             progressionStrategy: progressionStrategy(for: experience, workoutType: request.workoutType),
+            modalityProgression: defaultModalityProgression(for: request.workoutType),
             warnings: generateWarnings(for: request)
         )
+    }
+
+    private static func defaultHonoredInputs(from request: WorkoutPlanGenerationRequest) -> [String] {
+        [
+            request.availableDays.map { "\($0) days/week" },
+            request.timePerWorkout.map { "\($0) min sessions" },
+            request.equipmentAccess?.displayName,
+            request.experienceLevel?.displayName
+        ].compactMap { $0 }
+    }
+
+    private static func defaultModalityProgression(
+        for workoutType: WorkoutPlanGenerationRequest.WorkoutType
+    ) -> ModalityProgression {
+        let focus: ModalityProgression.ProgressionFocus
+        let text: String
+        switch workoutType {
+        case .strength:
+            focus = .strength
+            text = "Add reps or weight as sessions feel repeatable."
+        case .cardio:
+            focus = .endurance
+            text = "Add a small amount of duration or intensity when the work feels comfortable."
+        case .hiit:
+            focus = .volume
+            text = "Add rounds or tighten rest gradually without sacrificing recovery."
+        case .flexibility:
+            focus = .mobility
+            text = "Increase range, control, or session frequency gradually."
+        case .mixed:
+            focus = .mixed
+            text = "Progress the main focus while keeping supporting work sustainable."
+        }
+        return ModalityProgression(focus: focus, weeklyProgression: text, targets: [])
     }
 
     private static func generateDefaultTemplates(
@@ -434,10 +479,35 @@ extension WorkoutPlan {
                 sessionType: primary == .climbing ? .climbing : .cardio,
                 focusAreas: [primary.displayName, "Endurance"],
                 targetMuscleGroups: [primary.displayName.lowercased(), "cardio"],
-                exercises: [
-                    ExerciseTemplate(exerciseName: "Easy Warm-Up", muscleGroup: "cardio", defaultSets: 1, defaultReps: 10, notes: "10 minutes easy", order: 0),
-                    ExerciseTemplate(exerciseName: "\(primary.displayName) Base Work", muscleGroup: primary.displayName.lowercased(), defaultSets: 1, defaultReps: max(duration - 15, 20), notes: "Steady conversational pace", order: 1),
-                    ExerciseTemplate(exerciseName: "Cool Down", muscleGroup: "cardio", defaultSets: 1, defaultReps: 5, notes: "5 minutes easy", order: 2)
+                exercises: [],
+                blocks: [
+                    WorkoutPlan.TrainingBlock(
+                        kind: .mobility,
+                        role: .warmup,
+                        title: "Warmup",
+                        detail: "Build gradually",
+                        durationMinutes: 8,
+                        intensity: "Easy",
+                        order: 0
+                    ),
+                    WorkoutPlan.TrainingBlock(
+                        kind: primary == .climbing ? .skill : .cardio,
+                        title: "\(primary.displayName) base work",
+                        detail: "Steady conversational effort",
+                        durationMinutes: max(duration - 13, 20),
+                        intensity: "Easy to moderate",
+                        target: "Sustainable pace",
+                        order: 1
+                    ),
+                    WorkoutPlan.TrainingBlock(
+                        kind: .recovery,
+                        role: .cooldown,
+                        title: "Cooldown",
+                        detail: "Return to easy breathing",
+                        durationMinutes: 5,
+                        intensity: "Easy",
+                        order: 2
+                    )
                 ],
                 estimatedDurationMinutes: duration,
                 order: 0
@@ -447,10 +517,35 @@ extension WorkoutPlan {
                 sessionType: .hiit,
                 focusAreas: [secondary.displayName, "Intervals"],
                 targetMuscleGroups: ["conditioning", "cardio"],
-                exercises: [
-                    ExerciseTemplate(exerciseName: "Warm-Up", muscleGroup: "cardio", defaultSets: 1, defaultReps: 10, notes: "Build to moderate effort", order: 0),
-                    ExerciseTemplate(exerciseName: "\(secondary.displayName) Intervals", muscleGroup: secondary.displayName.lowercased(), defaultSets: 6, defaultReps: 2, notes: "2 hard minutes, 2 easy minutes", order: 1),
-                    ExerciseTemplate(exerciseName: "Cool Down", muscleGroup: "cardio", defaultSets: 1, defaultReps: 5, notes: "Return to easy pace", order: 2)
+                exercises: [],
+                blocks: [
+                    WorkoutPlan.TrainingBlock(
+                        kind: .mobility,
+                        role: .warmup,
+                        title: "Warmup",
+                        detail: "Build to moderate effort",
+                        durationMinutes: 10,
+                        intensity: "Easy to moderate",
+                        order: 0
+                    ),
+                    WorkoutPlan.TrainingBlock(
+                        kind: .conditioning,
+                        title: "\(secondary.displayName) intervals",
+                        detail: "2 hard minutes, 2 easy minutes",
+                        durationMinutes: max(duration - 15, 20),
+                        intensity: "Hard repeats",
+                        target: "Controlled hard efforts",
+                        order: 1
+                    ),
+                    WorkoutPlan.TrainingBlock(
+                        kind: .recovery,
+                        role: .cooldown,
+                        title: "Cooldown",
+                        detail: "Return to easy pace",
+                        durationMinutes: 5,
+                        intensity: "Easy",
+                        order: 2
+                    )
                 ],
                 estimatedDurationMinutes: duration,
                 order: 1
@@ -466,10 +561,34 @@ extension WorkoutPlan {
                     sessionType: preferred.contains(.climbing) ? .climbing : .recovery,
                     focusAreas: [recoveryFocus],
                     targetMuscleGroups: [recoveryTarget, "recovery"],
-                    exercises: [
-                        ExerciseTemplate(exerciseName: "Skill Warm-Up", muscleGroup: recoveryTarget, defaultSets: 1, defaultReps: 10, notes: "Easy ramp-up", order: 0),
-                        ExerciseTemplate(exerciseName: recoveryFocus, muscleGroup: recoveryTarget, defaultSets: 1, defaultReps: max(duration - 20, 15), notes: "Keep effort smooth and repeatable", order: 1),
-                        ExerciseTemplate(exerciseName: "Mobility Finish", muscleGroup: "mobility", defaultSets: 1, defaultReps: 10, notes: "Reset hips, ankles, and upper back", order: 2)
+                    exercises: [],
+                    blocks: [
+                        WorkoutPlan.TrainingBlock(
+                            kind: .mobility,
+                            role: .warmup,
+                            title: "Easy ramp",
+                            detail: "Ease into the session",
+                            durationMinutes: 8,
+                            intensity: "Easy",
+                            order: 0
+                        ),
+                        WorkoutPlan.TrainingBlock(
+                            kind: preferred.contains(.climbing) ? .skill : .recovery,
+                            title: recoveryFocus,
+                            detail: "Keep effort smooth and repeatable",
+                            durationMinutes: max(duration - 18, 15),
+                            intensity: "Easy",
+                            target: "Recovery quality",
+                            order: 1
+                        ),
+                        WorkoutPlan.TrainingBlock(
+                            kind: .mobility,
+                            title: "Mobility finish",
+                            detail: "Reset hips, ankles, and upper back",
+                            durationMinutes: 10,
+                            intensity: "Gentle",
+                            order: 2
+                        )
                     ],
                     estimatedDurationMinutes: duration,
                     order: 2
@@ -554,6 +673,33 @@ extension WorkoutPlan {
         let strengthTemplates = generateFullBodyTemplates(equipment: equipment, experience: experience, duration: duration)
         let cardioTemplates = generateCardioTemplates(request: request, duration: duration)
 
+        if request.requestsCardioAsAccessory {
+            let requestedDays = max(request.availableDays ?? 3, 2)
+            guard !strengthTemplates.isEmpty else { return [] }
+            return (0..<requestedDays)
+                .map { index in
+                    let template = strengthTemplates[index % strengthTemplates.count]
+                    let supportRole = request.supportiveCardioRole
+                    let renamed = WorkoutTemplate(
+                        id: template.id,
+                        name: "Strength \(Character(UnicodeScalar(65 + index)!))",
+                        sessionType: .strength,
+                        focusAreas: template.targetMuscleGroups,
+                        targetMuscleGroups: template.targetMuscleGroups,
+                        exercises: template.exercises,
+                        blocks: index == 0
+                            ? blocksWithSupportiveCardioBlock(template.displayBlocks, role: supportRole)
+                            : template.blocks,
+                        estimatedDurationMinutes: template.estimatedDurationMinutes,
+                        order: index,
+                        notes: index == 0
+                            ? "Strength-first session with the requested short cardio support."
+                            : template.notes
+                    )
+                    return renamed
+                }
+        }
+
         return [
             strengthTemplates.first.map { template in
                 WorkoutTemplate(
@@ -563,6 +709,7 @@ extension WorkoutPlan {
                     focusAreas: template.targetMuscleGroups,
                     targetMuscleGroups: template.targetMuscleGroups,
                     exercises: template.exercises,
+                    blocks: template.blocks,
                     estimatedDurationMinutes: template.estimatedDurationMinutes,
                     order: 0,
                     notes: template.notes
@@ -576,6 +723,7 @@ extension WorkoutPlan {
                     focusAreas: template.focusAreas,
                     targetMuscleGroups: template.targetMuscleGroups,
                     exercises: template.exercises,
+                    blocks: template.blocks,
                     estimatedDurationMinutes: template.estimatedDurationMinutes,
                     order: 1,
                     notes: template.notes
@@ -589,6 +737,7 @@ extension WorkoutPlan {
                     focusAreas: template.targetMuscleGroups,
                     targetMuscleGroups: template.targetMuscleGroups,
                     exercises: template.exercises,
+                    blocks: template.blocks,
                     estimatedDurationMinutes: template.estimatedDurationMinutes,
                     order: 2,
                     notes: template.notes
@@ -596,5 +745,27 @@ extension WorkoutPlan {
             }
         ]
         .compactMap { $0 }
+    }
+
+    private static func blocksWithSupportiveCardioBlock(
+        _ blocks: [WorkoutPlan.TrainingBlock],
+        role: WorkoutPlan.TrainingBlock.Role
+    ) -> [WorkoutPlan.TrainingBlock] {
+        let normalizedBlocks = blocks.sorted { $0.order < $1.order }
+        let nextOrder = (normalizedBlocks.map(\.order).max() ?? -1) + 1
+        let detail = role == .finisher ? "Short easy finish after the lift" : "Short easy support inside the session"
+        return normalizedBlocks + [
+            WorkoutPlan.TrainingBlock(
+                kind: .cardio,
+                role: role,
+                title: "Easy support cardio",
+                detail: detail,
+                durationMinutes: 10,
+                intensity: "Easy",
+                target: "Conversational effort",
+                order: nextOrder,
+                notes: "Keep this supportive, not a separate cardio day."
+            )
+        ]
     }
 }

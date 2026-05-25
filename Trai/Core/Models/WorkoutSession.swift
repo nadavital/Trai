@@ -32,6 +32,9 @@ final class WorkoutSession {
     /// Type of workout from HealthKit (e.g., "running", "cycling")
     var healthKitWorkoutType: String?
 
+    /// Comma-separated activity identity tags imported from Trai HealthKit metadata.
+    var activityTagsRaw: String = ""
+
     var loggedAt: Date = Date()
     var notes: String?
 
@@ -74,9 +77,93 @@ extension WorkoutSession {
         exercise?.name ?? exerciseName ?? healthKitWorkoutType?.capitalized ?? "Workout"
     }
 
+    var activityDisplayName: String {
+        if let exercise {
+            let activityName = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if exercise.exerciseCategory != .strength, !activityName.isEmpty {
+                return activityName
+            }
+        }
+
+        if let workoutType = WorkoutMode.normalized(from: healthKitWorkoutType) {
+            return workoutType.displayName
+        }
+
+        let cleaned = (healthKitWorkoutType ?? exercise?.category ?? "")
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleaned.isEmpty else {
+            return isCardio ? "Cardio" : "Workout"
+        }
+
+        return cleaned
+            .split(separator: " ")
+            .map { $0.capitalized }
+            .joined(separator: " ")
+    }
+
+    var semanticActivityTags: [String] {
+        var seen = Set<String>()
+        var values: [String] = []
+        let candidates = semanticActivityTagCandidates + importedActivityTags + (exercise?.targetTags ?? [])
+
+        for rawValue in candidates {
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.goalNormalizedKey
+            guard !trimmed.isEmpty, !key.isEmpty, seen.insert(key).inserted else { continue }
+            values.append(trimmed)
+        }
+
+        return values
+    }
+
+    var importedActivityTags: [String] {
+        get {
+            activityTagsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            activityTagsRaw = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ",")
+        }
+    }
+
+    func matchesWorkoutMode(_ mode: WorkoutMode) -> Bool {
+        guard let importedMode = WorkoutMode.normalized(from: healthKitWorkoutType) else {
+            return false
+        }
+        if mode == .mixed {
+            return true
+        }
+        return importedMode == mode
+    }
+
+    private var semanticActivityTagCandidates: [String] {
+        guard let exercise else {
+            return [healthKitWorkoutType, displayTypeName].compactMap { $0 }
+        }
+
+        let specificActivityName = exercise.exerciseCategory == .strength
+            ? nil
+            : exercise.activityTypeName
+        let categoryDisplayName = exercise.exerciseCategory.userFacingEquivalent.displayName
+        return [
+            specificActivityName,
+            healthKitWorkoutType,
+            displayTypeName,
+            specificActivityName == nil ? categoryDisplayName : nil
+        ].compactMap { $0 }
+    }
+
     /// Total volume (sets * reps * weight) for strength exercises
     var totalVolume: Double? {
-        guard let weightKg, sets > 0, reps > 0 else { return nil }
+        guard isStrengthTraining, let weightKg, sets > 0, reps > 0 else { return nil }
         return Double(sets * reps) * weightKg
     }
 
@@ -123,12 +210,21 @@ extension WorkoutSession {
 
     /// Check if this is a strength training session
     var isStrengthTraining: Bool {
-        exercise?.category == "strength" || (sets > 0 && reps > 0)
+        if let exercise {
+            return exercise.exerciseCategory == .strength
+        }
+        return healthKitWorkoutType == nil && sets > 0 && reps > 0
     }
 
     /// Check if this is a cardio session
     var isCardio: Bool {
-        exercise?.category == "cardio" || durationMinutes != nil || healthKitWorkoutType != nil
+        if let exercise {
+            return exercise.exerciseCategory.userFacingEquivalent == .cardio
+        }
+        if let workoutType = WorkoutMode.normalized(from: healthKitWorkoutType) {
+            return workoutType == .cardio
+        }
+        return distanceMeters != nil || durationMinutes != nil || healthKitWorkoutType != nil
     }
 
     var displayTypeName: String {
@@ -136,20 +232,147 @@ extension WorkoutSession {
             return "Strength Training"
         }
 
-        let rawType = healthKitWorkoutType ?? exercise?.category
-        let cleaned = rawType?
-            .replacingOccurrences(of: "_", with: " ")
-            .replacingOccurrences(of: "-", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return activityDisplayName
+    }
 
-        guard !cleaned.isEmpty else {
-            return isCardio ? "Cardio" : "Workout"
+    var activityContextSegments: [String] {
+        guard !isStrengthTraining else { return [displayTypeName] }
+
+        var seen = Set<String>()
+        let displayKey = displayName.goalNormalizedKey
+        let activityDisplays = [rawHealthKitActivityDisplayName, activityDisplayName].compactMap { $0 }
+        let candidates = importedActivityTags + activityDisplays + semanticActivityTags
+        let segments = candidates.compactMap { rawValue -> String? in
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.goalNormalizedKey
+            guard !trimmed.isEmpty,
+                  !key.isEmpty,
+                  key != displayKey,
+                  seen.insert(key).inserted else {
+                return nil
+            }
+            return trimmed
         }
 
+        return segments.isEmpty ? [displayTypeName] : segments
+    }
+
+    private var rawHealthKitActivityDisplayName: String? {
+        guard let healthKitWorkoutType else { return nil }
+        let cleaned = healthKitWorkoutType
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return nil }
         return cleaned
             .split(separator: " ")
             .map { $0.capitalized }
             .joined(separator: " ")
+    }
+
+    var setMetricLabel: String {
+        guard !isStrengthTraining else { return "Sets" }
+
+        switch exercise?.exerciseCategory.userFacingEquivalent {
+        case .conditioning:
+            return "Rounds"
+        case .cardio, .mobility, .recovery, .sportPractice, .custom, .none:
+            return "Segments"
+        case .strength:
+            return "Sets"
+        case .skill, .flexibility:
+            return "Segments"
+        }
+    }
+
+    var repMetricLabel: String {
+        guard !isStrengthTraining else { return "Reps" }
+
+        switch exercise?.exerciseCategory.userFacingEquivalent {
+        case .sportPractice:
+            return "Attempts"
+        case .conditioning:
+            return "Rounds"
+        case .mobility, .recovery:
+            return "Reps"
+        case .cardio, .custom, .none:
+            return "Reps"
+        case .strength:
+            return "Reps"
+        case .skill:
+            return "Attempts"
+        case .flexibility:
+            return "Reps"
+        }
+    }
+
+    var setMetricPhrase: String? {
+        metricPhrase(value: sets, pluralLabel: setMetricLabel)
+    }
+
+    var repMetricPhrase: String? {
+        metricPhrase(value: reps, pluralLabel: repMetricLabel)
+    }
+
+    var historyDetailSegments: [String] {
+        var segments: [String] = []
+
+        if isStrengthTraining {
+            if sets > 0 && reps > 0 {
+                segments.append("\(sets)×\(reps)")
+            } else {
+                if sets > 0 {
+                    segments.append("\(sets) \(sets == 1 ? "set" : "sets")")
+                }
+                if reps > 0 {
+                    segments.append("\(reps) reps")
+                }
+            }
+        } else {
+            segments.append(contentsOf: activityContextSegments.prefix(2))
+
+            if let duration = formattedDuration {
+                segments.append(duration)
+            }
+            if let distance = formattedDistance {
+                segments.append(distance)
+            }
+            if let setMetricPhrase {
+                segments.append(setMetricPhrase)
+            }
+            if let repMetricPhrase {
+                segments.append(repMetricPhrase)
+            }
+        }
+
+        if let caloriesBurned {
+            segments.append("\(caloriesBurned) kcal")
+        }
+
+        return segments
+    }
+
+    private func metricPhrase(value: Int, pluralLabel: String) -> String? {
+        guard value > 0 else { return nil }
+        return "\(value) \(metricName(for: value, pluralLabel: pluralLabel))"
+    }
+
+    private func metricName(for value: Int, pluralLabel: String) -> String {
+        let lowercased = pluralLabel.lowercased()
+        guard value == 1 else { return lowercased }
+
+        switch lowercased {
+        case "sets": return "set"
+        case "reps": return "rep"
+        case "rounds": return "round"
+        case "segments": return "segment"
+        case "attempts": return "attempt"
+        default:
+            if lowercased.hasSuffix("s") {
+                return String(lowercased.dropLast())
+            }
+            return lowercased
+        }
     }
 
     var inferredWorkoutMode: WorkoutMode {
@@ -159,7 +382,7 @@ extension WorkoutSession {
 
         return WorkoutMode.infer(
             from: displayName,
-            focusAreas: [healthKitWorkoutType ?? exercise?.category ?? displayTypeName],
+            focusAreas: semanticActivityTags,
             targetMuscleGroups: []
         )
     }
@@ -177,6 +400,10 @@ extension WorkoutSession {
 
         var details: [String] = []
         details.append(displayTypeName.lowercased())
+        let tags = semanticActivityTags.filter { $0.goalNormalizedKey != displayTypeName.goalNormalizedKey }
+        if !tags.isEmpty {
+            details.append("activity context \(tags.prefix(3).joined(separator: ", "))")
+        }
 
         if let formattedDuration {
             details.append("duration \(formattedDuration)")
@@ -184,11 +411,11 @@ extension WorkoutSession {
         if let formattedDistance {
             details.append("distance \(formattedDistance)")
         }
-        if sets > 0 {
-            details.append("\(sets) sets")
+        if let setMetricPhrase {
+            details.append(setMetricPhrase)
         }
-        if reps > 0 {
-            details.append("\(reps) reps")
+        if let repMetricPhrase {
+            details.append(repMetricPhrase)
         }
         if let caloriesBurned {
             details.append("\(caloriesBurned) kcal")
@@ -210,47 +437,83 @@ extension WorkoutSession {
 
     var goalMatchingTokens: Set<String> {
         var tokens: Set<String> = []
-        [displayName, exerciseName, healthKitWorkoutType, exercise?.category, displayTypeName]
+        [displayName, exerciseName, healthKitWorkoutType, exercise?.category, exercise?.activityTypeName, displayTypeName]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .forEach { tokens.insert($0.goalNormalizedKey) }
+        exercise?.targetTags.forEach { tag in
+            let key = tag.goalNormalizedKey
+            if !key.isEmpty {
+                tokens.insert(key)
+            }
+        }
+        importedActivityTags.forEach { tag in
+            let key = tag.goalNormalizedKey
+            if !key.isEmpty {
+                tokens.insert(key)
+            }
+        }
         return tokens
     }
 
     var iconName: String {
-        let token = (healthKitWorkoutType ?? exercise?.category ?? "")
-            .lowercased()
+        let words = activityWords(from: ([displayName, displayTypeName, healthKitWorkoutType, exercise?.category] + semanticActivityTags)
+            .compactMap { $0 }
+            .joined(separator: " "))
 
-        if isStrengthTraining || token.contains("strength") || token.contains("weight") {
+        if isStrengthTraining || ["strength", "weight", "weights"].contains(where: words.contains) {
             return "dumbbell.fill"
         }
-        if token.contains("run") {
+        if ["run", "running", "jog", "jogging"].contains(where: words.contains) {
             return "figure.run"
         }
-        if token.contains("cycle") || token.contains("bike") {
+        if ["cycle", "cycling", "bike", "biking"].contains(where: words.contains) {
             return "figure.outdoor.cycle"
         }
-        if token.contains("swim") {
+        if ["swim", "swimming"].contains(where: words.contains) {
             return "figure.pool.swim"
         }
-        if token.contains("walk") || token.contains("hike") {
+        if ["walk", "walking", "hike", "hiking"].contains(where: words.contains) {
             return "figure.walk"
         }
-        if token.contains("row") {
+        if ["rowing", "rower"].contains(where: words.contains) {
             return "figure.rower"
         }
-        if token.contains("yoga") {
+        if words.contains("yoga") {
             return "figure.yoga"
         }
-        if token.contains("pilates") || token.contains("stretch") || token.contains("flexibility") {
+        if ["pilates", "stretch", "stretching", "flexibility"].contains(where: words.contains) {
             return "figure.flexibility"
         }
-        if token.contains("climb") || token.contains("boulder") {
+        if words.contains("mobility") {
+            return "figure.mind.and.body"
+        }
+        if ["climb", "climbing", "boulder", "bouldering"].contains(where: words.contains) {
             return "figure.climbing"
         }
-        if token.contains("hiit") || token.contains("interval") || token.contains("conditioning") {
+        if ["skill", "practice"].contains(where: words.contains) {
+            return "sportscourt.fill"
+        }
+        if ["hiit", "interval", "intervals", "conditioning"].contains(where: words.contains) {
             return "bolt.heart.fill"
         }
+        if ["recovery", "cooldown"].contains(where: words.contains) {
+            return "heart.text.square.fill"
+        }
         return isCardio ? "figure.mixed.cardio" : "figure.run"
+    }
+
+    private func activityWords(from rawValue: String) -> Set<String> {
+        let words = rawValue
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let compact = rawValue
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        return Set(words + [compact])
     }
 }

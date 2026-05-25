@@ -124,45 +124,11 @@ private struct CompactLiveWorkoutRow: View {
     let workout: LiveWorkout
     let onTap: () -> Void
 
-    private var entryCount: Int { workout.entries?.count ?? 0 }
-    private var strengthEntryCount: Int { workout.entries?.filter(\.isStrength).count ?? 0 }
-    private var totalSets: Int { workout.entries?.reduce(0) { $0 + $1.sets.count } ?? 0 }
-    private var completedActivityCount: Int {
-        workout.entries?.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count ?? 0
-    }
-    private var durationMinutes: Int { Int(workout.duration / 60) }
-
-    private var summarySegments: [String] {
-        var segments: [String] = []
-
-        if workout.type.prefersStructuredEntries || strengthEntryCount > 0 {
-            if entryCount > 0 {
-                segments.append("\(entryCount) \(entryCount == 1 ? "exercise" : "exercises")")
-            }
-            if totalSets > 0 {
-                segments.append("\(totalSets) \(totalSets == 1 ? "set" : "sets")")
-            }
-        } else {
-            if entryCount > 0 {
-                segments.append("\(entryCount) \(entryCount == 1 ? "activity" : "activities")")
-            }
-            if completedActivityCount > 0 {
-                segments.append("\(completedActivityCount) done")
-            }
-        }
-
-        if durationMinutes > 0 {
-            segments.append("\(durationMinutes) min")
-        }
-
-        return segments
-    }
-
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
                 // Icon with colored background
-                Image(systemName: workout.type.iconName)
+                Image(systemName: workout.historyIconName)
                     .font(.body)
                     .foregroundStyle(.accent)
                     .frame(width: 32, height: 32)
@@ -175,7 +141,7 @@ private struct CompactLiveWorkoutRow: View {
                         .foregroundStyle(.primary)
 
                     HStack(spacing: 6) {
-                        ForEach(Array(summarySegments.enumerated()), id: \.offset) { index, segment in
+                        ForEach(Array(workout.historySummarySegments.enumerated()), id: \.offset) { index, segment in
                             if index > 0 {
                                 Text("•")
                                     .foregroundStyle(.tertiary)
@@ -208,34 +174,6 @@ private struct CompactWorkoutSessionRow: View {
     let workout: WorkoutSession
     let onTap: () -> Void
 
-    private var detailSegments: [String] {
-        var segments: [String] = []
-
-        if workout.isStrengthTraining {
-            if workout.sets > 0 {
-                segments.append("\(workout.sets) \(workout.sets == 1 ? "set" : "sets")")
-            }
-            if workout.reps > 0 {
-                segments.append("\(workout.reps) reps")
-            }
-        } else {
-            segments.append(workout.displayTypeName)
-
-            if let duration = workout.formattedDuration {
-                segments.append(duration)
-            }
-            if let distance = workout.formattedDistance {
-                segments.append(distance)
-            }
-        }
-
-        if let calories = workout.caloriesBurned {
-            segments.append("\(calories) kcal")
-        }
-
-        return segments
-    }
-
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
@@ -253,7 +191,7 @@ private struct CompactWorkoutSessionRow: View {
                         .foregroundStyle(.primary)
 
                     HStack(spacing: 6) {
-                        ForEach(Array(detailSegments.enumerated()), id: \.offset) { index, segment in
+                        ForEach(Array(workout.historyDetailSegments.enumerated()), id: \.offset) { index, segment in
                             if index > 0 {
                                 Text("•")
                                     .foregroundStyle(.tertiary)

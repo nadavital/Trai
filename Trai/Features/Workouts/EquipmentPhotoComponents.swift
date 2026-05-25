@@ -2,7 +2,7 @@
 //  EquipmentPhotoComponents.swift
 //  Trai
 //
-//  Camera and analysis components for identifying gym equipment
+//  Camera and analysis components for identifying exercises and equipment
 //
 
 import SwiftUI
@@ -27,7 +27,7 @@ struct EquipmentCameraView: View {
                     Spacer()
 
                     // Instructions
-                    Text("Point at gym equipment")
+                    Text("Point at an exercise or machine")
                         .font(.headline)
                         .foregroundStyle(.white)
                         .padding(.horizontal, 20)
@@ -82,22 +82,21 @@ struct EquipmentCameraView: View {
     }
 }
 
-// MARK: - Equipment Analysis Sheet
+// MARK: - Exercise Photo Analysis Sheet
 
 struct EquipmentAnalysisSheet: View {
     @Environment(\.dismiss) private var dismiss
     let analysis: ExercisePhotoAnalysis
-    /// Callback with (exerciseName, muscleGroup, equipmentName)
-    let onSelectExercise: (String, String, String?) -> Void
+    let onSelectExercise: (ExercisePhotoAnalysis.SuggestedExercise, String?) -> Void
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Equipment info card
+                    // Photo analysis info card
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Image(systemName: "dumbbell.fill")
+                            Image(systemName: "camera.viewfinder")
                                 .font(.title2)
                                 .foregroundStyle(.accent)
 
@@ -133,12 +132,12 @@ struct EquipmentAnalysisSheet: View {
 
                     // Suggested exercises
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Exercises You Can Do")
+                        Text("Add to Your Library")
                             .font(.headline)
 
                         ForEach(analysis.suggestedExercises) { exercise in
                             Button {
-                                onSelectExercise(exercise.name, exercise.muscleGroup, analysis.equipmentName)
+                                onSelectExercise(exercise, analysis.equipmentName)
                                 dismiss()
                             } label: {
                                 HStack(alignment: .top) {
@@ -147,7 +146,7 @@ struct EquipmentAnalysisSheet: View {
                                             .font(.body)
                                             .fontWeight(.medium)
 
-                                        Text(exercise.muscleGroup.capitalized)
+                                        Text(exerciseLabel(for: exercise))
                                             .font(.caption)
                                             .padding(.horizontal, 8)
                                             .padding(.vertical, 2)
@@ -179,7 +178,7 @@ struct EquipmentAnalysisSheet: View {
                 }
                 .padding()
             }
-            .navigationTitle("Equipment Identified")
+            .navigationTitle("Exercise Identified")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -189,5 +188,9 @@ struct EquipmentAnalysisSheet: View {
                 }
             }
         }
+    }
+
+    private func exerciseLabel(for exercise: ExercisePhotoAnalysis.SuggestedExercise) -> String {
+        exercise.resolvedDisplayLabel(equipmentName: analysis.equipmentName)
     }
 }

@@ -12,7 +12,8 @@ struct ChatInputBar: View {
     @Binding var selectedImage: UIImage?
     @Binding var selectedPhotoItem: PhotosPickerItem?
     let isLoading: Bool
-    let onSend: (String) -> Void
+    var isInputDisabled: Bool = false
+    let onSend: (String) -> Bool
     let onStop: (() -> Void)?
     let onTakePhoto: () -> Void
     let onImageTapped: (UIImage) -> Void
@@ -25,7 +26,7 @@ struct ChatInputBar: View {
     @StateObject private var dictation = ChatDictationController()
 
     private var canSend: Bool {
-        (!draftText.trimmingCharacters(in: .whitespaces).isEmpty || selectedImage != nil) && !isLoading
+        (!draftText.trimmingCharacters(in: .whitespaces).isEmpty || selectedImage != nil) && !isLoading && !isInputDisabled
     }
 
     private var inputCornerRadius: CGFloat {
@@ -84,7 +85,7 @@ struct ChatInputBar: View {
             }
             .glassEffect(.regular.tint(.red).interactive(), in: .circle)
             .opacity(isLoading ? 0.5 : 1)
-            .disabled(isLoading)
+            .disabled(isLoading || isInputDisabled)
             .accessibilityLabel("Add attachment")
         }
     }
@@ -126,11 +127,12 @@ struct ChatInputBar: View {
                     .textFieldStyle(.plain)
                     .lineLimit(1...6)
                     .focused(isFocused)
+                    .disabled(isInputDisabled)
             }
 
             if !isLoading {
                 if !dictation.isRecording {
-                    dictationButton(text: $draftText, isDisabled: false)
+                    dictationButton(text: $draftText, isDisabled: isInputDisabled)
                         .transition(.scale.combined(with: .opacity))
                 }
             }
@@ -175,9 +177,10 @@ struct ChatInputBar: View {
                     await dictation.finish()
                     let outgoingText = draftText
                     renderedDictationText = ""
-                    draftText = ""
-                    onSend(outgoingText)
-                    isFocused.wrappedValue = false
+                    if onSend(outgoingText) {
+                        draftText = ""
+                        isFocused.wrappedValue = false
+                    }
                 }
             } label: {
                 Image(systemName: "arrow.up")

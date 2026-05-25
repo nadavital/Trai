@@ -172,7 +172,7 @@ private struct FoodCameraDescriptionBar: View {
     var body: some View {
         GlassEffectContainer(spacing: 10) {
             HStack(alignment: .center, spacing: 10) {
-                TextField("Describe your food...", text: $description, axis: .vertical)
+                TextField("Add notes or extra items...", text: $description, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...4)
                     .focused($isDescriptionFocused)
@@ -194,7 +194,7 @@ private struct FoodCameraDescriptionBar: View {
                 .glassEffect(.regular.tint(canSubmitDescription ? .accent : .gray).interactive(), in: .circle)
                 .opacity(canSubmitDescription ? 1 : 0.5)
                 .disabled(!canSubmitDescription)
-                .accessibilityLabel("Save description")
+                .accessibilityLabel("Save notes")
                 .accessibilityIdentifier("foodCameraDescriptionSubmitButton")
             }
             .padding(.leading, 16)

@@ -88,8 +88,12 @@ extension ProfileView {
                 // Review with Trai button
                 Button {
                     if canAccessAIFeatures {
-                        pendingPlanReviewRequest = true
-                        onSelectTab?(.trai)
+                        if accountSessionService?.isAuthenticated == false {
+                            presentedAccountSetupContext = .aiFeatures
+                        } else {
+                            pendingPlanReviewRequest = true
+                            onSelectTab?(.trai)
+                        }
                     } else {
                         proUpsellCoordinator?.present(source: .nutritionPlan)
                     }
@@ -233,8 +237,12 @@ extension ProfileView {
                 HStack(spacing: 12) {
                     Button {
                         if canAccessAIFeatures {
-                            pendingWorkoutPlanReviewRequest = true
-                            onSelectTab?(.trai)
+                            if accountSessionService?.isAuthenticated == false {
+                                presentedAccountSetupContext = .aiFeatures
+                            } else {
+                                pendingWorkoutPlanReviewRequest = true
+                                onSelectTab?(.trai)
+                            }
                         } else {
                             proUpsellCoordinator?.present(source: .workoutPlan)
                         }
@@ -282,11 +290,7 @@ extension ProfileView {
 
                 // Create plan prompt
                 Button {
-                    if canAccessAIFeatures {
-                        showPlanSetupSheet = true
-                    } else {
-                        proUpsellCoordinator?.present(source: .workoutPlan)
-                    }
+                    showPlanSetupSheet = true
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "circle.hexagongrid.circle")
@@ -305,15 +309,6 @@ extension ProfileView {
                         }
 
                         Spacer()
-
-                        if !canAccessAIFeatures {
-                            Text("PRO")
-                                .font(.traiLabel(11))
-                                .foregroundStyle(TraiColors.ember)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
-                                .background(TraiColors.ember.opacity(0.10), in: Capsule())
-                        }
 
                         Image(systemName: "chevron.right")
                             .font(.caption)
@@ -436,7 +431,7 @@ extension ProfileView {
         }
     }
 
-    // MARK: - Exercises Card
+    // MARK: - Exercise Library Card
 
     @ViewBuilder
     func exercisesCard() -> some View {
@@ -451,11 +446,11 @@ extension ProfileView {
                     .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Custom Exercises")
+                    Text("Exercise Library")
                         .font(.headline)
                         .foregroundStyle(.primary)
 
-                    Text("View and manage your exercises")
+                    Text("Manage exercises and activities")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
