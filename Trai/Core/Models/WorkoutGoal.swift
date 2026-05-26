@@ -262,21 +262,25 @@ extension WorkoutGoal {
 
     var scopeSummary: String {
         var parts: [String] = []
+        var normalizedParts: Set<String> = []
         if let linkedWorkoutType {
-            parts.append(linkedWorkoutType.displayName)
+            appendUniqueScopePart(linkedWorkoutType.displayName, to: &parts, normalizedParts: &normalizedParts)
         }
         if let activityName = trimmedActivityName {
-            parts.append(activityName)
+            appendUniqueScopePart(activityName, to: &parts, normalizedParts: &normalizedParts)
         }
         if !linkedActivityTags.isEmpty {
-            parts.append(linkedActivityTags.prefix(2).joined(separator: ", "))
+            for tag in linkedActivityTags {
+                appendUniqueScopePart(tag, to: &parts, normalizedParts: &normalizedParts)
+                if parts.count >= 3 { break }
+            }
         }
         let hasSemanticActivityScope = trimmedActivityName != nil || !linkedActivityTags.isEmpty
         if !hasSemanticActivityScope, let linkedActivityKind {
-            parts.append(linkedActivityKind.displayName)
+            appendUniqueScopePart(linkedActivityKind.displayName, to: &parts, normalizedParts: &normalizedParts)
         }
         if !hasSemanticActivityScope, let linkedActivityRole {
-            parts.append(linkedActivityRole.placementDisplayName)
+            appendUniqueScopePart(linkedActivityRole.placementDisplayName, to: &parts, normalizedParts: &normalizedParts)
         }
         return parts.isEmpty ? "Any session" : parts.joined(separator: " • ")
     }
@@ -342,6 +346,21 @@ extension WorkoutGoal {
             trimmedSuccessCriteria.goalNormalizedKey
         ])
         .joined(separator: "|")
+    }
+
+    private func appendUniqueScopePart(
+        _ value: String,
+        to parts: inout [String],
+        normalizedParts: inout Set<String>
+    ) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let normalized = trimmed.goalNormalizedKey
+        guard !normalized.isEmpty else { return }
+        guard normalizedParts.insert(normalized).inserted else { return }
+
+        parts.append(trimmed)
     }
 
     func normalizeGeneratedPlanAdherenceScopeIfNeeded(for plan: WorkoutPlan) {

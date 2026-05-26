@@ -99,7 +99,7 @@ struct SelectableGeneratedWorkoutGoalRow: View {
                 GeneratedWorkoutGoalRowContent(
                     goal: goal,
                     isCompact: isCompact,
-                    showsChevron: true
+                    showsChevron: false
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
