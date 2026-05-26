@@ -468,6 +468,12 @@ extension AIFunctionExecutor {
                 response: ["error": "generated plan ids cannot be used with tracks_plan_adherence."]
             ))
         }
+        if !generatedPlanTemplateIDs.isEmpty, !generatedPlanBlockIDs.isEmpty {
+            return .dataResponse(FunctionResult(
+                name: "create_workout_goal",
+                response: ["error": "Use either generated_plan_template_ids or generated_plan_block_ids, not both."]
+            ))
+        }
         if tracksPlanAdherence, userProfile?.workoutPlan == nil {
             return .dataResponse(FunctionResult(
                 name: "create_workout_goal",
@@ -732,6 +738,12 @@ extension AIFunctionExecutor {
             return .dataResponse(FunctionResult(
                 name: "update_workout_goal",
                 response: ["error": "generated plan ids cannot be used with tracks_plan_adherence."]
+            ))
+        }
+        if !generatedPlanTemplateIDs.isEmpty, !generatedPlanBlockIDs.isEmpty {
+            return .dataResponse(FunctionResult(
+                name: "update_workout_goal",
+                response: ["error": "Use either generated_plan_template_ids or generated_plan_block_ids, not both."]
             ))
         }
         if tracksPlanAdherence, userProfile?.workoutPlan == nil {

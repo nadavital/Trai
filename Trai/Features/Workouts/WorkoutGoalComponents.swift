@@ -53,7 +53,7 @@ enum WorkoutGoalProgressResolver {
         goals
             .filter { goal in
                 let matchesWorkout: Bool
-                if goal.tracksGeneratedPlanAdherence || !goal.generatedPlanTemplateIDs.isEmpty {
+                if goal.hasGeneratedPlanTemplateScope && !goal.hasGeneratedPlanBlockScope {
                     matchesWorkout = goal.matchesGeneratedPlanTemplate(workout: workout)
                         && (workout.completedAt == nil || hasLoggedGeneratedPlanProgress(in: workout))
                 } else {
@@ -600,7 +600,7 @@ enum WorkoutGoalProgressResolver {
         guard workout.completedAt != nil else {
             return false
         }
-        if goal.tracksGeneratedPlanAdherence || !goal.generatedPlanTemplateIDs.isEmpty {
+        if goal.hasGeneratedPlanTemplateScope && !goal.hasGeneratedPlanBlockScope {
             return goal.matchesGeneratedPlanTemplate(workout: workout)
                 && hasLoggedGeneratedPlanProgress(in: workout)
         }
@@ -648,7 +648,7 @@ enum WorkoutGoalProgressResolver {
         _ session: WorkoutSession,
         for goal: WorkoutGoal
     ) -> Bool {
-        guard !goal.tracksGeneratedPlanAdherence, goal.generatedPlanTemplateIDs.isEmpty else { return false }
+        guard !goal.hasGeneratedPlanTemplateScope, !goal.hasGeneratedPlanBlockScope else { return false }
         guard goal.matches(session: session) else { return false }
         guard !goal.hasActivityScope else { return true }
 
@@ -801,7 +801,7 @@ enum WorkoutGoalProgressResolver {
         let periodStart = periodStartDate(for: goal, now: now) ?? Calendar.current.startOfDay(for: now)
 
         let workoutCount: Int
-        if goal.tracksGeneratedPlanAdherence || !goal.generatedPlanTemplateIDs.isEmpty {
+        if goal.hasGeneratedPlanTemplateScope && !goal.hasGeneratedPlanBlockScope {
             workoutCount = Set(workouts.compactMap { workout -> UUID? in
                 let progressDate = workout.completedAt ?? workout.startedAt
                 guard progressDate >= periodStart,

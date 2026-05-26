@@ -96,7 +96,7 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
             tracksGeneratedPlanAdherence: tracksGeneratedPlanAdherence == true,
             generatedPlanBlockIDs: generatedPlanBlockIDs ?? []
         )
-        goal.generatedPlanTemplateIDs = generatedPlanTemplateIDs ?? []
+        goal.generatedPlanTemplateIDs = (generatedPlanBlockIDs?.isEmpty == false) ? [] : (generatedPlanTemplateIDs ?? [])
         if !goal.generatedPlanTemplateIDs.isEmpty {
             goal.tracksGeneratedPlanAdherence = false
             goal.linkedWorkoutTypeRaw = nil
@@ -614,6 +614,7 @@ extension WorkoutGoalSuggestion {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return false }
         guard successCriteria?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else { return false }
+        guard !hasMixedGeneratedPlanScope else { return false }
         guard hasTrackableScope else { return false }
 
         switch goalKind {
@@ -687,5 +688,9 @@ extension WorkoutGoalSuggestion {
 
     private var periodTrackingGoalKinds: Set<WorkoutGoal.GoalKind> {
         [.frequency, .duration, .distance, .count]
+    }
+
+    private var hasMixedGeneratedPlanScope: Bool {
+        generatedPlanTemplateIDs?.isEmpty == false && generatedPlanBlockIDs?.isEmpty == false
     }
 }

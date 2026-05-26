@@ -220,6 +220,18 @@ extension WorkoutGoal {
             || !generatedPlanBlockIDs.isEmpty
     }
 
+    var hasGeneratedPlanBlockScope: Bool {
+        requiresGeneratedPlanBlockScope || !generatedPlanBlockIDs.isEmpty
+    }
+
+    var hasGeneratedPlanTemplateScope: Bool {
+        tracksGeneratedPlanAdherence || !generatedPlanTemplateIDs.isEmpty
+    }
+
+    var hasMixedGeneratedPlanScope: Bool {
+        !generatedPlanTemplateIDs.isEmpty && hasGeneratedPlanBlockScope
+    }
+
     var requiresDurableGeneratedPlanScope: Bool {
         hasActivityScope || linkedWorkoutType != nil || !generatedPlanTemplateIDs.isEmpty
     }
@@ -402,6 +414,11 @@ extension WorkoutGoal {
 
     func normalizeGeneratedPlanTemplateScopeIfNeeded(for plan: WorkoutPlan) {
         guard !generatedPlanTemplateIDs.isEmpty else { return }
+        guard !hasGeneratedPlanBlockScope else {
+            generatedPlanTemplateIDs = []
+            updatedAt = Date()
+            return
+        }
         let validTemplateIDs = Set(plan.templates.map(\.id))
         let normalizedIDs = generatedPlanTemplateIDs.filter { validTemplateIDs.contains($0) }
         guard normalizedIDs != generatedPlanTemplateIDs else { return }
@@ -449,6 +466,7 @@ extension WorkoutGoal {
             goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
             goal.normalizeGeneratedPlanTemplateScopeIfNeeded(for: plan)
             goal.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan)
+            guard !goal.hasMixedGeneratedPlanScope else { continue }
             guard !hadTemplateScope || !goal.generatedPlanTemplateIDs.isEmpty else { continue }
             guard goal.hasValidGeneratedPlanTemplateCriteria() else { continue }
             guard !hadBlockScope || !goal.generatedPlanBlockIDs.isEmpty else { continue }
@@ -483,6 +501,7 @@ extension WorkoutGoal {
             } else if let plan {
                 goal.normalizeGeneratedPlanTemplateScopeIfNeeded(for: plan)
                 goal.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan)
+                guard !goal.hasMixedGeneratedPlanScope else { continue }
                 guard !hadTemplateScope || !goal.generatedPlanTemplateIDs.isEmpty else { continue }
                 guard goal.hasValidGeneratedPlanTemplateCriteria() else { continue }
                 guard !hadBlockScope || !goal.generatedPlanBlockIDs.isEmpty else { continue }
@@ -566,12 +585,12 @@ extension WorkoutGoal {
     }
 
     func matches(workout: LiveWorkout) -> Bool {
-        if !generatedPlanTemplateIDs.isEmpty {
-            return matchesGeneratedPlanTemplate(workout: workout)
-        }
-
         if requiresGeneratedPlanBlockScope || !generatedPlanBlockIDs.isEmpty {
             return matchesGeneratedPlanBlock(workout: workout)
+        }
+
+        if !generatedPlanTemplateIDs.isEmpty {
+            return matchesGeneratedPlanTemplate(workout: workout)
         }
 
         if tracksGeneratedPlanAdherence {
