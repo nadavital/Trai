@@ -1203,28 +1203,38 @@ struct WorkoutGoalsOverviewSection: View {
     }
 
     private var emptyStateCard: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "scope")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 34, height: 34)
-                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(canCreateGoalsWithTrai ? "Set goals with Trai" : "Unlock goal coaching")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-
-                Text(canCreateGoalsWithTrai ? "Turn a route, lift, or routine into something trackable." : "Trai Pro can turn training into trackable goals.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
+        Button {
+            if canCreateGoalsWithTrai {
+                onCreateGoalWithTrai()
+            } else {
+                onUnlockPro()
             }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "scope")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 34, height: 34)
+                    .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
 
-            Spacer()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(canCreateGoalsWithTrai ? "Set goals with Trai" : "Unlock goal coaching")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Text(canCreateGoalsWithTrai ? "Turn a route, lift, or routine into something trackable." : "Trai Pro can turn training into trackable goals.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer()
+            }
+            .padding(14)
+            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
         }
-        .padding(14)
-        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+        .buttonStyle(TraiPressStyle())
     }
 
     private var lockedSignalsState: some View {

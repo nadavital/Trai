@@ -78,6 +78,12 @@ struct DashboardView: View {
     @State private var showingMacroDetail = false
     @State private var entryToEdit: FoodEntry?
     @State private var activationChecklistHealthError: String?
+    @AppStorage("dashboardActivationChecklistHasLoggedFood")
+    private var cachedActivationHasLoggedFood = false
+    @AppStorage("dashboardActivationChecklistHasWorkoutPlan")
+    private var cachedActivationHasWorkoutPlan = false
+    @AppStorage("dashboardActivationChecklistHasHealthAccess")
+    private var cachedActivationHasHealthAccess = false
 
     // Workout sheet state
     @State private var showingWorkoutSheet = false
@@ -241,16 +247,20 @@ struct DashboardView: View {
     private var profile: UserProfile? { profiles.first }
 
     private var hasLoggedFood: Bool {
-        !allFoodEntries.isEmpty
+        cachedActivationHasLoggedFood || !allFoodEntries.isEmpty
     }
 
     private var hasWorkoutPlan: Bool {
-        profile?.workoutPlan != nil
+        cachedActivationHasWorkoutPlan || profile?.workoutPlan != nil
+    }
+
+    private var hasHealthAccessForActivationChecklist: Bool {
+        cachedActivationHasHealthAccess || healthKitService?.isAuthorized == true
     }
 
     private var shouldShowActivationChecklist: Bool {
         guard hasSettledActivationChecklistState, isViewingToday, profile != nil else { return false }
-        return !hasLoggedFood || !hasWorkoutPlan || healthKitService?.isAuthorized != true
+        return !hasLoggedFood || !hasWorkoutPlan || !hasHealthAccessForActivationChecklist
     }
 
     private var isDashboardTabActive: Bool {
@@ -555,6 +565,7 @@ struct DashboardView: View {
                     pendingScrollToReminders = true
                 }
                 refreshDateScopedCaches()
+                updateActivationChecklistCompletionCache()
                 await Task.yield()
                 scheduleRemindersLoad(
                     delayMilliseconds: Self.remindersInitialLoadDelayMilliseconds
@@ -577,6 +588,7 @@ struct DashboardView: View {
                 }
                 tabActivationPolicy.activate()
                 isDashboardTabVisible = true
+                updateActivationChecklistCompletionCache()
                 guard didPrimeInitialData else { return }
 
                 if showRemindersBinding {
@@ -601,6 +613,7 @@ struct DashboardView: View {
             }
             .onChange(of: selectedDate) { _, newDate in
                 refreshDateScopedCaches()
+                updateActivationChecklistCompletionCache()
                 if Calendar.current.isDateInToday(newDate) {
                     Task {
                         await loadActivityData()
@@ -610,10 +623,12 @@ struct DashboardView: View {
             .onChange(of: foodEntriesRefreshFingerprint) { _, _ in
                 guard isDashboardTabActive else { return }
                 refreshFoodDateCaches()
+                updateActivationChecklistCompletionCache()
             }
             .onChange(of: allWorkouts.count) {
                 guard isDashboardTabActive else { return }
                 refreshWorkoutDateCache()
+                updateActivationChecklistCompletionCache()
                 if isViewingToday {
                     scheduleCoachContextRefresh(forceRefresh: true)
                 }
@@ -621,9 +636,16 @@ struct DashboardView: View {
             .onChange(of: liveWorkouts.count) {
                 guard isDashboardTabActive else { return }
                 refreshLiveWorkoutDateCache()
+                updateActivationChecklistCompletionCache()
                 if isViewingToday {
                     scheduleCoachContextRefresh(forceRefresh: true)
                 }
+            }
+            .onChange(of: profile?.workoutPlan) {
+                updateActivationChecklistCompletionCache()
+            }
+            .onChange(of: healthKitService?.isAuthorized) {
+                updateActivationChecklistCompletionCache()
             }
             .onReceive(NotificationCenter.default.publisher(for: .workoutCompleted)) { _ in
                 guard isDashboardTabActive else { return }
@@ -755,11 +777,24 @@ struct DashboardView: View {
         return latencyProbeEntries.isEmpty ? "pending" : latencyProbeEntries.joined(separator: " | ")
     }
 
+    private func updateActivationChecklistCompletionCache() {
+        if !allFoodEntries.isEmpty {
+            cachedActivationHasLoggedFood = true
+        }
+        if profile?.workoutPlan != nil {
+            cachedActivationHasWorkoutPlan = true
+        }
+        if healthKitService?.isAuthorized == true {
+            cachedActivationHasHealthAccess = true
+        }
+    }
+
     private func connectHealthFromActivationChecklist() {
         activationChecklistHealthError = nil
         Task { @MainActor in
             do {
                 try await healthKitService?.requestAuthorization()
+                updateActivationChecklistCompletionCache()
                 guard let profile else { return }
                 profile.syncFoodToHealthKit = true
                 profile.syncWeightToHealthKit = true
