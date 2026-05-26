@@ -990,6 +990,8 @@ private func seedUITestProfileIfNeeded(modelContainer: ModelContainer) {
 @MainActor
 private func seedAppStoreScreenshotDataIfNeeded(modelContainer: ModelContainer) {
     let context = modelContainer.mainContext
+    UserDefaults.standard.set(true, forKey: "dashboardActivationChecklistDismissed")
+
     var markerDescriptor = FetchDescriptor<CoachMemory>(
         predicate: #Predicate<CoachMemory> { $0.content == "App Store Screenshot Seed" }
     )
