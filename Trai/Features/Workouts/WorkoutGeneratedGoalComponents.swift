@@ -153,11 +153,13 @@ struct GeneratedWorkoutGoalDetailSheet: View {
                 VStack(alignment: .leading, spacing: 14) {
                     headerCard
                     detailCard
-                    if let selection {
-                        selectionButton(selection)
-                    }
                 }
                 .padding()
+            }
+            .safeAreaInset(edge: .bottom) {
+                if let selection {
+                    selectionBar(selection)
+                }
             }
             .navigationTitle("Goal")
             .navigationBarTitleDisplayMode(.inline)
@@ -242,6 +244,14 @@ struct GeneratedWorkoutGoalDetailSheet: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16, style: .continuous))
+    }
+
+    private func selectionBar(_ selection: Selection) -> some View {
+        selectionButton(selection)
+            .padding(.horizontal)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+            .background(.bar)
     }
 
     @ViewBuilder
