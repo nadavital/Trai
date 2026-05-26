@@ -86,7 +86,7 @@ struct WorkoutDetailSheet: View {
                 value: "\(workout.sets)",
                 label: workout.setMetricLabel,
                 icon: "square.stack.3d.up.fill",
-                color: .blue
+                color: .orange
             ))
         }
 
@@ -104,7 +104,7 @@ struct WorkoutDetailSheet: View {
                 value: "\(displayWeight(weight))",
                 label: weightUnit,
                 icon: "scalemass.fill",
-                color: .orange
+                color: .indigo
             ))
         }
 
@@ -122,7 +122,7 @@ struct WorkoutDetailSheet: View {
                 value: formatDistance(distance),
                 label: "Distance",
                 icon: "figure.walk",
-                color: .green
+                color: .teal
             ))
         }
 
@@ -282,7 +282,7 @@ struct WorkoutDetailSheet: View {
                 .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.14))
             }
             .padding(16)
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+            .traiCard(cornerRadius: 16, contentPadding: 0)
         } else {
             ProUpsellInlineCard(
                 source: .workoutReview,

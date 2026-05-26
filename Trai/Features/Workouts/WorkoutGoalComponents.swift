@@ -1015,7 +1015,8 @@ struct WorkoutGoalProgressCard: View {
                 }
             }
         }
-        .traiCard()
+        .padding(16)
+        .traiCard(cornerRadius: 16, contentPadding: 0)
     }
 
     @ViewBuilder
@@ -1140,7 +1141,9 @@ struct WorkoutGoalsOverviewSection: View {
     let signals: [RecentWorkoutSignal]
     let celebratedGoal: WorkoutGoal?
     let canCreateGoalsWithTrai: Bool
+    let completedGoalCount: Int
     let onCreateGoalWithTrai: () -> Void
+    let onCompletedGoalsTap: () -> Void
     let onUnlockPro: () -> Void
     let staleCheckInGoal: WorkoutGoal?
     let onGoalTap: (WorkoutGoal) -> Void
@@ -1199,6 +1202,10 @@ struct WorkoutGoalsOverviewSection: View {
                     signalRow(firstSignal)
                 }
             }
+
+            if completedGoalCount > 0 {
+                completedGoalsRow
+            }
         }
     }
 
@@ -1251,6 +1258,38 @@ struct WorkoutGoalsOverviewSection: View {
             actionTitle: "Unlock Trai Pro",
             action: onUnlockPro
         )
+    }
+
+    private var completedGoalsRow: some View {
+        Button(action: onCompletedGoalsTap) {
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.green)
+                    .frame(width: 34, height: 34)
+                    .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Completed Goals")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Text("\(completedGoalCount) saved for review")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(12)
+            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(TraiPressStyle())
     }
 
     private var goalsCarousel: some View {
@@ -1423,6 +1462,113 @@ struct WorkoutGoalsOverviewSection: View {
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
     }
 
+}
+
+struct CompletedWorkoutGoalsSheet: View {
+    let insights: [WorkoutGoalInsight]
+    let onToggleCompletion: (WorkoutGoal) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 12) {
+                    if insights.isEmpty {
+                        ContentUnavailableView(
+                            "No Completed Goals",
+                            systemImage: "checkmark.seal",
+                            description: Text("Completed workout goals will stay available here.")
+                        )
+                        .padding(.top, 40)
+                    } else {
+                        ForEach(insights) { insight in
+                            CompletedWorkoutGoalRow(
+                                insight: insight,
+                                onReopen: {
+                                    onToggleCompletion(insight.goal)
+                                }
+                            )
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Completed Goals")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark") {
+                        dismiss()
+                    }
+                    .labelStyle(.iconOnly)
+                }
+            }
+        }
+    }
+}
+
+private struct CompletedWorkoutGoalRow: View {
+    let insight: WorkoutGoalInsight
+    let onReopen: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                GoalProgressRing(
+                    progress: insight.progressFraction ?? 1,
+                    iconName: insight.goal.goalKind.iconName,
+                    color: .green
+                )
+                .frame(width: 46, height: 46)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(insight.goal.trimmedTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(insight.progressText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let completedAt = insight.goal.completedAt {
+                        Text("Completed \(completedAt.formatted(date: .abbreviated, time: .omitted))")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            if let supportingText = insight.supportingText {
+                Text(supportingText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+            }
+
+            HStack {
+                Text(insight.goal.scopeSummary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Button("Reopen", systemImage: "arrow.uturn.backward") {
+                    onReopen()
+                }
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.traiTertiary(size: .compact, height: 30))
+            }
+        }
+        .padding(14)
+        .traiCard(cornerRadius: 16, contentPadding: 0)
+    }
 }
 
 private struct GoalProgressRing: View {

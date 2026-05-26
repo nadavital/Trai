@@ -68,6 +68,7 @@ struct WorkoutsView: View {
     @State private var showingWorkoutDetail: WorkoutSession?
     @State private var showingLiveWorkoutDetail: LiveWorkout?
     @State private var showingWorkoutGoalDetail: WorkoutGoal?
+    @State private var showingCompletedWorkoutGoals = false
     @State private var showingWorkoutGoalAISetup = false
     @State private var showingWorkoutSheet = false
     @State private var showingPersonalRecords = false
@@ -205,6 +206,26 @@ struct WorkoutsView: View {
         )
     }
 
+    private var completedWorkoutGoals: [WorkoutGoal] {
+        workoutGoals
+            .filter { $0.status == .completed }
+            .sorted { lhs, rhs in
+                let lhsDate = lhs.completedAt ?? lhs.updatedAt
+                let rhsDate = rhs.completedAt ?? rhs.updatedAt
+                return lhsDate > rhsDate
+            }
+    }
+
+    private var completedWorkoutGoalInsights: [WorkoutGoalInsight] {
+        WorkoutGoalProgressResolver.insights(
+            goals: completedWorkoutGoals,
+            workouts: completedLiveWorkouts,
+            sessions: workoutGoalSessions,
+            exerciseHistory: allExerciseHistory,
+            useLbs: !usesMetricExerciseWeight
+        )
+    }
+
     private var visibleWorkoutGoalInsights: [WorkoutGoalInsight] {
         activeWorkoutGoalInsights.filter { !$0.isCompletedGoalHidden }
     }
@@ -333,7 +354,9 @@ struct WorkoutsView: View {
                         signals: workoutGoalSignals,
                         celebratedGoal: celebratedWorkoutGoal,
                         canCreateGoalsWithTrai: canAccessAIFeatures,
+                        completedGoalCount: completedWorkoutGoals.count,
                         onCreateGoalWithTrai: startWorkoutGoalsWithTrai,
+                        onCompletedGoalsTap: { showingCompletedWorkoutGoals = true },
                         onUnlockPro: {
                             proUpsellCoordinator?.present(source: .workoutPlan)
                         },
@@ -485,6 +508,13 @@ struct WorkoutsView: View {
                     useLbs: !usesMetricExerciseWeight,
                     onToggleCompletion: toggleWorkoutGoalCompletion
                 )
+            }
+            .sheet(isPresented: $showingCompletedWorkoutGoals) {
+                CompletedWorkoutGoalsSheet(
+                    insights: completedWorkoutGoalInsights,
+                    onToggleCompletion: toggleWorkoutGoalCompletion
+                )
+                .traiSheetBranding()
             }
             .sheet(isPresented: $showingWorkoutGoalAISetup) {
                 WorkoutGoalAISheet(

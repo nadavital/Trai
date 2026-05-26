@@ -33,51 +33,52 @@ struct CustomExercisesView: View {
         }
     }
 
-    private var exercisesByTarget: [String: [Exercise]] {
-        Dictionary(grouping: filteredExercises) { exercise in
-            let activityName = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
-            return activityName.isEmpty
-                ? Exercise.defaultActivityTypeName(for: exercise.name, category: exercise.exerciseCategory)
-                : activityName
+    private var exerciseSections: [ExerciseLibrarySection] {
+        let grouped = Dictionary(grouping: filteredExercises) { exercise in
+            exercise.exerciseCategory.userFacingEquivalent
+        }
+        let orderedCategories = Exercise.Category.userFacingCases
+        return orderedCategories.compactMap { category in
+            guard let exercises = grouped[category], !exercises.isEmpty else { return nil }
+            return ExerciseLibrarySection(
+                category: category,
+                exercises: exercises.sorted { lhs, rhs in
+                    let lhsActivity = displayActivityName(for: lhs)
+                    let rhsActivity = displayActivityName(for: rhs)
+                    if lhsActivity != rhsActivity {
+                        return lhsActivity.localizedStandardCompare(rhsActivity) == .orderedAscending
+                    }
+                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                }
+            )
         }
     }
 
     var body: some View {
-        List {
-            if customExercises.isEmpty {
-                VStack(spacing: 16) {
-                    ContentUnavailableView(
-                        "No Custom Items",
-                        systemImage: "dumbbell",
-                        description: Text("Exercises and activities you create will appear here")
-                    )
+        ScrollView {
+            VStack(spacing: 14) {
+                if customExercises.isEmpty {
+                    emptyState
+                        .padding(.top, 48)
+                } else if filteredExercises.isEmpty {
+                    ContentUnavailableView.search(text: searchText)
+                        .padding(.top, 48)
+                } else {
+                    librarySummaryCard
 
-                    Button("Add Item", systemImage: "plus") {
-                        showingAddCustomExercise = true
-                    }
-                    .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: false))
-                }
-                .frame(maxWidth: .infinity)
-                .listRowBackground(Color.clear)
-            } else if filteredExercises.isEmpty {
-                ContentUnavailableView.search(text: searchText)
-            } else {
-                ForEach(exercisesByTarget.keys.sorted(), id: \.self) { target in
-                    Section(target) {
-                        ForEach(exercisesByTarget[target] ?? []) { exercise in
-                            ExerciseManagementRow(exercise: exercise)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) {
-                                        exerciseToDelete = exercise
-                                        showingDeleteConfirmation = true
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
-                        }
+                    ForEach(exerciseSections) { section in
+                        ExerciseLibrarySectionCard(
+                            section: section,
+                            onDelete: { exercise in
+                                exerciseToDelete = exercise
+                                showingDeleteConfirmation = true
+                            }
+                        )
                     }
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
         }
         .searchable(text: $searchText, prompt: "Search exercises and activities")
         .navigationTitle("Exercise Library")
@@ -124,6 +125,45 @@ struct CustomExercisesView: View {
                 Text("Are you sure you want to delete \"\(exercise.name)\"? This cannot be undone.")
             }
         }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 16) {
+            ContentUnavailableView(
+                "No Custom Items",
+                systemImage: "dumbbell",
+                description: Text("Exercises and activities you create will appear here")
+            )
+
+            Button("Add Item", systemImage: "plus") {
+                showingAddCustomExercise = true
+            }
+            .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: false))
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var librarySummaryCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "square.grid.2x2.fill")
+                .font(.headline)
+                .foregroundStyle(.accent)
+                .frame(width: 38, height: 38)
+                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(filteredExercises.count) custom item\(filteredExercises.count == 1 ? "" : "s")")
+                    .font(.traiHeadline())
+
+                Text("Organized by category, activity group, targets, and tracking.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .traiCard(cornerRadius: 16, contentPadding: 0)
     }
 
     private func fetchCustomExercises() {
@@ -226,53 +266,105 @@ struct CustomExercisesView: View {
         let allExercises = (try? modelContext.fetch(descriptor)) ?? []
         return allExercises.first { $0.name.lowercased() == name.lowercased() }
     }
+
+    private func displayActivityName(for exercise: Exercise) -> String {
+        let activityName = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return activityName.isEmpty
+            ? Exercise.defaultActivityTypeName(for: exercise.name, category: exercise.exerciseCategory)
+            : activityName
+    }
 }
 
-// MARK: - Exercise Row
+// MARK: - Exercise Library Cards
+
+private struct ExerciseLibrarySection: Identifiable {
+    let category: Exercise.Category
+    let exercises: [Exercise]
+
+    var id: String { category.rawValue }
+}
+
+private struct ExerciseLibrarySectionCard: View {
+    let section: ExerciseLibrarySection
+    let onDelete: (Exercise) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TraiSectionHeader(section.category.displayName, icon: section.category.iconName) {
+                Text("\(section.exercises.count)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .frame(height: 24)
+                    .background(Color(.tertiarySystemFill), in: Capsule())
+            }
+
+            VStack(spacing: 0) {
+                ForEach(Array(section.exercises.enumerated()), id: \.element.id) { index, exercise in
+                    ExerciseManagementRow(exercise: exercise, onDelete: { onDelete(exercise) })
+
+                    if index < section.exercises.count - 1 {
+                        Divider()
+                            .padding(.leading, 46)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .traiCard(cornerRadius: 16, contentPadding: 0)
+    }
+}
 
 private struct ExerciseManagementRow: View {
     let exercise: Exercise
+    let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Category icon
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: exercise.exerciseCategory.iconName)
-                .font(.title3)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.accent)
-                .frame(width: 32)
+                .frame(width: 34, height: 34)
+                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(exercise.name)
-                    .font(.body)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
 
-                HStack(spacing: 8) {
-                    Text(displayActivityName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    ExerciseLibraryMetadataLine(
+                        icon: "rectangle.stack.fill",
+                        title: displayActivityName
+                    )
 
-                    if let target = exercise.targetTags.first {
-                        Text("•")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                        Text(target)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    ExerciseLibraryMetadataLine(
+                        icon: "slider.horizontal.3",
+                        title: trackingSummary
+                    )
 
-                    if let equipment = exercise.displayEquipment {
-                        Text("•")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                        Text(equipment)
-                            .font(.caption)
-                            .foregroundStyle(.accent)
+                    if !targetSummary.isEmpty {
+                        ExerciseLibraryMetadataLine(
+                            icon: exercise.exerciseCategory.iconName,
+                            title: targetSummary
+                        )
                     }
                 }
             }
 
             Spacer()
+
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, height: 32)
+                    .background(Color(.tertiarySystemFill), in: Circle())
+            }
+            .buttonStyle(.plain)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 12)
     }
 
     private var displayActivityName: String {
@@ -280,5 +372,39 @@ private struct ExerciseManagementRow: View {
         return activityName.isEmpty
             ? Exercise.defaultActivityTypeName(for: exercise.name, category: exercise.exerciseCategory)
             : activityName
+    }
+
+    private var trackingSummary: String {
+        exercise.trackingFields
+            .prefix(3)
+            .map(\.displayName)
+            .joined(separator: ", ")
+    }
+
+    private var targetSummary: String {
+        var values = Array(exercise.targetTags.prefix(3))
+        if let equipment = exercise.displayEquipment {
+            values.append(equipment)
+        }
+        return values.joined(separator: ", ")
+    }
+}
+
+private struct ExerciseLibraryMetadataLine: View {
+    let icon: String
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
     }
 }
