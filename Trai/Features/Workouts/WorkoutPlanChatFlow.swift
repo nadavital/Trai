@@ -266,10 +266,14 @@ struct WorkoutPlanChatFlow: View {
                 }
             }
 
-            // Input bar
+        }
+        .safeAreaInset(edge: .bottom) {
             if shouldShowInputBar {
                 inputBar
             }
+        }
+        .background(alignment: .bottom) {
+            TraiChatInputBackdrop()
         }
         .onTapGesture {
             // Dismiss keyboard when tapping outside
@@ -411,7 +415,6 @@ struct WorkoutPlanChatFlow: View {
         }
         .padding(.top, 6)
         .padding(.bottom, 2)
-        .background(Color(.systemBackground))
     }
 
     private func generatedGoalsCard(_ goals: [WorkoutGoal]) -> some View {

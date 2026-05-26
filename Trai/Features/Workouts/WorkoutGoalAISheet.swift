@@ -33,6 +33,13 @@ struct WorkoutGoalAISheet: View {
     @State private var selectedSuggestionForDetail: WorkoutGoalSuggestion?
     @FocusState private var isInputFocused: Bool
 
+    private struct GoalPromptSuggestion: Identifiable, Hashable {
+        let title: String
+        let prompt: String
+
+        var id: String { title + "|" + prompt }
+    }
+
     private var canAccessWorkoutGoalAI: Bool {
         monetizationService?.canAccessAIFeatures ?? true
     }
@@ -82,62 +89,100 @@ struct WorkoutGoalAISheet: View {
         existingGoals.contains { $0.status == .active }
     }
 
+    private var shouldShowInitialPromptMessage: Bool {
+        suggestions.isEmpty && !isGenerating && submittedPromptText == nil && canAccessWorkoutGoalAI
+    }
+
+    private var goalPromptSuggestions: [GoalPromptSuggestion] {
+        var items: [GoalPromptSuggestion] = []
+
+        if let workoutPlan {
+            items.append(
+                GoalPromptSuggestion(
+                    title: "Plan consistency",
+                    prompt: "Generate goals that help me follow my current workout plan consistently."
+                )
+            )
+
+            for template in workoutPlan.templates.prefix(4) {
+                let focus = template.focusAreasDisplay.isEmpty ? template.sessionType.displayName : template.focusAreasDisplay
+                let title = focus.isEmpty ? template.name : focus
+                let detail = [template.name, template.primaryBlockSummary]
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " with ")
+                items.append(
+                    GoalPromptSuggestion(
+                        title: title,
+                        prompt: "Generate goals around \(detail.isEmpty ? title : detail)."
+                    )
+                )
+            }
+        }
+
+        if items.isEmpty {
+            items = [
+                GoalPromptSuggestion(title: "Strength goal", prompt: "Generate strength goals from my recent training."),
+                GoalPromptSuggestion(title: "Consistency", prompt: "Generate a consistency goal from my recent workouts."),
+                GoalPromptSuggestion(title: "Recovery", prompt: "Generate a recovery or mobility goal from my recent training.")
+            ]
+        }
+
+        var seen: Set<String> = []
+        return Array(items.filter { seen.insert($0.title.goalNormalizedKey).inserted }.prefix(4))
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 14) {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 14) {
+                        if shouldShowInitialPromptMessage {
                             traiPromptMessage
-
-                            if let submittedPromptText {
-                                userMessage(submittedPromptText)
-                                    .id("submittedPrompt")
-                            }
-
-                            if !canAccessWorkoutGoalAI {
-                                ProUpsellInlineCard(
-                                    source: .workoutPlan,
-                                    actionTitle: "Unlock Trai Pro"
-                                ) {
-                                    proUpsellCoordinator?.present(source: .workoutPlan)
-                                }
-                            } else if isGenerating {
-                                generatingMessage
-                                    .id("generating")
-                            } else if suggestions.isEmpty {
-                                emptyConversationState
-                                    .id("empty")
-                            } else {
-                                generatedGoalsMessage
-                                    .id("suggestions")
-                            }
-
-                            Color.clear
-                                .frame(height: 12)
-                                .id("bottom")
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
+
+                        if let submittedPromptText {
+                            userMessage(submittedPromptText)
+                                .id("submittedPrompt")
+                        }
+
+                        if !canAccessWorkoutGoalAI {
+                            ProUpsellInlineCard(
+                                source: .workoutPlan,
+                                actionTitle: "Unlock Trai Pro"
+                            ) {
+                                proUpsellCoordinator?.present(source: .workoutPlan)
+                            }
+                        } else if isGenerating {
+                            generatingMessage
+                                .id("generating")
+                        } else if suggestions.isEmpty {
+                            emptyConversationState
+                                .id("empty")
+                        } else {
+                            generatedGoalsMessage
+                                .id("suggestions")
+                        }
+
+                        Color.clear
+                            .frame(height: 12)
+                            .id("bottom")
                     }
-                    .scrollDismissesKeyboard(.interactively)
-                    .onChange(of: suggestions.count) { _, _ in
-                        scrollToBottom(proxy)
-                    }
-                    .onChange(of: isGenerating) { _, _ in
-                        scrollToBottom(proxy)
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
                 }
-
-                Divider()
-
-                SimpleChatInputBar(
-                    text: $promptText,
-                    placeholder: "Tell Trai what you want to work toward...",
-                    isLoading: isGenerating,
-                    onSend: submitGoalPrompt,
-                    isFocused: $isInputFocused
-                )
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: suggestions.count) { _, _ in
+                    scrollToBottom(proxy)
+                }
+                .onChange(of: isGenerating) { _, _ in
+                    scrollToBottom(proxy)
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                bottomPromptBar
+            }
+            .background(alignment: .bottom) {
+                TraiChatInputBackdrop()
             }
             .navigationTitle("Set Goals with Trai")
             .navigationBarTitleDisplayMode(.inline)
@@ -183,7 +228,7 @@ struct WorkoutGoalAISheet: View {
         .onAppear {
             if suggestions.isEmpty, !initialSuggestions.isEmpty {
                 suggestions = initialSuggestions
-                selectedSuggestionIDs = Set(initialSuggestions.map(\.id))
+                selectedSuggestionIDs = []
                 submittedPromptText = nil
                 return
             }
@@ -256,26 +301,49 @@ struct WorkoutGoalAISheet: View {
     }
 
     private var generatedGoalsMessage: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            GeneratedWorkoutGoalsCardContainer(title: "Goals Trai will track") {
-                VStack(spacing: 8) {
-                    ForEach(suggestions) { suggestion in
-                        SelectableGeneratedWorkoutGoalRow(
-                            goal: suggestion.asWorkoutGoal(),
-                            isSelected: selectedSuggestionIDs.contains(suggestion.id),
-                            onSelect: { selectedSuggestionForDetail = suggestion },
-                            onToggle: { toggleSuggestion(suggestion) }
-                        )
+        GeneratedWorkoutGoalsCardContainer(title: "Goals Trai will track") {
+            VStack(spacing: 8) {
+                ForEach(suggestions) { suggestion in
+                    SelectableGeneratedWorkoutGoalRow(
+                        goal: suggestion.asWorkoutGoal(),
+                        isSelected: selectedSuggestionIDs.contains(suggestion.id),
+                        onSelect: { selectedSuggestionForDetail = suggestion },
+                        onToggle: { toggleSuggestion(suggestion) }
+                    )
+                }
+            }
+        }
+    }
+
+    private var bottomPromptBar: some View {
+        VStack(spacing: 6) {
+            if canAccessWorkoutGoalAI, !isGenerating {
+                promptSuggestionChips
+            }
+
+            SimpleChatInputBar(
+                text: $promptText,
+                placeholder: "Ask Trai for a different goal...",
+                isLoading: isGenerating,
+                onSend: submitGoalPrompt,
+                isFocused: $isInputFocused
+            )
+        }
+    }
+
+    private var promptSuggestionChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(goalPromptSuggestions) { suggestion in
+                    TraiSelectableChip(text: suggestion.title, isSelected: false) {
+                        submitGoalPrompt(suggestion.prompt)
                     }
                 }
             }
-
-            Button("Regenerate", systemImage: "arrow.clockwise") {
-                Task { await generateSuggestions() }
-            }
-            .font(.caption.weight(.semibold))
-            .buttonStyle(.traiTertiary(size: .compact, height: 32))
+            .padding(.horizontal)
         }
+        .padding(.top, 6)
+        .padding(.bottom, 2)
     }
 
     private func toggleSuggestion(_ suggestion: WorkoutGoalSuggestion) {
@@ -321,7 +389,7 @@ struct WorkoutGoalAISheet: View {
             )
 
             suggestions = generated
-            selectedSuggestionIDs = Set(generated.map(\.id))
+            selectedSuggestionIDs = []
             onSuggestionsGenerated?(generated)
         } catch {
             print("Workout goal suggestion generation failed: \(error)")
@@ -330,6 +398,14 @@ struct WorkoutGoalAISheet: View {
 
     private func submitGoalPrompt() {
         let trimmed = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isGenerating else { return }
+        submittedPromptText = trimmed
+        promptText = ""
+        Task { await generateSuggestions(userIntent: trimmed) }
+    }
+
+    private func submitGoalPrompt(_ prompt: String) {
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isGenerating else { return }
         submittedPromptText = trimmed
         promptText = ""

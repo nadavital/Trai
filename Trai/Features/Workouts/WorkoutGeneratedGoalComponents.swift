@@ -108,18 +108,24 @@ struct SelectableGeneratedWorkoutGoalRow: View {
             Button {
                 onToggle()
             } label: {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.45))
-                    .frame(width: 34, height: 34)
-                    .contentShape(Circle())
+                Label(isSelected ? "Added" : "Add", systemImage: isSelected ? "checkmark" : "plus")
+                    .font(.caption.weight(.semibold))
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                    .background(
+                        isSelected ? Color.accentColor.opacity(0.12) : Color(.quaternarySystemFill),
+                        in: Capsule()
+                    )
+                    .contentShape(Capsule())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(isSelected ? "Remove goal" : "Select goal")
         }
         .padding(isCompact ? 8 : 10)
         .background(
-            isSelected ? Color.accentColor.opacity(0.08) : Color(.tertiarySystemFill).opacity(0.55),
+            Color(.tertiarySystemFill).opacity(0.55),
             in: .rect(cornerRadius: 13, style: .continuous)
         )
         .overlay {

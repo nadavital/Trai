@@ -323,6 +323,27 @@ struct SimpleChatInputBar: View {
     }
 }
 
+struct TraiChatInputBackdrop: View {
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: Color(.systemBackground).opacity(0), location: 0),
+                .init(color: Color(.systemBackground).opacity(0.04), location: 0.18),
+                .init(color: Color(.systemBackground).opacity(0.16), location: 0.38),
+                .init(color: Color(.systemBackground).opacity(0.44), location: 0.64),
+                .init(color: Color(.systemBackground).opacity(0.8), location: 0.86),
+                .init(color: Color(.systemBackground), location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(maxWidth: .infinity)
+        .frame(height: 220)
+        .allowsHitTesting(false)
+        .ignoresSafeArea(edges: .bottom)
+    }
+}
+
 private struct ChatDictationButton: View {
     let isRecording: Bool
     let isPreparing: Bool
