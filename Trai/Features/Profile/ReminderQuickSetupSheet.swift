@@ -855,13 +855,22 @@ struct ReminderQuickSetupSheet: View {
     @MainActor
     private func syncBuiltInReminderSchedules() async {
         guard let notificationService else { return }
+        let completedTodayReminderIDs = fetchCompletedReminderIDsForToday()
         await notificationService.updateAuthorizationStatus()
-        guard notificationService.isAuthorized else { return }
+        guard notificationService.isAuthorized else {
+            await notificationService.cancelNotifications(category: .mealReminder)
+            await notificationService.cancelNotifications(category: .workoutReminder)
+            await notificationService.cancelNotifications(category: .weightReminder)
+            return
+        }
 
         if profile.mealRemindersEnabled {
             let enabledMeals = Set(profile.enabledMealReminders.split(separator: ",").map(String.init))
             let mealTimes = MealReminderTime.allMeals.filter { enabledMeals.contains($0.id) }
-            await notificationService.scheduleMealReminders(times: mealTimes)
+            await notificationService.scheduleMealReminders(
+                times: mealTimes,
+                skippingTodayReminderIDs: completedTodayReminderIDs
+            )
         } else {
             await notificationService.cancelNotifications(category: .mealReminder)
         }
@@ -871,17 +880,34 @@ struct ReminderQuickSetupSheet: View {
             await notificationService.scheduleWorkoutReminders(
                 days: workoutDays.sorted(),
                 hour: profile.workoutReminderHour,
-                minute: profile.workoutReminderMinute
+                minute: profile.workoutReminderMinute,
+                skippingTodayReminderIDs: completedTodayReminderIDs
             )
+        } else {
+            await notificationService.cancelNotifications(category: .workoutReminder)
         }
 
         if profile.weightReminderEnabled {
             await notificationService.scheduleWeightReminder(
                 weekday: profile.weightReminderWeekday,
                 hour: profile.weightReminderHour,
-                minute: 0
+                minute: 0,
+                skippingTodayReminderIDs: completedTodayReminderIDs
             )
+        } else {
+            await notificationService.cancelNotifications(category: .weightReminder)
         }
+    }
+
+    private func fetchCompletedReminderIDsForToday() -> Set<UUID> {
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let descriptor = FetchDescriptor<ReminderCompletion>(
+            predicate: #Predicate { completion in
+                completion.completedAt >= startOfDay
+            }
+        )
+        let completions = (try? modelContext.fetch(descriptor)) ?? []
+        return Set(completions.map(\.reminderId))
     }
 }
 

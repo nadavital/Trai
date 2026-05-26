@@ -15,6 +15,7 @@ struct ReminderSettingsView: View {
     @State private var notificationService: NotificationService?
     @State private var composerSeed: ReminderComposerSeed?
     @State private var customReminders: [CustomReminder] = []
+    @State private var selectedHabitReminder: CustomReminder?
     @State private var reminderSaveErrorMessage: String?
 
     private var enabledMealIDs: Set<String> {
@@ -35,6 +36,9 @@ struct ReminderSettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .sheet(item: $composerSeed) { seed in
                 reminderComposer(seed)
+            }
+            .navigationDestination(item: $selectedHabitReminder) { reminder in
+                ReminderHabitView(reminder: reminder)
             }
             .alert("Reminder Not Updated", isPresented: Binding(
                 get: { reminderSaveErrorMessage != nil },
@@ -282,6 +286,33 @@ struct ReminderSettingsView: View {
                 set: { updateCustomReminder(reminder, isEnabled: $0) }
             ))
             .labelsHidden()
+
+            Menu {
+                Button {
+                    selectedHabitReminder = reminder
+                } label: {
+                    Label("History", systemImage: "chart.bar.xaxis")
+                }
+
+                Button {
+                    composerSeed = .custom(reminder)
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+
+                Button(role: .destructive) {
+                    deleteReminder(reminder)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 34, height: 34)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Reminder actions")
         }
         .padding(.vertical, 10)
     }
@@ -396,15 +427,56 @@ struct ReminderSettingsView: View {
         customReminders = (try? modelContext.fetch(descriptor)) ?? []
     }
 
+    private func deleteReminder(_ reminder: CustomReminder) {
+        Task {
+            await notificationService?.cancelCustomReminder(id: reminder.id)
+        }
+        modelContext.delete(reminder)
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            reminderSaveErrorMessage = "We couldn’t delete this reminder. Please try again."
+            HapticManager.error()
+            fetchCustomReminders()
+            return
+        }
+        if selectedHabitReminder?.id == reminder.id {
+            selectedHabitReminder = nil
+        }
+        fetchCustomReminders()
+        HapticManager.lightTap()
+    }
+
+    private func fetchCompletedReminderIDsForToday() -> Set<UUID> {
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let descriptor = FetchDescriptor<ReminderCompletion>(
+            predicate: #Predicate { completion in
+                completion.completedAt >= startOfDay
+            }
+        )
+        let completions = (try? modelContext.fetch(descriptor)) ?? []
+        return Set(completions.map(\.reminderId))
+    }
+
     @MainActor
     private func syncBuiltInReminderSchedules() async {
         guard let service = notificationService else { return }
+        let completedTodayReminderIDs = fetchCompletedReminderIDsForToday()
         await service.updateAuthorizationStatus()
-        guard service.isAuthorized else { return }
+        guard service.isAuthorized else {
+            await service.cancelNotifications(category: .mealReminder)
+            await service.cancelNotifications(category: .workoutReminder)
+            await service.cancelNotifications(category: .weightReminder)
+            return
+        }
 
         if profile.mealRemindersEnabled {
             let mealTimes = MealReminderTime.allMeals.filter { enabledMealIDs.contains($0.id) }
-            await service.scheduleMealReminders(times: mealTimes)
+            await service.scheduleMealReminders(
+                times: mealTimes,
+                skippingTodayReminderIDs: completedTodayReminderIDs
+            )
         } else {
             await service.cancelNotifications(category: .mealReminder)
         }
@@ -414,7 +486,8 @@ struct ReminderSettingsView: View {
             await service.scheduleWorkoutReminders(
                 days: workoutDays.sorted(),
                 hour: profile.workoutReminderHour,
-                minute: profile.workoutReminderMinute
+                minute: profile.workoutReminderMinute,
+                skippingTodayReminderIDs: completedTodayReminderIDs
             )
         } else {
             await service.cancelNotifications(category: .workoutReminder)
@@ -424,7 +497,8 @@ struct ReminderSettingsView: View {
             await service.scheduleWeightReminder(
                 weekday: profile.weightReminderWeekday,
                 hour: profile.weightReminderHour,
-                minute: 0
+                minute: 0,
+                skippingTodayReminderIDs: completedTodayReminderIDs
             )
         } else {
             await service.cancelNotifications(category: .weightReminder)
