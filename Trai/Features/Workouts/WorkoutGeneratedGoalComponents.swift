@@ -249,9 +249,7 @@ struct GeneratedWorkoutGoalDetailSheet: View {
     private func selectionBar(_ selection: Selection) -> some View {
         selectionButton(selection)
             .padding(.horizontal)
-            .padding(.top, 10)
-            .padding(.bottom, 8)
-            .background(.bar)
+            .padding(.vertical, 8)
     }
 
     @ViewBuilder
