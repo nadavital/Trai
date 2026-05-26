@@ -26,6 +26,10 @@ fi
 
 if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   tracked_sensitive_paths="$(git -C "$ROOT" ls-files -- \
+    '.agent' \
+    '.agent/**' \
+    '.claude' \
+    '.claude/**' \
     '.agent/gcloud-config' \
     '.agent/gcloud-config/**' \
     '.agent/**/logs/**' \
@@ -37,15 +41,23 @@ if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --is-inside-work-t
     '.agent/**/.boto' \
     '.agent/**/*.pem' \
     '.agent/**/*.p8' \
-    '.agent/**/*.key')"
+    '.agent/**/*.key' | while IFS= read -r path; do
+      if [ -e "$ROOT/$path" ]; then
+        printf '%s\n' "$path"
+      fi
+    done)"
 
   if [ -n "$tracked_sensitive_paths" ]; then
     echo "$tracked_sensitive_paths"
-    echo "error: Sensitive local agent/cloud credential or log paths are tracked by git."
+    echo "error: Local agent, Claude, cloud credential, or log paths are tracked by git."
     exit 1
   fi
 
   unignored_sensitive_paths="$(git -C "$ROOT" ls-files --others --exclude-standard -- \
+    '.agent' \
+    '.agent/**' \
+    '.claude' \
+    '.claude/**' \
     '.agent/gcloud-config' \
     '.agent/gcloud-config/**' \
     '.agent/**/logs/**' \
@@ -61,7 +73,7 @@ if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --is-inside-work-t
 
   if [ -n "$unignored_sensitive_paths" ]; then
     echo "$unignored_sensitive_paths"
-    echo "error: Sensitive local agent/cloud credential or log paths are not covered by .gitignore."
+    echo "error: Local agent, Claude, cloud credential, or log paths are not covered by .gitignore."
     exit 1
   fi
 fi

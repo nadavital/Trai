@@ -4,9 +4,10 @@
 - Shared operating notes for coding agents working in this repository.
 
 ## Project Scope
-- App code: `/Users/navital/Desktop/Trai/Trai`
-- Widgets: `/Users/navital/Desktop/Trai/TraiWidgets`
-- Xcode project: `/Users/navital/Desktop/Trai/Trai.xcodeproj`
+- App code: `Trai/`
+- Widgets: `TraiWidgets/`
+- Backend: `Backend/`
+- Xcode project: `Trai.xcodeproj`
 
 ## Working Rules
 - Make targeted, minimal changes.
@@ -24,7 +25,7 @@
 - Widgets: keep the current widget action/deep link flow aligned with `LogFoodCameraIntent` and `showingFoodCamera`; avoid introducing alternate routing paths.
 
 ## Design Language
-- Before changing UI, read [design.md](/Users/navital/Desktop/Trai/design.md) and preserve the app’s current warm, rounded, material-backed look.
+- Before changing UI, read `design.md` and preserve the app’s current warm, rounded, material-backed look.
 - Prefer the existing design system tokens and components: `traiCard`, `traiPrimary`, `traiSecondary`, `traiTertiary`, `traiBackground`, `traiSheetBranding`, `TraiSpacing`, `TraiRadius`, and the Trai rounded font helpers.
 - Keep main surfaces compact and card-based; move secondary information into toolbars, sheets, or drill-down views instead of making the main scroll surface taller.
 - Use the Trai brand palette and semantic colors consistently, and keep the Trai lens/hexagon icon intact.
@@ -36,4 +37,4 @@
 
 ## Performance Notes
 - Live workout UI is sensitive to main-thread work. Avoid JSON encode/decode in hot getters (e.g., `LiveWorkoutEntry.sets`) and avoid synchronous `modelContext.save()` on `Add Set`; prefer caching and debounced saves.
-- Live workout latency checks: run `./scripts/run_live_workout_stability.sh --mode sim`; deeper context/results live in `/Users/navital/Desktop/Trai/.agent/done/live-workout-latency-report.md`.
+- Live workout latency checks: run `./scripts/run_live_workout_stability.sh --mode sim`.
