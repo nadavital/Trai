@@ -74,6 +74,7 @@ struct WorkoutsView: View {
     @State private var showingCustomExercises = false
     @State private var pendingWorkout: LiveWorkout?
     @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
+    @State private var isStartingWorkout = false
     @State private var lastOpenTrackedAt: Date?
     @State private var historyRefreshTask: Task<Void, Never>?
     @State private var deferredRecoveryRefreshTask: Task<Void, Never>?
@@ -516,8 +517,10 @@ struct WorkoutsView: View {
             }
             .onChange(of: showingWorkoutSheet) { _, isShowing in
                 if !isShowing {
-                    // Clear template when sheet is dismissed
+                    // Clear launch state when sheet is dismissed
                     pendingTemplate = nil
+                    pendingWorkout = nil
+                    isStartingWorkout = false
                 }
             }
         }
@@ -1279,6 +1282,8 @@ struct WorkoutsView: View {
     }
 
     private func startWorkoutFromTemplate(_ template: WorkoutPlan.WorkoutTemplate) {
+        guard !isStartingWorkout else { return }
+
         if let activeWorkout {
             pendingTemplate = nil
             pendingWorkout = activeWorkout
@@ -1287,13 +1292,17 @@ struct WorkoutsView: View {
             return
         }
 
+        isStartingWorkout = true
         let workout = templateService.createWorkoutFromTemplate(
             template,
             progressionStrategy: workoutPlan?.progressionStrategy ?? .defaultStrategy,
             modelContext: modelContext,
             prefillStrengthExercises: true
         )
-        _ = templateService.persistWorkout(workout, modelContext: modelContext)
+        guard templateService.persistWorkout(workout, modelContext: modelContext) else {
+            isStartingWorkout = false
+            return
+        }
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,
             domain: .workout,
@@ -1330,6 +1339,8 @@ struct WorkoutsView: View {
         muscles: [LiveWorkout.MuscleGroup] = [],
         focusAreas: [String] = []
     ) {
+        guard !isStartingWorkout else { return }
+
         if let activeWorkout {
             pendingWorkout = activeWorkout
             showingWorkoutSheet = true
@@ -1337,13 +1348,17 @@ struct WorkoutsView: View {
             return
         }
 
+        isStartingWorkout = true
         let workout = templateService.createCustomWorkout(
             name: name,
             type: type,
             muscles: muscles,
             focusAreas: focusAreas
         )
-        _ = templateService.persistWorkout(workout, modelContext: modelContext)
+        guard templateService.persistWorkout(workout, modelContext: modelContext) else {
+            isStartingWorkout = false
+            return
+        }
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,
             domain: .workout,

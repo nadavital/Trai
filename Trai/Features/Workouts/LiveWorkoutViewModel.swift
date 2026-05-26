@@ -17,6 +17,11 @@ final class LiveWorkoutViewModel {
 
     var workout: LiveWorkout
     var isTimerRunning = true
+    private(set) var isFinishingWorkout = false
+
+    var isWorkoutFinished: Bool {
+        workout.completedAt != nil
+    }
 
     // Live Activity manager (shared singleton to prevent duplicates)
     private var liveActivityManager: LiveActivityManager { LiveActivityManager.shared }
@@ -1762,6 +1767,12 @@ final class LiveWorkoutViewModel {
     // MARK: - Workout Completion
 
     func finishWorkout() {
+        guard !isFinishingWorkout else { return }
+        guard workout.completedAt == nil else { return }
+
+        isFinishingWorkout = true
+        defer { isFinishingWorkout = false }
+
         stopTimer()
         workout.completedAt = Date()
 

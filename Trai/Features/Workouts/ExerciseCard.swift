@@ -20,6 +20,8 @@ struct ExerciseCard: View {
     let onToggleWarmup: (Int) -> Void
     var onDeleteExercise: (() -> Void)? = nil
     var onChangeExercise: (() -> Void)? = nil
+    var setRowScrollID: (UUID) -> String = { "liveWorkoutSet-\($0.uuidString)" }
+    var onFocusedSetChange: (UUID?) -> Void = { _ in }
 
     @State private var isExpanded = true
     @State private var showDeleteConfirmation = false
@@ -179,8 +181,12 @@ struct ExerciseCard: View {
                                 withAnimation(.easeInOut(duration: 0.2)) {
                                     onRemoveSet(index)
                                 }
+                            },
+                            onFocusChange: { isFocused in
+                                onFocusedSetChange(isFocused ? set.id : nil)
                             }
                         )
+                        .id(setRowScrollID(set.id))
                     }
 
                     // Add set button
@@ -237,6 +243,7 @@ struct SetRow: View {
     let onUpdateWeightUnit: (WeightUnit?) -> Void
     let onToggleWarmup: () -> Void
     let onDelete: () -> Void
+    let onFocusChange: (Bool) -> Void
 
     @State private var weightText: String = ""
     @State private var repsText: String = ""
@@ -270,6 +277,10 @@ struct SetRow: View {
         get {
             set.preferredWeightUnit ?? defaultDisplayUnit
         }
+    }
+
+    private var hasFieldFocus: Bool {
+        isWeightFocused || isRepsFocused || isNotesFocused
     }
 
     var body: some View {
@@ -430,6 +441,9 @@ struct SetRow: View {
             notesText = set.notes
             showNotesField = !set.notes.isEmpty
         }
+        .onChange(of: hasFieldFocus) { _, hasFocus in
+            onFocusChange(hasFocus)
+        }
         .onChange(of: effectiveDisplayUnit) { _, newUnit in
             currentDisplayUnit = newUnit
             let displayWeight = displayWeightValue(for: newUnit)
@@ -438,6 +452,9 @@ struct SetRow: View {
             Task { @MainActor in
                 isUpdatingFromUnitChange = false
             }
+        }
+        .onDisappear {
+            onFocusChange(false)
         }
         .confirmationDialog(
             "Large Weight Increase",

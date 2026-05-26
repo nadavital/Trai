@@ -91,12 +91,14 @@ struct WorkoutHistorySection: View {
                         case .live(let workout):
                             CompactLiveWorkoutRow(
                                 workout: workout,
-                                onTap: { onLiveWorkoutTap(workout) }
+                                onTap: { onLiveWorkoutTap(workout) },
+                                onDelete: { onDeleteLiveWorkout(workout) }
                             )
                         case .session(let workout):
                             CompactWorkoutSessionRow(
                                 workout: workout,
-                                onTap: { onWorkoutTap(workout) }
+                                onTap: { onWorkoutTap(workout) },
+                                onDelete: { onDelete(workout) }
                             )
                         }
                     }
@@ -123,48 +125,82 @@ struct WorkoutHistorySection: View {
 private struct CompactLiveWorkoutRow: View {
     let workout: LiveWorkout
     let onTap: () -> Void
+    let onDelete: () -> Void
+
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                // Icon with colored background
-                Image(systemName: workout.historyIconName)
-                    .font(.body)
-                    .foregroundStyle(.accent)
-                    .frame(width: 32, height: 32)
-                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(workout.name)
-                        .font(.subheadline)
-                        .lineLimit(1)
-                        .foregroundStyle(.primary)
-
-                    HStack(spacing: 6) {
-                        ForEach(Array(workout.historySummarySegments.enumerated()), id: \.offset) { index, segment in
-                            if index > 0 {
-                                Text("•")
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Text(segment)
-                        }
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+        HStack(spacing: 8) {
+            Button(action: onTap) {
+                rowContent
             }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+            .buttonStyle(.plain)
+
+            Menu {
+                Button(role: .destructive) {
+                    showDeleteConfirmation = true
+                } label: {
+                    Label("Delete Workout", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 34, height: 34)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Workout options")
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .confirmationDialog(
+            "Delete Workout?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Workout", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes \"\(workout.name)\" from your history.")
+        }
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: 12) {
+            Image(systemName: workout.historyIconName)
+                .font(.body)
+                .foregroundStyle(.accent)
+                .frame(width: 32, height: 32)
+                .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(workout.name)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+
+                HStack(spacing: 6) {
+                    ForEach(Array(workout.historySummarySegments.enumerated()), id: \.offset) { index, segment in
+                        if index > 0 {
+                            Text("•")
+                                .foregroundStyle(.tertiary)
+                        }
+                        Text(segment)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -173,53 +209,87 @@ private struct CompactLiveWorkoutRow: View {
 private struct CompactWorkoutSessionRow: View {
     let workout: WorkoutSession
     let onTap: () -> Void
+    let onDelete: () -> Void
+
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                // Icon with colored background
-                Image(systemName: workout.iconName)
-                    .font(.body)
-                    .foregroundStyle(workout.sourceIsHealthKit ? .red : .accent)
-                    .frame(width: 32, height: 32)
-                    .background((workout.sourceIsHealthKit ? Color.red : Color.accentColor).opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(workout.displayName)
-                        .font(.subheadline)
-                        .lineLimit(1)
-                        .foregroundStyle(.primary)
-
-                    HStack(spacing: 6) {
-                        ForEach(Array(workout.historyDetailSegments.enumerated()), id: \.offset) { index, segment in
-                            if index > 0 {
-                                Text("•")
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Text(segment)
-                                .foregroundStyle(segment.hasSuffix("kcal") ? .red : .secondary)
-                        }
-
-                        if workout.sourceIsHealthKit {
-                            Image(systemName: "heart.fill")
-                                .foregroundStyle(.red)
-                        }
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+        HStack(spacing: 8) {
+            Button(action: onTap) {
+                rowContent
             }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+            .buttonStyle(.plain)
+
+            Menu {
+                Button(role: .destructive) {
+                    showDeleteConfirmation = true
+                } label: {
+                    Label("Delete Workout", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 34, height: 34)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Workout options")
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .confirmationDialog(
+            "Delete Workout?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Workout", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes \"\(workout.displayName)\" from your history.")
+        }
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: 12) {
+            Image(systemName: workout.iconName)
+                .font(.body)
+                .foregroundStyle(workout.sourceIsHealthKit ? .red : .accent)
+                .frame(width: 32, height: 32)
+                .background((workout.sourceIsHealthKit ? Color.red : Color.accentColor).opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(workout.displayName)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+
+                HStack(spacing: 6) {
+                    ForEach(Array(workout.historyDetailSegments.enumerated()), id: \.offset) { index, segment in
+                        if index > 0 {
+                            Text("•")
+                                .foregroundStyle(.tertiary)
+                        }
+                        Text(segment)
+                            .foregroundStyle(segment.hasSuffix("kcal") ? .red : .secondary)
+                    }
+
+                    if workout.sourceIsHealthKit {
+                        Image(systemName: "heart.fill")
+                            .foregroundStyle(.red)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
