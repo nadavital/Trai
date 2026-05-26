@@ -206,7 +206,7 @@ struct WorkoutsView: View {
     }
 
     private var visibleWorkoutGoalInsights: [WorkoutGoalInsight] {
-        activeWorkoutGoalInsights.filter { !$0.isCompleteEnoughToHide }
+        activeWorkoutGoalInsights.filter { !$0.isCompletedGoalHidden }
     }
 
     private var visibleActiveWorkoutGoals: [WorkoutGoal] {
@@ -501,13 +501,11 @@ struct WorkoutsView: View {
                         persistCachedGoalSuggestionSnapshot(suggestions)
                     }
                 ) { goals in
-                    let goalsToInsert = workoutPlan.map {
-                        WorkoutGoal.generatedGoalsToInsert(
-                            goals,
-                            existingGoals: activeWorkoutGoals,
-                            for: $0
-                        )
-                    } ?? goals
+                    let goalsToInsert = WorkoutGoal.selectedAIGoalsToInsert(
+                        goals,
+                        existingGoals: activeWorkoutGoals,
+                        for: workoutPlan
+                    )
                     for goal in goalsToInsert {
                         modelContext.insert(goal)
                     }
@@ -1510,10 +1508,14 @@ private struct StandardWorkoutPlanSaveError: Identifiable {
 }
 
 private extension WorkoutGoalInsight {
-    var isCompleteEnoughToHide: Bool {
+    var isCompletedGoalHidden: Bool {
         if goal.status == .completed {
             return true
         }
+        return false
+    }
+
+    var isCompleteEnoughToHide: Bool {
         guard let progressFraction else {
             return false
         }

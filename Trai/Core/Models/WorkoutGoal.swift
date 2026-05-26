@@ -389,6 +389,7 @@ extension WorkoutGoal {
         let normalizedIDs = generatedPlanBlockIDs.filter { validBlockIDs.contains($0) }
         guard normalizedIDs != generatedPlanBlockIDs else { return }
         generatedPlanBlockIDs = normalizedIDs
+        requiresGeneratedPlanBlockScope = !normalizedIDs.isEmpty
         updatedAt = Date()
     }
 
@@ -418,6 +419,28 @@ extension WorkoutGoal {
                 || !goal.requiresDurableGeneratedPlanScope
                 || !goal.generatedPlanBlockIDs.isEmpty else {
                 continue
+            }
+            let key = goal.planSetupDeduplicationKey
+            guard !key.isEmpty, existingKeys.insert(key).inserted else { continue }
+            result.append(goal)
+        }
+        return result
+    }
+
+    static func selectedAIGoalsToInsert(
+        _ goals: [WorkoutGoal],
+        existingGoals: [WorkoutGoal],
+        for plan: WorkoutPlan?
+    ) -> [WorkoutGoal] {
+        var existingKeys = Set(existingGoals.map(\.planSetupDeduplicationKey))
+        var result: [WorkoutGoal] = []
+        for goal in goals {
+            if let plan {
+                goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+                goal.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan)
+            }
+            if !goal.tracksGeneratedPlanAdherence, goal.generatedPlanBlockIDs.isEmpty {
+                goal.requiresGeneratedPlanBlockScope = false
             }
             let key = goal.planSetupDeduplicationKey
             guard !key.isEmpty, existingKeys.insert(key).inserted else { continue }
