@@ -422,37 +422,11 @@ struct LiveWorkoutDetailSheet: View {
     @ViewBuilder
     private var traiReviewSection: some View {
         if canAccessTraiChat {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 10) {
-                    Image(systemName: "circle.hexagongrid.circle")
-                        .font(.title3)
-                        .foregroundStyle(.accent)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Review This Workout with Trai")
-                            .font(.headline)
-
-                        Text("Jump into Trai with this completed workout queued for coaching and follow-up advice.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer(minLength: 0)
-                }
-
-                Button {
-                    reviewWorkoutWithTrai()
-                } label: {
-                    HStack {
-                        Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                        Text("Ask Trai About This Workout")
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.14))
-            }
-            .padding(16)
-            .traiCard(cornerRadius: 16, contentPadding: 0)
+            WorkoutTraiReviewCard(
+                title: "Review with Trai",
+                subtitle: "Ask what to adjust after this workout.",
+                action: reviewWorkoutWithTrai
+            )
         } else {
             ProUpsellInlineCard(
                 source: .workoutReview,

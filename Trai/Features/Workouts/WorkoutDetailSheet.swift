@@ -252,37 +252,11 @@ struct WorkoutDetailSheet: View {
     @ViewBuilder
     private var traiReviewSection: some View {
         if canAccessTraiChat {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 10) {
-                    Image(systemName: "circle.hexagongrid.circle")
-                        .font(.title3)
-                        .foregroundStyle(.accent)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Review This Session with Trai")
-                            .font(.headline)
-
-                        Text("Open Trai with this workout queued up for coaching and next-step feedback.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer(minLength: 0)
-                }
-
-                Button {
-                    reviewSessionWithTrai()
-                } label: {
-                    HStack {
-                        Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                        Text("Ask Trai About This Session")
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.14))
-            }
-            .padding(16)
-            .traiCard(cornerRadius: 16, contentPadding: 0)
+            WorkoutTraiReviewCard(
+                title: "Review with Trai",
+                subtitle: "Ask what this session means for your next workout.",
+                action: reviewSessionWithTrai
+            )
         } else {
             ProUpsellInlineCard(
                 source: .workoutReview,

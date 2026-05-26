@@ -995,7 +995,7 @@ struct WorkoutGoalProgressCard: View {
     var onGoalTap: ((WorkoutGoal) -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             if showsAddGoal {
                 TraiSectionHeader("Working Toward", icon: "scope") {
                     Button("Add Goal", systemImage: "plus", action: onAddGoal)
@@ -1010,85 +1010,56 @@ struct WorkoutGoalProgressCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(insights) { insight in
-                    goalRow(insight)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(insights.prefix(5)) { insight in
+                            compactGoalCard(insight)
+                                .frame(width: 154)
+                        }
+                    }
+                    .scrollTargetLayout()
                 }
+                .scrollTargetBehavior(.viewAligned)
+                .contentMargins(.horizontal, 1, for: .scrollContent)
             }
         }
         .padding(16)
         .traiCard(cornerRadius: 16, contentPadding: 0)
     }
 
-    @ViewBuilder
-    private func goalRow(_ insight: WorkoutGoalInsight) -> some View {
-        let rowContent = VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: insight.goal.goalKind.iconName)
-                    .font(.subheadline)
-                    .foregroundStyle(insight.goal.status == .completed ? .green : .accentColor)
-                    .frame(width: 34, height: 34)
-                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10))
+    private func compactGoalCard(_ insight: WorkoutGoalInsight) -> some View {
+        Button {
+            onGoalTap?(insight.goal)
+        } label: {
+            VStack(spacing: 9) {
+                GoalProgressRing(
+                    progress: insight.progressFraction,
+                    iconName: insight.goal.goalKind.iconName,
+                    color: insight.goal.status == .completed ? .green : TraiColors.flame
+                )
+                .frame(width: 48, height: 48)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(insight.goal.trimmedTitle)
-                        .font(.subheadline.weight(.semibold))
+                Text(insight.goal.trimmedTitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    Text(insight.goal.scopeSummary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if insight.goal.goalKind == .milestone {
-                    Button {
-                        onToggleCompletion(insight.goal)
-                    } label: {
-                        Text(insight.goal.status == .completed ? "Reopen" : "Mark Done")
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                (insight.goal.status == .completed ? Color.green : Color.accentColor)
-                                    .opacity(0.12),
-                                in: Capsule()
-                            )
-                            .foregroundStyle(insight.goal.status == .completed ? .green : .accentColor)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            if let progressFraction = insight.progressFraction {
-                ProgressView(value: progressFraction)
-                    .tint(insight.goal.status == .completed ? .green : .accentColor)
-            }
-
-            Text(insight.progressText)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-
-            if let supportingText = insight.supportingText {
-                Text(supportingText)
-                    .font(.caption)
+                Text(insight.progressText)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .lineLimit(3)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 10)
+            .frame(height: 126)
+            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
         }
-        .padding(.vertical, 4)
-
-        if let onGoalTap {
-            rowContent
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onGoalTap(insight.goal)
-                }
-        } else {
-            rowContent
-        }
+        .buttonStyle(TraiPressStyle())
     }
 }
 
@@ -1133,6 +1104,46 @@ struct RecentWorkoutSignalsCard: View {
             }
         }
         .traiCard()
+    }
+}
+
+struct WorkoutTraiReviewCard: View {
+    let title: String
+    let subtitle: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: "circle.hexagongrid.circle")
+                    .font(.headline)
+                    .foregroundStyle(TraiColors.brandAccent)
+                    .frame(width: 38, height: 38)
+                    .background(TraiColors.brandAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .contentShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(TraiPressStyle())
+        .traiCard(cornerRadius: 16, contentPadding: 0)
     }
 }
 
@@ -1185,12 +1196,12 @@ struct WorkoutGoalsOverviewSection: View {
                 celebratedGoalCard(celebratedGoal)
             }
 
-            if insights.isEmpty && signals.isEmpty {
+            if insights.isEmpty && signals.isEmpty && completedGoalCount == 0 {
                 emptyStateCard
             } else if !canCreateGoalsWithTrai {
                 lockedSignalsState
             } else {
-                if !insights.isEmpty {
+                if !insights.isEmpty || completedGoalCount > 0 {
                     goalsCarousel
                 }
 
@@ -1203,9 +1214,6 @@ struct WorkoutGoalsOverviewSection: View {
                 }
             }
 
-            if completedGoalCount > 0 {
-                completedGoalsRow
-            }
         }
     }
 
@@ -1260,43 +1268,16 @@ struct WorkoutGoalsOverviewSection: View {
         )
     }
 
-    private var completedGoalsRow: some View {
-        Button(action: onCompletedGoalsTap) {
-            HStack(spacing: 12) {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.green)
-                    .frame(width: 34, height: 34)
-                    .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Completed Goals")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-
-                    Text("\(completedGoalCount) saved for review")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(12)
-            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
-            .contentShape(RoundedRectangle(cornerRadius: 14))
-        }
-        .buttonStyle(TraiPressStyle())
-    }
-
     private var goalsCarousel: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 ForEach(insights.prefix(5)) { insight in
                     featuredGoalCard(insight)
+                        .frame(width: 150)
+                }
+
+                if completedGoalCount > 0 {
+                    completedGoalsCard
                         .frame(width: 150)
                 }
             }
@@ -1345,6 +1326,33 @@ struct WorkoutGoalsOverviewSection: View {
         .accessibilityAction {
             onGoalTap(insight.goal)
         }
+    }
+
+    private var completedGoalsCard: some View {
+        Button(action: onCompletedGoalsTap) {
+            VStack(spacing: 9) {
+                GoalProgressRing(
+                    progress: 1,
+                    iconName: "checkmark.seal.fill",
+                    color: .green
+                )
+
+                Text("Completed")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text("\(completedGoalCount) goal\(completedGoalCount == 1 ? "" : "s")")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .padding(.horizontal, 10)
+            .frame(height: 126)
+            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(TraiPressStyle())
     }
 
     private func staleCheckInCard(_ goal: WorkoutGoal) -> some View {
@@ -1466,13 +1474,18 @@ struct WorkoutGoalsOverviewSection: View {
 
 struct CompletedWorkoutGoalsSheet: View {
     let insights: [WorkoutGoalInsight]
+    let workouts: [LiveWorkout]
+    let sessions: [WorkoutSession]
+    let exerciseHistory: [ExerciseHistory]
+    let useLbs: Bool
     let onToggleCompletion: (WorkoutGoal) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedGoal: WorkoutGoal?
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 12) {
+                VStack(spacing: 16) {
                     if insights.isEmpty {
                         ContentUnavailableView(
                             "No Completed Goals",
@@ -1481,14 +1494,22 @@ struct CompletedWorkoutGoalsSheet: View {
                         )
                         .padding(.top, 40)
                     } else {
-                        ForEach(insights) { insight in
-                            CompletedWorkoutGoalRow(
-                                insight: insight,
-                                onReopen: {
-                                    onToggleCompletion(insight.goal)
+                        VStack(spacing: 0) {
+                            ForEach(Array(insights.enumerated()), id: \.element.id) { index, insight in
+                                Button {
+                                    selectedGoal = insight.goal
+                                } label: {
+                                    CompletedWorkoutGoalRow(insight: insight)
                                 }
-                            )
+                                .buttonStyle(TraiPressStyle())
+
+                                if index < insights.count - 1 {
+                                    Divider()
+                                        .padding(.leading, 72)
+                                }
+                            }
                         }
+                        .traiCard(cornerRadius: 16, contentPadding: 0)
                     }
                 }
                 .padding()
@@ -1503,71 +1524,59 @@ struct CompletedWorkoutGoalsSheet: View {
                     .labelStyle(.iconOnly)
                 }
             }
+            .sheet(item: $selectedGoal) { goal in
+                WorkoutGoalDetailSheet(
+                    goal: goal,
+                    workouts: workouts,
+                    sessions: sessions,
+                    exerciseHistory: exerciseHistory,
+                    useLbs: useLbs,
+                    onToggleCompletion: onToggleCompletion
+                )
+                .traiSheetBranding()
+            }
         }
     }
 }
 
 private struct CompletedWorkoutGoalRow: View {
     let insight: WorkoutGoalInsight
-    let onReopen: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                GoalProgressRing(
-                    progress: insight.progressFraction ?? 1,
-                    iconName: insight.goal.goalKind.iconName,
-                    color: .green
-                )
-                .frame(width: 46, height: 46)
+        HStack(spacing: 12) {
+            GoalProgressRing(
+                progress: 1,
+                iconName: insight.goal.goalKind.iconName,
+                color: .green
+            )
+            .frame(width: 44, height: 44)
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(insight.goal.trimmedTitle)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(insight.goal.trimmedTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
 
-                    Text(insight.progressText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    if let completedAt = insight.goal.completedAt {
-                        Text("Completed \(completedAt.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-
-                Spacer(minLength: 0)
-            }
-
-            if let supportingText = insight.supportingText {
-                Text(supportingText)
+                Text(insight.progressText)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-            }
-
-            HStack {
-                Text(insight.goal.scopeSummary)
-                    .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
 
-                Spacer()
-
-                Button("Reopen", systemImage: "arrow.uturn.backward") {
-                    onReopen()
+                if let completedAt = insight.goal.completedAt {
+                    Text(completedAt.formatted(date: .abbreviated, time: .omitted))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
-                .font(.caption.weight(.semibold))
-                .buttonStyle(.traiTertiary(size: .compact, height: 30))
             }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
         .padding(14)
-        .traiCard(cornerRadius: 16, contentPadding: 0)
+        .contentShape(Rectangle())
     }
 }
 
@@ -1890,16 +1899,13 @@ struct WorkoutGoalDetailSheet: View {
                     .foregroundStyle(.secondary)
             }
 
-            if goal.goalKind == .milestone {
+            if goal.goalKind == .milestone, goal.status != .completed {
                 Button {
                     onToggleCompletion(goal)
                 } label: {
-                    Label(
-                        goal.status == .completed ? "Reopen Goal" : "Mark Done",
-                        systemImage: goal.status == .completed ? "arrow.uturn.backward.circle" : "circle"
-                    )
+                    Label("Mark Done", systemImage: "circle")
                 }
-                .buttonStyle(.traiSecondary(color: goal.status == .completed ? .green : goalAccentColor, fullWidth: true))
+                .buttonStyle(.traiSecondary(color: goalAccentColor, fullWidth: true))
             }
 
             Button("Check in with Trai", systemImage: "circle.hexagongrid.circle") {

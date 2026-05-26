@@ -512,6 +512,10 @@ struct WorkoutsView: View {
             .sheet(isPresented: $showingCompletedWorkoutGoals) {
                 CompletedWorkoutGoalsSheet(
                     insights: completedWorkoutGoalInsights,
+                    workouts: completedLiveWorkouts,
+                    sessions: workoutGoalSessions,
+                    exerciseHistory: allExerciseHistory,
+                    useLbs: !usesMetricExerciseWeight,
                     onToggleCompletion: toggleWorkoutGoalCompletion
                 )
                 .traiSheetBranding()

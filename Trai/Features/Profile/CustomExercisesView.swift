@@ -34,22 +34,10 @@ struct CustomExercisesView: View {
     }
 
     private var exerciseSections: [ExerciseLibrarySection] {
-        let grouped = Dictionary(grouping: filteredExercises) { exercise in
-            exercise.exerciseCategory.userFacingEquivalent
-        }
-        let orderedCategories = Exercise.Category.userFacingCases
-        return orderedCategories.compactMap { category in
-            guard let exercises = grouped[category], !exercises.isEmpty else { return nil }
-            return ExerciseLibrarySection(
-                category: category,
-                exercises: exercises.sorted { lhs, rhs in
-                    let lhsActivity = displayActivityName(for: lhs)
-                    let rhsActivity = displayActivityName(for: rhs)
-                    if lhsActivity != rhsActivity {
-                        return lhsActivity.localizedStandardCompare(rhsActivity) == .orderedAscending
-                    }
-                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
-                }
+        Exercise.Category.userFacingCases.flatMap { category in
+            smartSections(
+                for: category,
+                exercises: filteredExercises.filter { $0.exerciseCategory.userFacingEquivalent == category }
             )
         }
     }
@@ -64,8 +52,6 @@ struct CustomExercisesView: View {
                     ContentUnavailableView.search(text: searchText)
                         .padding(.top, 48)
                 } else {
-                    librarySummaryCard
-
                     ForEach(exerciseSections) { section in
                         ExerciseLibrarySectionCard(
                             section: section,
@@ -141,29 +127,6 @@ struct CustomExercisesView: View {
             .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: false))
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private var librarySummaryCard: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "square.grid.2x2.fill")
-                .font(.headline)
-                .foregroundStyle(.accent)
-                .frame(width: 38, height: 38)
-                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(filteredExercises.count) custom item\(filteredExercises.count == 1 ? "" : "s")")
-                    .font(.traiHeadline())
-
-                Text("Organized by category, activity group, targets, and tracking.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(14)
-        .traiCard(cornerRadius: 16, contentPadding: 0)
     }
 
     private func fetchCustomExercises() {
@@ -273,15 +236,135 @@ struct CustomExercisesView: View {
             ? Exercise.defaultActivityTypeName(for: exercise.name, category: exercise.exerciseCategory)
             : activityName
     }
+
+    private func smartSections(
+        for category: Exercise.Category,
+        exercises: [Exercise]
+    ) -> [ExerciseLibrarySection] {
+        guard !exercises.isEmpty else { return [] }
+
+        let sorted = exercises.sorted(by: sortExercises)
+        guard exercises.count > 6 else {
+            return [
+                ExerciseLibrarySection(
+                    id: category.rawValue,
+                    title: category.displayName,
+                    subtitle: nil,
+                    icon: category.iconName,
+                    category: category,
+                    priority: 0,
+                    exercises: sorted
+                )
+            ]
+        }
+
+        let activityCounts = Dictionary(grouping: exercises, by: displayActivityName(for:))
+            .mapValues(\.count)
+        let targetCounts = Dictionary(grouping: exercises, by: { primaryTargetName(for: $0) ?? "" })
+            .mapValues(\.count)
+        var buckets: [ExerciseLibraryBucket: [Exercise]] = [:]
+
+        for exercise in exercises {
+            let activityName = displayActivityName(for: exercise)
+            let targetName = primaryTargetName(for: exercise)
+            let bucket: ExerciseLibraryBucket
+
+            if category == .strength,
+               let targetName,
+               (targetCounts[targetName] ?? 0) >= 2 {
+                bucket = ExerciseLibraryBucket(
+                    title: targetName,
+                    subtitle: activityName,
+                    icon: exercise.exerciseCategory.iconName,
+                    category: category,
+                    priority: 0
+                )
+            } else if (activityCounts[activityName] ?? 0) >= (category == .strength ? 4 : 2) {
+                bucket = ExerciseLibraryBucket(
+                    title: activityName,
+                    subtitle: category.displayName,
+                    icon: category.iconName,
+                    category: category,
+                    priority: 1
+                )
+            } else if let targetName,
+                      (targetCounts[targetName] ?? 0) >= 2 {
+                bucket = ExerciseLibraryBucket(
+                    title: targetName,
+                    subtitle: category.displayName,
+                    icon: category.iconName,
+                    category: category,
+                    priority: 2
+                )
+            } else {
+                bucket = ExerciseLibraryBucket(
+                    title: "More \(category.displayName)",
+                    subtitle: nil,
+                    icon: category.iconName,
+                    category: category,
+                    priority: 3
+                )
+            }
+
+            buckets[bucket, default: []].append(exercise)
+        }
+
+        return buckets
+            .map { bucket, exercises in
+                ExerciseLibrarySection(
+                    id: "\(category.rawValue)-\(bucket.title.goalNormalizedKey)-\(bucket.subtitle?.goalNormalizedKey ?? "none")",
+                    title: bucket.title,
+                    subtitle: bucket.subtitle == bucket.title ? nil : bucket.subtitle,
+                    icon: bucket.icon,
+                    category: bucket.category,
+                    priority: bucket.priority,
+                    exercises: exercises.sorted(by: sortExercises)
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.priority != rhs.priority { return lhs.priority < rhs.priority }
+                if lhs.exercises.count != rhs.exercises.count { return lhs.exercises.count > rhs.exercises.count }
+                return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+            }
+    }
+
+    private func sortExercises(_ lhs: Exercise, _ rhs: Exercise) -> Bool {
+        let lhsActivity = displayActivityName(for: lhs)
+        let rhsActivity = displayActivityName(for: rhs)
+        if lhsActivity != rhsActivity {
+            return lhsActivity.localizedStandardCompare(rhsActivity) == .orderedAscending
+        }
+        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+    }
+
+    private func primaryTargetName(for exercise: Exercise) -> String? {
+        if let muscleGroup = exercise.targetMuscleGroup {
+            return muscleGroup.displayName
+        }
+        return exercise.targetTags
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+    }
 }
 
 // MARK: - Exercise Library Cards
 
 private struct ExerciseLibrarySection: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String?
+    let icon: String
     let category: Exercise.Category
+    let priority: Int
     let exercises: [Exercise]
+}
 
-    var id: String { category.rawValue }
+private struct ExerciseLibraryBucket: Hashable {
+    let title: String
+    let subtitle: String?
+    let icon: String
+    let category: Exercise.Category
+    let priority: Int
 }
 
 private struct ExerciseLibrarySectionCard: View {
@@ -290,7 +373,7 @@ private struct ExerciseLibrarySectionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TraiSectionHeader(section.category.displayName, icon: section.category.iconName) {
+            TraiSectionHeader(section.title, icon: section.icon) {
                 Text("\(section.exercises.count)")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -299,72 +382,87 @@ private struct ExerciseLibrarySectionCard: View {
                     .background(Color(.tertiarySystemFill), in: Capsule())
             }
 
-            VStack(spacing: 0) {
-                ForEach(Array(section.exercises.enumerated()), id: \.element.id) { index, exercise in
-                    ExerciseManagementRow(exercise: exercise, onDelete: { onDelete(exercise) })
+            if let subtitle = section.subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
-                    if index < section.exercises.count - 1 {
-                        Divider()
-                            .padding(.leading, 46)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(section.exercises) { exercise in
+                        ExerciseManagementCard(
+                            exercise: exercise,
+                            sectionTitle: section.title,
+                            onDelete: { onDelete(exercise) }
+                        )
+                        .frame(width: 176)
                     }
                 }
+                .scrollTargetLayout()
             }
+            .scrollTargetBehavior(.viewAligned)
+            .contentMargins(.horizontal, 1, for: .scrollContent)
         }
-        .padding(14)
-        .traiCard(cornerRadius: 16, contentPadding: 0)
+        .padding(.vertical, 4)
     }
 }
 
-private struct ExerciseManagementRow: View {
+private struct ExerciseManagementCard: View {
     let exercise: Exercise
+    let sectionTitle: String
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: exercise.exerciseCategory.iconName)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.accent)
-                .frame(width: 34, height: 34)
-                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                Image(systemName: exercise.exerciseCategory.iconName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.accent)
+                    .frame(width: 32, height: 32)
+                    .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
 
-            VStack(alignment: .leading, spacing: 8) {
+                Spacer()
+
+                Menu {
+                    Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
                 Text(exercise.name)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    ExerciseLibraryMetadataLine(
-                        icon: "rectangle.stack.fill",
-                        title: displayActivityName
-                    )
-
-                    ExerciseLibraryMetadataLine(
-                        icon: "slider.horizontal.3",
-                        title: trackingSummary
-                    )
-
-                    if !targetSummary.isEmpty {
-                        ExerciseLibraryMetadataLine(
-                            icon: exercise.exerciseCategory.iconName,
-                            title: targetSummary
-                        )
-                    }
+                if !detailSummary.isEmpty {
+                    Text(detailSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            Button(role: .destructive, action: onDelete) {
-                Image(systemName: "trash")
-                    .font(.caption.weight(.semibold))
+            if !trackingSummary.isEmpty {
+                Text(trackingSummary)
+                    .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: 32, height: 32)
-                    .background(Color(.tertiarySystemFill), in: Circle())
+                    .lineLimit(1)
             }
-            .buttonStyle(.plain)
         }
-        .padding(.vertical, 12)
+        .padding(12)
+        .frame(height: 136, alignment: .topLeading)
+        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+        .contentShape(RoundedRectangle(cornerRadius: 14))
     }
 
     private var displayActivityName: String {
@@ -381,30 +479,28 @@ private struct ExerciseManagementRow: View {
             .joined(separator: ", ")
     }
 
-    private var targetSummary: String {
-        var values = Array(exercise.targetTags.prefix(3))
+    private var detailSummary: String {
+        let sectionKey = sectionTitle.goalNormalizedKey
+        var values: [String] = []
+        if displayActivityName.goalNormalizedKey != sectionKey {
+            values.append(displayActivityName)
+        }
+        if let target = primaryTargetName,
+           target.goalNormalizedKey != sectionKey {
+            values.append(target)
+        }
         if let equipment = exercise.displayEquipment {
             values.append(equipment)
         }
-        return values.joined(separator: ", ")
+        return values.prefix(2).joined(separator: " • ")
     }
-}
 
-private struct ExerciseLibraryMetadataLine: View {
-    let icon: String
-    let title: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 14)
-
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+    private var primaryTargetName: String? {
+        if let muscleGroup = exercise.targetMuscleGroup {
+            return muscleGroup.displayName
         }
+        return exercise.targetTags
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
     }
 }
