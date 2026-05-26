@@ -433,6 +433,20 @@ extension AIFunctionExecutor {
         let targetDate = parseDate(args["target_date"] as? String)
         let checkInCadenceDays = numericInt(from: args["check_in_cadence_days"])
         let tracksPlanAdherence = args["tracks_plan_adherence"] as? Bool == true
+        let generatedPlanTemplateIDs: [UUID]
+        if args.keys.contains("generated_plan_template_ids") {
+            switch parsedGeneratedPlanTemplateIDs(
+                from: args["generated_plan_template_ids"],
+                functionName: "create_workout_goal"
+            ) {
+            case .success(let ids):
+                generatedPlanTemplateIDs = ids
+            case .failure(let result):
+                return .dataResponse(result)
+            }
+        } else {
+            generatedPlanTemplateIDs = []
+        }
         let generatedPlanBlockIDs: [UUID]
         if args.keys.contains("generated_plan_block_ids") {
             switch parsedGeneratedPlanBlockIDs(
@@ -448,10 +462,16 @@ extension AIFunctionExecutor {
             generatedPlanBlockIDs = []
         }
 
-        if tracksPlanAdherence, !generatedPlanBlockIDs.isEmpty {
+        if tracksPlanAdherence, (!generatedPlanTemplateIDs.isEmpty || !generatedPlanBlockIDs.isEmpty) {
             return .dataResponse(FunctionResult(
                 name: "create_workout_goal",
-                response: ["error": "generated_plan_block_ids cannot be used with tracks_plan_adherence."]
+                response: ["error": "generated plan ids cannot be used with tracks_plan_adherence."]
+            ))
+        }
+        if tracksPlanAdherence, userProfile?.workoutPlan == nil {
+            return .dataResponse(FunctionResult(
+                name: "create_workout_goal",
+                response: ["error": "tracks_plan_adherence requires a saved workout plan."]
             ))
         }
 
@@ -466,6 +486,14 @@ extension AIFunctionExecutor {
             return .dataResponse(FunctionResult(
                 name: "create_workout_goal",
                 response: ["error": error]
+            ))
+        }
+        if goalKind == .frequency,
+           !generatedPlanTemplateIDs.isEmpty,
+           targetValue != Double(generatedPlanTemplateIDs.count) {
+            return .dataResponse(FunctionResult(
+                name: "create_workout_goal",
+                response: ["error": "For frequency goals scoped to generated_plan_template_ids, target_value must equal the number of template ids being tracked."]
             ))
         }
 
@@ -490,10 +518,25 @@ extension AIFunctionExecutor {
         )
         if tracksPlanAdherence, let plan = userProfile?.workoutPlan {
             goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
+        } else if !generatedPlanTemplateIDs.isEmpty {
+            goal.generatedPlanTemplateIDs = generatedPlanTemplateIDs
+            goal.linkedWorkoutTypeRaw = nil
+            goal.linkedActivityName = nil
+            goal.linkedActivityTags = []
+            goal.linkedActivityKindRaw = nil
+            goal.linkedActivityRoleRaw = nil
         }
 
         modelContext.insert(goal)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            return .dataResponse(FunctionResult(
+                name: "create_workout_goal",
+                response: ["error": "Could not save workout goal: \(error.localizedDescription)"]
+            ))
+        }
         return .dataResponse(FunctionResult(
             name: "create_workout_goal",
             response: [
@@ -542,7 +585,9 @@ extension AIFunctionExecutor {
         var checkInCadenceDays = goal.checkInCadenceDays
         var notes = goal.trimmedNotes
         var tracksPlanAdherence = goal.tracksGeneratedPlanAdherence
+        var generatedPlanTemplateIDs = goal.generatedPlanTemplateIDs
         var generatedPlanBlockIDs = goal.generatedPlanBlockIDs
+        let updatesGeneratedPlanTemplateIDs = args.keys.contains("generated_plan_template_ids")
         let updatesGeneratedPlanBlockIDs = args.keys.contains("generated_plan_block_ids")
 
         if let rawTitle = args["title"] as? String {
@@ -659,6 +704,18 @@ extension AIFunctionExecutor {
             tracksPlanAdherence = rawTracksPlanAdherence
         }
 
+        if updatesGeneratedPlanTemplateIDs {
+            switch parsedGeneratedPlanTemplateIDs(
+                from: args["generated_plan_template_ids"],
+                functionName: "update_workout_goal"
+            ) {
+            case .success(let ids):
+                generatedPlanTemplateIDs = ids
+            case .failure(let result):
+                return .dataResponse(result)
+            }
+        }
+
         if updatesGeneratedPlanBlockIDs {
             switch parsedGeneratedPlanBlockIDs(
                 from: args["generated_plan_block_ids"],
@@ -671,10 +728,16 @@ extension AIFunctionExecutor {
             }
         }
 
-        if tracksPlanAdherence, !generatedPlanBlockIDs.isEmpty {
+        if tracksPlanAdherence, (!generatedPlanTemplateIDs.isEmpty || !generatedPlanBlockIDs.isEmpty) {
             return .dataResponse(FunctionResult(
                 name: "update_workout_goal",
-                response: ["error": "generated_plan_block_ids cannot be used with tracks_plan_adherence."]
+                response: ["error": "generated plan ids cannot be used with tracks_plan_adherence."]
+            ))
+        }
+        if tracksPlanAdherence, userProfile?.workoutPlan == nil {
+            return .dataResponse(FunctionResult(
+                name: "update_workout_goal",
+                response: ["error": "tracks_plan_adherence requires a saved workout plan."]
             ))
         }
 
@@ -689,6 +752,14 @@ extension AIFunctionExecutor {
             return .dataResponse(FunctionResult(
                 name: "update_workout_goal",
                 response: ["error": error]
+            ))
+        }
+        if goalKind == .frequency,
+           !generatedPlanTemplateIDs.isEmpty,
+           targetValue != Double(generatedPlanTemplateIDs.count) {
+            return .dataResponse(FunctionResult(
+                name: "update_workout_goal",
+                response: ["error": "For frequency goals scoped to generated_plan_template_ids, target_value must equal the number of template ids being tracked."]
             ))
         }
 
@@ -711,18 +782,36 @@ extension AIFunctionExecutor {
         goal.notes = notes
         goal.tracksGeneratedPlanAdherence = tracksPlanAdherence
         if tracksPlanAdherence, let plan = userProfile?.workoutPlan {
+            goal.generatedPlanTemplateIDs = []
             goal.generatedPlanBlockIDs = []
             goal.requiresGeneratedPlanBlockScope = false
             goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
         } else if !tracksPlanAdherence {
-            goal.generatedPlanTemplateIDs = []
+            if updatesGeneratedPlanTemplateIDs {
+                goal.generatedPlanTemplateIDs = generatedPlanTemplateIDs
+            }
+            if !goal.generatedPlanTemplateIDs.isEmpty {
+                goal.linkedWorkoutTypeRaw = nil
+                goal.linkedActivityName = nil
+                goal.linkedActivityTags = []
+                goal.linkedActivityKindRaw = nil
+                goal.linkedActivityRoleRaw = nil
+            }
             if updatesGeneratedPlanBlockIDs {
                 goal.generatedPlanBlockIDs = generatedPlanBlockIDs
                 goal.requiresGeneratedPlanBlockScope = !generatedPlanBlockIDs.isEmpty
             }
         }
         goal.updatedAt = Date()
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            return .dataResponse(FunctionResult(
+                name: "update_workout_goal",
+                response: ["error": "Could not save workout goal: \(error.localizedDescription)"]
+            ))
+        }
         return .dataResponse(FunctionResult(
             name: "update_workout_goal",
             response: [
@@ -743,6 +832,7 @@ extension AIFunctionExecutor {
             "activity_tags": goal.linkedActivityTags,
             "activity_kind": goal.linkedActivityKind?.rawValue ?? "",
             "activity_role": goal.linkedActivityRole?.rawValue ?? "",
+            "generated_plan_template_ids": goal.generatedPlanTemplateIDs.map(\.uuidString),
             "generated_plan_block_ids": goal.generatedPlanBlockIDs.map(\.uuidString),
             "tracks_plan_adherence": goal.tracksGeneratedPlanAdherence,
             "target_value": goal.targetValue as Any,
@@ -801,7 +891,51 @@ extension AIFunctionExecutor {
         return .success(parsedIDs)
     }
 
+    private func parsedGeneratedPlanTemplateIDs(
+        from value: Any?,
+        functionName: String
+    ) -> GeneratedPlanTemplateIDParseResult {
+        let rawIDs = stringArray(from: value)
+        guard !rawIDs.isEmpty else { return .success([]) }
+
+        var seen: Set<UUID> = []
+        var parsedIDs: [UUID] = []
+        for rawID in rawIDs {
+            guard let id = UUID(uuidString: rawID) else {
+                return .failure(FunctionResult(
+                    name: functionName,
+                    response: ["error": "generated_plan_template_ids must contain exact template ids from the current workout plan."]
+                ))
+            }
+            if seen.insert(id).inserted {
+                parsedIDs.append(id)
+            }
+        }
+
+        guard let plan = userProfile?.workoutPlan else {
+            return .failure(FunctionResult(
+                name: functionName,
+                response: ["error": "generated_plan_template_ids requires a current workout plan."]
+            ))
+        }
+
+        let currentTemplateIDs = Set(plan.templates.map(\.id))
+        guard parsedIDs.allSatisfy(currentTemplateIDs.contains) else {
+            return .failure(FunctionResult(
+                name: functionName,
+                response: ["error": "generated_plan_template_ids must contain only template ids from the current workout plan."]
+            ))
+        }
+
+        return .success(parsedIDs)
+    }
+
     private enum GeneratedPlanBlockIDParseResult {
+        case success([UUID])
+        case failure(FunctionResult)
+    }
+
+    private enum GeneratedPlanTemplateIDParseResult {
         case success([UUID])
         case failure(FunctionResult)
     }

@@ -1072,6 +1072,7 @@ struct OnboardingWorkoutPlanSetupView: View {
     @Binding var generatedPlanGoalsForReview: [WorkoutGoal]
 
     let context: OnboardingWorkoutPlanUserContext
+    let existingWorkoutGoals: [WorkoutGoal]
     let aiService: AIService
     var mode: WorkoutPlanSetupMode = .proAI
     var showsProForkBeforeReview = false
@@ -3504,7 +3505,7 @@ struct OnboardingWorkoutPlanSetupView: View {
                     result.goalSuggestions
                         .map { $0.asWorkoutGoal() }
                         .filter(\.hasValidTrackingCriteria),
-                    existingGoals: [],
+                    existingGoals: existingWorkoutGoals,
                     for: result.plan
                 )
                 generatedPlanUsedFallback = false
@@ -3638,6 +3639,7 @@ private extension Array where Element: Hashable {
             goal: .recomposition,
             activityLevel: .moderate
         ),
+        existingWorkoutGoals: [],
         aiService: AIService(),
         onComplete: { _, _ in },
         onBack: {}

@@ -87,6 +87,15 @@ extension ProUpsellSource {
                 inlineMessage: "Your workout plan is included. Upgrade when you want Trai to review progress, adjust your week, and keep coaching over time.",
                 inlineIconName: "figure.strengthtraining.traditional"
             )
+        case .workoutReview:
+            return ProUpsellContent(
+                headline: "Review workouts with Trai",
+                tagline: "Turn a completed session into clear feedback and a smarter next workout.",
+                modules: [coachSuggestions, fitnessPlan, nutritionPlan, photoLogging],
+                inlineTitle: "Unlock workout reviews",
+                inlineMessage: "Have Trai review completed workouts, spot useful patterns, and suggest the next adjustment.",
+                inlineIconName: "bubble.left.and.text.bubble.right.fill"
+            )
         case .exerciseAnalysis:
             return ProUpsellContent(
                 headline: "Get smarter exercise help",

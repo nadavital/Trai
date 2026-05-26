@@ -478,7 +478,7 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private var saveGeneratedPlanTitle: String {
-        let hasGoals = !deduplicatedGeneratedPlanGoals.isEmpty
+        let hasGoals = !activeGeneratedPlanGoals.isEmpty
         if didRefineGeneratedPlan {
             return hasGoals ? "Save Changes + Goals" : "Save Changes"
         }
@@ -1022,7 +1022,7 @@ struct WorkoutPlanChatFlow: View {
                 )
                 try Task.checkCancellation()
                 let updatedPlan = response.proposedPlan ?? response.updatedPlan
-                let refreshedGoals = if isOnboarding, let updatedPlan {
+                let refreshedGoals = if let updatedPlan {
                     await finalGeneratedGoals(for: updatedPlan)
                 } else {
                     activeGeneratedPlanGoals
@@ -1065,7 +1065,7 @@ struct WorkoutPlanChatFlow: View {
                         plan: newPlan,
                         introText: isOnboarding ? (response.message.isEmpty ? "I updated the plan and goals. Review the changes, then save when it looks right." : response.message) : nil,
                         planMessage: response.message,
-                        goals: isOnboarding ? refreshedGoals : [],
+                        goals: refreshedGoals,
                         includeSaveAction: isOnboarding,
                         presentation: .proposal
                     )
@@ -1161,9 +1161,9 @@ struct WorkoutPlanChatFlow: View {
             existingGoals: workoutGoals,
             for: plan
         )
+        activeGeneratedPlanGoals = goalsToShow
         if !goalsToShow.isEmpty {
             guard generatedResultPresentationID == presentationID else { return }
-            activeGeneratedPlanGoals = goalsToShow
             guard await appendGeneratedResultMessage(
                 .generatedGoals(goalsToShow),
                 delayMilliseconds: 120,
@@ -1248,7 +1248,14 @@ struct WorkoutPlanChatFlow: View {
             if currentPlanToEdit == durablePlan {
                 refreshExistingGeneratedPlanAdherenceGoals(for: durablePlan)
                 insertGeneratedWorkoutGoals(activeGeneratedPlanGoals, for: durablePlan)
-                try? modelContext.save()
+                do {
+                    try modelContext.save()
+                } catch {
+                    modelContext.rollback()
+                    saveError = WorkoutPlanChatFlowSaveError(message: error.localizedDescription)
+                    HapticManager.error()
+                    return
+                }
                 WidgetDataProvider.shared.scheduleRefresh()
                 HapticManager.success()
                 dismiss()

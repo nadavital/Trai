@@ -53,7 +53,7 @@ enum WorkoutGoalProgressResolver {
         goals
             .filter { goal in
                 let matchesWorkout: Bool
-                if goal.tracksGeneratedPlanAdherence {
+                if goal.tracksGeneratedPlanAdherence || !goal.generatedPlanTemplateIDs.isEmpty {
                     matchesWorkout = goal.matchesGeneratedPlanTemplate(workout: workout)
                         && (workout.completedAt == nil || hasLoggedGeneratedPlanProgress(in: workout))
                 } else {
@@ -600,7 +600,7 @@ enum WorkoutGoalProgressResolver {
         guard workout.completedAt != nil else {
             return false
         }
-        if goal.tracksGeneratedPlanAdherence {
+        if goal.tracksGeneratedPlanAdherence || !goal.generatedPlanTemplateIDs.isEmpty {
             return goal.matchesGeneratedPlanTemplate(workout: workout)
                 && hasLoggedGeneratedPlanProgress(in: workout)
         }
@@ -648,7 +648,7 @@ enum WorkoutGoalProgressResolver {
         _ session: WorkoutSession,
         for goal: WorkoutGoal
     ) -> Bool {
-        guard !goal.tracksGeneratedPlanAdherence else { return false }
+        guard !goal.tracksGeneratedPlanAdherence, goal.generatedPlanTemplateIDs.isEmpty else { return false }
         guard goal.matches(session: session) else { return false }
         guard !goal.hasActivityScope else { return true }
 
@@ -801,7 +801,7 @@ enum WorkoutGoalProgressResolver {
         let periodStart = periodStartDate(for: goal, now: now) ?? Calendar.current.startOfDay(for: now)
 
         let workoutCount: Int
-        if goal.tracksGeneratedPlanAdherence {
+        if goal.tracksGeneratedPlanAdherence || !goal.generatedPlanTemplateIDs.isEmpty {
             workoutCount = Set(workouts.compactMap { workout -> UUID? in
                 let progressDate = workout.completedAt ?? workout.startedAt
                 guard progressDate >= periodStart,
@@ -1668,8 +1668,13 @@ struct WorkoutGoalDetailSheet: View {
             .confirmationDialog("Delete Goal", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     modelContext.delete(goal)
-                    try? modelContext.save()
-                    dismiss()
+                    do {
+                        try modelContext.save()
+                        dismiss()
+                    } catch {
+                        modelContext.rollback()
+                        HapticManager.error()
+                    }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -1936,11 +1941,12 @@ struct AddWorkoutGoalSheet: View {
     }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     let workoutType: WorkoutMode?
     let activitySuggestions: [String]
     let prefersMetricWeight: Bool
-    let onSave: (WorkoutGoal) -> Void
+    let onSave: (WorkoutGoal) -> Bool
     private let editingGoal: WorkoutGoal?
 
     @State private var title = ""
@@ -1966,7 +1972,7 @@ struct AddWorkoutGoalSheet: View {
         workoutType: WorkoutMode?,
         activitySuggestions: [String],
         prefersMetricWeight: Bool,
-        onSave: @escaping (WorkoutGoal) -> Void
+        onSave: @escaping (WorkoutGoal) -> Bool
     ) {
         self.workoutType = workoutType
         self.activitySuggestions = activitySuggestions
@@ -1982,7 +1988,7 @@ struct AddWorkoutGoalSheet: View {
         editGoal existing: WorkoutGoal,
         activitySuggestions: [String],
         prefersMetricWeight: Bool,
-        onSave: @escaping (WorkoutGoal) -> Void = { _ in }
+        onSave: @escaping (WorkoutGoal) -> Bool = { _ in true }
     ) {
         self.workoutType = existing.linkedWorkoutType
         self.activitySuggestions = activitySuggestions
@@ -2269,7 +2275,18 @@ struct AddWorkoutGoalSheet: View {
                             existing.targetDate = targetDateEnabled ? targetDate : nil
                             existing.checkInCadenceDays = Int(checkInCadenceDaysText.trimmingCharacters(in: .whitespacesAndNewlines))
                             existing.baselineValue = baseline
+                            existing.tracksGeneratedPlanAdherence = false
+                            existing.generatedPlanBlockIDs = []
+                            existing.generatedPlanTemplateIDs = []
+                            existing.requiresGeneratedPlanBlockScope = false
                             existing.updatedAt = Date()
+                            do {
+                                try modelContext.save()
+                                dismiss()
+                            } catch {
+                                modelContext.rollback()
+                                HapticManager.error()
+                            }
                         } else {
                             let newGoal = WorkoutGoal(
                                 title: trimmedTitle,
@@ -2289,9 +2306,12 @@ struct AddWorkoutGoalSheet: View {
                                 checkInCadenceDays: Int(checkInCadenceDaysText.trimmingCharacters(in: .whitespacesAndNewlines)),
                                 baselineValue: baseline
                             )
-                            onSave(newGoal)
+                            if onSave(newGoal) {
+                                dismiss()
+                            } else {
+                                HapticManager.error()
+                            }
                         }
-                        dismiss()
                     }
                     .labelStyle(.iconOnly)
                     .disabled(isSaveDisabled)

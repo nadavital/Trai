@@ -655,10 +655,21 @@ struct SummaryStatRow: View {
     let value: String
     let icon: String
 
+    private var iconColor: Color {
+        switch icon {
+        case "dumbbell.fill":
+            .green
+        case "square.stack.3d.up.fill":
+            .blue
+        default:
+            Color.accentColor
+        }
+    }
+
     var body: some View {
         HStack {
             Image(systemName: icon)
-                .foregroundStyle(.tint)
+                .foregroundStyle(iconColor)
                 .frame(width: 24)
 
             Text(label)

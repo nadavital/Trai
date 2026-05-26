@@ -247,6 +247,7 @@ struct ProfileView: View {
                     generatedPlanForReview: $standardGeneratedWorkoutPlan,
                     generatedPlanGoalsForReview: $standardGeneratedWorkoutGoals,
                     context: standardWorkoutPlanSetupContext,
+                    existingWorkoutGoals: activeWorkoutGoalsForPlanSetup(),
                     aiService: standardWorkoutPlanAIService,
                     canAccessAIFeatures: canAccessAIFeatures,
                     onComplete: saveStandardWorkoutPlan,

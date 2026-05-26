@@ -66,19 +66,14 @@ struct WorkoutHistorySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header with See All button
-            HStack {
-                Label("Recent Workouts", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
-                    .font(.headline)
-                Spacer()
+            TraiSectionHeader("Recent Workouts", icon: "clock.arrow.trianglehead.counterclockwise.rotate.90") {
                 if totalWorkoutCount > 5 {
                     Button {
                         showAllWorkouts = true
                     } label: {
                         Text("See All")
-                            .font(.subheadline)
-                            .foregroundStyle(.accent)
                     }
+                    .buttonStyle(.traiTertiary(size: .compact, height: 32))
                 }
             }
 
@@ -150,12 +145,12 @@ private struct CompactLiveWorkoutRow: View {
                 VStack(spacing: 8) {
                     Image(systemName: workout.historyIconName)
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.accent)
+                        .foregroundStyle(TraiColors.flame)
                         .frame(width: 48, height: 48)
-                        .background(Color.accentColor.opacity(0.14), in: Circle())
+                        .background(TraiColors.flame.opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
 
                     Text(workout.name)
-                        .font(.caption.weight(.semibold))
+                        .font(.traiLabel(13))
                         .lineLimit(2)
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.center)
@@ -190,7 +185,7 @@ private struct CompactLiveWorkoutRow: View {
             .accessibilityLabel("Workout options")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
         .confirmationDialog(
             "Delete Workout?",
             isPresented: $showDeleteConfirmation,
@@ -223,12 +218,12 @@ private struct CompactWorkoutSessionRow: View {
                 VStack(spacing: 8) {
                     Image(systemName: workout.iconName)
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(workout.sourceIsHealthKit ? .red : .accent)
+                        .foregroundStyle(workout.sourceIsHealthKit ? .red : TraiColors.flame)
                         .frame(width: 48, height: 48)
-                        .background((workout.sourceIsHealthKit ? Color.red : Color.accentColor).opacity(0.14), in: Circle())
+                        .background((workout.sourceIsHealthKit ? Color.red : TraiColors.flame).opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
 
                     Text(workout.displayName)
-                        .font(.caption.weight(.semibold))
+                        .font(.traiLabel(13))
                         .lineLimit(2)
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.center)
@@ -263,7 +258,7 @@ private struct CompactWorkoutSessionRow: View {
             .accessibilityLabel("Workout options")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
         .confirmationDialog(
             "Delete Workout?",
             isPresented: $showDeleteConfirmation,

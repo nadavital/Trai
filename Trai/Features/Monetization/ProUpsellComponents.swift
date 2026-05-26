@@ -166,6 +166,7 @@ struct ProUpsellInlineCard: View {
     var isActionDisabled = false
     var showsActionButton = true
     var usesIconContainer = true
+    var showsShadow = true
     let action: () -> Void
 
     var body: some View {
@@ -246,7 +247,7 @@ struct ProUpsellInlineCard: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(.white.opacity(0.22), lineWidth: 1)
         }
-        .shadow(color: TraiColors.brandAccent.opacity(0.18), radius: 16, x: 0, y: 8)
+        .shadow(color: TraiColors.brandAccent.opacity(showsShadow ? 0.18 : 0), radius: showsShadow ? 16 : 0, x: 0, y: showsShadow ? 8 : 0)
         .accessibilityElement(children: .combine)
     }
 

@@ -638,9 +638,7 @@ private struct ExercisePRCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(.ultraThinMaterial)
-            .clipShape(.rect(cornerRadius: 14))
-            .shadow(color: Color.black.opacity(0.04), radius: 4, y: 2)
+            .traiCard(cornerRadius: 14, contentPadding: 0)
         }
         .frame(height: 126)
         .frame(width: 214, alignment: .leading)

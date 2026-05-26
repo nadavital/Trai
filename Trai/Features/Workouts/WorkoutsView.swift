@@ -436,6 +436,7 @@ struct WorkoutsView: View {
                     generatedPlanForReview: $standardGeneratedWorkoutPlan,
                     generatedPlanGoalsForReview: $standardGeneratedWorkoutGoals,
                     context: standardWorkoutPlanSetupContext,
+                    existingWorkoutGoals: activeWorkoutGoals,
                     aiService: standardWorkoutPlanAIService,
                     canAccessAIFeatures: canAccessAIFeatures,
                     onComplete: saveStandardWorkoutPlan,
@@ -506,13 +507,19 @@ struct WorkoutsView: View {
                         existingGoals: activeWorkoutGoals,
                         for: workoutPlan
                     )
+                    guard !goalsToInsert.isEmpty else { return false }
                     for goal in goalsToInsert {
                         modelContext.insert(goal)
                     }
-                    try? modelContext.save()
-                    suggestedWorkoutGoals = []
-                    clearCachedGoalSuggestionSnapshot()
-                    HapticManager.success()
+                    do {
+                        try modelContext.save()
+                        suggestedWorkoutGoals = []
+                        clearCachedGoalSuggestionSnapshot()
+                        return true
+                    } catch {
+                        modelContext.rollback()
+                        return false
+                    }
                 }
                 .traiSheetBranding()
             }

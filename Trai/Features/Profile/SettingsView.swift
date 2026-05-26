@@ -371,6 +371,7 @@ struct SettingsView: View {
                 generatedPlanForReview: $standardGeneratedWorkoutPlan,
                 generatedPlanGoalsForReview: $standardGeneratedWorkoutGoals,
                 context: standardWorkoutPlanSetupContext,
+                existingWorkoutGoals: activeWorkoutGoalsForPlanSetup(),
                 aiService: standardWorkoutPlanAIService,
                 canAccessAIFeatures: monetizationService?.canAccessAIFeatures ?? true,
                 onComplete: saveStandardWorkoutPlan,

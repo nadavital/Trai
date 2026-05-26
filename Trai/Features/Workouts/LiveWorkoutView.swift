@@ -240,7 +240,13 @@ struct LiveWorkoutView: View {
                     prefersMetricWeight: usesMetricExerciseWeight
                 ) { goal in
                     modelContext.insert(goal)
-                    try? modelContext.save()
+                    do {
+                        try modelContext.save()
+                        return true
+                    } catch {
+                        modelContext.rollback()
+                        return false
+                    }
                 }
             }
             .confirmationDialog(

@@ -81,6 +81,7 @@ struct OnboardingView: View {
     @State var generatedWorkoutGoals: [WorkoutGoal] = []
     @State var showingWorkoutSetup = false
     @State var workoutPlanDraft = OnboardingWorkoutPlanDraft()
+    @State var onboardingCompletionError: String?
 
     @State var aiService = AIService()
 
@@ -157,6 +158,7 @@ struct OnboardingView: View {
                     generatedPlanForReview: $generatedWorkoutPlan,
                     generatedPlanGoalsForReview: $generatedWorkoutGoals,
                     context: workoutPlanUserContext,
+                    existingWorkoutGoals: [],
                     aiService: aiService,
                     canAccessAIFeatures: monetizationService?.canAccessAIFeatures ?? false,
                     onComplete: { plan, goals, _, draft in
@@ -228,6 +230,17 @@ struct OnboardingView: View {
             guard hasAccess, showingPlanGenerationChoice, isWaitingToEnterNutritionPlan else { return }
             showingPlanGenerationChoice = false
             advanceToNutritionPlan()
+        }
+        .alert(
+            "Couldn’t finish setup",
+            isPresented: Binding(
+                get: { onboardingCompletionError != nil },
+                set: { if !$0 { onboardingCompletionError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(onboardingCompletionError ?? "Please try again.")
         }
         .sheet(isPresented: $showingPlanGenerationChoice) {
             PlanGenerationChoiceSheet(

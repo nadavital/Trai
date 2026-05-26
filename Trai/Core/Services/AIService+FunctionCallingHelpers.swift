@@ -382,8 +382,11 @@ extension AIService {
         - Workout goals should usually be multi-session or multi-week, not "complete one normal workout."
         - Prefer progression, consistency, frequency, distance, duration, or milestone framing over one-off routine completion.
         - If the user asks for something like "work out 3x a week", create a frequency goal with the right cadence fields instead of flattening it into a generic milestone.
+        - If the goal is semantic or qualitative and cannot be measured from logged workouts/sessions, create a milestone goal with clear success_criteria and check_in_cadence_days instead of inventing a numeric target.
         - If the request maps to a specific recurring exercise, it's okay to create an activity-linked goal for that exercise.
+        - If the request maps to exact planned sessions in the current generated workout plan, pass exact generated_plan_template_ids from CURRENT WORKOUT PLAN and make target_value equal the number of template ids being tracked.
         - If the request maps to a specific block in the current generated workout plan, pass exact generated_plan_block_ids from CURRENT WORKOUT PLAN; do not rely on names or tags for generated-plan block goals.
+        - Do not use tracks_plan_adherence for new goals; it is deprecated in favor of exact generated_plan_template_ids.
         - Use soft target dates when they help make the goal concrete, but don't force a hard date on every goal.
         - After updating or creating a workout goal, clearly tell the user what changed.
 

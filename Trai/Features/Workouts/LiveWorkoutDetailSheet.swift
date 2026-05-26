@@ -256,7 +256,13 @@ struct LiveWorkoutDetailSheet: View {
                     prefersMetricWeight: !useLbs
                 ) { goal in
                     modelContext.insert(goal)
-                    try? modelContext.save()
+                    do {
+                        try modelContext.save()
+                        return true
+                    } catch {
+                        modelContext.rollback()
+                        return false
+                    }
                 }
             }
             .sheet(item: $selectedGoal) { goal in
@@ -381,7 +387,7 @@ struct LiveWorkoutDetailSheet: View {
                         icon: "square.stack.3d.up.fill",
                         value: "\(totalSets)",
                         label: totalSets == 1 ? "set" : "sets",
-                        color: .green
+                        color: .blue
                     )
                 }
 
@@ -397,37 +403,50 @@ struct LiveWorkoutDetailSheet: View {
         .clipShape(.rect(cornerRadius: 16))
     }
 
+    @ViewBuilder
     private var traiReviewSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                Image(systemName: "circle.hexagongrid.circle")
-                    .font(.title3)
-                    .foregroundStyle(.accent)
+        if canAccessTraiChat {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
+                    Image(systemName: "circle.hexagongrid.circle")
+                        .font(.title3)
+                        .foregroundStyle(.accent)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Review This Workout with Trai")
-                        .font(.headline)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Review This Workout with Trai")
+                            .font(.headline)
 
-                    Text("Jump into Trai with this completed workout queued for coaching and follow-up advice.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        Text("Jump into Trai with this completed workout queued for coaching and follow-up advice.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 0)
                 }
 
-                Spacer(minLength: 0)
-            }
-
-            Button {
-                reviewWorkoutWithTrai()
-            } label: {
-                HStack {
-                    Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                    Text(canAccessTraiChat ? "Ask Trai About This Workout" : "Unlock Trai Coaching")
+                Button {
+                    reviewWorkoutWithTrai()
+                } label: {
+                    HStack {
+                        Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                        Text("Ask Trai About This Workout")
+                    }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.14))
             }
-            .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.14))
+            .padding(16)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        } else {
+            ProUpsellInlineCard(
+                source: .workoutReview,
+                actionTitle: "Unlock Trai Pro",
+                showsShadow: false,
+                action: {
+                    proUpsellCoordinator?.present(source: .workoutReview)
+                }
+            )
         }
-        .traiCard()
     }
 
     // MARK: - Exercises Section
@@ -626,7 +645,7 @@ struct LiveWorkoutDetailSheet: View {
 
     private func reviewWorkoutWithTrai() {
         guard canAccessTraiChat else {
-            proUpsellCoordinator?.present(source: .chat)
+            proUpsellCoordinator?.present(source: .workoutReview)
             HapticManager.lightTap()
             return
         }

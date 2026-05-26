@@ -12,7 +12,7 @@ extension OnboardingView {
     // MARK: - Complete Onboarding
 
     func completeOnboarding() {
-        HapticManager.success()
+        onboardingCompletionError = nil
 
         let profile = UserProfile()
 
@@ -90,8 +90,13 @@ extension OnboardingView {
             UserDefaults.standard.set(true, forKey: AppLaunchArguments.onboardingCompletedCacheKey)
             clearOnboardingDraft()
             WidgetDataProvider.shared.scheduleRefresh()
+            HapticManager.success()
         } catch {
+            modelContext.rollback()
+            onboardingCompletionError = error.localizedDescription
+            HapticManager.error()
             print("Failed to persist onboarding profile: \(error)")
+            return
         }
 
         // Parse and create categorized memories from user notes (async)

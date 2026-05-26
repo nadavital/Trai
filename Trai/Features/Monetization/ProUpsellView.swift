@@ -5,6 +5,7 @@ enum ProUpsellSource: String, Identifiable {
     case foodAnalysis
     case nutritionPlan
     case workoutPlan
+    case workoutReview
     case exerciseAnalysis
     case settings
 

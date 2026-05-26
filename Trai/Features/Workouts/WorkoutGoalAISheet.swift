@@ -21,7 +21,7 @@ struct WorkoutGoalAISheet: View {
     let prefersMetricWeight: Bool
     var initialSuggestions: [WorkoutGoalSuggestion] = []
     var onSuggestionsGenerated: (([WorkoutGoalSuggestion]) -> Void)? = nil
-    let onSaveGoals: ([WorkoutGoal]) -> Void
+    let onSaveGoals: ([WorkoutGoal]) -> Bool
 
     @State private var aiService = AIService()
     @State private var promptText = ""
@@ -196,9 +196,12 @@ struct WorkoutGoalAISheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     if !selectedGoals.isEmpty {
                         Button("Save", systemImage: "checkmark") {
-                            onSaveGoals(selectedGoals)
-                            HapticManager.success()
-                            dismiss()
+                            if onSaveGoals(selectedGoals) {
+                                HapticManager.success()
+                                dismiss()
+                            } else {
+                                HapticManager.error()
+                            }
                         }
                         .labelStyle(.iconOnly)
                         .tint(.accentColor)
