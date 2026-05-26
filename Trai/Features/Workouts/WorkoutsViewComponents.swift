@@ -34,8 +34,6 @@ struct StartWorkoutSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TraiSectionHeader("Start Workout", icon: "figure.mixed.cardio")
-
             if let featuredTemplate {
                 FeaturedStartWorkoutCard(
                     template: featuredTemplate,
@@ -165,10 +163,10 @@ private struct MoreSessionsCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TraiSectionHeader("My Plan", icon: "calendar") {
+            TraiSectionHeader("More Workouts", icon: "calendar") {
                 HStack(spacing: 6) {
                     if let onEditPlan {
-                        Button("Edit", systemImage: "pencil", action: onEditPlan)
+                        Button("Edit Plan", systemImage: "pencil", action: onEditPlan)
                             .buttonStyle(.traiTertiary(size: .compact, height: 28))
                     }
                 }
@@ -256,11 +254,13 @@ private struct CustomSessionCard: View {
                     .frame(width: 28, height: 28)
                     .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
 
-                Text("Custom")
-                    .font(.caption.weight(.semibold))
+                Text("Quick Start")
+                    .font(.traiLabel(12))
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
             }
-            .frame(width: 62, height: 62)
+            .frame(width: 84, height: 62)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(
@@ -303,7 +303,7 @@ private struct StartWorkoutCreatePlanCard: View {
                 Button("Create Plan", action: onCreatePlan)
                     .buttonStyle(.traiPrimary(size: .compact, fullWidth: true, height: 36))
 
-                Button("Custom") {
+                Button("Quick Start") {
                     onStartCustomWorkout()
                 }
                 .buttonStyle(.traiTertiary(size: .compact, fullWidth: true, height: 36))
@@ -316,21 +316,23 @@ private struct StartWorkoutCreatePlanCard: View {
 
 private struct StartWorkoutEmptyState: View {
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "figure.mixed.cardio")
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Start any workout")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-
-                Text("Use Custom to log a flexible session without a plan.")
-                    .font(.caption)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "figure.mixed.cardio")
                     .foregroundStyle(.secondary)
-            }
 
-            Spacer()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Start any workout")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Text("Use Quick Start to log a flexible session without a plan.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
         }
         .padding(16)
         .traiCard(cornerRadius: 20, contentPadding: 0)

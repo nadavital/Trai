@@ -93,7 +93,11 @@ struct TraiApp: App {
             }
             if AppLaunchArguments.shouldUseFreePlanForUITest {
                 monetizationService.setDebugPlan(.free)
-                accountSessionService.signOut()
+                if AppLaunchArguments.shouldUseAuthenticatedFreePlanForUITest {
+                    accountSessionService.setDebugAuthenticatedSession()
+                } else {
+                    accountSessionService.signOut()
+                }
             } else {
                 monetizationService.setDebugPlan(AppLaunchArguments.shouldUseProPlanForUITest ? .pro : .developer)
                 if !AppLaunchArguments.shouldUseLiveAIBackendForUITest {

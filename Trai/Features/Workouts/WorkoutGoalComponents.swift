@@ -53,7 +53,7 @@ enum WorkoutGoalProgressResolver {
         goals
             .filter { goal in
                 let matchesWorkout: Bool
-                if goal.tracksGeneratedPlanAdherence {
+                if goal.hasGeneratedPlanTemplateScope && !goal.hasGeneratedPlanBlockScope {
                     matchesWorkout = goal.matchesGeneratedPlanTemplate(workout: workout)
                         && (workout.completedAt == nil || hasLoggedGeneratedPlanProgress(in: workout))
                 } else {
@@ -514,6 +514,8 @@ enum WorkoutGoalProgressResolver {
         let progressFraction: Double?
         if goal.status == .completed {
             progressFraction = 1.0
+        } else if let current = currentDisplayValue, goal.goalKind == .weight, current >= targetValue * 0.995 {
+            progressFraction = 1.0
         } else if let current = currentDisplayValue, let baseline = effectiveBaseline, targetValue != baseline {
             progressFraction = min(max((current - baseline) / (targetValue - baseline), 0), 1)
         } else if let current = currentDisplayValue,
@@ -598,7 +600,7 @@ enum WorkoutGoalProgressResolver {
         guard workout.completedAt != nil else {
             return false
         }
-        if goal.tracksGeneratedPlanAdherence {
+        if goal.hasGeneratedPlanTemplateScope && !goal.hasGeneratedPlanBlockScope {
             return goal.matchesGeneratedPlanTemplate(workout: workout)
                 && hasLoggedGeneratedPlanProgress(in: workout)
         }
@@ -646,7 +648,7 @@ enum WorkoutGoalProgressResolver {
         _ session: WorkoutSession,
         for goal: WorkoutGoal
     ) -> Bool {
-        guard !goal.tracksGeneratedPlanAdherence else { return false }
+        guard !goal.hasGeneratedPlanTemplateScope, !goal.hasGeneratedPlanBlockScope else { return false }
         guard goal.matches(session: session) else { return false }
         guard !goal.hasActivityScope else { return true }
 
@@ -799,7 +801,7 @@ enum WorkoutGoalProgressResolver {
         let periodStart = periodStartDate(for: goal, now: now) ?? Calendar.current.startOfDay(for: now)
 
         let workoutCount: Int
-        if goal.tracksGeneratedPlanAdherence {
+        if goal.hasGeneratedPlanTemplateScope && !goal.hasGeneratedPlanBlockScope {
             workoutCount = Set(workouts.compactMap { workout -> UUID? in
                 let progressDate = workout.completedAt ?? workout.startedAt
                 guard progressDate >= periodStart,
@@ -993,7 +995,7 @@ struct WorkoutGoalProgressCard: View {
     var onGoalTap: ((WorkoutGoal) -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             if showsAddGoal {
                 TraiSectionHeader("Working Toward", icon: "scope") {
                     Button("Add Goal", systemImage: "plus", action: onAddGoal)
@@ -1008,84 +1010,56 @@ struct WorkoutGoalProgressCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(insights) { insight in
-                    goalRow(insight)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(insights.prefix(5)) { insight in
+                            compactGoalCard(insight)
+                                .frame(width: 154)
+                        }
+                    }
+                    .scrollTargetLayout()
                 }
+                .scrollTargetBehavior(.viewAligned)
+                .contentMargins(.horizontal, 1, for: .scrollContent)
             }
         }
-        .traiCard()
+        .padding(16)
+        .traiCard(cornerRadius: 16, contentPadding: 0)
     }
 
-    @ViewBuilder
-    private func goalRow(_ insight: WorkoutGoalInsight) -> some View {
-        let rowContent = VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: insight.goal.goalKind.iconName)
-                    .font(.subheadline)
-                    .foregroundStyle(insight.goal.status == .completed ? .green : .accentColor)
-                    .frame(width: 34, height: 34)
-                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10))
+    private func compactGoalCard(_ insight: WorkoutGoalInsight) -> some View {
+        Button {
+            onGoalTap?(insight.goal)
+        } label: {
+            VStack(spacing: 9) {
+                GoalProgressRing(
+                    progress: insight.progressFraction,
+                    iconName: insight.goal.goalKind.iconName,
+                    color: insight.goal.status == .completed ? .green : TraiColors.flame
+                )
+                .frame(width: 48, height: 48)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(insight.goal.trimmedTitle)
-                        .font(.subheadline.weight(.semibold))
+                Text(insight.goal.trimmedTitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    Text(insight.goal.scopeSummary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if insight.goal.goalKind == .milestone {
-                    Button {
-                        onToggleCompletion(insight.goal)
-                    } label: {
-                        Text(insight.goal.status == .completed ? "Done" : "Mark Done")
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                (insight.goal.status == .completed ? Color.green : Color.accentColor)
-                                    .opacity(0.12),
-                                in: Capsule()
-                            )
-                            .foregroundStyle(insight.goal.status == .completed ? .green : .accentColor)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            if let progressFraction = insight.progressFraction {
-                ProgressView(value: progressFraction)
-                    .tint(insight.goal.status == .completed ? .green : .accentColor)
-            }
-
-            Text(insight.progressText)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-
-            if let supportingText = insight.supportingText {
-                Text(supportingText)
-                    .font(.caption)
+                Text(insight.progressText)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .lineLimit(3)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 10)
+            .frame(height: 126)
+            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
         }
-        .padding(.vertical, 4)
-
-        if let onGoalTap {
-            rowContent
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onGoalTap(insight.goal)
-                }
-        } else {
-            rowContent
-        }
+        .buttonStyle(TraiPressStyle())
     }
 }
 
@@ -1133,29 +1107,58 @@ struct RecentWorkoutSignalsCard: View {
     }
 }
 
+struct WorkoutTraiReviewCard: View {
+    let title: String
+    let subtitle: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: "circle.hexagongrid.circle")
+                    .font(.headline)
+                    .foregroundStyle(TraiColors.brandAccent)
+                    .frame(width: 38, height: 38)
+                    .background(TraiColors.brandAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .contentShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(TraiPressStyle())
+        .traiCard(cornerRadius: 16, contentPadding: 0)
+    }
+}
+
 struct WorkoutGoalsOverviewSection: View {
     let insights: [WorkoutGoalInsight]
     let signals: [RecentWorkoutSignal]
     let celebratedGoal: WorkoutGoal?
     let canCreateGoalsWithTrai: Bool
+    let completedGoalCount: Int
     let onCreateGoalWithTrai: () -> Void
+    let onCompletedGoalsTap: () -> Void
     let onUnlockPro: () -> Void
     let staleCheckInGoal: WorkoutGoal?
     let onGoalTap: (WorkoutGoal) -> Void
     let onToggleCompletion: (WorkoutGoal) -> Void
-
-    private var activeGoalCount: Int {
-        insights.filter { $0.goal.status == .active }.count
-    }
-
-    private var featuredInsight: WorkoutGoalInsight? {
-        insights.first { $0.goal.status == .active } ?? insights.first
-    }
-
-    private var supportingInsights: [WorkoutGoalInsight] {
-        guard let featuredInsight else { return [] }
-        return insights.filter { $0.id != featuredInsight.id }
-    }
 
     private var visibleSignals: [RecentWorkoutSignal] {
         Array(signals.prefix(canCreateGoalsWithTrai ? 2 : 3))
@@ -1193,13 +1196,13 @@ struct WorkoutGoalsOverviewSection: View {
                 celebratedGoalCard(celebratedGoal)
             }
 
-            if insights.isEmpty && signals.isEmpty {
+            if insights.isEmpty && signals.isEmpty && completedGoalCount == 0 {
                 emptyStateCard
             } else if !canCreateGoalsWithTrai {
                 lockedSignalsState
             } else {
-                if let featuredInsight {
-                    featuredGoalCard(featuredInsight)
+                if !insights.isEmpty || completedGoalCount > 0 {
+                    goalsCarousel
                 }
 
                 if let staleCheckInGoal {
@@ -1210,32 +1213,43 @@ struct WorkoutGoalsOverviewSection: View {
                     signalRow(firstSignal)
                 }
             }
+
         }
     }
 
     private var emptyStateCard: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "scope")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 34, height: 34)
-                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(canCreateGoalsWithTrai ? "Set goals with Trai" : "Unlock goal coaching")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-
-                Text(canCreateGoalsWithTrai ? "Turn a route, lift, or routine into something trackable." : "Trai Pro can turn training into trackable goals.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
+        Button {
+            if canCreateGoalsWithTrai {
+                onCreateGoalWithTrai()
+            } else {
+                onUnlockPro()
             }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "scope")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 34, height: 34)
+                    .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
 
-            Spacer()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(canCreateGoalsWithTrai ? "Set goals with Trai" : "Unlock goal coaching")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Text(canCreateGoalsWithTrai ? "Turn a route, lift, or routine into something trackable." : "Trai Pro can turn training into trackable goals.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer()
+            }
+            .padding(14)
+            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
         }
-        .padding(14)
-        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+        .buttonStyle(TraiPressStyle())
     }
 
     private var lockedSignalsState: some View {
@@ -1254,54 +1268,55 @@ struct WorkoutGoalsOverviewSection: View {
         )
     }
 
-    private func featuredGoalCard(_ insight: WorkoutGoalInsight) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: insight.goal.goalKind.iconName)
-                    .font(.headline)
-                    .foregroundStyle(insight.goal.status == .completed ? .green : TraiColors.flame)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        (insight.goal.status == .completed ? Color.green.opacity(0.12) : TraiColors.flame.opacity(0.12)),
-                        in: RoundedRectangle(cornerRadius: 12)
-                    )
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(insight.goal.trimmedTitle)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.leading)
-
-                    Text(insight.progressText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2)
+    private var goalsCarousel: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(insights.prefix(5)) { insight in
+                    featuredGoalCard(insight)
+                        .frame(width: 150)
                 }
 
-                Spacer(minLength: 0)
+                if completedGoalCount > 0 {
+                    completedGoalsCard
+                        .frame(width: 150)
+                }
             }
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.viewAligned)
+        .contentMargins(.horizontal, 1, for: .scrollContent)
+    }
 
-            if let progressFraction = insight.progressFraction {
-                ProgressView(value: progressFraction)
-                    .tint(insight.goal.status == .completed ? .green : TraiColors.flame)
-            }
+    private func featuredGoalCard(_ insight: WorkoutGoalInsight) -> some View {
+        VStack(spacing: 9) {
+            GoalProgressRing(
+                progress: insight.progressFraction,
+                iconName: insight.goal.goalKind.iconName,
+                color: TraiColors.flame
+            )
+
+            Text(insight.goal.trimmedTitle)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
 
             if insight.goal.goalKind == .milestone {
                 Button {
                     onToggleCompletion(insight.goal)
                 } label: {
-                    Label(
-                        insight.goal.status == .completed ? "Completed" : "Mark Done",
-                        systemImage: insight.goal.status == .completed ? "checkmark.circle.fill" : "circle"
-                    )
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(insight.goal.status == .completed ? .green : .secondary)
+                    Image(systemName: "circle")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(14)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 13)
+        .padding(.horizontal, 10)
+        .frame(height: 126)
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
         .contentShape(RoundedRectangle(cornerRadius: 14))
         .onTapGesture {
@@ -1311,6 +1326,33 @@ struct WorkoutGoalsOverviewSection: View {
         .accessibilityAction {
             onGoalTap(insight.goal)
         }
+    }
+
+    private var completedGoalsCard: some View {
+        Button(action: onCompletedGoalsTap) {
+            VStack(spacing: 9) {
+                GoalProgressRing(
+                    progress: 1,
+                    iconName: "checkmark.seal.fill",
+                    color: .green
+                )
+
+                Text("Completed")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text("\(completedGoalCount) goal\(completedGoalCount == 1 ? "" : "s")")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .padding(.horizontal, 10)
+            .frame(height: 126)
+            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(TraiPressStyle())
     }
 
     private func staleCheckInCard(_ goal: WorkoutGoal) -> some View {
@@ -1430,6 +1472,146 @@ struct WorkoutGoalsOverviewSection: View {
 
 }
 
+struct CompletedWorkoutGoalsSheet: View {
+    let insights: [WorkoutGoalInsight]
+    let workouts: [LiveWorkout]
+    let sessions: [WorkoutSession]
+    let exerciseHistory: [ExerciseHistory]
+    let useLbs: Bool
+    let onToggleCompletion: (WorkoutGoal) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedGoal: WorkoutGoal?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    if insights.isEmpty {
+                        ContentUnavailableView(
+                            "No Completed Goals",
+                            systemImage: "checkmark.seal",
+                            description: Text("Completed workout goals will stay available here.")
+                        )
+                        .padding(.top, 40)
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(Array(insights.enumerated()), id: \.element.id) { index, insight in
+                                Button {
+                                    selectedGoal = insight.goal
+                                } label: {
+                                    CompletedWorkoutGoalRow(insight: insight)
+                                }
+                                .buttonStyle(TraiPressStyle())
+
+                                if index < insights.count - 1 {
+                                    Divider()
+                                        .padding(.leading, 72)
+                                }
+                            }
+                        }
+                        .traiCard(cornerRadius: 16, contentPadding: 0)
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Completed Goals")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark") {
+                        dismiss()
+                    }
+                    .labelStyle(.iconOnly)
+                }
+            }
+            .sheet(item: $selectedGoal) { goal in
+                WorkoutGoalDetailSheet(
+                    goal: goal,
+                    workouts: workouts,
+                    sessions: sessions,
+                    exerciseHistory: exerciseHistory,
+                    useLbs: useLbs,
+                    onToggleCompletion: onToggleCompletion
+                )
+                .traiSheetBranding()
+            }
+        }
+    }
+}
+
+private struct CompletedWorkoutGoalRow: View {
+    let insight: WorkoutGoalInsight
+
+    var body: some View {
+        HStack(spacing: 12) {
+            GoalProgressRing(
+                progress: 1,
+                iconName: insight.goal.goalKind.iconName,
+                color: .green
+            )
+            .frame(width: 44, height: 44)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(insight.goal.trimmedTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                Text(insight.progressText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                if let completedAt = insight.goal.completedAt {
+                    Text(completedAt.formatted(date: .abbreviated, time: .omitted))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(14)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct GoalProgressRing: View {
+    let progress: Double?
+    let iconName: String
+    let color: Color
+
+    private var clampedProgress: Double {
+        min(max(progress ?? 0, 0), 1)
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color(.quaternarySystemFill), lineWidth: 5)
+
+            Circle()
+                .trim(from: 0, to: clampedProgress)
+                .stroke(
+                    color,
+                    style: StrokeStyle(lineWidth: 5, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+
+            Image(systemName: iconName)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(color)
+        }
+        .frame(width: 52, height: 52)
+        .accessibilityLabel("Goal progress")
+        .accessibilityValue(progress.map { "\((Int(($0 * 100).rounded()))) percent" } ?? "Not started")
+    }
+}
+
 private struct ActivityItem: Identifiable {
     let id = UUID()
     let date: Date
@@ -1437,6 +1619,67 @@ private struct ActivityItem: Identifiable {
     let detail: String
     let workout: LiveWorkout?
     let session: WorkoutSession?
+}
+
+private struct GoalDetailSessionCard: View {
+    let item: ActivityItem
+    let accentColor: Color
+    let onTap: () -> Void
+
+    private var iconName: String {
+        if let workout = item.workout {
+            return workout.historyIconName
+        }
+        return item.session?.iconName ?? "figure.strengthtraining.traditional"
+    }
+
+    private var isHealthKit: Bool {
+        item.session?.sourceIsHealthKit == true
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top) {
+                    Image(systemName: iconName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(isHealthKit ? .red : accentColor)
+                        .frame(width: 34, height: 34)
+                        .background((isHealthKit ? Color.red : accentColor).opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+
+                    Spacer()
+
+                    Text(item.date, format: .dateTime.month(.abbreviated).day())
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+
+                    if !item.detail.isEmpty {
+                        Text(item.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .frame(height: 132)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(TraiPressStyle())
+    }
 }
 
 struct WorkoutGoalDetailSheet: View {
@@ -1486,32 +1729,6 @@ struct WorkoutGoalDetailSheet: View {
         WorkoutGoalProgressResolver.signals(for: goal, in: workouts, sessions: sessions)
     }
 
-    private var latestCompletedDate: Date? {
-        let workoutDate = relatedWorkouts.first?.completedAt ?? relatedWorkouts.first?.startedAt
-        let sessionDate = relatedSessions.first?.loggedAt
-        switch (workoutDate, sessionDate) {
-        case let (lhs?, rhs?):
-            return max(lhs, rhs)
-        case let (lhs?, nil):
-            return lhs
-        case let (nil, rhs?):
-            return rhs
-        case (nil, nil):
-            return nil
-        }
-    }
-
-    private var allSessionDates: [Date] {
-        // Only count sessions after the goal was created
-        let workoutDates = relatedWorkouts
-            .compactMap { $0.completedAt ?? $0.startedAt }
-            .filter { $0 >= goal.createdAt }
-        let sessionDates = relatedSessions
-            .map(\.loggedAt)
-            .filter { $0 >= goal.createdAt }
-        return workoutDates + sessionDates
-    }
-
     private var recentActivityItems: [ActivityItem] {
         // Only sessions after the goal was created
         let workoutItems = relatedWorkouts
@@ -1548,10 +1765,7 @@ struct WorkoutGoalDetailSheet: View {
             ScrollView {
                 VStack(spacing: 16) {
                     detailHeader
-                    activitySection
-                    if !recentActivityItems.isEmpty {
-                        sessionsSection
-                    }
+                    sessionsSection
                     if !relatedSignals.isEmpty || goal.supportingSummary != nil {
                         notesSection
                     }
@@ -1609,8 +1823,13 @@ struct WorkoutGoalDetailSheet: View {
             .confirmationDialog("Delete Goal", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     modelContext.delete(goal)
-                    try? modelContext.save()
-                    dismiss()
+                    do {
+                        try modelContext.save()
+                        dismiss()
+                    } catch {
+                        modelContext.rollback()
+                        HapticManager.error()
+                    }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -1680,16 +1899,13 @@ struct WorkoutGoalDetailSheet: View {
                     .foregroundStyle(.secondary)
             }
 
-            if goal.goalKind == .milestone {
+            if goal.goalKind == .milestone, goal.status != .completed {
                 Button {
                     onToggleCompletion(goal)
                 } label: {
-                    Label(
-                        goal.status == .completed ? "Completed" : "Mark Done",
-                        systemImage: goal.status == .completed ? "checkmark.circle.fill" : "circle"
-                    )
+                    Label("Mark Done", systemImage: "circle")
                 }
-                .buttonStyle(.traiSecondary(color: goal.status == .completed ? .green : goalAccentColor, fullWidth: true))
+                .buttonStyle(.traiSecondary(color: goalAccentColor, fullWidth: true))
             }
 
             Button("Check in with Trai", systemImage: "circle.hexagongrid.circle") {
@@ -1717,61 +1933,44 @@ struct WorkoutGoalDetailSheet: View {
             .foregroundStyle(goal.status == .completed ? .green : Color.accentColor)
     }
 
-    private var activitySection: some View {
+    private var sessionsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            let totalCount = relatedWorkouts.count + relatedSessions.count
-            TraiSectionHeader("Activity", icon: "chart.bar.fill") {
-                if totalCount > 0 {
-                    Text("\(totalCount) session\(totalCount == 1 ? "" : "s")")
+            TraiSectionHeader("Sessions", icon: "clock.arrow.circlepath") {
+                if !recentActivityItems.isEmpty {
+                    Text("\(recentActivityItems.count)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            if allSessionDates.isEmpty {
+            if recentActivityItems.isEmpty {
                 Text("No completed sessions match this goal yet.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                SessionWeeklyBars(sessionDates: allSessionDates)
-
-                HStack {
-                    Text("Past 8 weeks")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                    Spacer()
-                    if let latestDate = latestCompletedDate {
-                        Text("Latest \(latestDate.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(Array(recentActivityItems.prefix(8))) { item in
+                            GoalDetailSessionCard(
+                                item: item,
+                                accentColor: goalAccentColor
+                            ) {
+                                if let workout = item.workout {
+                                    selectedWorkout = workout
+                                } else if let session = item.session {
+                                    selectedSession = session
+                                }
+                            }
+                            .frame(width: 220)
+                        }
                     }
+                    .scrollTargetLayout()
                 }
+                .scrollTargetBehavior(.viewAligned)
+                .contentMargins(.horizontal, 1, for: .scrollContent)
             }
         }
         .traiCard()
-    }
-
-    private var sessionsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TraiSectionHeader("Sessions", icon: "clock.arrow.circlepath")
-
-            ForEach(Array(recentActivityItems.prefix(5))) { item in
-                if let workout = item.workout {
-                    LiveWorkoutHistoryRow(
-                        workout: workout,
-                        activeGoals: [goal],
-                        onTap: { selectedWorkout = workout },
-                        onDelete: {}
-                    )
-                } else if let session = item.session {
-                    WorkoutHistoryRow(
-                        workout: session,
-                        onTap: { selectedSession = session },
-                        onDelete: {}
-                    )
-                }
-            }
-        }
     }
 
     private var notesSection: some View {
@@ -1866,50 +2065,12 @@ struct WorkoutGoalDetailSheet: View {
     }
 }
 
-private struct SessionWeeklyBars: View {
-    let sessionDates: [Date]
-
-    private let weekCount = 8
-    private let maxBarHeight: CGFloat = 44
-    private let minBarHeight: CGFloat = 4
-
-    var body: some View {
-        HStack(alignment: .bottom, spacing: 6) {
-            ForEach(weekData, id: \.0) { _, count, label in
-                VStack(spacing: 4) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(count > 0 ? TraiColors.flame : Color(.tertiarySystemFill))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: barHeight(for: count))
-                    Text(label)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func barHeight(for count: Int) -> CGFloat {
-        let maxCount = weekData.map(\.1).max() ?? 1
-        guard maxCount > 0 else { return minBarHeight }
-        return max(minBarHeight, maxBarHeight * CGFloat(count) / CGFloat(maxCount))
-    }
-
-    private var weekData: [(Int, Int, String)] {
-        let calendar = Calendar.current
-        let today = Date()
-        return (0..<weekCount).map { i in
-            let weekOffset = -(weekCount - 1 - i)
-            let anchorDate = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: today) ?? today
-            guard let weekInterval = calendar.dateInterval(of: .weekOfYear, for: anchorDate) else {
-                return (i, 0, "")
-            }
-            let count = sessionDates.filter { $0 >= weekInterval.start && $0 < weekInterval.end }.count
-            let label = weekInterval.start.formatted(.dateTime.month(.abbreviated))
-            return (i, count, label)
-        }
+private extension WorkoutGoal {
+    var hasUserEditableActivityScope: Bool {
+        trimmedActivityName != nil
+            || !linkedActivityTags.isEmpty
+            || linkedActivityKind != nil
+            || linkedActivityRole != nil
     }
 }
 
@@ -1941,12 +2102,17 @@ struct AddWorkoutGoalSheet: View {
     }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     let workoutType: WorkoutMode?
     let activitySuggestions: [String]
     let prefersMetricWeight: Bool
-    let onSave: (WorkoutGoal) -> Void
+    let onSave: (WorkoutGoal) -> Bool
     private let editingGoal: WorkoutGoal?
+    private let editingOriginalGeneratedPlanTemplateIDs: [UUID]
+    private let editingOriginalGeneratedPlanBlockIDs: [UUID]
+    private let editingOriginalTracksGeneratedPlanAdherence: Bool
+    private let editingOriginalRequiresGeneratedPlanBlockScope: Bool
 
     @State private var title = ""
     @State private var goalKind: WorkoutGoal.GoalKind = .milestone
@@ -1971,13 +2137,17 @@ struct AddWorkoutGoalSheet: View {
         workoutType: WorkoutMode?,
         activitySuggestions: [String],
         prefersMetricWeight: Bool,
-        onSave: @escaping (WorkoutGoal) -> Void
+        onSave: @escaping (WorkoutGoal) -> Bool
     ) {
         self.workoutType = workoutType
         self.activitySuggestions = activitySuggestions
         self.prefersMetricWeight = prefersMetricWeight
         self.onSave = onSave
         self.editingGoal = nil
+        self.editingOriginalGeneratedPlanTemplateIDs = []
+        self.editingOriginalGeneratedPlanBlockIDs = []
+        self.editingOriginalTracksGeneratedPlanAdherence = false
+        self.editingOriginalRequiresGeneratedPlanBlockScope = false
         _selectedWorkoutType = State(initialValue: workoutType ?? .custom)
         _targetUnit = State(initialValue: Self.defaultUnit(for: .milestone, prefersMetricWeight: prefersMetricWeight))
     }
@@ -1987,16 +2157,20 @@ struct AddWorkoutGoalSheet: View {
         editGoal existing: WorkoutGoal,
         activitySuggestions: [String],
         prefersMetricWeight: Bool,
-        onSave: @escaping (WorkoutGoal) -> Void = { _ in }
+        onSave: @escaping (WorkoutGoal) -> Bool = { _ in true }
     ) {
         self.workoutType = existing.linkedWorkoutType
         self.activitySuggestions = activitySuggestions
         self.prefersMetricWeight = prefersMetricWeight
         self.onSave = onSave
         self.editingGoal = existing
+        self.editingOriginalGeneratedPlanTemplateIDs = existing.generatedPlanTemplateIDs
+        self.editingOriginalGeneratedPlanBlockIDs = existing.generatedPlanBlockIDs
+        self.editingOriginalTracksGeneratedPlanAdherence = existing.tracksGeneratedPlanAdherence
+        self.editingOriginalRequiresGeneratedPlanBlockScope = existing.requiresGeneratedPlanBlockScope
         _title = State(initialValue: existing.title)
         _goalKind = State(initialValue: existing.goalKind)
-        _scope = State(initialValue: existing.hasActivityScope ? .activity : .session)
+        _scope = State(initialValue: existing.hasUserEditableActivityScope ? .activity : .session)
         _selectedWorkoutType = State(initialValue: existing.linkedWorkoutType ?? .custom)
         _activityName = State(initialValue: existing.linkedActivityName ?? "")
         _activityTagsText = State(initialValue: existing.linkedActivityTags.joined(separator: ", "))
@@ -2250,17 +2424,28 @@ struct AddWorkoutGoalSheet: View {
                         let baseline = goalKind == .weight
                             ? Double(baselineValueText.trimmingCharacters(in: .whitespacesAndNewlines))
                             : nil
+                        let preservesGeneratedPlanScope = editingOriginalTracksGeneratedPlanAdherence
+                            || !editingOriginalGeneratedPlanTemplateIDs.isEmpty
+                            || !editingOriginalGeneratedPlanBlockIDs.isEmpty
 
                         if let existing = editingGoal {
                             existing.title = trimmedTitle
                             existing.goalKindRaw = goalKind.rawValue
-                            existing.linkedWorkoutTypeRaw = selectedWorkoutType.rawValue
-                            existing.linkedActivityName = scope == .activity
-                                ? activityName.trimmingCharacters(in: .whitespacesAndNewlines)
-                                : nil
-                            existing.linkedActivityTags = scope == .activity ? parsedActivityTags : []
-                            existing.linkedActivityKind = nil
-                            existing.linkedActivityRole = scope == .activity ? selectedActivityRole : nil
+                            if preservesGeneratedPlanScope {
+                                existing.linkedWorkoutTypeRaw = nil
+                                existing.linkedActivityName = nil
+                                existing.linkedActivityTags = []
+                                existing.linkedActivityKind = nil
+                                existing.linkedActivityRole = nil
+                            } else {
+                                existing.linkedWorkoutTypeRaw = selectedWorkoutType.rawValue
+                                existing.linkedActivityName = scope == .activity
+                                    ? activityName.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    : nil
+                                existing.linkedActivityTags = scope == .activity ? parsedActivityTags : []
+                                existing.linkedActivityKind = nil
+                                existing.linkedActivityRole = scope == .activity ? selectedActivityRole : nil
+                            }
                             existing.targetValue = goalKind.supportsNumericTarget
                                 ? Double(targetValueText.trimmingCharacters(in: .whitespacesAndNewlines))
                                 : nil
@@ -2274,7 +2459,18 @@ struct AddWorkoutGoalSheet: View {
                             existing.targetDate = targetDateEnabled ? targetDate : nil
                             existing.checkInCadenceDays = Int(checkInCadenceDaysText.trimmingCharacters(in: .whitespacesAndNewlines))
                             existing.baselineValue = baseline
+                            existing.tracksGeneratedPlanAdherence = editingOriginalTracksGeneratedPlanAdherence
+                            existing.generatedPlanBlockIDs = editingOriginalGeneratedPlanBlockIDs
+                            existing.generatedPlanTemplateIDs = editingOriginalGeneratedPlanTemplateIDs
+                            existing.requiresGeneratedPlanBlockScope = editingOriginalRequiresGeneratedPlanBlockScope
                             existing.updatedAt = Date()
+                            do {
+                                try modelContext.save()
+                                dismiss()
+                            } catch {
+                                modelContext.rollback()
+                                HapticManager.error()
+                            }
                         } else {
                             let newGoal = WorkoutGoal(
                                 title: trimmedTitle,
@@ -2294,9 +2490,12 @@ struct AddWorkoutGoalSheet: View {
                                 checkInCadenceDays: Int(checkInCadenceDaysText.trimmingCharacters(in: .whitespacesAndNewlines)),
                                 baselineValue: baseline
                             )
-                            onSave(newGoal)
+                            if onSave(newGoal) {
+                                dismiss()
+                            } else {
+                                HapticManager.error()
+                            }
                         }
-                        dismiss()
                     }
                     .labelStyle(.iconOnly)
                     .disabled(isSaveDisabled)

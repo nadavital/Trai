@@ -21,7 +21,7 @@ struct WorkoutGoalAISheet: View {
     let prefersMetricWeight: Bool
     var initialSuggestions: [WorkoutGoalSuggestion] = []
     var onSuggestionsGenerated: (([WorkoutGoalSuggestion]) -> Void)? = nil
-    let onSaveGoals: ([WorkoutGoal]) -> Void
+    let onSaveGoals: ([WorkoutGoal]) -> Bool
 
     @State private var aiService = AIService()
     @State private var promptText = ""
@@ -29,6 +29,16 @@ struct WorkoutGoalAISheet: View {
     @State private var suggestions: [WorkoutGoalSuggestion] = []
     @State private var selectedSuggestionIDs: Set<String> = []
     @State private var presentedAccountSetupContext: AccountSetupContext?
+    @State private var submittedPromptText: String?
+    @State private var selectedSuggestionForDetail: WorkoutGoalSuggestion?
+    @FocusState private var isInputFocused: Bool
+
+    private struct GoalPromptSuggestion: Identifiable, Hashable {
+        let title: String
+        let prompt: String
+
+        var id: String { title + "|" + prompt }
+    }
 
     private var canAccessWorkoutGoalAI: Bool {
         monetizationService?.canAccessAIFeatures ?? true
@@ -79,42 +89,101 @@ struct WorkoutGoalAISheet: View {
         existingGoals.contains { $0.status == .active }
     }
 
-    private let examplePrompts = [
-        "Bench 185 for 5",
-        "Climb 2x/week",
-        "Send a V5 project",
-        "Build to a 75 min run"
-    ]
+    private var shouldShowInitialPromptMessage: Bool {
+        suggestions.isEmpty && !isGenerating && submittedPromptText == nil && canAccessWorkoutGoalAI
+    }
+
+    private var goalPromptSuggestions: [GoalPromptSuggestion] {
+        var items: [GoalPromptSuggestion] = []
+
+        if let workoutPlan {
+            items.append(
+                GoalPromptSuggestion(
+                    title: "Plan consistency",
+                    prompt: "Generate goals that help me follow my current workout plan consistently."
+                )
+            )
+
+            for template in workoutPlan.templates.prefix(4) {
+                let focus = template.focusAreasDisplay.isEmpty ? template.sessionType.displayName : template.focusAreasDisplay
+                let title = focus.isEmpty ? template.name : focus
+                let detail = [template.name, template.primaryBlockSummary]
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " with ")
+                items.append(
+                    GoalPromptSuggestion(
+                        title: title,
+                        prompt: "Generate goals around \(detail.isEmpty ? title : detail)."
+                    )
+                )
+            }
+        }
+
+        if items.isEmpty {
+            items = [
+                GoalPromptSuggestion(title: "Strength goal", prompt: "Generate strength goals from my recent training."),
+                GoalPromptSuggestion(title: "Consistency", prompt: "Generate a consistency goal from my recent workouts."),
+                GoalPromptSuggestion(title: "Recovery", prompt: "Generate a recovery or mobility goal from my recent training.")
+            ]
+        }
+
+        var seen: Set<String> = []
+        return Array(items.filter { seen.insert($0.title.goalNormalizedKey).inserted }.prefix(4))
+    }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 14) {
-                    promptCard
-                        .traiCard(cornerRadius: 16)
-
-                    if !canAccessWorkoutGoalAI {
-                        ProUpsellInlineCard(
-                            source: .workoutPlan,
-                            actionTitle: "Unlock Trai Pro"
-                        ) {
-                            proUpsellCoordinator?.present(source: .workoutPlan)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 14) {
+                        if shouldShowInitialPromptMessage {
+                            traiPromptMessage
                         }
-                    } else if isGenerating {
-                        generatingCard
-                            .traiCard(cornerRadius: 16)
-                    } else if suggestions.isEmpty {
-                        generateCard
-                            .traiCard(cornerRadius: 16)
-                    } else {
-                        suggestionsCard
-                            .traiCard(cornerRadius: 16)
+
+                        if let submittedPromptText {
+                            userMessage(submittedPromptText)
+                                .id("submittedPrompt")
+                        }
+
+                        if !canAccessWorkoutGoalAI {
+                            ProUpsellInlineCard(
+                                source: .workoutPlan,
+                                actionTitle: "Unlock Trai Pro"
+                            ) {
+                                proUpsellCoordinator?.present(source: .workoutPlan)
+                            }
+                        } else if isGenerating {
+                            generatingMessage
+                                .id("generating")
+                        } else if suggestions.isEmpty {
+                            emptyConversationState
+                                .id("empty")
+                        } else {
+                            generatedGoalsMessage
+                                .id("suggestions")
+                        }
+
+                        Color.clear
+                            .frame(height: 12)
+                            .id("bottom")
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: suggestions.count) { _, _ in
+                    scrollToBottom(proxy)
+                }
+                .onChange(of: isGenerating) { _, _ in
+                    scrollToBottom(proxy)
+                }
             }
-            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom) {
+                bottomPromptBar
+            }
+            .background(alignment: .bottom) {
+                TraiChatInputBackdrop()
+            }
             .navigationTitle("Set Goals with Trai")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -127,9 +196,12 @@ struct WorkoutGoalAISheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     if !selectedGoals.isEmpty {
                         Button("Save", systemImage: "checkmark") {
-                            onSaveGoals(selectedGoals)
-                            HapticManager.success()
-                            dismiss()
+                            if onSaveGoals(selectedGoals) {
+                                HapticManager.success()
+                                dismiss()
+                            } else {
+                                HapticManager.error()
+                            }
                         }
                         .labelStyle(.iconOnly)
                         .tint(.accentColor)
@@ -141,12 +213,26 @@ struct WorkoutGoalAISheet: View {
             AccountSetupView(context: context)
                 .traiSheetBranding()
         }
+        .sheet(item: $selectedSuggestionForDetail) { suggestion in
+            GeneratedWorkoutGoalDetailSheet(
+                goal: suggestion.asWorkoutGoal(),
+                rationale: suggestion.rationale,
+                selection: .init(
+                    isSelected: selectedSuggestionIDs.contains(suggestion.id),
+                    onToggle: { toggleSuggestion(suggestion) }
+                )
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .traiSheetBranding()
+        }
         .traiSheetBranding()
         .proUpsellPresenter()
         .onAppear {
             if suggestions.isEmpty, !initialSuggestions.isEmpty {
                 suggestions = initialSuggestions
-                selectedSuggestionIDs = Set(initialSuggestions.map(\.id))
+                selectedSuggestionIDs = []
+                submittedPromptText = nil
                 return
             }
 
@@ -155,118 +241,112 @@ struct WorkoutGoalAISheet: View {
         }
     }
 
-    private var promptCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    Image(systemName: "sparkles")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(width: 38, height: 38)
-                        .background(Color.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Set Goals with Trai")
-                            .font(.traiHeadline())
-                            .foregroundStyle(.white)
-
-                        Text("Turn a route, lift, or consistency target into something Trai can track.")
-                            .font(.traiLabel(12))
-                            .foregroundStyle(.white.opacity(0.82))
-                    }
-                }
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(TraiColors.brandGradient, in: RoundedRectangle(cornerRadius: 16))
+    private var traiPromptMessage: some View {
+        HStack(alignment: .top, spacing: 10) {
+            TraiLensView(size: 32, state: isGenerating ? .thinking : .idle, palette: .energy)
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("Tell Trai what you want")
-                    .font(.traiHeadline(15))
+                Text("What should we work toward?")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
 
-                TextField("e.g. Send a V5 project or get back to 90 minute long runs", text: $promptText, axis: .vertical)
-                .lineLimit(2...4)
-                .padding(12)
-                .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-
-                FlowLayout(spacing: 8) {
-                    ForEach(examplePrompts, id: \.self) { prompt in
-                        Button(prompt) {
-                            promptText = prompt
-                        }
-                        .font(.traiLabel(12))
-                        .buttonStyle(.traiSecondary(size: .compact, fullWidth: false))
-                    }
-                }
+                Text("Tell me the lift, route, habit, or training target. I’ll turn it into a goal Trai can track.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(12)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+
+            Spacer(minLength: 28)
         }
     }
 
-    private var generateCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Suggestions", systemImage: "scope")
-                .font(.traiHeadline())
+    private func userMessage(_ text: String) -> some View {
+        HStack {
+            Spacer(minLength: 40)
 
-            Text("Trai will suggest one or two goals from your plan, training, and history.")
-                .font(.traiLabel(12))
-                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
 
+    private var emptyConversationState: some View {
+        HStack(alignment: .top, spacing: 10) {
+            TraiLensView(size: 32, state: .idle, palette: .energy)
             Button {
                 Task { await generateSuggestions() }
             } label: {
-                Label("Refresh Suggestions", systemImage: "sparkles")
+                Label("Generate goal ideas", systemImage: "sparkles")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.traiSecondary(color: TraiColors.brandAccent, fullWidth: true))
+            .buttonStyle(.traiSecondary(color: TraiColors.brandAccent))
         }
     }
 
-    private var generatingCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Suggestions", systemImage: "sparkles")
-                .font(.traiHeadline())
-
+    private var generatingMessage: some View {
+        HStack(alignment: .top, spacing: 10) {
+            TraiLensView(size: 32, state: .thinking, palette: .energy)
             HStack(spacing: 10) {
                 ProgressView()
-                Text("Looking through your training...")
-                    .font(.traiHeadline(15))
+                Text("Looking through your plan and training...")
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
             }
             .padding(12)
-            .background(TraiColors.brandAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
         }
     }
 
-    private var suggestionsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center) {
-                Label("Suggested Goals", systemImage: "scope")
-                    .font(.traiHeadline())
-
-                Spacer()
-
-                Button("Refresh") {
-                    Task { await generateSuggestions() }
-                }
-                .font(.traiLabel(12))
-            }
-
-            Text("Pick one or both.")
-                .font(.traiLabel(12))
-                .foregroundStyle(.secondary)
-
-            VStack(spacing: 10) {
+    private var generatedGoalsMessage: some View {
+        GeneratedWorkoutGoalsCardContainer(title: "Goals Trai will track") {
+            VStack(spacing: 8) {
                 ForEach(suggestions) { suggestion in
-                    WorkoutGoalSuggestionCard(
-                        suggestion: suggestion,
-                        isSelected: selectedSuggestionIDs.contains(suggestion.id)
-                    ) {
-                        toggleSuggestion(suggestion)
-                    }
+                    SelectableGeneratedWorkoutGoalRow(
+                        goal: suggestion.asWorkoutGoal(),
+                        isSelected: selectedSuggestionIDs.contains(suggestion.id),
+                        onSelect: { selectedSuggestionForDetail = suggestion },
+                        onToggle: { toggleSuggestion(suggestion) }
+                    )
                 }
             }
         }
+    }
+
+    private var bottomPromptBar: some View {
+        VStack(spacing: 6) {
+            if canAccessWorkoutGoalAI, !isGenerating {
+                promptSuggestionChips
+            }
+
+            SimpleChatInputBar(
+                text: $promptText,
+                placeholder: "Ask Trai for a different goal...",
+                isLoading: isGenerating,
+                onSend: submitGoalPrompt,
+                isFocused: $isInputFocused
+            )
+        }
+    }
+
+    private var promptSuggestionChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(goalPromptSuggestions) { suggestion in
+                    TraiSelectableChip(text: suggestion.title, isSelected: false) {
+                        submitGoalPrompt(suggestion.prompt)
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+        .padding(.top, 6)
+        .padding(.bottom, 2)
     }
 
     private func toggleSuggestion(_ suggestion: WorkoutGoalSuggestion) {
@@ -278,7 +358,7 @@ struct WorkoutGoalAISheet: View {
         HapticManager.selectionChanged()
     }
 
-    private func generateSuggestions() async {
+    private func generateSuggestions(userIntent: String? = nil) async {
         guard canAccessWorkoutGoalAI else {
             proUpsellCoordinator?.present(source: .workoutPlan)
             return
@@ -307,126 +387,40 @@ struct WorkoutGoalAISheet: View {
                 ),
                 memoryContext: memoryContext,
                 existingGoals: existingGoalTitles,
-                userIntent: promptText,
+                userIntent: userIntent ?? promptText,
                 prefersMetricWeight: prefersMetricWeight
             )
 
             suggestions = generated
-            selectedSuggestionIDs = Set(generated.map(\.id))
+            selectedSuggestionIDs = []
             onSuggestionsGenerated?(generated)
         } catch {
             print("Workout goal suggestion generation failed: \(error)")
         }
     }
-}
 
-private struct WorkoutGoalSuggestionCard: View {
-    let suggestion: WorkoutGoalSuggestion
-    let isSelected: Bool
-    let action: () -> Void
-
-    private var scopeLine: String {
-        if let activity = suggestion.linkedActivityName, let workoutType = suggestion.linkedWorkoutType {
-            return "\(workoutType.displayName) • \(activity)"
-        }
-        if let activity = suggestion.linkedActivityName {
-            return activity
-        }
-        if let workoutType = suggestion.linkedWorkoutType {
-            return workoutType.displayName
-        }
-        return "Any session"
+    private func submitGoalPrompt() {
+        let trimmed = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isGenerating else { return }
+        submittedPromptText = trimmed
+        promptText = ""
+        Task { await generateSuggestions(userIntent: trimmed) }
     }
 
-    private var targetLine: String? {
-        guard suggestion.goalKind.supportsNumericTarget,
-              let targetValue = suggestion.targetValue else {
-            return nil
-        }
-
-        switch suggestion.goalKind {
-        case .frequency:
-            let unit = (suggestion.targetUnit?.isEmpty == false ? suggestion.targetUnit! : "sessions")
-            let periodUnit = suggestion.periodUnit?.rawValue ?? "week"
-            let periodCount = max(suggestion.periodCount ?? 1, 1)
-            let periodText = periodCount == 1 ? periodUnit : "\(periodCount) \(periodUnit)s"
-            return "\(Int(targetValue.rounded())) \(unit) / \(periodText)"
-        case .milestone:
-            return nil
-        case .duration, .distance, .weight:
-            let targetUnit = suggestion.targetUnit ?? ""
-            guard !targetUnit.isEmpty else { return nil }
-            return "\(targetValue.formatted(.number.precision(.fractionLength(0...1)))) \(targetUnit)"
-        case .count:
-            let unit = (suggestion.targetUnit?.isEmpty == false ? suggestion.targetUnit! : "count")
-            let periodUnit = suggestion.periodUnit?.rawValue ?? "week"
-            let periodCount = max(suggestion.periodCount ?? 1, 1)
-            let periodText = periodCount == 1 ? periodUnit : "\(periodCount) \(periodUnit)s"
-            return "\(Int(targetValue.rounded())) \(unit) / \(periodText)"
-        }
+    private func submitGoalPrompt(_ prompt: String) {
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isGenerating else { return }
+        submittedPromptText = trimmed
+        promptText = ""
+        Task { await generateSuggestions(userIntent: trimmed) }
     }
 
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: suggestion.goalKind.iconName)
-                        .font(.headline)
-                        .foregroundStyle(isSelected ? .white : TraiColors.brandAccent)
-                        .frame(width: 34, height: 34)
-                        .background(
-                            isSelected ? Color.accentColor : TraiColors.brandAccent.opacity(0.12),
-                            in: RoundedRectangle(cornerRadius: 10)
-                        )
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(suggestion.title)
-                            .font(.traiHeadline(16))
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                        Text(scopeLine)
-                            .font(.traiLabel(12))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.45))
-                }
-
-                Text(suggestion.rationale)
-                    .font(.traiLabel(13))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                if let targetLine {
-                    Label(targetLine, systemImage: "target")
-                        .font(.traiLabel(12))
-                        .foregroundStyle(.secondary)
-                }
-
-                if let criteria = suggestion.successCriteria?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !criteria.isEmpty,
-                   criteria != targetLine {
-                    Label(criteria, systemImage: "checklist.checked")
-                        .font(.traiLabel(12))
-                        .foregroundStyle(.secondary)
-                }
-
-                if let targetDate = suggestion.targetDate {
-                    Label("By \(targetDate.formatted(date: .abbreviated, time: .omitted))", systemImage: "calendar")
-                        .font(.traiLabel(12))
-                        .foregroundStyle(.secondary)
-                }
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(80))
+            withAnimation(.easeOut(duration: 0.22)) {
+                proxy.scrollTo("bottom", anchor: .bottom)
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                isSelected ? Color.accentColor.opacity(0.08) : Color(.secondarySystemBackground),
-                in: RoundedRectangle(cornerRadius: 14)
-            )
         }
-        .buttonStyle(.plain)
     }
 }

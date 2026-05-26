@@ -9,9 +9,10 @@ import SwiftUI
 
 struct TodaysRemindersCard: View {
     let reminders: [ReminderItem]
+    var hasActiveReminderSetup = true
     let onReminderTap: (ReminderItem) -> Void
     let onComplete: (ReminderItem) -> Void
-    let onViewAll: () -> Void
+    let onAdd: () -> Void
 
     /// Simple reminder item for display
     struct ReminderItem: Identifiable {
@@ -36,42 +37,64 @@ struct TodaysRemindersCard: View {
 
                 Spacer()
 
-                Button {
-                    onViewAll()
-                } label: {
-                    Text("Settings")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Button("Add", systemImage: "plus", action: onAdd)
+                    .buttonStyle(.traiTertiary(size: .compact, height: 32))
             }
 
-            VStack(spacing: 8) {
-                ForEach(reminders.prefix(3)) { reminder in
-                    ReminderRow(
-                        reminder: reminder,
-                        isCompleting: completingIds.contains(reminder.id),
-                        onComplete: {
-                            completeWithAnimation(reminder)
-                        },
-                        onTap: {
-                            onReminderTap(reminder)
-                        }
-                    )
-                    .transition(.asymmetric(
-                        insertion: .opacity,
-                        removal: .scale(scale: 0.8).combined(with: .opacity)
-                    ))
-                }
+            if reminders.isEmpty {
+                emptyState
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(reminders.prefix(3)) { reminder in
+                        ReminderRow(
+                            reminder: reminder,
+                            isCompleting: completingIds.contains(reminder.id),
+                            onComplete: {
+                                completeWithAnimation(reminder)
+                            },
+                            onTap: {
+                                onReminderTap(reminder)
+                            }
+                        )
+                        .transition(.asymmetric(
+                            insertion: .opacity,
+                            removal: .scale(scale: 0.8).combined(with: .opacity)
+                        ))
+                    }
 
-                if reminders.count > 3 {
-                    Text("+\(reminders.count - 3) more")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if reminders.count > 3 {
+                        Text("+\(reminders.count - 3) more")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .animation(.easeInOut(duration: 0.3), value: reminders.map(\.id))
             }
-            .animation(.easeInOut(duration: 0.3), value: reminders.map(\.id))
         }
         .traiCard()
+    }
+
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: hasActiveReminderSetup ? "checkmark.circle.fill" : "bell.badge")
+                    .font(.headline)
+                    .foregroundStyle(hasActiveReminderSetup ? .green : Color.accentColor)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        (hasActiveReminderSetup ? Color.green : Color.accentColor).opacity(0.12),
+                        in: Circle()
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(hasActiveReminderSetup ? "All caught up today" : "Make Trai easier to stick with")
+                        .font(.subheadline.weight(.semibold))
+                    Text(hasActiveReminderSetup ? "You have no open reminders right now." : "Add meal, workout, or habit reminders in a few taps.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 
     private func completeWithAnimation(_ reminder: ReminderItem) {
@@ -257,7 +280,7 @@ extension TodaysRemindersCard {
         ],
         onReminderTap: { _ in },
         onComplete: { _ in },
-        onViewAll: {}
+        onAdd: {}
     )
     .padding()
 }

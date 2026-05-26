@@ -1,4 +1,7 @@
 
+# macOS local metadata
+.DS_Store
+
 # API Secrets
 Trai/Core/Services/Secrets.swift
 
@@ -26,6 +29,8 @@ Backend/.env
 Backend/.env.local
 
 # Local agent/cloud credentials and logs
+.agent/
+.claude/
 .agent/gcloud-config/
 .agent/**/logs/
 .agent/**/*.log
@@ -37,3 +42,6 @@ Backend/.env.local
 .agent/**/*.pem
 .agent/**/*.p8
 .agent/**/*.key
+
+# Local review captures
+onboarding-redesign-walkthrough.mp4

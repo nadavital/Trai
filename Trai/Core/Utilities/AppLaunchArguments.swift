@@ -11,6 +11,7 @@ enum AppLaunchArguments {
     static let uiTestMode = "UITEST_MODE"
     static let uiTestOnboardingFlow = "--ui-test-onboarding-flow"
     static let uiTestFreePlan = "--ui-test-free-plan"
+    static let uiTestAuthenticatedFreePlan = "--ui-test-authenticated-free-plan"
     static let uiTestProPlan = "--ui-test-pro-plan"
     static let uiTestLiveAIBackend = "--ui-test-live-ai-backend"
     static let pendingAppRoute = "-pendingAppRoute"
@@ -46,6 +47,10 @@ enum AppLaunchArguments {
 
     static var shouldUseFreePlanForUITest: Bool {
         ProcessInfo.processInfo.arguments.contains(uiTestFreePlan)
+    }
+
+    static var shouldUseAuthenticatedFreePlanForUITest: Bool {
+        ProcessInfo.processInfo.arguments.contains(uiTestAuthenticatedFreePlan)
     }
 
     static var shouldUseProPlanForUITest: Bool {

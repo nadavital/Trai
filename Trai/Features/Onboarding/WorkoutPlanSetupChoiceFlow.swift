@@ -13,6 +13,7 @@ struct WorkoutPlanSetupChoiceFlow: View {
     @Binding var generatedPlanGoalsForReview: [WorkoutGoal]
 
     let context: OnboardingWorkoutPlanUserContext
+    let existingWorkoutGoals: [WorkoutGoal]
     let aiService: AIService
     let canAccessAIFeatures: Bool
     let onComplete: (WorkoutPlan, [WorkoutGoal], WorkoutPlanSetupMode, OnboardingWorkoutPlanDraft) -> Void
@@ -32,6 +33,7 @@ struct WorkoutPlanSetupChoiceFlow: View {
             generatedPlanForReview: $generatedPlanForReview,
             generatedPlanGoalsForReview: $generatedPlanGoalsForReview,
             context: context,
+            existingWorkoutGoals: existingWorkoutGoals,
             aiService: aiService,
             mode: activeMode,
             showsProForkBeforeReview: !hasResolvedProFork,
@@ -146,6 +148,7 @@ struct WorkoutPlanSetupChoiceFlow: View {
             goal: .recomposition,
             activityLevel: .moderate
         ),
+        existingWorkoutGoals: [],
         aiService: AIService(),
         canAccessAIFeatures: false,
         onComplete: { _, _, _, _ in },

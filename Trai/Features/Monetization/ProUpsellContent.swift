@@ -87,6 +87,15 @@ extension ProUpsellSource {
                 inlineMessage: "Your workout plan is included. Upgrade when you want Trai to review progress, adjust your week, and keep coaching over time.",
                 inlineIconName: "figure.strengthtraining.traditional"
             )
+        case .workoutReview:
+            return ProUpsellContent(
+                headline: "Review workouts with Trai",
+                tagline: "Turn a completed session into clear feedback and a smarter next workout.",
+                modules: [coachSuggestions, fitnessPlan, nutritionPlan, photoLogging],
+                inlineTitle: "Unlock workout reviews",
+                inlineMessage: "Have Trai review completed workouts, spot useful patterns, and suggest the next adjustment.",
+                inlineIconName: "bubble.left.and.text.bubble.right.fill"
+            )
         case .exerciseAnalysis:
             return ProUpsellContent(
                 headline: "Get smarter exercise help",
@@ -95,6 +104,15 @@ extension ProUpsellSource {
                 inlineTitle: "Unlock exercise analysis",
                 inlineMessage: "Get instant exercise guidance, smarter setup help, and faster analysis when adding new movements.",
                 inlineIconName: "dumbbell.fill"
+            )
+        case .reminders:
+            return ProUpsellContent(
+                headline: "Let Trai remember with you",
+                tagline: "Ask for the nudge you want and Trai drafts the reminder.",
+                modules: [coachSuggestions, nutritionPlan, fitnessPlan, photoLogging],
+                inlineTitle: "Unlock AI reminder setup",
+                inlineMessage: "Tell Trai what you want to remember and it will draft the title, timing, and repeat days for you.",
+                inlineIconName: "bell.badge.fill"
             )
         case .settings:
             return ProUpsellContent(

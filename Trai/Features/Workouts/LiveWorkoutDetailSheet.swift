@@ -43,6 +43,14 @@ struct LiveWorkoutDetailSheet: View {
     @State private var originalEntryIDs: Set<UUID> = []
     @State private var presentedAccountSetupContext: AccountSetupContext?
 
+    private struct HeaderStatItem: Identifiable {
+        let id = UUID()
+        let icon: String
+        let value: String
+        let label: String
+        let color: Color
+    }
+
     private var sortedEntries: [LiveWorkoutEntry] {
         (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
     }
@@ -75,6 +83,43 @@ struct LiveWorkoutDetailSheet: View {
 
     private var activityMetricStats: [WorkoutActivityMetricDisplayStat] {
         entryStats.activityMetricSegments.prefix(2).compactMap(WorkoutActivityMetricDisplayStat.init(segment:))
+    }
+
+    private var headerStats: [HeaderStatItem] {
+        var items: [HeaderStatItem] = []
+        if durationMinutes > 0 {
+            items.append(HeaderStatItem(
+                icon: "clock.fill",
+                value: formatDuration(Double(durationMinutes)),
+                label: "time",
+                color: .blue
+            ))
+        }
+        if entryCount > 0 {
+            items.append(HeaderStatItem(
+                icon: "figure.strengthtraining.traditional",
+                value: "\(entryCount)",
+                label: entryCount == 1 ? "exercise" : "exercises",
+                color: .green
+            ))
+        }
+        if totalSets > 0 {
+            items.append(HeaderStatItem(
+                icon: "square.stack.3d.up.fill",
+                value: "\(totalSets)",
+                label: totalSets == 1 ? "set" : "sets",
+                color: .orange
+            ))
+        }
+        if let calories = workout.healthKitCalories {
+            items.append(HeaderStatItem(
+                icon: "flame.fill",
+                value: "\(Int(calories))",
+                label: "kcal",
+                color: .red
+            ))
+        }
+        return items
     }
 
     private var volumePRMode: UserProfile.VolumePRMode {
@@ -256,7 +301,13 @@ struct LiveWorkoutDetailSheet: View {
                     prefersMetricWeight: !useLbs
                 ) { goal in
                     modelContext.insert(goal)
-                    try? modelContext.save()
+                    do {
+                        try modelContext.save()
+                        return true
+                    } catch {
+                        modelContext.rollback()
+                        return false
+                    }
                 }
             }
             .sheet(item: $selectedGoal) { goal in
@@ -343,91 +394,49 @@ struct LiveWorkoutDetailSheet: View {
                 }
             }
 
-            // Stats row
-            FlowLayout(spacing: 10) {
-                if durationMinutes > 0 {
-                    StatPill(icon: "clock.fill", value: formatDuration(Double(durationMinutes)), label: "time", color: .blue)
-                }
-
-                if entryStats.strengthEntryCount > 0 {
-                    StatPill(
-                        icon: "dumbbell.fill",
-                        value: "\(entryStats.strengthEntryCount)",
-                        label: entryStats.strengthEntryCount == 1 ? "exercise" : "exercises",
-                        color: .green
-                    )
-                }
-
-                if entryStats.activityEntryCount > 0 {
-                    StatPill(
-                        icon: "list.bullet.rectangle",
-                        value: "\(entryStats.activityEntryCount)",
-                        label: entryStats.activityEntryCount == 1 ? "activity" : "activities",
-                        color: .orange
-                    )
-                }
-
-                ForEach(activityMetricStats) { metric in
-                    StatPill(
-                        icon: metric.icon,
-                        value: metric.value,
-                        label: metric.label.lowercased(),
-                        color: .orange
-                    )
-                }
-
-                if totalSets > 0 {
-                    StatPill(
-                        icon: "square.stack.3d.up.fill",
-                        value: "\(totalSets)",
-                        label: totalSets == 1 ? "set" : "sets",
-                        color: .green
-                    )
-                }
-
-                // Apple Watch merged data
-                if let calories = workout.healthKitCalories {
-                    StatPill(icon: "applewatch", value: "\(Int(calories))", label: "kcal", color: .red)
+            if !headerStats.isEmpty {
+                LazyVGrid(
+                    columns: Array(
+                        repeating: GridItem(.flexible(), spacing: 8),
+                        count: min(max(headerStats.count, 1), 4)
+                    ),
+                    spacing: 8
+                ) {
+                    ForEach(headerStats) { stat in
+                        StatPill(
+                            icon: stat.icon,
+                            value: stat.value,
+                            label: stat.label,
+                            color: stat.color
+                        )
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .padding(16)
+        .traiCard(cornerRadius: 16, contentPadding: 0)
     }
 
+    @ViewBuilder
     private var traiReviewSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                Image(systemName: "circle.hexagongrid.circle")
-                    .font(.title3)
-                    .foregroundStyle(.accent)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Review This Workout with Trai")
-                        .font(.headline)
-
-                    Text("Jump into Trai with this completed workout queued for coaching and follow-up advice.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        if canAccessTraiChat {
+            WorkoutTraiReviewCard(
+                title: "Review with Trai",
+                subtitle: "Ask what to adjust after this workout.",
+                action: reviewWorkoutWithTrai
+            )
+        } else {
+            ProUpsellInlineCard(
+                source: .workoutReview,
+                actionTitle: "Unlock Trai Pro",
+                showsShadow: false,
+                action: {
+                    proUpsellCoordinator?.present(source: .workoutReview)
                 }
-
-                Spacer(minLength: 0)
-            }
-
-            Button {
-                reviewWorkoutWithTrai()
-            } label: {
-                HStack {
-                    Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                    Text(canAccessTraiChat ? "Ask Trai About This Workout" : "Unlock Trai Coaching")
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.14))
+            )
         }
-        .traiCard()
     }
 
     // MARK: - Exercises Section
@@ -626,7 +635,7 @@ struct LiveWorkoutDetailSheet: View {
 
     private func reviewWorkoutWithTrai() {
         guard canAccessTraiChat else {
-            proUpsellCoordinator?.present(source: .chat)
+            proUpsellCoordinator?.present(source: .workoutReview)
             HapticManager.lightTap()
             return
         }

@@ -103,6 +103,7 @@ struct LiveWorkoutView: View {
     @State private var showingGeneralActivitySheet = false
     @State private var showingGoalSheet = false
     @State private var didApplyPresentationFinishRequest = false
+    @State private var focusedSetID: UUID?
 
     // MARK: - Initialization
 
@@ -168,6 +169,7 @@ struct LiveWorkoutView: View {
                         .labelStyle(.iconOnly)
                         .accessibilityIdentifier("liveWorkoutEndButton")
                         .tint(.accentColor)
+                        .disabled(viewModel.isWorkoutFinished || viewModel.isFinishingWorkout)
                     }
                 }
             }
@@ -238,7 +240,13 @@ struct LiveWorkoutView: View {
                     prefersMetricWeight: usesMetricExerciseWeight
                 ) { goal in
                     modelContext.insert(goal)
-                    try? modelContext.save()
+                    do {
+                        try modelContext.save()
+                        return true
+                    } catch {
+                        modelContext.rollback()
+                        return false
+                    }
                 }
             }
             .confirmationDialog(
@@ -260,11 +268,9 @@ struct LiveWorkoutView: View {
                 titleVisibility: .visible
             ) {
                 Button("End Workout") {
-                    viewModel.finishWorkout()
-                    withAnimation {
-                        showingSummary = true
-                    }
+                    finishAndShowSummary()
                 }
+                .disabled(viewModel.isWorkoutFinished || viewModel.isFinishingWorkout)
                 Button("Continue", role: .cancel) {}
             } message: {
                 Text("Are you ready to finish this workout?")
@@ -297,7 +303,16 @@ struct LiveWorkoutView: View {
         guard viewModel.workout.completedAt == nil else { return }
 
         didApplyPresentationFinishRequest = true
-        viewModel.finishWorkout()
+        finishAndShowSummary()
+    }
+
+    private func finishAndShowSummary() {
+        guard !viewModel.isFinishingWorkout else { return }
+
+        if !viewModel.isWorkoutFinished {
+            viewModel.finishWorkout()
+        }
+
         withAnimation {
             showingSummary = true
         }
@@ -314,69 +329,76 @@ struct LiveWorkoutView: View {
 
     private var generalWorkoutContent: some View {
         ZStack(alignment: .bottom) {
-            ScrollView(showsIndicators: false) {
-                LazyVStack(spacing: 16) {
-                    WorkoutTimerHeader(
-                        workoutStartedAt: viewModel.workout.startedAt,
-                        isTimerRunning: viewModel.isTimerRunning,
-                        totalPauseDuration: viewModel.totalPauseDuration,
-                        pausedElapsedTime: viewModel.pausedElapsedTimeSnapshot,
-                        totalVolume: viewModel.totalVolume,
-                        onTogglePause: {
-                            if viewModel.isTimerRunning {
-                                viewModel.pauseTimer()
-                            } else {
-                                viewModel.resumeTimer()
+            ScrollViewReader { scrollProxy in
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 16) {
+                        WorkoutTimerHeader(
+                            workoutStartedAt: viewModel.workout.startedAt,
+                            isTimerRunning: viewModel.isTimerRunning,
+                            totalPauseDuration: viewModel.totalPauseDuration,
+                            pausedElapsedTime: viewModel.pausedElapsedTimeSnapshot,
+                            totalVolume: viewModel.totalVolume,
+                            onTogglePause: {
+                                if viewModel.isTimerRunning {
+                                    viewModel.pauseTimer()
+                                } else {
+                                    viewModel.resumeTimer()
+                                }
+                            },
+                            showsWatchSyncButton: !viewModel.isWatchConnected,
+                            isWatchSyncing: viewModel.isRetryingWatchSync,
+                            onRetryWatchSync: {
+                                viewModel.retryWatchSync()
+                            },
+                            watchConnectionHint: viewModel.watchConnectionHint,
+                            heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
+                            calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
+                        )
+
+                        workoutTargetSelector
+
+                        GeneralSessionOverviewCard(workout: viewModel.workout)
+
+                        SessionGoalsCard(
+                            goals: relevantSessionGoals,
+                            onAddGoal: { showingGoalSheet = true },
+                            onToggleCompletion: toggleGoalCompletion
+                        )
+
+                        SessionNotesCard(
+                            notes: Binding(
+                                get: { viewModel.workout.notes },
+                                set: { viewModel.updateWorkoutNotes($0) }
+                            )
+                        )
+
+                        if viewModel.entries.isEmpty {
+                            ContentUnavailableView(
+                                "No Activities Yet",
+                                systemImage: viewModel.workout.type.iconName,
+                                description: Text("Add exercises or activities to track in this session.")
+                            )
+                            .padding(.top, 8)
+                        } else {
+                            ForEach(viewModel.entries, id: \.id) { entry in
+                                workoutEntryCard(entry)
                             }
-                        },
-                        showsWatchSyncButton: !viewModel.isWatchConnected,
-                        isWatchSyncing: viewModel.isRetryingWatchSync,
-                        onRetryWatchSync: {
-                            viewModel.retryWatchSync()
-                        },
-                        watchConnectionHint: viewModel.watchConnectionHint,
-                        heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
-                        calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
-                    )
-
-                    GeneralSessionOverviewCard(workout: viewModel.workout)
-
-                    SessionGoalsCard(
-                        goals: relevantSessionGoals,
-                        onAddGoal: { showingGoalSheet = true },
-                        onToggleCompletion: toggleGoalCompletion
-                    )
-
-                    SessionNotesCard(
-                        notes: Binding(
-                            get: { viewModel.workout.notes },
-                            set: { viewModel.updateWorkoutNotes($0) }
-                        )
-                    )
-
-                    if viewModel.entries.isEmpty {
-                        ContentUnavailableView(
-                            "No Activities Yet",
-                            systemImage: viewModel.workout.type.iconName,
-                            description: Text("Add exercises or activities to track in this session.")
-                        )
-                        .padding(.top, 8)
-                    } else {
-                        ForEach(viewModel.entries, id: \.id) { entry in
-                            workoutEntryCard(entry)
                         }
-                    }
 
-                    Color.clear.frame(height: 100)
+                        Color.clear.frame(height: 100)
+                    }
+                    .padding()
                 }
-                .padding()
+                .scrollDismissesKeyboard(.interactively)
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        dismissKeyboard()
+                    }
+                )
+                .onChange(of: focusedSetID) { _, setID in
+                    scrollFocusedSet(setID, with: scrollProxy)
+                }
             }
-            .scrollDismissesKeyboard(.interactively)
-            .simultaneousGesture(
-                TapGesture().onEnded {
-                    dismissKeyboard()
-                }
-            )
 
             WorkoutBottomBar(
                 onAddExercise: { showingExerciseList = true },
@@ -389,121 +411,107 @@ struct LiveWorkoutView: View {
 
     private var structuredWorkoutContent: some View {
         ZStack(alignment: .bottom) {
-            ScrollView(showsIndicators: false) {
-                let entries = viewModel.entries
-                let upNext = viewModel.upNextSuggestion
-                let availableSuggestions = viewModel.availableSuggestions
-                let suggestionsByMuscle = viewModel.suggestionsByMuscle
-                let upNextSuggestionID = upNext?.id
+            ScrollViewReader { scrollProxy in
+                ScrollView(showsIndicators: false) {
+                    let entries = viewModel.entries
+                    let upNext = viewModel.upNextSuggestion
+                    let availableSuggestions = viewModel.availableSuggestions
+                    let suggestionsByMuscle = viewModel.suggestionsByMuscle
+                    let upNextSuggestionID = upNext?.id
 
-                LazyVStack(spacing: 16) {
-                    // Timer header with optional watch data
-                    WorkoutTimerHeader(
-                        workoutStartedAt: viewModel.workout.startedAt,
-                        isTimerRunning: viewModel.isTimerRunning,
-                        totalPauseDuration: viewModel.totalPauseDuration,
-                        pausedElapsedTime: viewModel.pausedElapsedTimeSnapshot,
-                        totalVolume: viewModel.totalVolume,
-                        onTogglePause: {
-                            if viewModel.isTimerRunning {
-                                viewModel.pauseTimer()
-                            } else {
-                                viewModel.resumeTimer()
-                            }
-                        },
-                        showsWatchSyncButton: !viewModel.isWatchConnected,
-                        isWatchSyncing: viewModel.isRetryingWatchSync,
-                        onRetryWatchSync: {
-                            viewModel.retryWatchSync()
-                        },
-                        watchConnectionHint: viewModel.watchConnectionHint,
-                        heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
-                        calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
-                    )
+                    LazyVStack(spacing: 16) {
+                        // Timer header with optional watch data
+                        WorkoutTimerHeader(
+                            workoutStartedAt: viewModel.workout.startedAt,
+                            isTimerRunning: viewModel.isTimerRunning,
+                            totalPauseDuration: viewModel.totalPauseDuration,
+                            pausedElapsedTime: viewModel.pausedElapsedTimeSnapshot,
+                            totalVolume: viewModel.totalVolume,
+                            onTogglePause: {
+                                if viewModel.isTimerRunning {
+                                    viewModel.pauseTimer()
+                                } else {
+                                    viewModel.resumeTimer()
+                                }
+                            },
+                            showsWatchSyncButton: !viewModel.isWatchConnected,
+                            isWatchSyncing: viewModel.isRetryingWatchSync,
+                            onRetryWatchSync: {
+                                viewModel.retryWatchSync()
+                            },
+                            watchConnectionHint: viewModel.watchConnectionHint,
+                            heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
+                            calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
+                        )
 
-                    // Targets can include muscles, planned split days, broad activity
-                    // fallbacks, and user-defined activity types from the exercise library.
-                    MuscleGroupSelector(
-                        selectedMuscles: Binding(
-                            get: { Set(viewModel.workout.muscleGroups) },
-                            set: { viewModel.updateMuscleGroups(Array($0)) }
-                        ),
-                        selectedActivityCategories: Binding(
-                            get: { Set(viewModel.targetActivityCategories) },
-                            set: { viewModel.updateActivityTargets(Array($0)) }
-                        ),
-                        selectedActivityTypes: Binding(
-                            get: { Set(viewModel.targetActivityTypes) },
-                            set: { selectedTypes in viewModel.updateActivityTypeTargets(Array(selectedTypes)) }
-                        ),
-                        isCustomWorkout: viewModel.exerciseSuggestions.isEmpty,
-                        planTargets: planTargets,
-                        activityTypeTargets: activityTypeTargets,
-                        showsMuscleTargets: viewModel.workout.type.supportsMuscleTargets,
-                        onSelectPlanTarget: { target in
-                            viewModel.applyPlanTarget(
-                                name: target.title,
-                                muscles: target.muscles,
-                                categories: target.categories,
-                                activityTypes: target.activityTypes
+                        workoutTargetSelector
+
+                        if !relevantSessionGoals.isEmpty {
+                            SessionGoalsCard(
+                                goals: relevantSessionGoals,
+                                onAddGoal: { showingGoalSheet = true },
+                                onToggleCompletion: toggleGoalCompletion
                             )
                         }
-                    )
 
-                    // Planned and ad hoc workout items share the same logging surface.
-                    ForEach(entries, id: \.id) { entry in
-                        workoutEntryCard(entry)
-                    }
-
-                    // Up Next suggestion (smart rotation)
-                    if let upNext {
-                        UpNextSuggestionCard(
-                            suggestion: upNext,
-                            lastPerformance: viewModel.lastPerformances[upNext.exerciseName],
-                            usesMetricWeight: usesMetricExerciseWeight
-                        ) {
-                            viewModel.addUpNextExercise()
+                        // Planned and ad hoc workout items share the same logging surface.
+                        ForEach(entries, id: \.id) { entry in
+                            workoutEntryCard(entry)
                         }
-                    }
 
-                    // More suggestions by muscle group
-                    if !availableSuggestions.isEmpty {
-                        // Filter out the up next suggestion from the grouped view
-                        let filteredSuggestions = suggestionsByMuscle.mapValues { suggestions in
-                            guard let upNextSuggestionID else { return suggestions }
-                            return suggestions.filter { $0.id != upNextSuggestionID }
-                        }.filter { !$0.value.isEmpty }
-
-                        if !filteredSuggestions.isEmpty {
-                            SuggestionsByMuscleSection(
-                                suggestionsByMuscle: filteredSuggestions,
-                                lastPerformances: viewModel.lastPerformances
-                            ) { suggestion in
-                                viewModel.addExerciseFromSuggestion(suggestion)
+                        // Up Next suggestion (smart rotation)
+                        if let upNext {
+                            UpNextSuggestionCard(
+                                suggestion: upNext,
+                                lastPerformance: viewModel.lastPerformances[upNext.exerciseName],
+                                usesMetricWeight: usesMetricExerciseWeight
+                            ) {
+                                viewModel.addUpNextExercise()
                             }
                         }
-                    }
 
-                    if entries.isEmpty && upNext == nil && availableSuggestions.isEmpty {
-                        ContentUnavailableView(
-                            "No Items Yet",
-                            systemImage: "figure.mixed.cardio",
-                            description: Text("Add what you want to track in this session.")
-                        )
-                        .padding(.top, 4)
-                    }
+                        // More suggestions by muscle group
+                        if !availableSuggestions.isEmpty {
+                            // Filter out the up next suggestion from the grouped view
+                            let filteredSuggestions = suggestionsByMuscle.mapValues { suggestions in
+                                guard let upNextSuggestionID else { return suggestions }
+                                return suggestions.filter { $0.id != upNextSuggestionID }
+                            }.filter { !$0.value.isEmpty }
 
-                    // Bottom padding for the bar
-                    Color.clear.frame(height: 100)
+                            if !filteredSuggestions.isEmpty {
+                                SuggestionsByMuscleSection(
+                                    suggestionsByMuscle: filteredSuggestions,
+                                    lastPerformances: viewModel.lastPerformances
+                                ) { suggestion in
+                                    viewModel.addExerciseFromSuggestion(suggestion)
+                                }
+                            }
+                        }
+
+                        if entries.isEmpty && upNext == nil && availableSuggestions.isEmpty {
+                            ContentUnavailableView(
+                                "No Items Yet",
+                                systemImage: "figure.mixed.cardio",
+                                description: Text("Add what you want to track in this session.")
+                            )
+                            .padding(.top, 4)
+                        }
+
+                        // Bottom padding for the bar
+                        Color.clear.frame(height: 100)
+                    }
+                    .padding()
                 }
-                .padding()
+                .scrollDismissesKeyboard(.interactively)
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        dismissKeyboard()
+                    }
+                )
+                .onChange(of: focusedSetID) { _, setID in
+                    scrollFocusedSet(setID, with: scrollProxy)
+                }
             }
-            .scrollDismissesKeyboard(.interactively)
-            .simultaneousGesture(
-                TapGesture().onEnded {
-                    dismissKeyboard()
-                }
-            )
 
             // Bottom bar
             WorkoutBottomBar(
@@ -541,7 +549,9 @@ struct LiveWorkoutView: View {
                 onChangeExercise: {
                     entryToReplace = entry
                     showingExerciseReplacement = true
-                }
+                },
+                setRowScrollID: setRowScrollID,
+                onFocusedSetChange: { focusedSetID = $0 }
             )
         } else {
             CardioExerciseCard(
@@ -589,10 +599,56 @@ struct LiveWorkoutView: View {
         }
     }
 
+    private var workoutTargetSelector: some View {
+        MuscleGroupSelector(
+            selectedMuscles: Binding(
+                get: { Set(viewModel.workout.muscleGroups) },
+                set: { viewModel.updateMuscleGroups(Array($0)) }
+            ),
+            selectedActivityCategories: Binding(
+                get: { Set(viewModel.targetActivityCategories) },
+                set: { viewModel.updateActivityTargets(Array($0)) }
+            ),
+            selectedActivityTypes: Binding(
+                get: { Set(viewModel.targetActivityTypes) },
+                set: { selectedTypes in viewModel.updateActivityTypeTargets(Array(selectedTypes)) }
+            ),
+            isCustomWorkout: viewModel.exerciseSuggestions.isEmpty,
+            planTargets: planTargets,
+            activityTypeTargets: activityTypeTargets,
+            showsMuscleTargets: viewModel.workout.type.supportsMuscleTargets
+                || viewModel.workout.type == .custom,
+            onSelectPlanTarget: { target in
+                viewModel.applyPlanTarget(
+                    sourcePlanTemplateID: target.id,
+                    name: target.title,
+                    muscles: target.muscles,
+                    categories: target.categories,
+                    activityTypes: target.activityTypes
+                )
+            }
+        )
+    }
+
     // MARK: - Helpers
 
     private func dismissKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    private func setRowScrollID(for setID: UUID) -> String {
+        "liveWorkoutSet-\(setID.uuidString)"
+    }
+
+    private func scrollFocusedSet(_ setID: UUID?, with scrollProxy: ScrollViewProxy) {
+        guard let setID else { return }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(260))
+            withAnimation(.easeInOut(duration: 0.2)) {
+                scrollProxy.scrollTo(setRowScrollID(for: setID), anchor: .center)
+            }
+        }
     }
 
     private func handleSummaryDone() {

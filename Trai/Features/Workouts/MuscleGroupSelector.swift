@@ -36,6 +36,7 @@ struct MuscleGroupSelector: View {
     var onSelectPlanTarget: ((PlanTarget) -> Void)?
 
     @State private var isExpanded: Bool = false
+    @State private var activityCategoriesAddedByActivityTypes: Set<Exercise.Category> = []
 
     private let activityTargets: [Exercise.Category] = [.cardio, .conditioning, .mobility, .sportPractice, .recovery]
 
@@ -207,10 +208,24 @@ struct MuscleGroupSelector: View {
     }
 
     private func toggleActivityTypeTarget(_ target: ActivityTypeTarget) {
+        let targetCategories = Set(target.categories.flatMap { Array($0.suggestionCategories) })
         if isActivityTypeTargetSelected(target) {
             selectedActivityTypes.remove(target.title)
+            let remainingImpliedCategories = activityTypeTargets
+                .filter { selectedActivityTypes.contains($0.title) }
+                .reduce(into: Set<Exercise.Category>()) { result, activityTarget in
+                    result.formUnion(activityTarget.categories.flatMap { Array($0.suggestionCategories) })
+                }
+            let categoriesToRemove = targetCategories
+                .intersection(activityCategoriesAddedByActivityTypes)
+                .subtracting(remainingImpliedCategories)
+            selectedActivityCategories.subtract(categoriesToRemove)
+            activityCategoriesAddedByActivityTypes.subtract(categoriesToRemove)
         } else {
+            let newlyAddedCategories = targetCategories.subtracting(selectedActivityCategories)
             selectedActivityTypes.insert(target.title)
+            selectedActivityCategories.formUnion(targetCategories)
+            activityCategoriesAddedByActivityTypes.formUnion(newlyAddedCategories)
         }
         HapticManager.selectionChanged()
     }

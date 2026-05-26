@@ -514,9 +514,14 @@ enum AIFunctionDeclarations {
                         "items": ["type": "string"],
                         "description": "Exact block IDs from CURRENT WORKOUT PLAN when this goal is tied to specific saved/generated plan blocks. Use this instead of relying on activity names or tags for generated-plan block goals."
                     ],
+                    "generated_plan_template_ids": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Exact template IDs from CURRENT WORKOUT PLAN when this goal tracks exact planned sessions. Use this for goals like completing specific strength days or every planned session."
+                    ],
                     "tracks_plan_adherence": [
                         "type": "boolean",
-                        "description": "True only when the goal tracks completion of the user's whole generated weekly workout plan, not a specific activity, modality, exercise, or support block."
+                        "description": "Deprecated. Prefer generated_plan_template_ids with an exact frequency target."
                     ],
                     "target_value": [
                         "type": "number",
@@ -609,9 +614,14 @@ enum AIFunctionDeclarations {
                         "items": ["type": "string"],
                         "description": "Updated exact block IDs from CURRENT WORKOUT PLAN when this goal is tied to specific saved/generated plan blocks. Pass an empty array to clear this durable generated-plan block scope."
                     ],
+                    "generated_plan_template_ids": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Updated exact template IDs from CURRENT WORKOUT PLAN when this goal tracks exact planned sessions. Pass an empty array to clear this generated-plan session scope."
+                    ],
                     "tracks_plan_adherence": [
                         "type": "boolean",
-                        "description": "Set true only when the goal tracks completion of the whole generated weekly workout plan; set false for activity-, modality-, exercise-, or support-block-specific goals."
+                        "description": "Deprecated. Prefer generated_plan_template_ids with an exact frequency target."
                     ],
                     "target_value": [
                         "type": "number",

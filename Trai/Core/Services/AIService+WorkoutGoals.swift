@@ -23,10 +23,15 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
     let targetDateISO8601: String?
     let checkInCadenceDays: Int?
     var tracksGeneratedPlanAdherence: Bool? = nil
+    var generatedPlanTemplateIDs: [UUID]? = nil
     var generatedPlanBlockIDs: [UUID]? = nil
 
     var id: String {
         let tagKey = linkedActivityTags?.joined(separator: ",") ?? ""
+        let templateKey = generatedPlanTemplateIDs?
+            .map(\.uuidString)
+            .sorted()
+            .joined(separator: ",") ?? ""
         let blockKey = generatedPlanBlockIDs?
             .map(\.uuidString)
             .sorted()
@@ -40,6 +45,7 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
             linkedActivityKindRaw ?? "",
             linkedActivityRoleRaw ?? "",
             tracksGeneratedPlanAdherence == true ? "planAdherence" : "",
+            templateKey,
             blockKey
         ]
         return parts.joined(separator: "|")
@@ -71,7 +77,7 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
     }
 
     func asWorkoutGoal() -> WorkoutGoal {
-        WorkoutGoal(
+        let goal = WorkoutGoal(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             goalKind: goalKind,
             linkedWorkoutType: linkedWorkoutType,
@@ -90,6 +96,16 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
             tracksGeneratedPlanAdherence: tracksGeneratedPlanAdherence == true,
             generatedPlanBlockIDs: generatedPlanBlockIDs ?? []
         )
+        goal.generatedPlanTemplateIDs = (generatedPlanBlockIDs?.isEmpty == false) ? [] : (generatedPlanTemplateIDs ?? [])
+        if !goal.generatedPlanTemplateIDs.isEmpty {
+            goal.tracksGeneratedPlanAdherence = false
+            goal.linkedWorkoutTypeRaw = nil
+            goal.linkedActivityName = nil
+            goal.linkedActivityTags = []
+            goal.linkedActivityKindRaw = nil
+            goal.linkedActivityRoleRaw = nil
+        }
+        return goal
     }
 }
 
@@ -462,11 +478,13 @@ extension AIService {
             - Weight/load goals require a known current baseline and should progress from that baseline.
             - Do not create vague progression goals unless the structured target and successCriteria make the exact achievement verifiable from app data.
             - Broad goals are allowed, but the intent must be accurate: title, target fields, linkedWorkoutType/linkedActivityName/linkedActivityTags/linkedActivityKindRaw/linkedActivityRoleRaw, and successCriteria should all describe the same behavior Trai can track.
-            - Set tracksGeneratedPlanAdherence true only when the goal tracks completion of the whole generated weekly plan structure, not a specific activity family, support block, exercise, or modality.
+            - Return tracksGeneratedPlanAdherence false. It is deprecated because goals must declare the exact sessions, blocks, or activity scope they measure.
+            - If a goal tracks exact planned sessions, set generatedPlanTemplateIDs to those templateID values from Current plan sessions. For example, a "3 strength days" goal should include the 3 strength template ids and targetValue 3, not a whole-plan shortcut.
+            - If a goal tracks the whole weekly plan, set generatedPlanTemplateIDs to every templateID in Current plan sessions and targetValue equal to that template count.
             - If a goal is tied to a specific activity, exercise, modality, or support block from Current plan sessions, set generatedPlanBlockIDs to the matching blockID values from that plan context. These durable IDs are required for plan-specific activity goals so Trai does not guess from names or tags later.
-            - Leave generatedPlanBlockIDs empty for whole-plan adherence goals, goals based only on recent history, or goals that are not tied to a specific current-plan block.
+            - Leave generatedPlanTemplateIDs and generatedPlanBlockIDs empty for goals based only on recent history or non-plan goals.
             - If the current plan includes a personalized constraint, habit, or recurring support block, prefer a goal for that specific plan behavior over generic progression.
-            - For a brand-new workout plan with little history, use goals that establish the plan: weekly structure adherence, named-day/session-type completion across several weeks, requested recurring habits, check-in cadence, or logging enough sessions for Trai to personalize the next revision.
+            - For a brand-new workout plan with little history, use goals that establish exact planned sessions, named-day/session-type completion across several weeks, requested recurring habits, check-in cadence, or logging enough sessions for Trai to personalize the next revision.
             - Every frequency, duration, distance, count, or weight goal must have a targetValue greater than 0 and a clear targetUnit.
             - Use count goals for trackable reps, attempts, rounds, completed routes, laps, or segments when the app can count them from logged sets or activity segments.
             - Every frequency, duration, distance, and count goal must also include periodUnitRaw and periodCount.
@@ -491,6 +509,7 @@ extension AIService {
             - linkedActivityRoleRaw can be \(AIPromptBuilder.workoutGoalActivityRolePromptList).
             - goalKind must be one of: milestone, frequency, duration, distance, count, weight
             - For milestone goals, leave targetValue and targetUnit empty.
+            - Use milestone goals for semantic or qualitative goals that cannot be measured from workout/session fields. Give them clear successCriteria and checkInCadenceDays so Trai follows up through check-ins instead of showing fake numeric progress.
             - For frequency goals, targetValue must be the session/activity count, targetUnit should usually be "sessions" or another unit matching the tracked activity, periodUnitRaw must be day, week, or month, and periodCount must be 1.
             - For duration and distance goals, periodUnitRaw must be day, week, or month and periodCount must be greater than 0.
             - For count goals, targetUnit should be the thing being counted, such as reps, attempts, rounds, laps, routes, or segments.
@@ -568,6 +587,10 @@ extension WorkoutGoalSuggestion {
             .map(\.goalNormalizedKey)
             .sorted()
             .joined(separator: ",") ?? ""
+        let templateKey = generatedPlanTemplateIDs?
+            .map(\.uuidString)
+            .sorted()
+            .joined(separator: ",") ?? ""
         let blockKey = generatedPlanBlockIDs?
             .map(\.uuidString)
             .sorted()
@@ -581,6 +604,7 @@ extension WorkoutGoalSuggestion {
             linkedActivityKindRaw ?? "",
             linkedActivityRoleRaw ?? "",
             tracksGeneratedPlanAdherence == true ? "planAdherence" : "",
+            templateKey,
             blockKey
         ]
         return parts.joined(separator: "|")
@@ -590,6 +614,7 @@ extension WorkoutGoalSuggestion {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return false }
         guard successCriteria?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else { return false }
+        guard !hasMixedGeneratedPlanScope else { return false }
         guard hasTrackableScope else { return false }
 
         switch goalKind {
@@ -631,7 +656,7 @@ extension WorkoutGoalSuggestion {
     }
 
     private var hasTrackableScope: Bool {
-        if tracksGeneratedPlanAdherence == true {
+        if tracksGeneratedPlanAdherence == true || generatedPlanTemplateIDs?.isEmpty == false {
             return true
         }
 
@@ -663,5 +688,9 @@ extension WorkoutGoalSuggestion {
 
     private var periodTrackingGoalKinds: Set<WorkoutGoal.GoalKind> {
         [.frequency, .duration, .distance, .count]
+    }
+
+    private var hasMixedGeneratedPlanScope: Bool {
+        generatedPlanTemplateIDs?.isEmpty == false && generatedPlanBlockIDs?.isEmpty == false
     }
 }

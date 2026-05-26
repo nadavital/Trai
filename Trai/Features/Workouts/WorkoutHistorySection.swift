@@ -66,41 +66,45 @@ struct WorkoutHistorySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header with See All button
-            HStack {
-                Label("Recent Workouts", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
-                    .font(.headline)
-                Spacer()
+            TraiSectionHeader("Recent Workouts", icon: "clock.arrow.trianglehead.counterclockwise.rotate.90") {
                 if totalWorkoutCount > 5 {
                     Button {
                         showAllWorkouts = true
                     } label: {
                         Text("See All")
-                            .font(.subheadline)
-                            .foregroundStyle(.accent)
                     }
+                    .buttonStyle(.traiTertiary(size: .compact, height: 32))
                 }
             }
 
             if previewItems.isEmpty {
                 EmptyWorkoutHistory()
             } else {
-                VStack(spacing: 8) {
-                    ForEach(previewItems) { item in
-                        switch item {
-                        case .live(let workout):
-                            CompactLiveWorkoutRow(
-                                workout: workout,
-                                onTap: { onLiveWorkoutTap(workout) }
-                            )
-                        case .session(let workout):
-                            CompactWorkoutSessionRow(
-                                workout: workout,
-                                onTap: { onWorkoutTap(workout) }
-                            )
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(previewItems) { item in
+                            switch item {
+                            case .live(let workout):
+                                CompactLiveWorkoutRow(
+                                    workout: workout,
+                                    onTap: { onLiveWorkoutTap(workout) },
+                                    onDelete: { onDeleteLiveWorkout(workout) }
+                                )
+                                .frame(width: 150)
+                            case .session(let workout):
+                                CompactWorkoutSessionRow(
+                                    workout: workout,
+                                    onTap: { onWorkoutTap(workout) },
+                                    onDelete: { onDelete(workout) }
+                                )
+                                .frame(width: 150)
+                            }
                         }
                     }
+                    .scrollTargetLayout()
                 }
+                .scrollTargetBehavior(.viewAligned)
+                .contentMargins(.horizontal, 1, for: .scrollContent)
             }
         }
         .traiCard()
@@ -123,48 +127,75 @@ struct WorkoutHistorySection: View {
 private struct CompactLiveWorkoutRow: View {
     let workout: LiveWorkout
     let onTap: () -> Void
+    let onDelete: () -> Void
+
+    @State private var showDeleteConfirmation = false
+
+    private var workoutDate: Date {
+        workout.completedAt ?? workout.startedAt
+    }
+
+    private var subtitle: String {
+        workout.historySummarySegments.first ?? workoutDate.formatted(.dateTime.month(.abbreviated).day())
+    }
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                // Icon with colored background
-                Image(systemName: workout.historyIconName)
-                    .font(.body)
-                    .foregroundStyle(.accent)
-                    .frame(width: 32, height: 32)
-                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+        ZStack(alignment: .topTrailing) {
+            Button(action: onTap) {
+                VStack(spacing: 8) {
+                    Image(systemName: workout.historyIconName)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(TraiColors.flame)
+                        .frame(width: 48, height: 48)
+                        .background(TraiColors.flame.opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
 
-                VStack(alignment: .leading, spacing: 2) {
                     Text(workout.name)
-                        .font(.subheadline)
-                        .lineLimit(1)
+                        .font(.traiLabel(13))
+                        .lineLimit(2)
                         .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                    HStack(spacing: 6) {
-                        ForEach(Array(workout.historySummarySegments.enumerated()), id: \.offset) { index, segment in
-                            if index > 0 {
-                                Text("•")
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Text(segment)
-                        }
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    Text(subtitle)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .padding(.horizontal, 10)
+                .frame(height: 126)
+                .contentShape(RoundedRectangle(cornerRadius: 14))
             }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+            .buttonStyle(.plain)
+
+            Menu {
+                Button(role: .destructive) {
+                    showDeleteConfirmation = true
+                } label: {
+                    Label("Delete Workout", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Workout options")
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+        .confirmationDialog(
+            "Delete Workout?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Workout", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes \"\(workout.name)\" from your history.")
+        }
     }
 }
 
@@ -173,53 +204,70 @@ private struct CompactLiveWorkoutRow: View {
 private struct CompactWorkoutSessionRow: View {
     let workout: WorkoutSession
     let onTap: () -> Void
+    let onDelete: () -> Void
+
+    @State private var showDeleteConfirmation = false
+
+    private var subtitle: String {
+        workout.historyDetailSegments.first ?? workout.loggedAt.formatted(.dateTime.month(.abbreviated).day())
+    }
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                // Icon with colored background
-                Image(systemName: workout.iconName)
-                    .font(.body)
-                    .foregroundStyle(workout.sourceIsHealthKit ? .red : .accent)
-                    .frame(width: 32, height: 32)
-                    .background((workout.sourceIsHealthKit ? Color.red : Color.accentColor).opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+        ZStack(alignment: .topTrailing) {
+            Button(action: onTap) {
+                VStack(spacing: 8) {
+                    Image(systemName: workout.iconName)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(workout.sourceIsHealthKit ? .red : TraiColors.flame)
+                        .frame(width: 48, height: 48)
+                        .background((workout.sourceIsHealthKit ? Color.red : TraiColors.flame).opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
 
-                VStack(alignment: .leading, spacing: 2) {
                     Text(workout.displayName)
-                        .font(.subheadline)
-                        .lineLimit(1)
+                        .font(.traiLabel(13))
+                        .lineLimit(2)
                         .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                    HStack(spacing: 6) {
-                        ForEach(Array(workout.historyDetailSegments.enumerated()), id: \.offset) { index, segment in
-                            if index > 0 {
-                                Text("•")
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Text(segment)
-                                .foregroundStyle(segment.hasSuffix("kcal") ? .red : .secondary)
-                        }
-
-                        if workout.sourceIsHealthKit {
-                            Image(systemName: "heart.fill")
-                                .foregroundStyle(.red)
-                        }
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    Text(subtitle)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(workout.sourceIsHealthKit ? .red : .secondary)
+                        .lineLimit(1)
                 }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .padding(.horizontal, 10)
+                .frame(height: 126)
+                .contentShape(RoundedRectangle(cornerRadius: 14))
             }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+            .buttonStyle(.plain)
+
+            Menu {
+                Button(role: .destructive) {
+                    showDeleteConfirmation = true
+                } label: {
+                    Label("Delete Workout", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Workout options")
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+        .confirmationDialog(
+            "Delete Workout?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Workout", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes \"\(workout.displayName)\" from your history.")
+        }
     }
 }
