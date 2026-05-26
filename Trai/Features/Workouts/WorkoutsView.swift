@@ -180,7 +180,7 @@ struct WorkoutsView: View {
             activityLevel: profile?.activityLevelValue ?? .moderate,
             nutritionContext: OnboardingWorkoutPlanUserContext.nutritionContext(from: profile),
             memoryContext: workoutGoalMemoryContext(),
-            activeWorkoutGoalContext: OnboardingWorkoutPlanUserContext.activeGoalContext(from: activeWorkoutGoals)
+            activeWorkoutGoalContext: OnboardingWorkoutPlanUserContext.activeGoalContext(from: visibleActiveWorkoutGoals)
         )
     }
 
@@ -195,7 +195,7 @@ struct WorkoutsView: View {
             }
     }
 
-    private var workoutGoalInsights: [WorkoutGoalInsight] {
+    private var activeWorkoutGoalInsights: [WorkoutGoalInsight] {
         WorkoutGoalProgressResolver.insights(
             goals: activeWorkoutGoals,
             workouts: completedLiveWorkouts,
@@ -203,6 +203,14 @@ struct WorkoutsView: View {
             exerciseHistory: allExerciseHistory,
             useLbs: !usesMetricExerciseWeight
         )
+    }
+
+    private var visibleWorkoutGoalInsights: [WorkoutGoalInsight] {
+        activeWorkoutGoalInsights.filter { !$0.isCompleteEnoughToHide }
+    }
+
+    private var visibleActiveWorkoutGoals: [WorkoutGoal] {
+        visibleWorkoutGoalInsights.map(\.goal)
     }
 
     private var workoutGoalSignals: [RecentWorkoutSignal] {
@@ -214,7 +222,7 @@ struct WorkoutsView: View {
 
     private var staleWorkoutGoalNeedingCheckIn: WorkoutGoal? {
         WorkoutGoalProgressResolver.staleGoalsNeedingCheckIn(
-            goals: activeWorkoutGoals,
+            goals: visibleActiveWorkoutGoals,
             workouts: completedLiveWorkouts,
             sessions: workoutGoalSessions
         ).first
@@ -321,7 +329,7 @@ struct WorkoutsView: View {
                     }
 
                     WorkoutGoalsOverviewSection(
-                        insights: workoutGoalInsights,
+                        insights: visibleWorkoutGoalInsights,
                         signals: workoutGoalSignals,
                         celebratedGoal: celebratedWorkoutGoal,
                         canCreateGoalsWithTrai: canAccessAIFeatures,
@@ -986,12 +994,11 @@ struct WorkoutsView: View {
     }
 
     private func autoCompleteEligibleGoalsIfNeeded() {
-        let eligibleInsights = workoutGoalInsights.filter { insight in
+        let eligibleInsights = activeWorkoutGoalInsights.filter { insight in
             guard insight.goal.isActive else { return false }
             guard insight.goal.goalKind != .milestone else { return false }
             guard insight.goal.goalKind != .frequency else { return false }
-            guard let progressFraction = insight.progressFraction else { return false }
-            return progressFraction >= 1
+            return insight.isCompleteEnoughToHide
         }
 
         guard !eligibleInsights.isEmpty else { return }
@@ -1500,6 +1507,18 @@ struct WorkoutsView: View {
 private struct StandardWorkoutPlanSaveError: Identifiable {
     let id = UUID()
     let message: String
+}
+
+private extension WorkoutGoalInsight {
+    var isCompleteEnoughToHide: Bool {
+        if goal.status == .completed {
+            return true
+        }
+        guard let progressFraction else {
+            return false
+        }
+        return progressFraction >= 1
+    }
 }
 
 // MARK: - Preview

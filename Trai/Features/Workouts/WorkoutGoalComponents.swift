@@ -1248,7 +1248,7 @@ struct WorkoutGoalsOverviewSection: View {
             HStack(spacing: 10) {
                 ForEach(insights.prefix(5)) { insight in
                     featuredGoalCard(insight)
-                        .frame(width: 260)
+                        .frame(width: 252)
                 }
             }
             .scrollTargetLayout()
@@ -1258,53 +1258,61 @@ struct WorkoutGoalsOverviewSection: View {
     }
 
     private func featuredGoalCard(_ insight: WorkoutGoalInsight) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
                 Image(systemName: insight.goal.goalKind.iconName)
-                    .font(.headline)
-                    .foregroundStyle(insight.goal.status == .completed ? .green : TraiColors.flame)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        (insight.goal.status == .completed ? Color.green.opacity(0.12) : TraiColors.flame.opacity(0.12)),
-                        in: RoundedRectangle(cornerRadius: 12)
-                    )
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(insight.goal.trimmedTitle)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.leading)
-
-                    Text(insight.progressText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2)
-                }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(TraiColors.flame)
+                    .frame(width: 32, height: 32)
+                    .background(TraiColors.flame.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
 
                 Spacer(minLength: 0)
+
+                Text(insight.goal.scopeSummary)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color(.quaternarySystemFill), in: Capsule())
             }
+
+            Text(insight.goal.trimmedTitle)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.leading)
+                .lineLimit(2)
+                .frame(minHeight: 38, alignment: .topLeading)
+
+            Text(goalValueText(for: insight))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TraiColors.flame)
+                .lineLimit(1)
 
             if let progressFraction = insight.progressFraction {
                 ProgressView(value: progressFraction)
-                    .tint(insight.goal.status == .completed ? .green : TraiColors.flame)
+                    .tint(TraiColors.flame)
             }
+
+            Spacer(minLength: 0)
 
             if insight.goal.goalKind == .milestone {
                 Button {
                     onToggleCompletion(insight.goal)
                 } label: {
-                    Label(
-                        insight.goal.status == .completed ? "Completed" : "Mark Done",
-                        systemImage: insight.goal.status == .completed ? "checkmark.circle.fill" : "circle"
-                    )
+                    Label("Mark Done", systemImage: "circle")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(insight.goal.status == .completed ? .green : .secondary)
+                    .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+            } else {
+                Text("Tap for details")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.tertiary)
             }
         }
-        .padding(14)
+        .padding(12)
+        .frame(height: 164)
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
         .contentShape(RoundedRectangle(cornerRadius: 14))
         .onTapGesture {
@@ -1314,6 +1322,16 @@ struct WorkoutGoalsOverviewSection: View {
         .accessibilityAction {
             onGoalTap(insight.goal)
         }
+    }
+
+    private func goalValueText(for insight: WorkoutGoalInsight) -> String {
+        if let currentValue = insight.currentValueText, let targetValue = insight.targetValueText {
+            return "\(currentValue) of \(targetValue)"
+        }
+        if let targetValue = insight.targetValueText {
+            return "Target \(targetValue)"
+        }
+        return insight.progressText
     }
 
     private func staleCheckInCard(_ goal: WorkoutGoal) -> some View {
