@@ -87,6 +87,8 @@ struct DashboardView: View {
     private var cachedActivationHasHealthAccess = false
     @AppStorage("dashboardActivationChecklistHasReminders")
     private var cachedActivationHasReminders = false
+    @AppStorage("dashboardActivationChecklistDismissed")
+    private var hasDismissedActivationChecklist = false
 
     // Workout sheet state
     @State private var showingWorkoutSheet = false
@@ -274,7 +276,7 @@ struct DashboardView: View {
     }
 
     private var shouldShowActivationChecklist: Bool {
-        guard hasSettledActivationChecklistState, isViewingToday, profile != nil else { return false }
+        guard !hasDismissedActivationChecklist, hasSettledActivationChecklistState, isViewingToday, profile != nil else { return false }
         return !hasLoggedFood || !hasWorkoutPlan || !hasHealthAccessForActivationChecklist || !hasReminderSetup
     }
 
@@ -871,7 +873,8 @@ struct DashboardView: View {
                     onLogFood: { openFoodCameraFromDashboard(source: "onboarding_checklist_log_food") },
                     onCreateWorkoutPlan: openWorkoutPlanSetupFromActivationChecklist,
                     onConnectHealth: connectHealthFromActivationChecklist,
-                    onSetReminders: { reminderComposerSeed = .blank }
+                    onSetReminders: { reminderComposerSeed = .blank },
+                    onDismiss: { hasDismissedActivationChecklist = true }
                 )
                 .traiEntrance(index: 2)
             }
@@ -1997,10 +2000,11 @@ private struct OnboardingActivationChecklistCard: View {
     let onCreateWorkoutPlan: () -> Void
     let onConnectHealth: () -> Void
     let onSetReminders: () -> Void
+    let onDismiss: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
+            HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Finish setting up Trai")
                         .font(.headline)
@@ -2012,36 +2016,51 @@ private struct OnboardingActivationChecklistCard: View {
                 Spacer()
 
                 ActivationChecklistProgressView(completedCount: completedCount, totalCount: 4)
+
+                Button("Dismiss", systemImage: "xmark") {
+                    onDismiss()
+                }
+                .labelStyle(.iconOnly)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss setup checklist")
             }
 
             VStack(spacing: 10) {
-                checklistRow(
-                    title: "Log your first meal",
-                    icon: "camera.fill",
-                    isComplete: hasLoggedFood,
-                    action: onLogFood
-                )
+                if !hasLoggedFood {
+                    checklistRow(
+                        title: "Log your first meal",
+                        icon: "camera.fill",
+                        action: onLogFood
+                    )
+                }
 
-                checklistRow(
-                    title: "Create a workout plan",
-                    icon: "figure.strengthtraining.traditional",
-                    isComplete: hasWorkoutPlan,
-                    action: onCreateWorkoutPlan
-                )
+                if !hasWorkoutPlan {
+                    checklistRow(
+                        title: "Create a workout plan",
+                        icon: "figure.strengthtraining.traditional",
+                        action: onCreateWorkoutPlan
+                    )
+                }
 
-                checklistRow(
-                    title: "Connect Apple Health",
-                    icon: "heart.fill",
-                    isComplete: hasHealthAccess,
-                    action: onConnectHealth
-                )
+                if !hasHealthAccess {
+                    checklistRow(
+                        title: "Connect Apple Health",
+                        icon: "heart.fill",
+                        action: onConnectHealth
+                    )
+                }
 
-                checklistRow(
-                    title: "Set reminders",
-                    icon: "bell.badge.fill",
-                    isComplete: hasReminders,
-                    action: onSetReminders
-                )
+                if !hasReminders {
+                    checklistRow(
+                        title: "Set reminders",
+                        icon: "bell.badge.fill",
+                        action: onSetReminders
+                    )
+                }
             }
 
             if let healthError, !healthError.isEmpty {
@@ -2061,17 +2080,16 @@ private struct OnboardingActivationChecklistCard: View {
     private func checklistRow(
         title: String,
         icon: String,
-        isComplete: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: isComplete ? {} : action) {
+        Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: isComplete ? "checkmark.circle.fill" : icon)
+                Image(systemName: icon)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(isComplete ? .green : .accent)
+                    .foregroundStyle(.accent)
                     .frame(width: 32, height: 32)
                     .background(
-                        (isComplete ? Color.green : Color.accentColor).opacity(0.12),
+                        Color.accentColor.opacity(0.12),
                         in: Circle()
                     )
 
@@ -2081,17 +2099,14 @@ private struct OnboardingActivationChecklistCard: View {
 
                 Spacer()
 
-                if !isComplete {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.tertiary)
-                }
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.tertiary)
             }
             .padding(12)
             .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
-        .disabled(isComplete)
     }
 }
 

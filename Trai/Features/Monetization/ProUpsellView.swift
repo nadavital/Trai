@@ -7,6 +7,7 @@ enum ProUpsellSource: String, Identifiable {
     case workoutPlan
     case workoutReview
     case exerciseAnalysis
+    case reminders
     case settings
 
     var id: String { rawValue }

@@ -105,6 +105,15 @@ extension ProUpsellSource {
                 inlineMessage: "Get instant exercise guidance, smarter setup help, and faster analysis when adding new movements.",
                 inlineIconName: "dumbbell.fill"
             )
+        case .reminders:
+            return ProUpsellContent(
+                headline: "Let Trai remember with you",
+                tagline: "Ask for the nudge you want and Trai drafts the reminder.",
+                modules: [coachSuggestions, nutritionPlan, fitnessPlan, photoLogging],
+                inlineTitle: "Unlock AI reminder setup",
+                inlineMessage: "Tell Trai what you want to remember and it will draft the title, timing, and repeat days for you.",
+                inlineIconName: "bell.badge.fill"
+            )
         case .settings:
             return ProUpsellContent(
                 headline: "Upgrade to Trai Pro",

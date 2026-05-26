@@ -100,11 +100,13 @@ struct ReminderQuickSetupSheet: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        ForEach(messages) { message in
-                            messageView(message)
+                        if canAccessReminderAI || editingCustomReminder != nil {
+                            ForEach(messages) { message in
+                                messageView(message)
+                            }
                         }
 
-                        if !canAccessReminderAI {
+                        if !canAccessReminderAI, editingCustomReminder == nil {
                             manualUpsellCard
                         } else if isGeneratingReminder {
                             ThinkingIndicator(activity: "Creating reminder...")
@@ -196,10 +198,22 @@ struct ReminderQuickSetupSheet: View {
 
     private var presetSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TraiAssistantTextMessage(
-                text: "Presets",
-                font: .subheadline.weight(.semibold)
-            )
+            if canAccessReminderAI {
+                TraiAssistantTextMessage(
+                    text: "Presets",
+                    font: .subheadline.weight(.semibold)
+                )
+            } else {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Presets")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Text(Self.manualIntroMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             LazyVGrid(
                 columns: [
@@ -247,14 +261,12 @@ struct ReminderQuickSetupSheet: View {
 
     private var manualUpsellCard: some View {
         ProUpsellInlineCard(
-            source: .chat,
-            title: "Create reminders with Trai",
-            message: "Tell Trai what you want and it will draft the title, time, and repeat days for you.",
+            source: .reminders,
             systemImage: "bell.badge.fill",
-            actionTitle: "Unlock Trai AI",
+            actionTitle: "Unlock Trai Pro",
             showsShadow: false
         ) {
-            proUpsellCoordinator?.present(source: .chat)
+            proUpsellCoordinator?.present(source: .reminders)
         }
     }
 
