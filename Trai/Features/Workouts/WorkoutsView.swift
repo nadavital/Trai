@@ -1517,7 +1517,7 @@ private extension WorkoutGoalInsight {
         guard let progressFraction else {
             return false
         }
-        return progressFraction >= 1
+        return progressFraction >= 0.995
     }
 }
 

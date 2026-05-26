@@ -514,10 +514,10 @@ enum WorkoutGoalProgressResolver {
         let progressFraction: Double?
         if goal.status == .completed {
             progressFraction = 1.0
+        } else if let current = currentDisplayValue, goal.goalKind == .weight, current >= targetValue * 0.995 {
+            progressFraction = 1.0
         } else if let current = currentDisplayValue, let baseline = effectiveBaseline, targetValue != baseline {
             progressFraction = min(max((current - baseline) / (targetValue - baseline), 0), 1)
-        } else if let current = currentDisplayValue, goal.goalKind == .weight, current >= targetValue {
-            progressFraction = 1.0
         } else if let current = currentDisplayValue,
                   goal.goalKind == .duration || goal.goalKind == .distance || goal.goalKind == .count {
             progressFraction = min(max(current / targetValue, 0), 1)
@@ -1248,7 +1248,7 @@ struct WorkoutGoalsOverviewSection: View {
             HStack(spacing: 10) {
                 ForEach(insights.prefix(5)) { insight in
                     featuredGoalCard(insight)
-                        .frame(width: 252)
+                        .frame(width: 150)
                 }
             }
             .scrollTargetLayout()
@@ -1258,61 +1258,35 @@ struct WorkoutGoalsOverviewSection: View {
     }
 
     private func featuredGoalCard(_ insight: WorkoutGoalInsight) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                Image(systemName: insight.goal.goalKind.iconName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(TraiColors.flame)
-                    .frame(width: 32, height: 32)
-                    .background(TraiColors.flame.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-
-                Spacer(minLength: 0)
-
-                Text(insight.goal.scopeSummary)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(Color(.quaternarySystemFill), in: Capsule())
-            }
+        VStack(spacing: 9) {
+            GoalProgressRing(
+                progress: insight.progressFraction,
+                iconName: insight.goal.goalKind.iconName,
+                color: TraiColors.flame
+            )
 
             Text(insight.goal.trimmedTitle)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.leading)
-                .lineLimit(2)
-                .frame(minHeight: 38, alignment: .topLeading)
-
-            Text(goalValueText(for: insight))
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(TraiColors.flame)
-                .lineLimit(1)
-
-            if let progressFraction = insight.progressFraction {
-                ProgressView(value: progressFraction)
-                    .tint(TraiColors.flame)
-            }
-
-            Spacer(minLength: 0)
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
 
             if insight.goal.goalKind == .milestone {
                 Button {
                     onToggleCompletion(insight.goal)
                 } label: {
-                    Label("Mark Done", systemImage: "circle")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    Image(systemName: "circle")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-            } else {
-                Text("Tap for details")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.tertiary)
             }
         }
-        .padding(12)
-        .frame(height: 164)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 13)
+        .padding(.horizontal, 10)
+        .frame(height: 126)
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
         .contentShape(RoundedRectangle(cornerRadius: 14))
         .onTapGesture {
@@ -1322,16 +1296,6 @@ struct WorkoutGoalsOverviewSection: View {
         .accessibilityAction {
             onGoalTap(insight.goal)
         }
-    }
-
-    private func goalValueText(for insight: WorkoutGoalInsight) -> String {
-        if let currentValue = insight.currentValueText, let targetValue = insight.targetValueText {
-            return "\(currentValue) of \(targetValue)"
-        }
-        if let targetValue = insight.targetValueText {
-            return "Target \(targetValue)"
-        }
-        return insight.progressText
     }
 
     private func staleCheckInCard(_ goal: WorkoutGoal) -> some View {
@@ -1449,6 +1413,38 @@ struct WorkoutGoalsOverviewSection: View {
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
     }
 
+}
+
+private struct GoalProgressRing: View {
+    let progress: Double?
+    let iconName: String
+    let color: Color
+
+    private var clampedProgress: Double {
+        min(max(progress ?? 0, 0), 1)
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color(.quaternarySystemFill), lineWidth: 5)
+
+            Circle()
+                .trim(from: 0, to: clampedProgress)
+                .stroke(
+                    color,
+                    style: StrokeStyle(lineWidth: 5, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+
+            Image(systemName: iconName)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(color)
+        }
+        .frame(width: 52, height: 52)
+        .accessibilityLabel("Goal progress")
+        .accessibilityValue(progress.map { "\((Int(($0 * 100).rounded()))) percent" } ?? "Not started")
+    }
 }
 
 private struct ActivityItem: Identifiable {
