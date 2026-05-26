@@ -166,11 +166,13 @@ struct WorkoutGoalAISheet: View {
                 .traiSheetBranding()
         }
         .sheet(item: $selectedSuggestionForDetail) { suggestion in
-            WorkoutGoalSuggestionDetailSheet(
-                suggestion: suggestion,
-                isSelected: selectedSuggestionIDs.contains(suggestion.id),
-                onToggle: { toggleSuggestion(suggestion) },
-                onDone: { selectedSuggestionForDetail = nil }
+            GeneratedWorkoutGoalDetailSheet(
+                goal: suggestion.asWorkoutGoal(),
+                rationale: suggestion.rationale,
+                selection: .init(
+                    isSelected: selectedSuggestionIDs.contains(suggestion.id),
+                    onToggle: { toggleSuggestion(suggestion) }
+                )
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
@@ -254,33 +256,25 @@ struct WorkoutGoalAISheet: View {
     }
 
     private var generatedGoalsMessage: some View {
-        HStack(alignment: .top, spacing: 10) {
-            TraiLensView(size: 32, state: .answering, palette: .energy)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("I’d track these.")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-
+        VStack(alignment: .leading, spacing: 10) {
+            GeneratedWorkoutGoalsCardContainer(title: "Goals Trai will track") {
                 VStack(spacing: 8) {
                     ForEach(suggestions) { suggestion in
-                        WorkoutGoalSuggestionCard(
-                            suggestion: suggestion,
+                        SelectableGeneratedWorkoutGoalRow(
+                            goal: suggestion.asWorkoutGoal(),
                             isSelected: selectedSuggestionIDs.contains(suggestion.id),
-                            onToggle: { toggleSuggestion(suggestion) },
-                            onDetails: { selectedSuggestionForDetail = suggestion }
+                            onSelect: { selectedSuggestionForDetail = suggestion },
+                            onToggle: { toggleSuggestion(suggestion) }
                         )
                     }
                 }
-
-                Button("Regenerate", systemImage: "arrow.clockwise") {
-                    Task { await generateSuggestions() }
-                }
-                .font(.caption.weight(.semibold))
-                .buttonStyle(.traiTertiary(size: .compact, height: 32))
             }
-            .padding(12)
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+
+            Button("Regenerate", systemImage: "arrow.clockwise") {
+                Task { await generateSuggestions() }
+            }
+            .font(.caption.weight(.semibold))
+            .buttonStyle(.traiTertiary(size: .compact, height: 32))
         }
     }
 
@@ -349,237 +343,5 @@ struct WorkoutGoalAISheet: View {
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
         }
-    }
-}
-
-private struct WorkoutGoalSuggestionCard: View {
-    let suggestion: WorkoutGoalSuggestion
-    let isSelected: Bool
-    let onToggle: () -> Void
-    let onDetails: () -> Void
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Button(action: onDetails) {
-                HStack(alignment: .center, spacing: 10) {
-                    Image(systemName: suggestion.goalKind.iconName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.accent)
-                        .frame(width: 28, height: 28)
-                        .background(
-                            Color.accentColor.opacity(isSelected ? 0.18 : 0.1),
-                            in: Circle()
-                        )
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(suggestion.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .lineLimit(2)
-
-                        Text(suggestion.compactDetailText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-
-            Button(action: onToggle) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.45))
-                    .frame(width: 34, height: 34)
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isSelected ? "Remove goal" : "Select goal")
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            isSelected ? Color.accentColor.opacity(0.08) : Color(.tertiarySystemFill).opacity(0.55),
-            in: RoundedRectangle(cornerRadius: 13, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .stroke(isSelected ? Color.accentColor.opacity(0.22) : Color.clear, lineWidth: 1)
-        }
-    }
-}
-
-private struct WorkoutGoalSuggestionDetailSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let suggestion: WorkoutGoalSuggestion
-    let isSelected: Bool
-    let onToggle: () -> Void
-    let onDone: () -> Void
-
-    private var goal: WorkoutGoal {
-        suggestion.asWorkoutGoal()
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    headerCard
-                    detailCard
-                    selectionButton
-                }
-                .padding()
-            }
-            .navigationTitle("Goal")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", systemImage: "checkmark") {
-                        onDone()
-                        dismiss()
-                    }
-                    .labelStyle(.iconOnly)
-                    .tint(.accentColor)
-                }
-            }
-        }
-    }
-
-    private var headerCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: goal.goalKind.iconName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.accent)
-                    .frame(width: 34, height: 34)
-                    .background(Color.accentColor.opacity(0.12), in: Circle())
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(goal.title)
-                        .font(.headline.weight(.bold))
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if let trackingSummary = goal.trackingSummary {
-                        Text(trackingSummary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            if !suggestion.rationale.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(suggestion.rationale)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16, style: .continuous))
-    }
-
-    private var detailCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if !goal.trimmedSuccessCriteria.isEmpty {
-                goalDetailRow(
-                    title: "How Trai verifies it",
-                    value: goal.trimmedSuccessCriteria,
-                    icon: "checkmark.seal.fill"
-                )
-            }
-
-            if let supportingSummary = goal.supportingSummary, supportingSummary != goal.trimmedSuccessCriteria {
-                goalDetailRow(
-                    title: "Notes",
-                    value: supportingSummary,
-                    icon: "text.bubble.fill"
-                )
-            }
-
-            goalDetailRow(
-                title: "Scope",
-                value: goal.scopeSummary,
-                icon: "scope"
-            )
-
-            if let horizonSummary = goal.horizonSummary, !horizonSummary.isEmpty {
-                goalDetailRow(
-                    title: "Timeline",
-                    value: horizonSummary,
-                    icon: "calendar"
-                )
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16, style: .continuous))
-    }
-
-    private var selectionButton: some View {
-        Group {
-            if isSelected {
-                Button {
-                    onToggle()
-                } label: {
-                    Label("Selected", systemImage: "checkmark.circle.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.traiSecondary(color: Color.accentColor, fullWidth: true))
-            } else {
-                Button {
-                    onToggle()
-                } label: {
-                    Label("Add Goal", systemImage: "plus.circle.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.traiPrimary(fullWidth: true))
-            }
-        }
-    }
-
-    private func goalDetailRow(title: String, value: String, icon: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.accent)
-                .frame(width: 20)
-                .padding(.top, 2)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Text(value)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-}
-
-private extension WorkoutGoalSuggestion {
-    var compactDetailText: String {
-        let goal = asWorkoutGoal()
-        let trackingSummary = goal.trackingSummary
-        let supportingSummary = goal.supportingSummary
-        return [
-            trackingSummary,
-            goal.scopeSummary,
-            supportingSummary == trackingSummary ? nil : supportingSummary,
-            goal.horizonSummary
-        ]
-        .compactMap { $0 }
-        .filter { !$0.isEmpty }
-        .joined(separator: " • ")
     }
 }

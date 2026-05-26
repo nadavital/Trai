@@ -415,75 +415,14 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private func generatedGoalsCard(_ goals: [WorkoutGoal]) -> some View {
-        VStack(alignment: .leading, spacing: isOnboarding ? 8 : 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "flag.checkered")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.accent)
-
-                Text(isOnboarding ? "Goals" : "Goals Trai will track")
-                    .font(.subheadline.weight(.bold))
-
-                Spacer(minLength: 0)
-            }
-
-            VStack(spacing: 8) {
-                ForEach(goals.prefix(2), id: \.id) { goal in
-                    generatedGoalRow(goal)
-                }
-            }
-        }
-        .padding(isOnboarding ? 12 : 14)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.accentColor.opacity(0.22), lineWidth: 1)
-        }
-    }
-
-    private func generatedGoalRow(_ goal: WorkoutGoal) -> some View {
-        Button {
-            HapticManager.lightTap()
+        GeneratedWorkoutGoalsCard(
+            goals: goals,
+            title: isOnboarding ? "Goals" : "Goals Trai will track",
+            isCompact: isOnboarding,
+            maxVisibleGoals: 2
+        ) { goal in
             selectedGeneratedGoal = goal
-        } label: {
-            HStack(alignment: .top, spacing: 10) {
-                if isOnboarding {
-                    Image(systemName: goal.goalKind.iconName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.accent)
-                        .frame(width: 18, height: 18)
-                        .padding(.top, 2)
-                } else {
-                    Image(systemName: goal.goalKind.iconName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.accent)
-                        .frame(width: 28, height: 28)
-                        .background(Color.accentColor.opacity(0.12), in: Circle())
-                }
-
-                VStack(alignment: .leading, spacing: isOnboarding ? 1 : 3) {
-                    Text(goal.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(isOnboarding ? 1 : 2)
-
-                    Text(generatedGoalDetailText(goal))
-                        .font(isOnboarding ? .caption2 : .caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(isOnboarding ? 2 : 2)
-                }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, isOnboarding ? 3 : 7)
-            }
-            .padding(isOnboarding ? 8 : 10)
-            .background(Color(.tertiarySystemFill).opacity(0.55), in: .rect(cornerRadius: 13, style: .continuous))
         }
-        .buttonStyle(.plain)
     }
 
     private func collapsedPlanSummary(_ plan: WorkoutPlan) -> some View {
@@ -553,20 +492,6 @@ struct WorkoutPlanChatFlow: View {
             return false
         }
         return !prompt.isEmpty
-    }
-
-    private func generatedGoalDetailText(_ goal: WorkoutGoal) -> String {
-        let trackingSummary = goal.trackingSummary
-        let supportingSummary = goal.supportingSummary
-        return [
-            trackingSummary,
-            goal.scopeSummary,
-            supportingSummary == trackingSummary ? nil : supportingSummary,
-            goal.horizonSummary
-        ]
-        .compactMap { $0 }
-        .filter { !$0.isEmpty }
-        .joined(separator: " • ")
     }
 
     // MARK: - Current Options View
@@ -1998,121 +1923,6 @@ struct WorkoutPlanChatFlow: View {
             proxy.scrollTo("bottomAnchor", anchor: .bottom)
         }
     }
-}
-
-private struct GeneratedWorkoutGoalDetailSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let goal: WorkoutGoal
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    headerCard
-                    detailCard
-                }
-                .padding()
-            }
-            .navigationTitle("Goal")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", systemImage: "checkmark") {
-                        dismiss()
-                    }
-                    .labelStyle(.iconOnly)
-                    .tint(.accentColor)
-                }
-            }
-        }
-    }
-
-    private var headerCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: goal.goalKind.iconName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.accent)
-                    .frame(width: 34, height: 34)
-                    .background(Color.accentColor.opacity(0.12), in: Circle())
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(goal.title)
-                        .font(.headline.weight(.bold))
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if let trackingSummary = goal.trackingSummary {
-                        Text(trackingSummary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16, style: .continuous))
-    }
-
-    private var detailCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if !goal.trimmedSuccessCriteria.isEmpty {
-                goalDetailRow(
-                    title: "How Trai verifies it",
-                    value: goal.trimmedSuccessCriteria,
-                    icon: "checkmark.seal.fill"
-                )
-            }
-
-            if let supportingSummary = goal.supportingSummary, supportingSummary != goal.trimmedSuccessCriteria {
-                goalDetailRow(
-                    title: "Notes",
-                    value: supportingSummary,
-                    icon: "text.bubble.fill"
-                )
-            }
-
-            goalDetailRow(
-                title: "Scope",
-                value: goal.scopeSummary,
-                icon: "scope"
-            )
-
-            if let horizonSummary = goal.horizonSummary, !horizonSummary.isEmpty {
-                goalDetailRow(
-                    title: "Timeline",
-                    value: horizonSummary,
-                    icon: "calendar"
-                )
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16, style: .continuous))
-    }
-
-    private func goalDetailRow(title: String, value: String, icon: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.accent)
-                .frame(width: 20)
-                .padding(.top, 2)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Text(value)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
 }
 
 private struct WorkoutPlanChatFlowSaveError: Identifiable {
