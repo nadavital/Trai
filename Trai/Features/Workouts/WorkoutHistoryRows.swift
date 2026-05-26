@@ -29,7 +29,7 @@ struct WorkoutHistoryInsightBadges: View {
             HStack(spacing: 6) {
                 if matchedGoalCount > 0 {
                     Label(
-                        matchedGoalCount == 1 ? "Goal linked" : "\(matchedGoalCount) goals",
+                        matchedGoalCount == 1 ? "Goal" : "\(matchedGoalCount) goals",
                         systemImage: "scope"
                     )
                     .foregroundStyle(Color.accentColor)

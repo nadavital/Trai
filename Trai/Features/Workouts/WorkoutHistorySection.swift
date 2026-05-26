@@ -85,24 +85,31 @@ struct WorkoutHistorySection: View {
             if previewItems.isEmpty {
                 EmptyWorkoutHistory()
             } else {
-                VStack(spacing: 8) {
-                    ForEach(previewItems) { item in
-                        switch item {
-                        case .live(let workout):
-                            CompactLiveWorkoutRow(
-                                workout: workout,
-                                onTap: { onLiveWorkoutTap(workout) },
-                                onDelete: { onDeleteLiveWorkout(workout) }
-                            )
-                        case .session(let workout):
-                            CompactWorkoutSessionRow(
-                                workout: workout,
-                                onTap: { onWorkoutTap(workout) },
-                                onDelete: { onDelete(workout) }
-                            )
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(previewItems) { item in
+                            switch item {
+                            case .live(let workout):
+                                CompactLiveWorkoutRow(
+                                    workout: workout,
+                                    onTap: { onLiveWorkoutTap(workout) },
+                                    onDelete: { onDeleteLiveWorkout(workout) }
+                                )
+                                .frame(width: 265)
+                            case .session(let workout):
+                                CompactWorkoutSessionRow(
+                                    workout: workout,
+                                    onTap: { onWorkoutTap(workout) },
+                                    onDelete: { onDelete(workout) }
+                                )
+                                .frame(width: 265)
+                            }
                         }
                     }
+                    .scrollTargetLayout()
                 }
+                .scrollTargetBehavior(.viewAligned)
+                .contentMargins(.horizontal, 1, for: .scrollContent)
             }
         }
         .traiCard()

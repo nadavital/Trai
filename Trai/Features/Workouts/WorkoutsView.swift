@@ -368,6 +368,7 @@ struct WorkoutsView: View {
                 schedulePendingRefreshesIfNeeded()
                 scheduleCloudKitHistoryReconciliationIfNeeded()
                 consumePendingWorkoutPlanSetupRequest()
+                autoCompleteEligibleGoalsIfNeeded()
             }
             .onChange(of: pendingWorkoutPlanSetupRequest) { _, _ in
                 consumePendingWorkoutPlanSetupRequest()
@@ -993,15 +994,23 @@ struct WorkoutsView: View {
             return progressFraction >= 1
         }
 
-        guard let firstEligible = eligibleInsights.first else { return }
-        let goal = firstEligible.goal
-        guard goal.lastCelebratedAt == nil else { return }
+        guard !eligibleInsights.isEmpty else { return }
 
-        goal.markCompleted()
-        goal.markCelebrated()
-        presentCompletedGoalCelebration(goal)
+        var goalToCelebrate: WorkoutGoal?
+        for insight in eligibleInsights {
+            let goal = insight.goal
+            if goal.lastCelebratedAt == nil, goalToCelebrate == nil {
+                goalToCelebrate = goal
+            }
+            goal.markCompleted()
+            goal.markCelebrated()
+        }
+
+        if let goalToCelebrate {
+            presentCompletedGoalCelebration(goalToCelebrate)
+            HapticManager.success()
+        }
         try? modelContext.save()
-        HapticManager.success()
     }
 
     private func presentCompletedGoalCelebration(_ goal: WorkoutGoal) {
