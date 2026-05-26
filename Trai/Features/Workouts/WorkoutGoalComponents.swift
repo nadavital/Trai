@@ -2065,6 +2065,15 @@ struct WorkoutGoalDetailSheet: View {
     }
 }
 
+private extension WorkoutGoal {
+    var hasUserEditableActivityScope: Bool {
+        trimmedActivityName != nil
+            || !linkedActivityTags.isEmpty
+            || linkedActivityKind != nil
+            || linkedActivityRole != nil
+    }
+}
+
 struct AddWorkoutGoalSheet: View {
     private enum GoalScope: String, CaseIterable, Identifiable {
         case session
@@ -2100,6 +2109,10 @@ struct AddWorkoutGoalSheet: View {
     let prefersMetricWeight: Bool
     let onSave: (WorkoutGoal) -> Bool
     private let editingGoal: WorkoutGoal?
+    private let editingOriginalGeneratedPlanTemplateIDs: [UUID]
+    private let editingOriginalGeneratedPlanBlockIDs: [UUID]
+    private let editingOriginalTracksGeneratedPlanAdherence: Bool
+    private let editingOriginalRequiresGeneratedPlanBlockScope: Bool
 
     @State private var title = ""
     @State private var goalKind: WorkoutGoal.GoalKind = .milestone
@@ -2131,6 +2144,10 @@ struct AddWorkoutGoalSheet: View {
         self.prefersMetricWeight = prefersMetricWeight
         self.onSave = onSave
         self.editingGoal = nil
+        self.editingOriginalGeneratedPlanTemplateIDs = []
+        self.editingOriginalGeneratedPlanBlockIDs = []
+        self.editingOriginalTracksGeneratedPlanAdherence = false
+        self.editingOriginalRequiresGeneratedPlanBlockScope = false
         _selectedWorkoutType = State(initialValue: workoutType ?? .custom)
         _targetUnit = State(initialValue: Self.defaultUnit(for: .milestone, prefersMetricWeight: prefersMetricWeight))
     }
@@ -2147,9 +2164,13 @@ struct AddWorkoutGoalSheet: View {
         self.prefersMetricWeight = prefersMetricWeight
         self.onSave = onSave
         self.editingGoal = existing
+        self.editingOriginalGeneratedPlanTemplateIDs = existing.generatedPlanTemplateIDs
+        self.editingOriginalGeneratedPlanBlockIDs = existing.generatedPlanBlockIDs
+        self.editingOriginalTracksGeneratedPlanAdherence = existing.tracksGeneratedPlanAdherence
+        self.editingOriginalRequiresGeneratedPlanBlockScope = existing.requiresGeneratedPlanBlockScope
         _title = State(initialValue: existing.title)
         _goalKind = State(initialValue: existing.goalKind)
-        _scope = State(initialValue: existing.hasActivityScope ? .activity : .session)
+        _scope = State(initialValue: existing.hasUserEditableActivityScope ? .activity : .session)
         _selectedWorkoutType = State(initialValue: existing.linkedWorkoutType ?? .custom)
         _activityName = State(initialValue: existing.linkedActivityName ?? "")
         _activityTagsText = State(initialValue: existing.linkedActivityTags.joined(separator: ", "))
@@ -2403,17 +2424,28 @@ struct AddWorkoutGoalSheet: View {
                         let baseline = goalKind == .weight
                             ? Double(baselineValueText.trimmingCharacters(in: .whitespacesAndNewlines))
                             : nil
+                        let preservesGeneratedPlanScope = editingOriginalTracksGeneratedPlanAdherence
+                            || !editingOriginalGeneratedPlanTemplateIDs.isEmpty
+                            || !editingOriginalGeneratedPlanBlockIDs.isEmpty
 
                         if let existing = editingGoal {
                             existing.title = trimmedTitle
                             existing.goalKindRaw = goalKind.rawValue
-                            existing.linkedWorkoutTypeRaw = selectedWorkoutType.rawValue
-                            existing.linkedActivityName = scope == .activity
-                                ? activityName.trimmingCharacters(in: .whitespacesAndNewlines)
-                                : nil
-                            existing.linkedActivityTags = scope == .activity ? parsedActivityTags : []
-                            existing.linkedActivityKind = nil
-                            existing.linkedActivityRole = scope == .activity ? selectedActivityRole : nil
+                            if preservesGeneratedPlanScope {
+                                existing.linkedWorkoutTypeRaw = nil
+                                existing.linkedActivityName = nil
+                                existing.linkedActivityTags = []
+                                existing.linkedActivityKind = nil
+                                existing.linkedActivityRole = nil
+                            } else {
+                                existing.linkedWorkoutTypeRaw = selectedWorkoutType.rawValue
+                                existing.linkedActivityName = scope == .activity
+                                    ? activityName.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    : nil
+                                existing.linkedActivityTags = scope == .activity ? parsedActivityTags : []
+                                existing.linkedActivityKind = nil
+                                existing.linkedActivityRole = scope == .activity ? selectedActivityRole : nil
+                            }
                             existing.targetValue = goalKind.supportsNumericTarget
                                 ? Double(targetValueText.trimmingCharacters(in: .whitespacesAndNewlines))
                                 : nil
@@ -2427,10 +2459,10 @@ struct AddWorkoutGoalSheet: View {
                             existing.targetDate = targetDateEnabled ? targetDate : nil
                             existing.checkInCadenceDays = Int(checkInCadenceDaysText.trimmingCharacters(in: .whitespacesAndNewlines))
                             existing.baselineValue = baseline
-                            existing.tracksGeneratedPlanAdherence = false
-                            existing.generatedPlanBlockIDs = []
-                            existing.generatedPlanTemplateIDs = []
-                            existing.requiresGeneratedPlanBlockScope = false
+                            existing.tracksGeneratedPlanAdherence = editingOriginalTracksGeneratedPlanAdherence
+                            existing.generatedPlanBlockIDs = editingOriginalGeneratedPlanBlockIDs
+                            existing.generatedPlanTemplateIDs = editingOriginalGeneratedPlanTemplateIDs
+                            existing.requiresGeneratedPlanBlockScope = editingOriginalRequiresGeneratedPlanBlockScope
                             existing.updatedAt = Date()
                             do {
                                 try modelContext.save()

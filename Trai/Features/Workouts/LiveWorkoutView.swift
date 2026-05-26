@@ -620,6 +620,7 @@ struct LiveWorkoutView: View {
                 || viewModel.workout.type == .custom,
             onSelectPlanTarget: { target in
                 viewModel.applyPlanTarget(
+                    sourcePlanTemplateID: target.id,
                     name: target.title,
                     muscles: target.muscles,
                     categories: target.categories,

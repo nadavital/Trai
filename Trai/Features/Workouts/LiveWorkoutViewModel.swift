@@ -1653,6 +1653,7 @@ final class LiveWorkoutViewModel {
     // MARK: - Muscle Groups
 
     func updateMuscleGroups(_ muscles: [LiveWorkout.MuscleGroup]) {
+        workout.sourcePlanTemplateID = nil
         workout.muscleGroups = muscles
         if muscles.isEmpty {
             refreshWorkoutTypeFromTargets()
@@ -1672,6 +1673,7 @@ final class LiveWorkoutViewModel {
     }
 
     func updateActivityTargets(_ categories: [Exercise.Category]) {
+        workout.sourcePlanTemplateID = nil
         let existingFreeformFocus = workout.focusAreas.filter { focus in
             Exercise.Category.allCases.allSatisfy { category in
                 !category.suggestionCategories.contains(where: { matched in
@@ -1691,6 +1693,7 @@ final class LiveWorkoutViewModel {
     }
 
     func updateActivityTypeTargets(_ activityTypes: [String]) {
+        workout.sourcePlanTemplateID = nil
         let cleanedActivityTypes = activityTypes
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -1707,11 +1710,13 @@ final class LiveWorkoutViewModel {
     }
 
     func applyPlanTarget(
+        sourcePlanTemplateID: UUID?,
         name: String,
         muscles: [LiveWorkout.MuscleGroup],
         categories: [Exercise.Category],
         activityTypes: [String] = []
     ) {
+        workout.sourcePlanTemplateID = sourcePlanTemplateID
         workout.name = name
         workout.muscleGroups = muscles
         let categoryFocus = Self.visibleActivityFocusLabels(for: categories)
