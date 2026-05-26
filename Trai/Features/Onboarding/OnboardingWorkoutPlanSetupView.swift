@@ -3500,10 +3500,12 @@ struct OnboardingWorkoutPlanSetupView: View {
                 generationTask = nil
                 generationRequestID = nil
                 generatedPlanForReview = result.plan
-                generatedPlanGoalsForReview = deduplicatedGoals(
+                generatedPlanGoalsForReview = WorkoutGoal.validatedGeneratedPlanGoals(
                     result.goalSuggestions
                         .map { $0.asWorkoutGoal() }
-                        .filter(\.hasValidTrackingCriteria)
+                        .filter(\.hasValidTrackingCriteria),
+                    existingGoals: [],
+                    for: result.plan
                 )
                 generatedPlanUsedFallback = false
                 isGenerating = false

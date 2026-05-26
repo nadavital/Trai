@@ -1156,10 +1156,11 @@ struct WorkoutPlanChatFlow: View {
             presentationID: presentationID
         ) else { return }
 
-        let goalsToShow = deduplicatedGoals(goals.map { goal in
-            goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
-            return goal
-        })
+        let goalsToShow = WorkoutGoal.validatedGeneratedPlanGoals(
+            goals,
+            existingGoals: workoutGoals,
+            for: plan
+        )
         if !goalsToShow.isEmpty {
             guard generatedResultPresentationID == presentationID else { return }
             activeGeneratedPlanGoals = goalsToShow
@@ -1337,7 +1338,7 @@ struct WorkoutPlanChatFlow: View {
     private func finalGeneratedGoals(for plan: WorkoutPlan) async -> [WorkoutGoal] {
         let currentGoals = deduplicatedGeneratedPlanGoals
         guard didRefineGeneratedPlan || currentGoals.isEmpty else {
-            return normalizedGeneratedPlanGoals(currentGoals, for: plan)
+            return validatedGeneratedPlanGoals(currentGoals, for: plan)
         }
 
         do {
@@ -1353,24 +1354,22 @@ struct WorkoutPlanChatFlow: View {
                 userIntent: latestUserRefinementIntent,
                 prefersMetricWeight: userProfile?.usesMetricExerciseWeight ?? true
             )
-            let goals = deduplicatedGoals(suggestions.map { suggestion in
-                let goal = suggestion.asWorkoutGoal()
-                goal.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
-                goal.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan)
-                return goal
-            })
-            return goals.isEmpty ? normalizedGeneratedPlanGoals(currentGoals, for: plan) : goals
+            let goals = validatedGeneratedPlanGoals(
+                suggestions.map { $0.asWorkoutGoal() },
+                for: plan
+            )
+            return goals.isEmpty ? validatedGeneratedPlanGoals(currentGoals, for: plan) : goals
         } catch {
-            return normalizedGeneratedPlanGoals(currentGoals, for: plan)
+            return validatedGeneratedPlanGoals(currentGoals, for: plan)
         }
     }
 
-    private func normalizedGeneratedPlanGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) -> [WorkoutGoal] {
-        goals.forEach {
-            $0.normalizeGeneratedPlanAdherenceScopeIfNeeded(for: plan)
-            $0.normalizeGeneratedPlanBlockScopeIfNeeded(for: plan)
-        }
-        return goals
+    private func validatedGeneratedPlanGoals(_ goals: [WorkoutGoal], for plan: WorkoutPlan) -> [WorkoutGoal] {
+        WorkoutGoal.validatedGeneratedPlanGoals(
+            goals,
+            existingGoals: workoutGoals,
+            for: plan
+        )
     }
 
     private func plannedSessionSummaries(for plan: WorkoutPlan) -> [String] {

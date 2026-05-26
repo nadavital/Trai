@@ -410,6 +410,18 @@ extension WorkoutGoal {
         existingGoals: [WorkoutGoal],
         for plan: WorkoutPlan
     ) -> [WorkoutGoal] {
+        validatedGeneratedPlanGoals(
+            goals,
+            existingGoals: existingGoals,
+            for: plan
+        )
+    }
+
+    static func validatedGeneratedPlanGoals(
+        _ goals: [WorkoutGoal],
+        existingGoals: [WorkoutGoal],
+        for plan: WorkoutPlan
+    ) -> [WorkoutGoal] {
         var existingKeys = Set(existingGoals.map(\.planSetupDeduplicationKey))
         var result: [WorkoutGoal] = []
         for goal in goals {
