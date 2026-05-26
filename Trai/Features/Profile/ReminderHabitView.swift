@@ -11,9 +11,14 @@ import SwiftData
 struct ReminderHabitView: View {
     let reminder: CustomReminder
     @Environment(\.modelContext) private var modelContext
+    @Query private var profiles: [UserProfile]
     @State private var completions: [ReminderCompletion] = []
-    @State private var showEditSheet = false
+    @State private var composerSeed: ReminderComposerSeed?
     @State private var notificationService = NotificationService()
+
+    private var profile: UserProfile {
+        profiles.first ?? UserProfile()
+    }
 
     var body: some View {
         List {
@@ -110,7 +115,7 @@ struct ReminderHabitView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Edit") {
-                    showEditSheet = true
+                    composerSeed = .custom(reminder)
                 }
             }
         }
@@ -120,11 +125,13 @@ struct ReminderHabitView: View {
                 await notificationService.updateAuthorizationStatus()
             }
         }
-        .sheet(isPresented: $showEditSheet) {
-            CustomReminderSheet(reminder: reminder, notificationService: notificationService)
-        }
-        .onChange(of: showEditSheet) { _, isShowing in
-            if !isShowing { fetchCompletions() }
+        .sheet(item: $composerSeed) { seed in
+            ReminderQuickSetupSheet(
+                profile: profile,
+                notificationService: notificationService,
+                seed: seed,
+                onSaved: fetchCompletions
+            )
         }
     }
 

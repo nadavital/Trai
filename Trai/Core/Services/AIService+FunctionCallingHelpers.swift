@@ -46,6 +46,7 @@ extension AIService {
         - Reading and managing workout goals (get_workout_goals, create_workout_goal, update_workout_goal)
         - Logging workouts (log_workout)
         - Checking and logging body weight (get_weight_history, log_weight)
+        - Creating reminder suggestions for user confirmation (create_reminder)
         - Remembering facts about the user (save_memory, delete_memory)
         - Managing temporary short-term context (save_short_term_context, clear_short_term_context)
 

@@ -77,6 +77,7 @@ struct DashboardView: View {
     @State private var showingCalorieDetail = false
     @State private var showingMacroDetail = false
     @State private var entryToEdit: FoodEntry?
+    @State private var reminderComposerSeed: ReminderComposerSeed?
     @State private var activationChecklistHealthError: String?
     @AppStorage("dashboardActivationChecklistHasLoggedFood")
     private var cachedActivationHasLoggedFood = false
@@ -84,6 +85,8 @@ struct DashboardView: View {
     private var cachedActivationHasWorkoutPlan = false
     @AppStorage("dashboardActivationChecklistHasHealthAccess")
     private var cachedActivationHasHealthAccess = false
+    @AppStorage("dashboardActivationChecklistHasReminders")
+    private var cachedActivationHasReminders = false
 
     // Workout sheet state
     @State private var showingWorkoutSheet = false
@@ -258,9 +261,21 @@ struct DashboardView: View {
         cachedActivationHasHealthAccess || healthKitService?.isAuthorized == true
     }
 
+    private var hasReminderSetup: Bool {
+        cachedActivationHasReminders || hasActiveReminderSetup
+    }
+
+    private var hasActiveReminderSetup: Bool {
+        guard let profile else { return !customReminders.filter(\.isEnabled).isEmpty }
+        return profile.mealRemindersEnabled
+            || profile.workoutRemindersEnabled
+            || profile.weightReminderEnabled
+            || customReminders.contains { $0.isEnabled }
+    }
+
     private var shouldShowActivationChecklist: Bool {
         guard hasSettledActivationChecklistState, isViewingToday, profile != nil else { return false }
-        return !hasLoggedFood || !hasWorkoutPlan || !hasHealthAccessForActivationChecklist
+        return !hasLoggedFood || !hasWorkoutPlan || !hasHealthAccessForActivationChecklist || !hasReminderSetup
     }
 
     private var isDashboardTabActive: Bool {
@@ -533,7 +548,7 @@ struct DashboardView: View {
                 .onChange(of: showRemindersBinding) { _, isShowing in
                     // Scroll to reminders section when triggered by notification
                     if isShowing {
-                        if remindersLoaded && !todaysReminderItems.isEmpty {
+                        if remindersLoaded {
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 scrollProxy.scrollTo("reminders-section", anchor: .top)
                             }
@@ -547,10 +562,8 @@ struct DashboardView: View {
                 .onChange(of: remindersLoaded) { _, loaded in
                     // Execute pending scroll after reminders load
                     if loaded && pendingScrollToReminders {
-                        if !todaysReminderItems.isEmpty {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                scrollProxy.scrollTo("reminders-section", anchor: .top)
-                            }
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            scrollProxy.scrollTo("reminders-section", anchor: .top)
                         }
                         // Reset state even if no reminders to scroll to
                         pendingScrollToReminders = false
@@ -744,6 +757,19 @@ struct DashboardView: View {
                 )
                 .traiSheetBranding()
             }
+            .sheet(item: $reminderComposerSeed) { seed in
+                if let profile {
+                    ReminderQuickSetupSheet(
+                        profile: profile,
+                        notificationService: notificationService,
+                        seed: seed,
+                        onSaved: {
+                            fetchCustomReminders()
+                            updateActivationChecklistCompletionCache()
+                        }
+                    )
+                }
+            }
             .sheet(item: $entryToEdit) { entry in
                 EditFoodEntrySheet(entry: entry)
                     .traiSheetBranding()
@@ -786,6 +812,9 @@ struct DashboardView: View {
         }
         if healthKitService?.isAuthorized == true {
             cachedActivationHasHealthAccess = true
+        }
+        if hasActiveReminderSetup {
+            cachedActivationHasReminders = true
         }
     }
 
@@ -837,20 +866,23 @@ struct DashboardView: View {
                     hasLoggedFood: hasLoggedFood,
                     hasWorkoutPlan: hasWorkoutPlan,
                     hasHealthAccess: healthKitService?.isAuthorized == true,
+                    hasReminders: hasReminderSetup,
                     healthError: activationChecklistHealthError,
                     onLogFood: { openFoodCameraFromDashboard(source: "onboarding_checklist_log_food") },
                     onCreateWorkoutPlan: openWorkoutPlanSetupFromActivationChecklist,
-                    onConnectHealth: connectHealthFromActivationChecklist
+                    onConnectHealth: connectHealthFromActivationChecklist,
+                    onSetReminders: { reminderComposerSeed = .blank }
                 )
                 .traiEntrance(index: 2)
             }
 
-            if !todaysReminderItems.isEmpty {
+            if remindersLoaded, !todaysReminderItems.isEmpty {
                 TodaysRemindersCard(
                     reminders: todaysReminderItems,
-                    onReminderTap: { _ in },
+                    hasActiveReminderSetup: hasActiveReminderSetup,
+                    onReminderTap: openReminderComposer,
                     onComplete: completeReminder,
-                    onViewAll: {}
+                    onAdd: { reminderComposerSeed = .blank }
                 )
                 .id("reminders-section")
                 .traiEntrance(index: 3)
@@ -899,6 +931,18 @@ struct DashboardView: View {
             onDeleteEntry: deleteFoodEntry
         )
         .traiEntrance(index: 5)
+
+        if isViewingToday, remindersLoaded, profile != nil, todaysReminderItems.isEmpty {
+            TodaysRemindersCard(
+                reminders: [],
+                hasActiveReminderSetup: hasActiveReminderSetup,
+                onReminderTap: openReminderComposer,
+                onComplete: completeReminder,
+                onAdd: { reminderComposerSeed = .blank }
+            )
+            .id("reminders-section-lower")
+            .traiEntrance(index: 6)
+        }
     }
 
     @ViewBuilder
@@ -914,7 +958,7 @@ struct DashboardView: View {
                 workoutCount: activityCardWorkoutCount,
                 isLoading: activityCardIsLoading
             )
-            .traiEntrance(index: 6)
+            .traiEntrance(index: 7)
         }
 
         if isViewingToday, let latestWeight = weightEntries.first {
@@ -933,7 +977,7 @@ struct DashboardView: View {
                 }
             )
             .buttonStyle(.plain)
-            .traiEntrance(index: 7)
+            .traiEntrance(index: 8)
         }
     }
 
@@ -1461,6 +1505,7 @@ struct DashboardView: View {
                 .filter { $0.completedAt >= startOfDay }
                 .map { $0.reminderId }
         )
+        updateActivationChecklistCompletionCache()
         recordDashboardLatencyProbe(
             "fetchCustomReminders",
             startedAt: startedAt,
@@ -1501,6 +1546,25 @@ struct DashboardView: View {
         reminderCompletionHistory.removeAll { $0.completedAt < start }
         while reminderCompletionHistory.count > reminderCompletionHistoryCapPerWindow {
             reminderCompletionHistory.removeLast()
+        }
+    }
+
+    private func openReminderComposer(_ reminder: TodaysRemindersCard.ReminderItem) {
+        if reminder.isCustom, let customReminder = customReminders.first(where: { $0.id == reminder.id }) {
+            reminderComposerSeed = .custom(customReminder)
+            return
+        }
+
+        if reminder.id == StableUUID.forMeal(MealReminderTime.breakfast.id) {
+            reminderComposerSeed = .preset(.breakfast)
+        } else if reminder.id == StableUUID.forMeal(MealReminderTime.lunch.id) {
+            reminderComposerSeed = .preset(.lunch)
+        } else if reminder.id == StableUUID.forMeal(MealReminderTime.dinner.id) {
+            reminderComposerSeed = .preset(.dinner)
+        } else if reminder.id == StableUUID.forWeightReminder() {
+            reminderComposerSeed = .preset(.weighIn)
+        } else {
+            reminderComposerSeed = .preset(.workout)
         }
     }
 
@@ -1927,10 +1991,12 @@ private struct OnboardingActivationChecklistCard: View {
     let hasLoggedFood: Bool
     let hasWorkoutPlan: Bool
     let hasHealthAccess: Bool
+    let hasReminders: Bool
     let healthError: String?
     let onLogFood: () -> Void
     let onCreateWorkoutPlan: () -> Void
     let onConnectHealth: () -> Void
+    let onSetReminders: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -1945,7 +2011,7 @@ private struct OnboardingActivationChecklistCard: View {
 
                 Spacer()
 
-                ActivationChecklistProgressView(completedCount: completedCount, totalCount: 3)
+                ActivationChecklistProgressView(completedCount: completedCount, totalCount: 4)
             }
 
             VStack(spacing: 10) {
@@ -1969,6 +2035,13 @@ private struct OnboardingActivationChecklistCard: View {
                     isComplete: hasHealthAccess,
                     action: onConnectHealth
                 )
+
+                checklistRow(
+                    title: "Set reminders",
+                    icon: "bell.badge.fill",
+                    isComplete: hasReminders,
+                    action: onSetReminders
+                )
             }
 
             if let healthError, !healthError.isEmpty {
@@ -1982,7 +2055,7 @@ private struct OnboardingActivationChecklistCard: View {
     }
 
     private var completedCount: Int {
-        [hasLoggedFood, hasWorkoutPlan, hasHealthAccess].filter { $0 }.count
+        [hasLoggedFood, hasWorkoutPlan, hasHealthAccess, hasReminders].filter { $0 }.count
     }
 
     private func checklistRow(
