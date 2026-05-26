@@ -195,9 +195,29 @@ struct WorkoutsView: View {
             }
     }
 
+    private var completedWorkoutGoals: [WorkoutGoal] {
+        workoutGoals
+            .filter { $0.status == .completed }
+            .sorted { lhs, rhs in
+                let lhsDate = lhs.completedAt ?? lhs.updatedAt
+                let rhsDate = rhs.completedAt ?? rhs.updatedAt
+                return lhsDate > rhsDate
+            }
+    }
+
     private var workoutGoalInsights: [WorkoutGoalInsight] {
         WorkoutGoalProgressResolver.insights(
             goals: activeWorkoutGoals,
+            workouts: completedLiveWorkouts,
+            sessions: workoutGoalSessions,
+            exerciseHistory: allExerciseHistory,
+            useLbs: !usesMetricExerciseWeight
+        )
+    }
+
+    private var completedWorkoutGoalInsights: [WorkoutGoalInsight] {
+        WorkoutGoalProgressResolver.insights(
+            goals: completedWorkoutGoals,
             workouts: completedLiveWorkouts,
             sessions: workoutGoalSessions,
             exerciseHistory: allExerciseHistory,
@@ -322,6 +342,7 @@ struct WorkoutsView: View {
 
                     WorkoutGoalsOverviewSection(
                         insights: workoutGoalInsights,
+                        completedInsights: completedWorkoutGoalInsights,
                         signals: workoutGoalSignals,
                         celebratedGoal: celebratedWorkoutGoal,
                         canCreateGoalsWithTrai: canAccessAIFeatures,
