@@ -49,7 +49,47 @@ struct ExerciseCard: View {
         let weight = WeightUtility.displayInt(pr.bestSetWeightKg, displayUnit: unit)
         let reps = pr.bestSetReps
 
-        return "PR: \(weight) \(weightUnit) \u{00D7} \(reps)"
+        return "\(weight) \(weightUnit) \u{00D7} \(reps)"
+    }
+
+    @ViewBuilder
+    private func headerMetadata(setsCount: Int) -> some View {
+        ViewThatFits(in: .horizontal) {
+            headerMetadataRow(setsCount: setsCount, includeLastPerformance: true)
+            headerMetadataRow(setsCount: setsCount, includeLastPerformance: false)
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
+    }
+
+    private func headerMetadataRow(setsCount: Int, includeLastPerformance: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text("\(setsCount) sets")
+                .foregroundStyle(.secondary)
+
+            if includeLastPerformance, let lastTime = lastTimeDisplay {
+                metadataSeparator
+                Text(lastTime)
+                    .foregroundStyle(.blue)
+            }
+
+            if let pr = prDisplay {
+                metadataSeparator
+                HStack(spacing: 2) {
+                    Image(systemName: "trophy.fill")
+                        .font(.caption2)
+                    Text("PR \(pr)")
+                }
+                .foregroundStyle(Color.accentColor)
+            }
+        }
+        .font(.caption)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var metadataSeparator: some View {
+        Text("•")
+            .foregroundStyle(.tertiary)
     }
 
     var body: some View {
@@ -81,34 +121,7 @@ struct ExerciseCard: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            HStack(spacing: 8) {
-                                Text("\(sets.count) sets")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-
-                                if let lastTime = lastTimeDisplay {
-                                    Text("•")
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
-                                    Text(lastTime)
-                                        .font(.caption)
-                                        .foregroundStyle(.blue)
-                                }
-
-                                // Show historical PR (live PR detection removed - shown in summary only)
-                                if let pr = prDisplay {
-                                    Text("•")
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
-                                    HStack(spacing: 2) {
-                                        Image(systemName: "trophy.fill")
-                                            .font(.caption2)
-                                        Text(pr)
-                                    }
-                                    .font(.caption)
-                                    .foregroundStyle(Color.accentColor)
-                                }
-                            }
+                            headerMetadata(setsCount: sets.count)
                         }
 
                         Spacer()

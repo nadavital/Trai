@@ -1404,11 +1404,16 @@ struct WorkoutsView: View {
         }
 
         isStartingWorkout = true
+        let shouldUseScreenshotWorkout = AppLaunchArguments.shouldUseAppStoreScreenshotSeed && name == "Custom Workout"
+        let resolvedName = shouldUseScreenshotWorkout ? "Upper Strength" : name
+        let resolvedType: LiveWorkout.WorkoutType = shouldUseScreenshotWorkout ? .strength : type
+        let resolvedMuscles: [LiveWorkout.MuscleGroup] = shouldUseScreenshotWorkout ? [.chest, .back, .shoulders] : muscles
+        let resolvedFocusAreas = shouldUseScreenshotWorkout ? ["Chest", "Back", "Shoulders"] : focusAreas
         let workout = templateService.createCustomWorkout(
-            name: name,
-            type: type,
-            muscles: muscles,
-            focusAreas: focusAreas
+            name: resolvedName,
+            type: resolvedType,
+            muscles: resolvedMuscles,
+            focusAreas: resolvedFocusAreas
         )
         guard templateService.persistWorkout(workout, modelContext: modelContext) else {
             isStartingWorkout = false
@@ -1422,8 +1427,8 @@ struct WorkoutsView: View {
             relatedEntityId: workout.id,
             metadata: [
                 "type": "custom",
-                "workout_type": type.rawValue,
-                "focus_areas": focusAreas.joined(separator: ",")
+                "workout_type": resolvedType.rawValue,
+                "focus_areas": resolvedFocusAreas.joined(separator: ",")
             ]
         )
 

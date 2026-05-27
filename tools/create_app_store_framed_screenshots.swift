@@ -30,59 +30,66 @@ let shots: [Shot] = [
     Shot(
         input: "01-dashboard.png",
         output: "01-hit-your-daily-targets.png",
-        title: "Hit your targets without guessing",
+        title: "Meet Trai, your intelligent fitness coach",
         accent: NSColor(calibratedRed: 1.00, green: 0.29, blue: 0.24, alpha: 1),
         backgroundOffset: 0
     ),
     Shot(
         input: "05-food-capture.png",
         output: "02-log-food-from-a-photo.png",
-        title: "Snap food and get macros fast",
+        title: "Turn food photos into macros",
         accent: NSColor(calibratedRed: 0.98, green: 0.43, blue: 0.22, alpha: 1),
         backgroundOffset: 1
     ),
     Shot(
         input: "06-food-review.png",
         output: "03-review-before-you-log.png",
-        title: "Review macros before logging",
+        title: "Review every detail before logging",
         accent: NSColor(calibratedRed: 0.86, green: 0.18, blue: 0.36, alpha: 1),
         backgroundOffset: 2
     ),
     Shot(
         input: "03-chat.png",
         output: "04-ask-trai-to-plan-the-day.png",
-        title: "Ask Trai to adjust your lift",
+        title: "Ask Trai to adapt your workout",
         accent: NSColor(calibratedRed: 0.16, green: 0.62, blue: 0.38, alpha: 1),
         backgroundOffset: 3
     ),
     Shot(
         input: "07-live-workout.png",
         output: "05-track-every-set-live.png",
-        title: "Ask Trai during live workouts",
+        title: "Track sets and effort live",
         accent: NSColor(calibratedRed: 0.97, green: 0.74, blue: 0.20, alpha: 1),
         backgroundOffset: 4
     ),
     Shot(
         input: "02-workouts.png",
         output: "06-follow-a-plan-that-adapts.png",
-        title: "See Health data with your workouts",
+        title: "Follow a split that fits your week",
         accent: NSColor(calibratedRed: 0.19, green: 0.45, blue: 0.88, alpha: 1),
         backgroundOffset: 5
     ),
     Shot(
         input: "08-plan-chat.png",
         output: "07-let-trai-plan-your-week.png",
-        title: "Let Trai plan your week",
+        title: "Generate plans built around you",
         accent: NSColor(calibratedRed: 0.95, green: 0.32, blue: 0.52, alpha: 1),
         backgroundOffset: 6
+    ),
+    Shot(
+        input: "09-trends.png",
+        output: "08-see-progress-over-time.png",
+        title: "See your progress over time",
+        accent: NSColor(calibratedRed: 0.98, green: 0.58, blue: 0.24, alpha: 1),
+        backgroundOffset: 7
     )
 ]
 
 let profile = RenderProfile(
     outputDirectoryName: "6.9",
     canvasSize: CGSize(width: 1320, height: 2868),
-    deviceFrame: CGRect(x: 145, y: 650, width: 1030, height: 2189),
-    titleRect: CGRect(x: 86, y: 245, width: 1148, height: 300),
+    deviceFrame: CGRect(x: 145, y: 555, width: 1030, height: 2189),
+    titleRect: CGRect(x: 86, y: 150, width: 1148, height: 300),
     titleFontSize: 92
 )
 

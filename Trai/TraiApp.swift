@@ -1030,6 +1030,7 @@ private func seedAppStoreScreenshotDataIfNeeded(modelContainer: ModelContainer) 
     seedScreenshotFoodEntries(context: context, calendar: calendar, today: today)
     seedScreenshotWeightEntries(context: context, calendar: calendar, today: today)
     seedScreenshotWorkouts(context: context, calendar: calendar, today: today)
+    seedScreenshotExerciseHistory(context: context, calendar: calendar, today: today)
     seedScreenshotChat(context: context, sessionId: chatSessionId, now: now)
     seedScreenshotGoalsAndMemory(context: context, now: now)
 
@@ -1152,41 +1153,67 @@ private func seedScreenshotWorkouts(context: ModelContext, calendar: Calendar, t
     ))
 }
 
+private func seedScreenshotExerciseHistory(context: ModelContext, calendar: Calendar, today: Date) {
+    let benchProgress: [(Int, Double, Int)] = [
+        (-42, 70, 5),
+        (-28, 75, 5),
+        (-14, 79, 5),
+        (-1, 84, 5)
+    ]
+
+    for (dayOffset, weightKg, reps) in benchProgress {
+        let entry = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)
+        entry.addSet(.init(reps: reps, weight: .init(kg: weightKg, lbs: weightKg * 2.20462), preferredWeightUnit: .lbs, completed: true))
+        entry.addSet(.init(reps: reps, weight: .init(kg: weightKg - 2.5, lbs: (weightKg - 2.5) * 2.20462), preferredWeightUnit: .lbs, completed: true))
+        entry.addSet(.init(reps: reps - 1, weight: .init(kg: weightKg - 2.5, lbs: (weightKg - 2.5) * 2.20462), preferredWeightUnit: .lbs, completed: true))
+        let performedAt = calendar.date(
+            byAdding: .hour,
+            value: 18,
+            to: calendar.date(byAdding: .day, value: dayOffset, to: today) ?? today
+        ) ?? today
+        context.insert(ExerciseHistory(from: entry, performedAt: performedAt))
+    }
+}
+
 private func seedScreenshotChat(context: ModelContext, sessionId: UUID, now: Date) {
     if AppLaunchArguments.appStoreScreenshotChatScenarioRawValue == "plan" {
         seedScreenshotPlanChat(context: context, sessionId: sessionId, now: now)
         return
     }
+    if AppLaunchArguments.appStoreScreenshotChatScenarioRawValue == "reminder" {
+        seedScreenshotReminderChat(context: context, sessionId: sessionId, now: now)
+        return
+    }
 
     let user = ChatMessage(
-        content: "I'm about to start Upper Strength, but my lower back feels tight. Can you adjust it?",
+        content: "Can you use this instead of barbell rows in today's Upper Strength workout?",
         isFromUser: true,
-        sessionId: sessionId
+        sessionId: sessionId,
+        imageData: screenshotGymMachineImageData()
     )
     user.timestamp = now.addingTimeInterval(-240)
     let coach = ChatMessage(
-        content: "I used your recent recovery notes and today's plan to make the lift more joint-friendly while keeping the strength work on track.",
+        content: "Yes. I identified it as a chest-supported row and rebuilt your session around it, keeping the same back volume while taking stress off your lower back.",
         isFromUser: false,
         sessionId: sessionId
     )
     coach.timestamp = now.addingTimeInterval(-210)
-    let memory = "Prefers lower-back friendly substitutions when squats feel heavy."
     coach.setSuggestedWorkout(SuggestedWorkoutEntry(
-        name: "Adjusted Upper Strength",
+        name: "Updated Upper Strength",
         workoutType: "strength",
-        targetMuscleGroups: ["legs", "back", "chest"],
+        targetMuscleGroups: ["chest", "back", "shoulders"],
         exercises: [
-            .init(name: "Back Squat", sets: 1, reps: 6, weightKg: 84),
-            .init(name: "Chest-Supported Row", sets: 3, reps: 8, weightKg: 45),
-            .init(name: "Incline Dumbbell Press", sets: 3, reps: 10, weightKg: 27)
+            .init(name: "Chest-Supported Row", category: "strength", targetTags: ["back"], trackingFields: ["weight", "reps"], sets: 3, reps: 10, weightKg: 48, notes: "Swapped in from your photo."),
+            .init(name: "Bench Press", category: "strength", targetTags: ["chest"], trackingFields: ["weight", "reps"], sets: 4, reps: 5, weightKg: 84),
+            .init(name: "Incline Press", category: "strength", targetTags: ["chest", "shoulders"], trackingFields: ["weight", "reps"], sets: 3, reps: 8, weightKg: 29)
         ],
-        durationMinutes: 38,
-        rationale: "Adjusted from your plan and saved preferences."
+        durationMinutes: 42,
+        rationale: "Photo-matched swap. Volume preserved."
     ))
     context.insert(user)
     context.insert(coach)
     context.insert(CoachMemory(
-        content: memory,
+        content: "Prefers machine swaps that keep planned workout volume intact.",
         category: .preference,
         topic: .workout,
         source: "app_store_screenshot_seed",
@@ -1194,23 +1221,53 @@ private func seedScreenshotChat(context: ModelContext, sessionId: UUID, now: Dat
     ))
 }
 
-private func seedScreenshotPlanChat(context: ModelContext, sessionId: UUID, now: Date) {
+private func screenshotGymMachineImageData() -> Data? {
+    UIImage(named: "AppStoreGymMachineSample")?.jpegData(compressionQuality: 0.88)
+}
+
+private func seedScreenshotReminderChat(context: ModelContext, sessionId: UUID, now: Date) {
     let user = ChatMessage(
-        content: "Build this week around strength, recovery, and my Friday Zone 2 run.",
+        content: "Remind me to weigh in every weekday before breakfast.",
         isFromUser: true,
         sessionId: sessionId
     )
     user.timestamp = now.addingTimeInterval(-240)
 
     let coach = ChatMessage(
-        content: "I matched your recomp goal, recent workouts, and recovery pattern to a 4-day plan that keeps Friday's run protected.",
+        content: "I drafted that reminder with your weekday schedule.",
+        isFromUser: false,
+        sessionId: sessionId
+    )
+    coach.timestamp = now.addingTimeInterval(-210)
+    coach.setSuggestedReminder(SuggestedReminder(
+        title: "Weigh in",
+        body: "Track your morning weight before breakfast.",
+        hour: 7,
+        minute: 30,
+        repeatDays: "2,3,4,5,6"
+    ))
+
+    context.insert(user)
+    context.insert(coach)
+}
+
+private func seedScreenshotPlanChat(context: ModelContext, sessionId: UUID, now: Date) {
+    let user = ChatMessage(
+        content: "Build me a 4-day plan for strength, lean muscle, and Friday's Zone 2 run.",
+        isFromUser: true,
+        sessionId: sessionId
+    )
+    user.timestamp = now.addingTimeInterval(-240)
+
+    let coach = ChatMessage(
+        content: "Here's a week that balances heavy upper/lower days, recovery, and your recomp targets.",
         isFromUser: false,
         sessionId: sessionId
     )
     coach.timestamp = now.addingTimeInterval(-210)
     coach.setSuggestedWorkoutPlan(WorkoutPlanSuggestionEntry(
         plan: screenshotWorkoutPlan(),
-        message: "4-day strength plan with recovery built in."
+        message: "4-day upper/lower split plus protected conditioning."
     ))
 
     context.insert(user)
@@ -1234,7 +1291,7 @@ private func seedScreenshotGoalsAndMemory(context: ModelContext, now: Date) {
     ))
 }
 
-private func screenshotWorkoutPlan() -> WorkoutPlan {
+func screenshotWorkoutPlan() -> WorkoutPlan {
     WorkoutPlan(
         splitType: .upperLower,
         daysPerWeek: 4,
@@ -1262,8 +1319,39 @@ private func screenshotWorkoutPlan() -> WorkoutPlan {
                 estimatedDurationMinutes: 60,
                 order: 1,
                 notes: "Lower-body strength and posterior-chain focus."
+            ),
+            WorkoutPlan.WorkoutTemplate(
+                name: "Zone 2 Run",
+                sessionType: .cardio,
+                focusAreas: ["Conditioning", "Recovery"],
+                targetMuscleGroups: [],
+                exercises: [
+                    .init(exerciseName: "Zone 2 Run", muscleGroup: "cardio", defaultSets: 1, defaultReps: 1, repRange: "30-40 min", restSeconds: 0, order: 0)
+                ],
+                estimatedDurationMinutes: 36,
+                order: 2,
+                notes: "Protected conditioning day that supports recovery."
+            ),
+            WorkoutPlan.WorkoutTemplate(
+                name: "Upper Hypertrophy",
+                targetMuscleGroups: ["chest", "back", "shoulders", "arms"],
+                exercises: [
+                    .init(exerciseName: "Incline Dumbbell Press", muscleGroup: "chest", defaultSets: 3, defaultReps: 10, repRange: "8-12", restSeconds: 90, order: 0),
+                    .init(exerciseName: "Lat Pulldown", muscleGroup: "back", defaultSets: 3, defaultReps: 12, repRange: "10-12", restSeconds: 75, order: 1),
+                    .init(exerciseName: "Lateral Raise", muscleGroup: "shoulders", defaultSets: 3, defaultReps: 15, repRange: "12-15", restSeconds: 60, order: 2)
+                ],
+                estimatedDurationMinutes: 50,
+                order: 3,
+                notes: "Higher-rep upper day to build muscle without beating up recovery."
             )
         ],
+        planIntent: WorkoutPlan.PlanIntent(
+            primaryFocus: "Strength and lean muscle",
+            supportingFocuses: ["Protected Zone 2 run", "Recovery-aware upper/lower split"],
+            sessionAllocation: "Three strength sessions plus one conditioning day.",
+            honoredInputs: ["Friday Zone 2 run", "55 minute sessions", "Recomposition goal"],
+            summary: "A four-day week that keeps strength moving while leaving room for conditioning."
+        ),
         rationale: "Four focused sessions balance strength progress, recovery, and recomposition.",
         guidelines: [
             "Add weight when all top sets reach the target reps.",

@@ -359,12 +359,6 @@ struct LiveWorkoutView: View {
 
                         GeneralSessionOverviewCard(workout: viewModel.workout)
 
-                        SessionGoalsCard(
-                            goals: relevantSessionGoals,
-                            onAddGoal: { showingGoalSheet = true },
-                            onToggleCompletion: toggleGoalCompletion
-                        )
-
                         SessionNotesCard(
                             notes: Binding(
                                 get: { viewModel.workout.notes },
@@ -445,14 +439,6 @@ struct LiveWorkoutView: View {
                         )
 
                         workoutTargetSelector
-
-                        if !relevantSessionGoals.isEmpty {
-                            SessionGoalsCard(
-                                goals: relevantSessionGoals,
-                                onAddGoal: { showingGoalSheet = true },
-                                onToggleCompletion: toggleGoalCompletion
-                            )
-                        }
 
                         // Planned and ad hoc workout items share the same logging surface.
                         ForEach(entries, id: \.id) { entry in
