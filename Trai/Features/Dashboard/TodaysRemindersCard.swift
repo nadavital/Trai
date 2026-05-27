@@ -31,14 +31,22 @@ struct TodaysRemindersCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("Today's Reminders", systemImage: "bell.fill")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+                Text("Today's Reminders")
+                    .font(.traiHeadline())
 
                 Spacer()
 
                 Button("Add", systemImage: "plus", action: onAdd)
-                    .buttonStyle(.traiTertiary(size: .compact, height: 32))
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(
+                        .traiSecondary(
+                            color: .accentColor,
+                            size: .compact,
+                            width: 32,
+                            height: 32,
+                            fillOpacity: 0.18
+                        )
+                    )
             }
 
             if reminders.isEmpty {

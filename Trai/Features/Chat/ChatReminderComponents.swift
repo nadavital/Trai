@@ -17,119 +17,12 @@ struct ReminderSuggestionCard: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
-            // Header
-            HStack {
-                HStack(spacing: 8) {
-                    Image(systemName: "bell.badge")
-                        .font(.subheadline)
-                        .foregroundStyle(.blue)
-
-                    Text("Create Reminder?")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                }
-
-                Spacer()
-
-                Button {
-                    onDismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24, height: 24)
-                        .background(Color(.quaternarySystemFill))
-                        .clipShape(.circle)
-                }
-            }
-
-            // Reminder details
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Image(systemName: "text.quote")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 20)
-
-                    Text(suggestion.title)
-                        .font(.body)
-                        .fontWeight(.medium)
-                }
-
-                if !suggestion.body.isEmpty {
-                    HStack(alignment: .top) {
-                        Image(systemName: "text.alignleft")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20)
-
-                        Text(suggestion.body)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                HStack {
-                    Image(systemName: "clock")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 20)
-
-                    Text(suggestion.formattedTime)
-                        .font(.subheadline)
-                }
-
-                HStack {
-                    Image(systemName: "repeat")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 20)
-
-                    Text(suggestion.scheduleDescription)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-
-            // Action buttons
-            HStack(spacing: 12) {
-                Button {
-                    onEdit()
-                } label: {
-                    Text("Edit")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.traiTertiary())
-
-                Button {
-                    onConfirm()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "checkmark")
-                        Text("Create Reminder")
-                    }
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                }
-                .buttonStyle(.traiPrimary())
-            }
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
-        .padding(.horizontal)
+        ReminderDraftCard(
+            suggestion: suggestion,
+            onEdit: onEdit,
+            onConfirm: onConfirm,
+            onDismiss: onDismiss
+        )
     }
 }
 

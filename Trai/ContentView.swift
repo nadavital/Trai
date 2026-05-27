@@ -170,53 +170,45 @@ struct ContentView: View {
 }
 
 private struct AppStoreScreenshotPlanReviewView: View {
-    @State private var plan: NutritionPlan? = NutritionPlan(
-        dailyTargets: .init(calories: 2100, protein: 165, carbs: 210, fat: 70, fiber: 30),
-        rationale: "Based on your goal of building muscle while maintaining a moderate activity level.",
-        macroSplit: .init(proteinPercent: 30, carbsPercent: 40, fatPercent: 30),
-        nutritionGuidelines: ["Aim for 30-40g protein per meal", "Time carbs around workouts"],
-        mealTimingSuggestion: "4 meals, evenly spaced",
-        weeklyAdjustments: nil,
-        warnings: ["Monitor weight weekly"],
-        progressInsights: .init(
-            estimatedWeeklyChange: "+0.2 kg",
-            estimatedTimeToGoal: nil,
-            calorieDeficitOrSurplus: 300,
-            shortTermMilestone: "Focus on progressive overload",
-            longTermOutlook: "Gradual strength and muscle gains"
-        )
-    )
-    @State private var adjustedCalories = "2100"
-    @State private var adjustedProtein = "165"
-    @State private var adjustedCarbs = "210"
-    @State private var adjustedFat = "70"
-
-    private let request = PlanGenerationRequest(
-        name: "Nadav",
-        age: 25,
-        gender: .male,
-        heightCm: 180,
-        weightKg: 80,
-        targetWeightKg: 75,
-        activityLevel: .moderate,
-        activityNotes: "",
-        goal: .buildMuscle,
-        additionalNotes: "",
-        enabledMacros: MacroType.defaultEnabled
-    )
-
     var body: some View {
-        PlanReviewStepView(
-            plan: $plan,
-            planRequest: request,
-            isLoading: false,
-            error: nil,
-            adjustedCalories: $adjustedCalories,
-            adjustedProtein: $adjustedProtein,
-            adjustedCarbs: $adjustedCarbs,
-            adjustedFat: $adjustedFat,
-            onRetry: {}
-        )
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: TraiSpacing.lg) {
+                    VStack(alignment: .leading, spacing: TraiSpacing.sm) {
+                        HStack(spacing: TraiSpacing.sm) {
+                            Image(systemName: "sparkles")
+                                .font(.headline)
+                                .foregroundStyle(.accent)
+
+                            Text("Trai generated your week")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                        }
+
+                        Text("Build me a 4-day plan for strength, lean muscle, and Friday's Zone 2 run.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(.rect(cornerRadius: TraiRadius.large))
+
+                    WorkoutPlanProposalCard(
+                        plan: screenshotWorkoutPlan(),
+                        message: "Generated from your goal, preferred split, session length, and recovery constraints.",
+                        onAccept: {},
+                        acceptTitle: "Save Plan",
+                        onCustomize: nil
+                    )
+                }
+                .padding(.horizontal)
+                .padding(.top, TraiSpacing.lg)
+                .padding(.bottom, TraiSpacing.xl)
+            }
+            .navigationTitle("Workout Plan")
+            .navigationBarTitleDisplayMode(.inline)
+        }
         .traiBackground(intensity: 0.45)
     }
 }
@@ -607,12 +599,16 @@ struct MainTabView: View {
             return
         }
 
+        workout.name = "Upper Strength"
+        workout.type = .strength
+        workout.muscleGroups = [.chest, .back, .shoulders]
+        workout.focusAreas = ["Chest", "Back", "Shoulders"]
         workout.startedAt = Date().addingTimeInterval(-34 * 60)
-        let primary = LiveWorkoutEntry(exerciseName: "Back Squat", orderIndex: 0)
+        let primary = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)
         let cleanWeight = CleanWeight(kg: 84, lbs: 185)
         for _ in 0..<4 {
             primary.addSet(LiveWorkoutEntry.SetData(
-                reps: 8,
+                reps: 5,
                 weight: cleanWeight,
                 completed: false,
                 isWarmup: false

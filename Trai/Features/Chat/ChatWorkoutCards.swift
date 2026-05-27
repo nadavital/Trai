@@ -15,76 +15,95 @@ struct SuggestedWorkoutCard: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header
-            HStack {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 10) {
                 Image(systemName: workout.iconName)
-                    .foregroundStyle(.accent)
-                Text("Start Workout?")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                Spacer()
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 30, height: 30)
+                    .background(Color.accentColor.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Workout ready")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text(workout.name)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .background(Color(.tertiarySystemFill), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss workout suggestion")
             }
 
-            // Workout details
-            VStack(alignment: .leading, spacing: 8) {
-                Text(workout.name)
-                    .font(.headline)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    WorkoutSuggestionMetric(
+                        title: "Exercises",
+                        value: workout.exercisesSummary,
+                        systemImage: "list.bullet"
+                    )
 
-                HStack(spacing: 12) {
-                    Label(workout.exercisesSummary, systemImage: "list.bullet")
-                    Label("\(workout.durationMinutes) min", systemImage: "clock")
+                    WorkoutSuggestionMetric(
+                        title: "Time",
+                        value: "\(workout.durationMinutes) min",
+                        systemImage: "clock"
+                    )
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
 
-                if let activityFocuses = workout.activityFocuses, !activityFocuses.isEmpty {
-                    Text(activityFocuses.prefix(3).joined(separator: ", "))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if !workout.targetMuscleGroups.isEmpty {
-                    Text(workout.muscleGroupsSummary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if !focusSummary.isEmpty {
+                    WorkoutSuggestionDetailRow(
+                        title: "Focus",
+                        value: focusSummary,
+                        systemImage: "target"
+                    )
                 }
 
                 if let firstExerciseSummary {
-                    Text(firstExerciseSummary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    WorkoutSuggestionDetailRow(
+                        title: "Starts with",
+                        value: firstExerciseSummary,
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
                 }
 
                 if !workout.rationale.isEmpty {
-                    Text(workout.rationale)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .padding(.top, 2)
+                    WorkoutSuggestionDetailRow(
+                        title: "Why",
+                        value: workout.rationale,
+                        systemImage: "sparkles"
+                    )
                 }
             }
-            .padding()
-            .background(Color(.tertiarySystemBackground))
-            .clipShape(.rect(cornerRadius: 12))
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Action buttons
-            HStack(spacing: 12) {
-                Button("Dismiss", systemImage: "xmark") {
-                    onDismiss()
-                }
-                .buttonStyle(.traiTertiary())
-                .controlSize(.small)
-
-                Spacer()
-
-                Button("Start Workout", systemImage: "play.fill") {
-                    onAccept()
-                }
-                .buttonStyle(.traiPrimary())
-                .controlSize(.small)
+            Button {
+                onAccept()
+            } label: {
+                Label("Start Workout", systemImage: "play.fill")
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.traiPrimary(fullWidth: true))
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .padding(14)
+        .traiCard(cornerRadius: 16)
+    }
+
+    private var focusSummary: String {
+        if let activityFocuses = workout.activityFocuses, !activityFocuses.isEmpty {
+            return activityFocuses.prefix(3).joined(separator: ", ")
+        }
+        return workout.muscleGroupsSummary
     }
 
     private var firstExerciseSummary: String? {
@@ -92,6 +111,62 @@ struct SuggestedWorkoutCard: View {
         let details = exercise.startSummarySegments
         guard !details.isEmpty else { return exercise.name }
         return ([exercise.name] + Array(details.prefix(3))).joined(separator: " • ")
+    }
+}
+
+private struct WorkoutSuggestionMetric: View {
+    let title: String
+    let value: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(value)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct WorkoutSuggestionDetailRow: View {
+    let title: String
+    let value: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(value)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 
