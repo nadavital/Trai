@@ -123,9 +123,9 @@ enum AIFeature: String, Codable, CaseIterable, Identifiable {
         case .coachChat:
             1
         case .agentCoachChat:
-            3
+            6
         case .agentToolFollowUp:
-            1
+            3
         case .foodPhotoAnalysis:
             6
         case .foodRefinement:

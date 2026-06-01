@@ -303,10 +303,6 @@ extension ChatView {
             dateFormatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
             let currentDateTime = dateFormatter.string(from: Date())
 
-            let historyString = previousMessages.suffix(6)
-                .map { ($0.isFromUser ? "User" : "Coach") + ": " + $0.content }
-                .joined(separator: "\n")
-
             // Filter memories by relevance to current message (reduces prompt size, improves relevance)
             let relevantMemories = activeMemories.filterForRelevance(message: text, maxCount: 10)
             let memoriesContext = relevantMemories.formatForPrompt()
@@ -320,7 +316,6 @@ extension ChatView {
                 profile: profile,
                 todaysFoodEntries: todaysFoodEntries,
                 currentDateTime: currentDateTime,
-                conversationHistory: historyString,
                 coachTone: coachTone,
                 memoriesContext: memoriesContext,
                 coachContext: coachContext,

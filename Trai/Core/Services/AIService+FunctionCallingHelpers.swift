@@ -35,6 +35,7 @@ extension AIService {
         - Skip "How are you?" and "Hope you're doing well" in follow-ups
         - Honest and supportive, not preachy
         - Never refer to yourself as an AI or assistant
+        - Style cue for the opening turn: \(context.coachTone.primingReply)
 
         You have access to tools for:
         - Logging food the user has eaten (suggest_food_log)
@@ -50,6 +51,13 @@ extension AIService {
         - Remembering facts about the user (save_memory, delete_memory)
         - Managing temporary short-term context (save_short_term_context, clear_short_term_context)
 
+        """
+
+        prompt += buildGuidelinesSection()
+
+        prompt += """
+
+        CURRENT REQUEST CONTEXT:
         Current date/time: \(context.currentDateTime)
 
         """
@@ -88,8 +96,6 @@ extension AIService {
         if let workout = context.activeWorkout {
             prompt += buildActiveWorkoutSection(workout: workout)
         }
-
-        prompt += buildGuidelinesSection()
 
         return prompt
     }
@@ -415,6 +421,7 @@ extension AIService {
         name: String,
         response: [String: Any],
         previousMessages: [TraiAIMessage],
+        systemPrompt: String,
         originalParts: [TraiAIPart],
         executor: AIFunctionExecutor
     ) async throws -> FunctionFollowUpResult {
@@ -422,6 +429,7 @@ extension AIService {
         return try await sendFunctionResult(
             functionResult: funcResult,
             previousMessages: previousMessages,
+            systemPrompt: systemPrompt,
             originalParts: originalParts,
             executor: executor,
             onTextChunk: nil
@@ -431,6 +439,7 @@ extension AIService {
     func sendFunctionResult(
         functionResult: AIFunctionExecutor.FunctionResult,
         previousMessages: [TraiAIMessage],
+        systemPrompt: String,
         originalParts: [TraiAIPart],
         executor: AIFunctionExecutor,
         onTextChunk: ((String) -> Void)?
@@ -460,6 +469,7 @@ extension AIService {
             )
 
             let requestBody = AIBackendPayloadBuilder.requestBody(from: AIBackendPayloadBuilder.canonicalRequest(
+                system: systemPrompt,
                 messages: messages,
                 generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low)
             ))
@@ -541,6 +551,7 @@ extension AIService {
     func sendParallelFunctionResults(
         functionResults: [AIFunctionExecutor.FunctionResult],
         previousMessages: [TraiAIMessage],
+        systemPrompt: String,
         originalParts: [TraiAIPart],
         executor: AIFunctionExecutor,
         previousText: String = "",
@@ -581,6 +592,7 @@ extension AIService {
         }
 
         let requestBody = AIBackendPayloadBuilder.requestBody(from: AIBackendPayloadBuilder.canonicalRequest(
+            system: systemPrompt,
             messages: messages,
             tools: canonicalTools,
             generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low)
@@ -732,6 +744,7 @@ extension AIService {
                 let chainedResult = try await sendParallelFunctionResults(
                     functionResults: additionalFunctionResults,
                     previousMessages: messages,
+                    systemPrompt: systemPrompt,
                     originalParts: result.accumulatedParts,
                     executor: executor,
                     previousText: accumulatedPreviousText + result.text,

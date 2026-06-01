@@ -27,6 +27,7 @@ Backend/node_modules/
 Backend/data/*.sqlite
 Backend/.env
 Backend/.env.local
+Backend/tmp/
 
 # Local agent/cloud credentials and logs
 .agent/

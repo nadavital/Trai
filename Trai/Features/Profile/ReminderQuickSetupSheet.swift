@@ -511,10 +511,6 @@ struct ReminderQuickSetupSheet: View {
             messages.last?.kind.isUser == true && messages.last?.text == userText ? 1 : 0
         ))
 
-        let historyString = previousMessages.suffix(8)
-            .map { ($0.kind.isUser ? "User" : "Trai") + ": " + $0.text }
-            .joined(separator: "\n")
-
         let reminderContext = """
         The user is creating a reminder inside Trai's reminder setup sheet.
         Only help with reminders.
@@ -529,7 +525,6 @@ struct ReminderQuickSetupSheet: View {
             profile: profile,
             todaysFoodEntries: [],
             currentDateTime: dateFormatter.string(from: Date()),
-            conversationHistory: historyString,
             memoriesContext: "",
             coachContext: reminderContext
         )

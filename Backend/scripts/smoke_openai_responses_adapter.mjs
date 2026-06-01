@@ -25,6 +25,7 @@ const baseConfig = {
 
 await testNonStreamingTextAndRequestShape();
 await testNonStreamingToolCallNormalization();
+await testNamespacedToolCallNormalization();
 await testStreamingTextNormalization();
 await testStreamingToolCallNormalization();
 await testToolFollowUpInputMapping();
@@ -94,7 +95,7 @@ async function testNonStreamingTextAndRequestShape() {
       topP: 0.8,
       maxOutputTokens: 256
     }
-  }, { streaming: false });
+  }, { streaming: false, feature: 'agentCoachChat' });
 
   assert.equal(response.type, 'single');
   assert.deepEqual(response.response.parts, [{ type: 'text', text: 'Hello from OpenAI.' }]);
@@ -103,6 +104,8 @@ async function testNonStreamingTextAndRequestShape() {
   assert.equal(captured.length, 1);
   assert.equal(captured[0].url, 'https://api.openai.com/v1/responses');
   assert.equal(captured[0].body.model, 'gpt-5.4-mini');
+  assert.equal(captured[0].body.prompt_cache_key, 'trai-agentcoachchat-v1');
+  assert.equal(captured[0].body.prompt_cache_retention, '24h');
   assert.equal(captured[0].body.instructions, 'Be concise.');
   assert.equal(captured[0].body.parallel_tool_calls, true);
   assert.equal(captured[0].body.tool_choice, 'auto');
@@ -134,6 +137,33 @@ async function testNonStreamingToolCallNormalization() {
       id: 'call_1',
       name: 'lookup_food',
       args: { query: 'banana' }
+    }
+  ]);
+}
+
+async function testNamespacedToolCallNormalization() {
+  const provider = withMockedFetch(async () => jsonResponse({
+    status: 'completed',
+    output: [
+      {
+        type: 'function_call',
+        id: 'fc_1',
+        call_id: 'call_1',
+        name: 'nutrition.suggest_food_log',
+        arguments: '{"food_name":"banana"}'
+      }
+    ]
+  }));
+
+  const response = await provider.execute(emptyRequest(), { streaming: false });
+
+  assert.equal(response.type, 'single');
+  assert.deepEqual(response.response.parts, [
+    {
+      type: 'tool_call',
+      id: 'call_1',
+      name: 'suggest_food_log',
+      args: { food_name: 'banana' }
     }
   ]);
 }
