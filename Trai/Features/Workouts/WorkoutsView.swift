@@ -70,6 +70,7 @@ struct WorkoutsView: View {
     @State private var showingWorkoutGoalDetail: WorkoutGoal?
     @State private var showingCompletedWorkoutGoals = false
     @State private var showingWorkoutGoalAISetup = false
+    @State private var showingWorkoutSheet = false
     @State private var showingPersonalRecords = false
     @State private var showingCustomExercises = false
     @State private var pendingWorkout: LiveWorkout?
@@ -556,12 +557,18 @@ struct WorkoutsView: View {
                 }
                 .traiSheetBranding()
             }
-            .sheet(item: $pendingWorkout, onDismiss: {
-                pendingTemplate = nil
-                isStartingWorkout = false
-            }) { workout in
-                LiveWorkoutView(workout: workout, template: pendingTemplate)
-                    .traiSheetBranding()
+            .sheet(isPresented: $showingWorkoutSheet) {
+                if let workout = pendingWorkout {
+                    LiveWorkoutView(workout: workout, template: pendingTemplate)
+                        .traiSheetBranding()
+                }
+            }
+            .onChange(of: showingWorkoutSheet) { _, isShowing in
+                if !isShowing {
+                    pendingTemplate = nil
+                    pendingWorkout = nil
+                    isStartingWorkout = false
+                }
             }
         }
         .proUpsellPresenter()
@@ -1334,6 +1341,7 @@ struct WorkoutsView: View {
         if let activeWorkout {
             pendingTemplate = nil
             pendingWorkout = activeWorkout
+            showingWorkoutSheet = true
             HapticManager.selectionChanged()
             return
         }
@@ -1343,7 +1351,7 @@ struct WorkoutsView: View {
             template,
             progressionStrategy: workoutPlan?.progressionStrategy ?? .defaultStrategy,
             modelContext: modelContext,
-            prefillStrengthExercises: true
+            prefillStrengthExercises: false
         )
         guard templateService.persistWorkout(workout, modelContext: modelContext) else {
             isStartingWorkout = false
@@ -1364,6 +1372,7 @@ struct WorkoutsView: View {
         // Preserve the source template context and open the workout sheet
         pendingTemplate = template
         pendingWorkout = workout
+        showingWorkoutSheet = true
         HapticManager.selectionChanged()
     }
 
@@ -1371,6 +1380,7 @@ struct WorkoutsView: View {
         if workout.isInProgress {
             pendingTemplate = nil
             pendingWorkout = workout
+            showingWorkoutSheet = true
         } else {
             showingLiveWorkoutDetail = workout
         }
@@ -1388,6 +1398,7 @@ struct WorkoutsView: View {
         if let activeWorkout {
             pendingTemplate = nil
             pendingWorkout = activeWorkout
+            showingWorkoutSheet = true
             HapticManager.selectionChanged()
             return
         }
@@ -1424,6 +1435,7 @@ struct WorkoutsView: View {
         // Open the workout sheet
         pendingTemplate = nil
         pendingWorkout = workout
+        showingWorkoutSheet = true
         HapticManager.selectionChanged()
     }
 

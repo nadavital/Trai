@@ -11,11 +11,13 @@ import SwiftUI
 import WidgetKit
 
 private enum LiveActivityTheme {
-    static let traiSymbol = "circle.hexagongrid.circle"
-    static let accent = Color.red
+    static let traiSymbol = "circle.hexagongrid.circle.fill"
+    static let brandAccent = Color(red: 0.85, green: 0.25, blue: 0.20)
+    static let accent = brandAccent
+    static let controlAccent = brandAccent
     static let textPrimary = Color.white
-    static let textSecondary = Color.white.opacity(0.82)
-    static let textTertiary = Color.white.opacity(0.62)
+    static let textSecondary = Color.white.opacity(0.88)
+    static let textTertiary = Color.white.opacity(0.70)
     static let muted = textSecondary
     static let background = Color(red: 0.09, green: 0.09, blue: 0.12)
     static let actionForeground = Color.white
@@ -189,7 +191,7 @@ private struct LockScreenWorkoutView: View {
         .foregroundStyle(LiveActivityTheme.textPrimary)
         .padding(12)
         .traiLiveActivityContainerBackground()
-        .activityBackgroundTint(LiveActivityTheme.background)
+        .activityBackgroundTint(.clear)
         .activitySystemActionForegroundColor(LiveActivityTheme.actionForeground)
     }
 
@@ -252,135 +254,47 @@ private struct LockScreenWorkoutView: View {
         .foregroundStyle(LiveActivityTheme.textPrimary)
         .padding(12)
         .traiLiveActivityContainerBackground()
-        .activityBackgroundTint(LiveActivityTheme.background)
+        .activityBackgroundTint(.clear)
         .activitySystemActionForegroundColor(LiveActivityTheme.actionForeground)
     }
 
     private var regularBody: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: isMediumFamily ? 12 : 16) {
-                // Status (no timer per user feedback)
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Image(systemName: LiveActivityTheme.statusIcon(isPaused: context.state.isPaused))
-                            .font(.caption)
-                            .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: isMediumFamily ? 12 : 16) {
+                Image(systemName: LiveActivityTheme.statusIcon(isPaused: context.state.isPaused))
+                    .font(.system(size: isMediumFamily ? 30 : 34, weight: .semibold))
+                    .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
+                    .frame(width: isMediumFamily ? 34 : 40, height: isMediumFamily ? 40 : 46)
 
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(context.state.currentExercise ?? context.attributes.workoutName)
+                        .font(isMediumFamily ? .subheadline.weight(.semibold) : .headline.weight(.semibold))
+                        .foregroundStyle(LiveActivityTheme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    if let nextExercise = context.state.nextExercise {
+                        LiveActivityUpNextText(exercise: nextExercise)
+                    } else {
                         Text(context.attributes.workoutName)
-                            .font(isMediumFamily ? .subheadline : .headline)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(LiveActivityTheme.textSecondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
-                    }
-
-                    if let exercise = context.state.currentExercise {
-                        HStack(spacing: 4) {
-                            Text(exercise)
-                                .font(.caption)
-                                .foregroundStyle(LiveActivityTheme.textSecondary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-
-                            // Show equipment if available
-                            if !isSupplementalFamily, let equipment = context.state.currentEquipment {
-                                Text("•")
-                                    .font(.caption2)
-                                    .foregroundStyle(LiveActivityTheme.textTertiary)
-                                Text(equipment)
-                                    .font(.caption2)
-                                    .foregroundStyle(LiveActivityTheme.textTertiary)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-                            }
-
-                            if let workDisplay = context.state.currentWorkDisplay {
-                                Text("•")
-                                    .font(.caption2)
-                                    .foregroundStyle(LiveActivityTheme.textTertiary)
-                                Text(workDisplay)
-                                    .font(.caption)
-                                    .foregroundStyle(LiveActivityTheme.accent)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-                            }
-                        }
-                    }
-
-                    // Show next exercise if available
-                    if !isSupplementalFamily, let nextExercise = context.state.nextExercise {
-                        HStack(spacing: 4) {
-                            Text("Next:")
-                                .font(.caption2)
-                                .foregroundStyle(LiveActivityTheme.textTertiary)
-                            Text(nextExercise)
-                                .font(.caption2)
-                                .foregroundStyle(LiveActivityTheme.textSecondary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                        }
                     }
                 }
                 .layoutPriority(1)
 
-                Spacer()
+                Spacer(minLength: 8)
 
-                // Progress and sets
                 VStack(alignment: .trailing, spacing: 6) {
-                    // Circular progress
-                    ZStack {
-                        Circle()
-                            .stroke(LiveActivityTheme.textPrimary.opacity(0.2), lineWidth: 4)
-                            .frame(width: isMediumFamily ? 36 : 44, height: isMediumFamily ? 36 : 44)
-
-                        Circle()
-                            .trim(from: 0, to: context.state.progress)
-                            .stroke(LiveActivityTheme.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                            .frame(width: isMediumFamily ? 36 : 44, height: isMediumFamily ? 36 : 44)
-                            .rotationEffect(.degrees(-90))
-
-                        Text("\(context.state.progressCompletedValue)")
-                            .font(.system(isMediumFamily ? .caption2 : .caption, design: .rounded, weight: .bold))
-                            .monospacedDigit()
-                    }
-
-                    Text(context.state.progressDisplay)
-                        .font(.caption2)
-                        .monospacedDigit()
-                        .foregroundStyle(LiveActivityTheme.textSecondary)
-                        .lineLimit(1)
-
-                    // Volume if available for the current strength exercise.
-                    if context.state.canUseSetShortcut, let volume = context.state.volumeDisplay {
-                        Text(volume)
-                            .font(.caption2)
-                            .foregroundStyle(LiveActivityTheme.accent)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
-
-                    // Heart rate display (shows "--" when unavailable)
-                    if !isSupplementalFamily {
-                        HStack(spacing: 2) {
-                            Image(systemName: "heart.fill")
-                                .font(.caption2)
-                                .foregroundStyle(.red)
-                            if let hr = context.state.heartRate {
-                                Text("\(hr)")
-                                    .font(.caption2)
-                                    .monospacedDigit()
-                                    .foregroundStyle(LiveActivityTheme.textSecondary)
-                            } else {
-                                Text("--")
-                                    .font(.caption2)
-                                    .foregroundStyle(LiveActivityTheme.textTertiary)
-                            }
-                        }
-                    }
+                    LiveActivityTargetSummary(state: context.state)
+                    LiveActivityPauseControl(state: context.state, isCompact: true)
                 }
             }
-            
-            // Action buttons
+
             if !isSupplementalFamily {
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     if context.state.canUseSetShortcut {
                         Button(intent: AddSetIntent()) {
                             Label("Add Set", systemImage: "plus.circle.fill")
@@ -388,29 +302,22 @@ private struct LockScreenWorkoutView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
-                        .tint(LiveActivityTheme.accent)
+                        .buttonBorderShape(.capsule)
+                        .tint(LiveActivityTheme.controlAccent)
                     }
 
                     if context.state.nextExercise != nil {
                         Button(intent: AdvanceExerciseIntent()) {
-                            Label("Next", systemImage: "forward.fill")
-                                .font(.caption)
+                            Label("Next Exercise", systemImage: "forward.fill")
+                                .font(.caption.weight(.semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
-                        .tint(LiveActivityTheme.accent)
+                        .buttonBorderShape(.capsule)
+                        .tint(LiveActivityTheme.muted)
                     }
-
-                    Button(intent: TogglePauseIntent()) {
-                        Label(
-                            context.state.isPaused ? "Resume" : "Pause",
-                            systemImage: context.state.isPaused ? "play.fill" : "pause.fill"
-                        )
-                        .font(.caption)
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(context.state.isPaused ? LiveActivityTheme.accent : LiveActivityTheme.muted)
 
                     Button(intent: ClearLiveActivityIntent()) {
                         Label("Clear", systemImage: "xmark")
@@ -419,6 +326,7 @@ private struct LockScreenWorkoutView: View {
                             .frame(width: 34)
                     }
                     .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
                     .tint(LiveActivityTheme.muted)
                 }
             }
@@ -426,7 +334,7 @@ private struct LockScreenWorkoutView: View {
         .foregroundStyle(LiveActivityTheme.textPrimary)
         .padding()
         .traiLiveActivityContainerBackground()
-        .activityBackgroundTint(LiveActivityTheme.background)
+        .activityBackgroundTint(.clear)
         .activitySystemActionForegroundColor(LiveActivityTheme.actionForeground)
     }
 }
@@ -436,11 +344,67 @@ private extension View {
     func traiLiveActivityContainerBackground() -> some View {
         if #available(iOS 17.0, *) {
             self.containerBackground(for: .widget) {
-                LiveActivityTheme.background
+                Color.clear
             }
         } else {
-            self.background(LiveActivityTheme.background)
+            self.background(Color.clear)
         }
+    }
+}
+
+private struct LiveActivityTargetSummary: View {
+    let state: TraiWorkoutAttributes.ContentState
+
+    var body: some View {
+        Text(summary)
+            .font(.system(.caption, design: .rounded, weight: .semibold))
+            .foregroundStyle(LiveActivityTheme.textPrimary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(.black.opacity(0.18), in: Capsule())
+    }
+
+    private var summary: String {
+        let work = state.currentWorkDisplay
+
+        if let work {
+            return work
+        }
+        return state.progressCountDisplay
+    }
+}
+
+private struct LiveActivityPauseControl: View {
+    let state: TraiWorkoutAttributes.ContentState
+    var isCompact = false
+
+    var body: some View {
+        Button(intent: TogglePauseIntent()) {
+            Image(systemName: state.isPaused ? "play.fill" : "pause.fill")
+                .font(.caption2.weight(.bold))
+                .frame(width: isCompact ? 24 : 30, height: isCompact ? 22 : 26)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .controlSize(.small)
+        .foregroundStyle(state.isPaused ? LiveActivityTheme.controlAccent : LiveActivityTheme.textSecondary)
+        .accessibilityLabel(state.isPaused ? "Resume workout" : "Pause workout")
+    }
+}
+
+private struct LiveActivityUpNextText: View {
+    let exercise: String
+
+    var body: some View {
+        Text("Up next: \(exercise)")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(LiveActivityTheme.textSecondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .accessibilityLabel("Up next, \(exercise)")
     }
 }
 

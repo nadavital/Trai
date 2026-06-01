@@ -578,14 +578,12 @@ final class LiveWorkoutViewModel {
         }
 
         refreshEntriesAndMetrics()
+        startLiveActivity()
         startTimer()
         scheduleDeferredStartupHydration()
 
-        // Start heart rate streaming from Apple Watch
+        // Start heart rate streaming from Apple Watch after the Live Activity is requested.
         startHeartRateMonitoring()
-
-        // Start Live Activity
-        startLiveActivity()
         
         // Set up Live Activity intent observers
         setupLiveActivityObservers()
