@@ -103,7 +103,6 @@ extension AIService {
         let profile: UserProfile?
         let todaysFoodEntries: [FoodEntry]
         let currentDateTime: String
-        let conversationHistory: String
         let coachTone: TraiCoachTone
         let memoriesContext: String
         let coachContext: String
@@ -120,7 +119,6 @@ extension AIService {
             profile: UserProfile?,
             todaysFoodEntries: [FoodEntry],
             currentDateTime: String,
-            conversationHistory: String,
             coachTone: TraiCoachTone = .encouraging,
             memoriesContext: String,
             coachContext: String = "",
@@ -136,7 +134,6 @@ extension AIService {
             self.profile = profile
             self.todaysFoodEntries = todaysFoodEntries
             self.currentDateTime = currentDateTime
-            self.conversationHistory = conversationHistory
             self.coachTone = coachTone
             self.memoriesContext = memoriesContext
             self.coachContext = coachContext

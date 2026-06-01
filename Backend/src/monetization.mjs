@@ -747,6 +747,19 @@ export function createMonetizationHelpers({
       const usage = normalizeTelemetryRow(request);
       return sum + (estimateProviderUsageCostUSD(normalizeProviderKey(request.provider, request.model), usage) ?? 0);
     }, 0);
+    const trackedTokenTotals = trackedRequests.reduce((totals, request) => {
+      const usage = normalizeTelemetryRow(request);
+      totals.inputTokens += usage.inputTokens ?? 0;
+      totals.cachedInputTokens += usage.cachedInputTokens ?? 0;
+      totals.outputTokens += usage.outputTokens ?? 0;
+      totals.reasoningTokens += usage.reasoningTokens ?? 0;
+      return totals;
+    }, {
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0
+    });
 
     return {
       pricing: buildTokenPricingSummary(),
@@ -760,6 +773,13 @@ export function createMonetizationHelpers({
       retryReasons: retryReasonCounts,
       telemetryCoverageRatio: successfulRequests.length > 0
         ? roundSmallAmount(trackedRequests.length / successfulRequests.length)
+        : null,
+      trackedInputTokens: trackedTokenTotals.inputTokens,
+      trackedCachedInputTokens: trackedTokenTotals.cachedInputTokens,
+      trackedOutputTokens: trackedTokenTotals.outputTokens,
+      trackedReasoningTokens: trackedTokenTotals.reasoningTokens,
+      cacheHitRatio: trackedTokenTotals.inputTokens > 0
+        ? roundSmallAmount(trackedTokenTotals.cachedInputTokens / trackedTokenTotals.inputTokens)
         : null,
       estimatedTrackedAICostUSD: trackedRequests.length > 0
         ? roundCurrency(trackedEstimatedCostUSD)
@@ -840,6 +860,9 @@ export function createMonetizationHelpers({
           : null,
         averageReasoningTokens: entry.trackedRequestCount > 0
           ? Math.round(entry.reasoningTokens / entry.trackedRequestCount)
+          : null,
+        cacheHitRatio: entry.inputTokens > 0
+          ? roundSmallAmount(entry.cachedInputTokens / entry.inputTokens)
           : null,
         telemetryCoverageRatio: entry.requestCount > 0
           ? roundSmallAmount(entry.trackedRequestCount / entry.requestCount)
