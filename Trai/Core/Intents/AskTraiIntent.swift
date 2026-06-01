@@ -108,11 +108,13 @@ extension AIService {
         tone: TraiCoachTone = .sharedPreference
     ) async throws -> String {
         try await performAIRequest(for: .coachChat) {
-            let prompt = """
-            You are Trai, a fitness and nutrition coach. Answer this question concisely (2-3 sentences max) for a voice response.
-            Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
-            Never refer to yourself as an AI or assistant.
+            let systemPrompt = TraiPromptCore.coachSystemPrompt(
+                role: "A fitness and nutrition coach answering a short voice question.",
+                tone: tone,
+                responseStyle: "Answer concisely in 2-3 sentences for a voice response."
+            )
 
+            let prompt = """
             User context:
             \(userContext)
 
@@ -124,14 +126,15 @@ extension AIService {
             If you only have totals and not enough meal detail, say that clearly instead of inventing foods.
             """
 
-            let body: [String: Any] = [
-                "contents": [
-                    ["parts": [["text": prompt]]]
+            let request = AIBackendPayloadBuilder.canonicalRequest(
+                system: systemPrompt,
+                messages: [
+                    AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: prompt)
                 ],
-                "generationConfig": buildGenerationConfig(thinkingLevel: .low, maxTokens: 500)
-            ]
+                generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low, maxTokens: 500)
+            )
 
-            return try await makeRequest(body: body)
+            return try await makeRequest(request: request)
         }
     }
 }

@@ -399,9 +399,16 @@ extension AIService {
         conversationHistory: [(role: String, text: String)]
     ) async throws -> String {
         try await performAIRequest(for: .coachChat) {
-            let systemPrompt = """
-            You are Trai, a focused fitness coach. The user is checking in on a specific workout goal.
+            let systemPrompt = TraiPromptCore.coachSystemPrompt(
+                role: "A focused fitness coach helping the user check in on a specific workout goal.",
+                tone: .sharedPreference,
+                responseStyle: """
+                Use 2-4 short sentences per reply. No bullet lists.
+                Keep responses focused on this goal, not general advice.
+                """
+            )
 
+            let goalContext = """
             Goal: \(goalTitle)
             Kind: \(goalKind)
             Scope: \(goalScope)
@@ -419,8 +426,7 @@ extension AIService {
             """
 
             var messages: [TraiAIMessage] = [
-                AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: systemPrompt),
-                AIBackendPayloadBuilder.canonicalTextMessage(role: .assistant, text: "Got it. I'm looking at your goal and recent training. What's on your mind?")
+                AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: goalContext)
             ]
 
             for entry in conversationHistory.suffix(10) {
@@ -431,6 +437,7 @@ extension AIService {
             messages.append(AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: userMessage))
 
             let request = AIBackendPayloadBuilder.canonicalRequest(
+                system: systemPrompt,
                 messages: messages,
                 generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low, maxTokens: 512)
             )

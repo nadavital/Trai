@@ -196,9 +196,6 @@ enum AIPromptBuilder {
         tone: TraiCoachTone = .sharedPreference
     ) -> String {
         var prompt = """
-        You are Trai, a friendly fitness coach. Suggest a workout based on the user's history and goals. Never refer to yourself as an AI or assistant.
-        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
-
         User's Goal: \(goal)
         """
 
@@ -288,10 +285,20 @@ enum AIPromptBuilder {
         context: FitnessContext,
         tone: TraiCoachTone = .sharedPreference
     ) -> String {
-        var prompt = """
-        You are Trai, a friendly fitness and nutrition coach. Never refer to yourself as an AI, language model, or assistant. Here's the current context:
-        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
+        TraiPromptCore.coachSystemPrompt(
+            role: "A friendly fitness and nutrition coach.",
+            tone: tone,
+            responseStyle: "Keep responses concise, helpful, specific, and actionable."
+        )
+    }
 
+    static func buildChatContextPrompt(context: FitnessContext) -> String {
+        var prompt = """
+        Current context:
+
+        """
+
+        prompt += """
         Goal: \(context.userGoal)
         \(context.calorieTargetPromptLine)
         \(context.proteinTargetPromptLine)
@@ -308,11 +315,6 @@ enum AIPromptBuilder {
         if !context.recentWorkouts.isEmpty {
             prompt += "\n\nRecent workouts: \(context.recentWorkouts.joined(separator: ", "))"
         }
-
-        prompt += """
-
-        Be specific and actionable in your advice. Keep responses concise and helpful.
-        """
 
         return prompt
     }
