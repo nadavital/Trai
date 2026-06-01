@@ -69,6 +69,32 @@ struct TogglePauseIntent: LiveActivityIntent {
     }
 }
 
+/// Intent for moving the Live Activity to the next workout item.
+struct AdvanceExerciseIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Next Exercise"
+    static var description = IntentDescription("Move the Live Activity to the next workout item")
+    static var openAppWhenRun: Bool = true
+
+    func perform() async throws -> some IntentResult {
+        let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName)
+        defaults?.set(Date().timeIntervalSince1970, forKey: SharedStorageKeys.AppGroup.liveActivityAdvanceExerciseTimestamp)
+        return .result()
+    }
+}
+
+/// Intent for clearing the current Live Activity without deleting the workout.
+struct ClearLiveActivityIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Clear Live Activity"
+    static var description = IntentDescription("Clear the workout Live Activity")
+    static var openAppWhenRun: Bool = true
+
+    func perform() async throws -> some IntentResult {
+        let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName)
+        defaults?.set(Date().timeIntervalSince1970, forKey: SharedStorageKeys.AppGroup.liveActivityClearTimestamp)
+        return .result()
+    }
+}
+
 // MARK: - Quick Food Types
 
 enum QuickFoodType: String, AppEnum, CaseIterable {

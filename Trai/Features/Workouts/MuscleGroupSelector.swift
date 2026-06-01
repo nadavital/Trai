@@ -44,6 +44,63 @@ struct MuscleGroupSelector: View {
         activityTargets
     }
 
+    private var orderedPlanTargets: [PlanTarget] {
+        planTargets
+            .enumerated()
+            .sorted { lhs, rhs in
+                sortSelectedFirst(
+                    lhsSelected: isPlanTargetSelected(lhs.element),
+                    rhsSelected: isPlanTargetSelected(rhs.element),
+                    lhsIndex: lhs.offset,
+                    rhsIndex: rhs.offset
+                )
+            }
+            .map(\.element)
+    }
+
+    private var orderedActivityTypeTargets: [ActivityTypeTarget] {
+        activityTypeTargets
+            .enumerated()
+            .sorted { lhs, rhs in
+                sortSelectedFirst(
+                    lhsSelected: isActivityTypeTargetSelected(lhs.element),
+                    rhsSelected: isActivityTypeTargetSelected(rhs.element),
+                    lhsIndex: lhs.offset,
+                    rhsIndex: rhs.offset
+                )
+            }
+            .map(\.element)
+    }
+
+    private var orderedActivityTargets: [Exercise.Category] {
+        displayedActivityTargets
+            .enumerated()
+            .sorted { lhs, rhs in
+                sortSelectedFirst(
+                    lhsSelected: isActivityCategorySelected(lhs.element),
+                    rhsSelected: isActivityCategorySelected(rhs.element),
+                    lhsIndex: lhs.offset,
+                    rhsIndex: rhs.offset
+                )
+            }
+            .map(\.element)
+    }
+
+    private var orderedMuscleTargets: [LiveWorkout.MuscleGroup] {
+        LiveWorkout.MuscleGroup.allCases
+            .filter { $0 != .fullBody }
+            .enumerated()
+            .sorted { lhs, rhs in
+                sortSelectedFirst(
+                    lhsSelected: selectedMuscles.contains(lhs.element),
+                    rhsSelected: selectedMuscles.contains(rhs.element),
+                    lhsIndex: lhs.offset,
+                    rhsIndex: rhs.offset
+                )
+            }
+            .map(\.element)
+    }
+
     private var displayedActivityCategories: [Exercise.Category] {
         let impliedCategories = Set(
             activityTypeTargets
@@ -106,7 +163,7 @@ struct MuscleGroupSelector: View {
                 VStack(alignment: .leading, spacing: 10) {
                     if !planTargets.isEmpty {
                         horizontalTargetRow {
-                            ForEach(planTargets) { target in
+                            ForEach(orderedPlanTargets) { target in
                                 PlanTargetChip(
                                     target: target,
                                     isSelected: isPlanTargetSelected(target)
@@ -119,7 +176,7 @@ struct MuscleGroupSelector: View {
 
                     if !activityTypeTargets.isEmpty {
                         horizontalTargetRow {
-                            ForEach(activityTypeTargets) { target in
+                            ForEach(orderedActivityTypeTargets) { target in
                                 ActivityTypeTargetChip(
                                     target: target,
                                     isSelected: isActivityTypeTargetSelected(target)
@@ -131,7 +188,7 @@ struct MuscleGroupSelector: View {
                     }
 
                     horizontalTargetRow {
-                        ForEach(displayedActivityTargets) { category in
+                        ForEach(orderedActivityTargets) { category in
                             ActivityTargetChip(
                                 category: category,
                                 isSelected: isActivityCategorySelected(category)
@@ -143,7 +200,7 @@ struct MuscleGroupSelector: View {
 
                     if showsMuscleTargets {
                         horizontalTargetRow {
-                            ForEach(LiveWorkout.MuscleGroup.allCases.filter { $0 != .fullBody }) { muscle in
+                            ForEach(orderedMuscleTargets) { muscle in
                                 MuscleSelectChip(
                                     muscle: muscle,
                                     isSelected: selectedMuscles.contains(muscle)
@@ -166,6 +223,18 @@ struct MuscleGroupSelector: View {
                 isExpanded = true
             }
         }
+    }
+
+    private func sortSelectedFirst(
+        lhsSelected: Bool,
+        rhsSelected: Bool,
+        lhsIndex: Int,
+        rhsIndex: Int
+    ) -> Bool {
+        if lhsSelected != rhsSelected {
+            return lhsSelected
+        }
+        return lhsIndex < rhsIndex
     }
 
     private func toggleMuscle(_ muscle: LiveWorkout.MuscleGroup) {

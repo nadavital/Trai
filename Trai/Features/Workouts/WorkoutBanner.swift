@@ -78,15 +78,11 @@ struct WorkoutBanner: View {
         let stats = stats
 
         HStack(spacing: 12) {
-            // Pulsing indicator
-            Circle()
-                .fill(.green)
-                .frame(width: 10, height: 10)
-                .overlay {
-                    Circle()
-                        .stroke(.green.opacity(0.4), lineWidth: 2)
-                        .scaleEffect(1.5)
-                }
+            Image(systemName: workout.historyIconName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TraiColors.flame)
+                .frame(width: 28, height: 28)
+                .background(TraiColors.flame.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
 
             // Workout info
             VStack(alignment: .leading, spacing: 2) {
@@ -114,15 +110,14 @@ struct WorkoutBanner: View {
 
             Spacer(minLength: 8)
 
-            // Sets completed badge
             if let completionSummary = completionSummaryText(for: stats) {
                 HStack(spacing: 4) {
-                    Image(systemName: "checkmark.circle.fill")
+                    Image(systemName: "square.stack.3d.up.fill")
                         .font(.caption)
                     Text(completionSummary)
                         .font(.caption)
                 }
-                .foregroundStyle(.green)
+                .foregroundStyle(TraiColors.flame)
             }
 
             // End button

@@ -94,10 +94,10 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             workoutType: "Climbing",
             focusAreas: ["Bouldering"],
             elapsedMinutes: 18,
-            exercisesCompleted: 1,
+            entriesLogged: 1,
             exercisesTotal: 2,
             currentExercise: "Limit Bouldering",
-            setsCompleted: 0,
+            setsLogged: 0,
             totalVolume: 0,
             targetMuscleGroups: [],
             sessionNotes: nil,
@@ -109,7 +109,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         let description = context.description
 
-        XCTAssertTrue(description.contains("Progress: 1/2 workout entries"))
+        XCTAssertTrue(description.contains("Logged/added: 1/2 workout entries"))
         XCTAssertTrue(description.contains("Current item: Limit Bouldering"))
         XCTAssertFalse(description.contains("Progress: 1/2 exercises"))
         XCTAssertFalse(description.contains("Sets completed"))
@@ -130,10 +130,10 @@ final class WorkoutSemanticParsingTests: XCTestCase {
             workoutType: "Strength",
             focusAreas: ["Push"],
             elapsedMinutes: 22,
-            exercisesCompleted: 1,
+            entriesLogged: 1,
             exercisesTotal: 3,
             currentExercise: "Bench Press",
-            setsCompleted: 4,
+            setsLogged: 4,
             totalVolume: 2400,
             targetMuscleGroups: ["Chest", "Shoulders"],
             sessionNotes: nil,
@@ -145,9 +145,10 @@ final class WorkoutSemanticParsingTests: XCTestCase {
 
         let description = context.description
 
-        XCTAssertTrue(description.contains("Progress: 1/3 exercises"))
+        XCTAssertTrue(description.contains("Logged/added: 1/3 exercises"))
         XCTAssertTrue(description.contains("Current exercise: Bench Press"))
-        XCTAssertTrue(description.contains("Strength sets completed: 4"))
+        XCTAssertTrue(description.contains("Strength sets logged: 4"))
+        XCTAssertFalse(description.contains("Strength sets completed"))
     }
 
     func testHealthKitImportedActivityTagsDriveGoalMatching() {
@@ -3470,7 +3471,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         XCTAssertEqual(workout.displayFocusSummary, "Bouldering")
     }
 
-    func testRecentWorkoutsExcludeUnloggedPlannedItemsAndIncompleteSets() async throws {
+    func testRecentWorkoutsExcludeUnloggedPlannedItemsAndCountLoggedSetData() async throws {
         let context = try makeWorkoutHistoryContext()
         let workout = LiveWorkout(name: "Strength + Support", workoutType: .mixed)
         workout.startedAt = Date().addingTimeInterval(-3_600)
@@ -3504,16 +3505,16 @@ final class WorkoutSemanticParsingTests: XCTestCase {
               let exercises = payload["exercises"] as? [[String: Any]],
               let exercise = exercises.first,
               let setDetails = exercise["sets_detail"] as? [[String: Any]] else {
-            return XCTFail("Expected recent workout payload with one completed strength set")
+            return XCTFail("Expected recent workout payload with logged strength sets")
         }
 
         XCTAssertNil(payload["activities"])
-        XCTAssertEqual(payload["summary_segments"] as? [String], ["1 exercise", "1 set", "60 min"])
+        XCTAssertEqual(payload["summary_segments"] as? [String], ["1 exercise", "2 sets", "60 min"])
         XCTAssertEqual(payload["workout_item_count"] as? Int, 1)
         XCTAssertEqual(payload["exercise_count"] as? Int, 1)
         XCTAssertEqual(payload["activity_count"] as? Int, 0)
-        XCTAssertEqual(exercise["sets_count"] as? Int, 1)
-        XCTAssertEqual(setDetails.count, 1)
+        XCTAssertEqual(exercise["sets_count"] as? Int, 2)
+        XCTAssertEqual(setDetails.count, 2)
         XCTAssertEqual(setDetails.first?["reps"] as? Int, 8)
     }
 

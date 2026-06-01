@@ -1193,6 +1193,10 @@ extension Error {
             }
         case let backendError as BackendClientError:
             return backendError.localizedDescription
+        case let urlError as URLError where urlError.code == .timedOut:
+            return "Trai is taking too long to respond. Check your connection and try again."
+        case let urlError as URLError where urlError.code == .notConnectedToInternet || urlError.code == .networkConnectionLost:
+            return "Trai couldn't reach the backend. Check your connection and try again."
         default:
             return nil
         }

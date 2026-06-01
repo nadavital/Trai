@@ -59,6 +59,11 @@ struct TraiApp: App {
     private static let reminderBackgroundRefreshTaskIdentifier = "Nadav.Trai.reminder-refresh"
 
     init() {
+        let isUITesting = AppLaunchArguments.isUITesting
+        let isRunningTests = AppLaunchArguments.isRunningTests
+        let shouldUseInMemoryStore = AppLaunchArguments.shouldUseInMemoryStore
+        let launchPendingRoute = AppLaunchArguments.launchPendingRoute
+
         let notificationService = NotificationService()
         let healthKitService = HealthKitService()
         let appAccountService = AppAccountService.shared
@@ -74,10 +79,6 @@ struct TraiApp: App {
         _billingService = State(initialValue: billingService)
         _proUpsellCoordinator = State(initialValue: proUpsellCoordinator)
 
-        let isUITesting = AppLaunchArguments.isUITesting
-        let isRunningTests = AppLaunchArguments.isRunningTests
-        let shouldUseInMemoryStore = AppLaunchArguments.shouldUseInMemoryStore
-        let launchPendingRoute = AppLaunchArguments.launchPendingRoute
         self.isUITesting = isUITesting
         self.isRunningTests = isRunningTests
         _deepLinkDestination = State(initialValue: launchPendingRoute)
@@ -183,16 +184,23 @@ struct TraiApp: App {
             let container = modelContainer
             Task { @MainActor in
                 TraiApp.sharedModelContainer = container
-                ExerciseLibrarySeeder.ensureDefaults(in: container.mainContext)
+
                 if isUITesting && !AppLaunchArguments.shouldRunOnboardingFlowUITest {
                     seedUITestProfileIfNeeded(modelContainer: container)
                     if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {
                         seedAppStoreScreenshotDataIfNeeded(modelContainer: container)
                     }
                 }
+
+                if isRunningTests {
+                    try? await Task.sleep(for: .milliseconds(250))
+                    guard !Task.isCancelled else { return }
+                }
+
+                ExerciseLibrarySeeder.ensureDefaults(in: container.mainContext)
                 if AppLaunchArguments.shouldSeedLiveWorkoutPerfData {
                     seedLiveWorkoutPerformanceDataIfNeeded(modelContainer: container)
-                } else {
+                } else if !isRunningTests {
                     purgeLiveWorkoutPerformanceSeedDataIfPresent(modelContainer: container)
                 }
             }

@@ -112,6 +112,7 @@ fi
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_PATH="$ROOT_DIR/Trai.xcodeproj"
 PROFILE_SCRIPT="$ROOT_DIR/scripts/profile_live_workout_device.sh"
+LIVE_WORKOUT_STRESS_FLAG_PATH="/tmp/trai_run_live_workout_stability_ui_stress"
 
 require_cmd xcodebuild
 require_cmd xcrun
@@ -211,11 +212,16 @@ run_simulator_checks() {
     -only-testing:TraiTests/LiveWorkoutPerformanceGuardrailsTests
 
   echo "==> Running live-workout UI stability flow on simulator"
-  RUN_LIVE_WORKOUT_STABILITY_UI_STRESS=1 xcodebuild test \
+  touch "$LIVE_WORKOUT_STRESS_FLAG_PATH"
+  if ! RUN_LIVE_WORKOUT_STABILITY_UI_STRESS=1 xcodebuild test \
     -project "$PROJECT_PATH" \
     -scheme "TraiTests" \
     -destination "$sim_destination" \
-    -only-testing:TraiUITests/TraiUITests/testLiveWorkoutStabilityPresetHandlesRepeatedMutationsAndReopen
+    -only-testing:TraiUITests/TraiUITests/testLiveWorkoutStabilityPresetHandlesRepeatedMutationsAndReopen; then
+    rm -f "$LIVE_WORKOUT_STRESS_FLAG_PATH"
+    return 1
+  fi
+  rm -f "$LIVE_WORKOUT_STRESS_FLAG_PATH"
 
   echo "==> Running startup and navigation latency smoke UI checks on simulator"
   xcodebuild test \

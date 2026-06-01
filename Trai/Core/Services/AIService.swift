@@ -21,6 +21,10 @@ final class AIService {
         let message: String?
     }
 
+    private enum RequestTimeout {
+        static let streaming: TimeInterval = 45
+    }
+
     let appAccountService = AppAccountService.shared
     let accountSessionService = AccountSessionService.shared
     let backendClient = TraiBackendClient.shared
@@ -326,6 +330,7 @@ final class AIService {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = RequestTimeout.streaming
         try await configureRequest(&request)
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 

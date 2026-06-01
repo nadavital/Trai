@@ -422,7 +422,7 @@ enum WorkoutGoalProgressResolver {
         case .weight:
             let currentKg: Double?
             let liveEntryMax = matchingEntries
-                .flatMap { entry in entry.sets.filter { $0.completed && !$0.isWarmup } }
+                .flatMap(\.loggedWorkingSets)
                 .compactMap(\.weightKg)
                 .filter { $0 > 0 }
                 .max()
@@ -452,7 +452,7 @@ enum WorkoutGoalProgressResolver {
                 let activityNormalizedName = goal.trimmedActivityName?.goalNormalizedKey
                 let entryWeights = (atCreation?.entries ?? [])
                     .filter { activityNormalizedName == nil || $0.exerciseName.goalNormalizedKey == activityNormalizedName }
-                    .flatMap { entry in entry.sets.filter { $0.completed && !$0.isWarmup } }
+                    .flatMap(\.loggedWorkingSets)
                     .compactMap(\.weightKg)
                     .filter { $0 > 0 }
                 autoBaselineKg = entryWeights.max()

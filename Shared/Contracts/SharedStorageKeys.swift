@@ -14,6 +14,8 @@ nonisolated enum SharedStorageKeys {
         static let pendingFoodLogs = "pendingFoodLogs"
         static let liveActivityAddSetTimestamp = "liveActivityAddSetTimestamp"
         static let liveActivityTogglePauseTimestamp = "liveActivityTogglePauseTimestamp"
+        static let liveActivityAdvanceExerciseTimestamp = "liveActivityAdvanceExerciseTimestamp"
+        static let liveActivityClearTimestamp = "liveActivityClearTimestamp"
     }
 
     enum Chat {

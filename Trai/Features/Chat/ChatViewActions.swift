@@ -240,6 +240,7 @@ extension ChatView {
         FoodHealthKitMacroSync.saveIfAllowed(entry, profile: profile, healthKitService: healthKitService)
         WidgetDataProvider.shared.scheduleRefresh()
         scheduleFoodMemoryResolution(for: entry.id)
+        focusedFoodEntryContext = entry.focusedChatContext
         rebuildSessionMessages(preferLiveQueryData: true)
 
         HapticManager.success()

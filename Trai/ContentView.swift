@@ -433,9 +433,16 @@ struct MainTabView: View {
             }
         }
         if loadedTabs.isEmpty {
-            _ = loadedTabs.insert(selectedTabState)
+            let initialTab = selectedTabState
+            Task { @MainActor in
+                await Task.yield()
+                guard !loadedTabs.contains(initialTab) else { return }
+                _ = loadedTabs.insert(initialTab)
+                scheduleTabPrewarmIfNeeded()
+            }
+        } else {
+            scheduleTabPrewarmIfNeeded()
         }
-        scheduleTabPrewarmIfNeeded()
         PerformanceTrace.event("main_tab_first_frame", category: .launch)
     }
 

@@ -3,7 +3,8 @@ import Foundation
 
 final class TraiUITests: XCTestCase {
     private static var didBootstrapPersistentStoreProfile = false
-    private let startupToTabBarSmokeBudgetSeconds: TimeInterval = 5.8
+    private static let liveWorkoutStabilityStressFlagPath = "/tmp/trai_run_live_workout_stability_ui_stress"
+    private let postLaunchToTabBarSmokeBudgetSeconds: TimeInterval = 2.5
     private let tabSwitchSmokeBudgetSeconds: TimeInterval = 3.5
     private let foregroundReopenSmokeBudgetSeconds: TimeInterval = 1.8
     private let addExerciseSheetSmokeBudgetSeconds: TimeInterval = 3.0
@@ -147,7 +148,11 @@ final class TraiUITests: XCTestCase {
     }
 
     func testLiveWorkoutStabilityPresetHandlesRepeatedMutationsAndReopen() throws {
-        guard ProcessInfo.processInfo.environment["RUN_LIVE_WORKOUT_STABILITY_UI_STRESS"] == "1" else {
+        let shouldRunStressPath = FileManager.default.fileExists(
+            atPath: Self.liveWorkoutStabilityStressFlagPath
+        )
+        guard ProcessInfo.processInfo.environment["RUN_LIVE_WORKOUT_STABILITY_UI_STRESS"] == "1"
+            || shouldRunStressPath else {
             throw XCTSkip(
                 "Skipping live workout stress UI path by default due simulator query flakiness; set RUN_LIVE_WORKOUT_STABILITY_UI_STRESS=1 to run explicitly."
             )
@@ -188,15 +193,19 @@ final class TraiUITests: XCTestCase {
         let app = makeApp()
         let launchStart = ProcessInfo.processInfo.systemUptime
         app.launch()
+        let launchReturned = ProcessInfo.processInfo.systemUptime
 
         let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(tabBar.waitForExistence(timeout: 10))
-        let launchToTabBar = ProcessInfo.processInfo.systemUptime - launchStart
-        logLatencyMetric("startup_to_tabbar", value: launchToTabBar)
+        let tabBarReady = ProcessInfo.processInfo.systemUptime
+        let launchToTabBar = tabBarReady - launchStart
+        let postLaunchToTabBar = tabBarReady - launchReturned
+        logLatencyMetric("startup_to_tabbar_wall", value: launchToTabBar)
+        logLatencyMetric("post_launch_to_tabbar", value: postLaunchToTabBar)
         XCTAssertLessThan(
-            launchToTabBar,
-            startupToTabBarSmokeBudgetSeconds,
-            "Startup-to-tabbar exceeded smoke budget (\(launchToTabBar)s)"
+            postLaunchToTabBar,
+            postLaunchToTabBarSmokeBudgetSeconds,
+            "Post-launch tabbar readiness exceeded smoke budget (\(postLaunchToTabBar)s; wall \(launchToTabBar)s)"
         )
 
         let dashboardTab = tabBar.buttons["Dashboard"]

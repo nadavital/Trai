@@ -19,7 +19,9 @@ struct LiveWorkoutView: View {
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
     @Query private var profiles: [UserProfile]
     @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
-    @Query(sort: \Exercise.name) private var exerciseLibrary: [Exercise]
+    @Query(filter: #Predicate<Exercise> { exercise in
+        exercise.category != "strength"
+    }, sort: \Exercise.name) private var activityExerciseLibrary: [Exercise]
 
     private var usesMetricExerciseWeight: Bool {
         profiles.first?.usesMetricExerciseWeight ?? true
@@ -51,8 +53,7 @@ struct LiveWorkoutView: View {
 
     private var activityTypeTargets: [MuscleGroupSelector.ActivityTypeTarget] {
         var seen: Set<String> = []
-        return exerciseLibrary.compactMap { exercise in
-            guard exercise.exerciseCategory != .strength else { return nil }
+        return activityExerciseLibrary.compactMap { exercise in
             let title = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !title.isEmpty else { return nil }
             let key = title.goalNormalizedKey
@@ -733,39 +734,28 @@ struct LiveWorkoutView: View {
     private func buildWorkoutContext() -> AIService.WorkoutContext {
         let entries = viewModel.entries
 
-        let completedExercises = entries.filter { entry in
-            if entry.isCardio {
-                return entry.completedAt != nil || entry.hasExercisePreferenceSignal
-            }
+        let loggedEntries = entries.filter { entry in
             if entry.isGeneralActivity {
                 guard !entry.isPlannedActivityGuidance else { return false }
-                return entry.completedAt != nil || entry.hasExercisePreferenceSignal
             }
-            let workingSets = entry.sets.filter { !$0.isWarmup }
-            return !workingSets.isEmpty && workingSets.allSatisfy { $0.completed && $0.reps > 0 }
+            return entry.hasExercisePreferenceSignal
         }.count
 
-        let currentExercise = entries.first { entry in
+        let currentExercise = entries.last(where: { entry in
             if entry.isGeneralActivity {
-                return !entry.isPlannedActivityGuidance
-                    && entry.completedAt == nil
-                    && !entry.hasExercisePreferenceSignal
+                return !entry.isPlannedActivityGuidance && entry.hasExercisePreferenceSignal
             }
-            if entry.isCardio {
-                return entry.completedAt == nil && !entry.hasExercisePreferenceSignal
-            }
-            let workingSets = entry.sets.filter { !$0.isWarmup }
-            return workingSets.isEmpty || workingSets.contains { !$0.completed || $0.reps == 0 }
-        }?.exerciseName ?? entries.last?.exerciseName
+            return entry.hasExercisePreferenceSignal
+        })?.exerciseName ?? entries.first?.exerciseName
 
         let setsWithData = entries.reduce(0) { total, entry in
             guard entry.isStrength else { return total }
-            return total + entry.sets.filter { $0.completed && $0.reps > 0 && !$0.isWarmup }.count
+            return total + entry.loggedWorkingSets.count
         }
 
         let volumeWithData = entries.reduce(0.0) { total, entry in
             guard !entry.isCardio, !entry.isGeneralActivity else { return total }
-            return total + entry.sets.filter { $0.completed && $0.reps > 0 && !$0.isWarmup }.reduce(0.0) { $0 + $1.volume }
+            return total + entry.loggedWorkingSets.reduce(0.0) { $0 + $1.volume }
         }
 
         return AIService.WorkoutContext(
@@ -773,10 +763,10 @@ struct LiveWorkoutView: View {
             workoutType: viewModel.workout.type.displayName,
             focusAreas: viewModel.sessionFocusAreas,
             elapsedMinutes: Int(viewModel.elapsedTime / 60),
-            exercisesCompleted: completedExercises,
+            entriesLogged: loggedEntries,
             exercisesTotal: entries.count,
             currentExercise: currentExercise,
-            setsCompleted: setsWithData,
+            setsLogged: setsWithData,
             totalVolume: volumeWithData,
             targetMuscleGroups: viewModel.targetMuscleGroups,
             sessionNotes: viewModel.workout.notes.isEmpty ? nil : viewModel.workout.notes,

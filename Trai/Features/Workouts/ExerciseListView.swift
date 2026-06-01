@@ -48,6 +48,7 @@ struct ExerciseListView: View {
     @State private var lastCapturedImageData: Data?
     @State private var usageSummaryCache: UsageSummary = .empty
     @State private var usageSummaryFingerprint: UsageSummaryFingerprint?
+    @State private var listMaintenanceTask: Task<Void, Never>?
     @State private var pendingCustomExerciseCreation: PendingCustomExerciseCreation?
     @State private var presentedAccountSetupContext: AccountSetupContext?
 
@@ -464,6 +465,7 @@ struct ExerciseListView: View {
                         // Create custom exercise option (always available at top)
                         Section {
                             Button {
+                                customExerciseName = ""
                                 showingAddCustom = true
                             } label: {
                                 HStack {
@@ -505,12 +507,8 @@ struct ExerciseListView: View {
                         if let customOptionName = listData.customOptionName {
                             Section {
                                 Button {
-                                    addCustomExercise(
-                                        name: customOptionName,
-                                        activityTypeName: quickAddActivityTypeName,
-                                        muscleGroup: quickAddMuscleGroup,
-                                        category: quickAddCategory
-                                    )
+                                    customExerciseName = customOptionName
+                                    showingAddCustom = true
                                 } label: {
                                     HStack {
                                         Image(systemName: "plus.circle")
@@ -581,7 +579,7 @@ struct ExerciseListView: View {
             }
             .sheet(isPresented: $showingAddCustom) {
                 AddCustomExerciseSheet(
-                    initialName: searchText,
+                    initialName: customExerciseName.isEmpty ? searchText : customExerciseName,
                     onSave: { name, activityTypeName, activityAliases, muscleGroup, category, secondaryMuscles, targetTags, trackingFields in
                         queueCustomExerciseCreation(
                             name: name,
@@ -681,8 +679,7 @@ struct ExerciseListView: View {
                 }
             }
             .onAppear {
-                ExerciseLibrarySeeder.ensureDefaults(in: modelContext)
-                refreshUsageSummaryIfNeeded(force: true)
+                scheduleDeferredListMaintenance()
             }
             .onChange(of: showingCamera) { _, isShowing in
                 guard !isShowing else { return }
@@ -703,6 +700,7 @@ struct ExerciseListView: View {
                 )
             }
             .onDisappear {
+                listMaintenanceTask?.cancel()
                 equipmentResultPresentationTask?.cancel()
             }
             .accessibilityIdentifier("exerciseListView")
@@ -711,6 +709,23 @@ struct ExerciseListView: View {
     }
 
     // MARK: - Photo Analysis
+
+    private func scheduleDeferredListMaintenance() {
+        listMaintenanceTask?.cancel()
+        listMaintenanceTask = Task { @MainActor in
+            if AppLaunchArguments.isRunningTests {
+                try? await Task.sleep(for: .milliseconds(300))
+            } else {
+                await Task.yield()
+            }
+            guard !Task.isCancelled else { return }
+            if exercises.isEmpty {
+                ExerciseLibrarySeeder.ensureDefaults(in: modelContext)
+            }
+            guard !Task.isCancelled else { return }
+            refreshUsageSummaryIfNeeded(force: true)
+        }
+    }
 
     private func analyzeEquipmentPhoto(_ imageData: Data) async {
         guard !requiresAuthenticatedAccountForExerciseAI else {
@@ -743,7 +758,9 @@ struct ExerciseListView: View {
             HapticManager.error()
             pendingEquipmentResultPresentation = false
             equipmentResultPresentationTask?.cancel()
-            photoAnalysisError = "Couldn't identify the item. Make sure the movement, equipment, or label is clearly visible and try again."
+            photoAnalysisError = error.aiUserFacingMessage(
+                fallback: "Couldn't identify the item. Make sure the movement, equipment, or label is clearly visible and try again."
+            )
         }
     }
 
@@ -902,33 +919,20 @@ struct ExerciseListView: View {
         Button {
             selectExercise(exercise)
         } label: {
-            HStack {
+            HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(exercise.name)
                         .font(.body)
+                        .lineLimit(2)
 
-                    HStack(spacing: 4) {
-                        if let muscleGroup = exercise.targetMuscleGroup {
-                            Text(muscleGroup.displayName)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else if !exercise.activityTypeName.isEmpty {
-                            Text(exercise.activityTypeName)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        // Show equipment name (stored or inferred)
-                        if let equipment = exercise.displayEquipment {
-                            Text("•")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                            Text(equipment)
-                                .font(.caption)
-                                .foregroundStyle(Color.accentColor)
-                        }
+                    if let detail = exerciseListDetail(for: exercise) {
+                        Text(detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                 }
+                .layoutPriority(1)
 
                 Spacer()
 
@@ -939,6 +943,16 @@ struct ExerciseListView: View {
             }
         }
         .foregroundStyle(.primary)
+    }
+
+    private func exerciseListDetail(for exercise: Exercise) -> String? {
+        if let muscleGroup = exercise.targetMuscleGroup {
+            return muscleGroup.displayName
+        }
+        if !exercise.activityTypeName.isEmpty {
+            return exercise.activityTypeName
+        }
+        return exercise.displayEquipment
     }
 
     // MARK: - Actions

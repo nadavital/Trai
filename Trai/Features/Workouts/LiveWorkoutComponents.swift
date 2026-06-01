@@ -233,8 +233,8 @@ struct WorkoutBottomBar: View {
                     Text(addLabel)
                 }
                 .frame(maxWidth: .infinity)
-                .accessibilityIdentifier("liveWorkoutAddExerciseButton")
             }
+            .accessibilityLabel("Add Exercise")
             .accessibilityIdentifier("liveWorkoutAddExerciseButton")
             .buttonStyle(.traiTertiary())
         }

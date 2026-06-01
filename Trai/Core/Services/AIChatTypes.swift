@@ -17,10 +17,10 @@ extension AIService {
         let workoutType: String
         let focusAreas: [String]
         let elapsedMinutes: Int
-        let exercisesCompleted: Int
+        let entriesLogged: Int
         let exercisesTotal: Int
         let currentExercise: String?
-        let setsCompleted: Int
+        let setsLogged: Int
         let totalVolume: Double
         let targetMuscleGroups: [String]
         let sessionNotes: String?
@@ -44,13 +44,13 @@ extension AIService {
                 parts.append("Target muscles: \(targetMuscleGroups.joined(separator: ", "))")
             }
             if exercisesTotal > 0 {
-                parts.append("Progress: \(exercisesCompleted)/\(exercisesTotal) \(progressLabel)")
+                parts.append("Logged/added: \(entriesLogged)/\(exercisesTotal) \(progressLabel)")
             }
             if let current = currentExercise {
                 parts.append("\(currentLabel): \(current)")
             }
-            if setsCompleted > 0 {
-                parts.append("Strength sets completed: \(setsCompleted)")
+            if setsLogged > 0 {
+                parts.append("Strength sets logged: \(setsLogged)")
             }
             if totalVolume > 0 {
                 parts.append("Total volume: \(Int(totalVolume)) kg")

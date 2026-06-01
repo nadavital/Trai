@@ -391,6 +391,16 @@ private struct LockScreenWorkoutView: View {
                         .tint(LiveActivityTheme.accent)
                     }
 
+                    if context.state.nextExercise != nil {
+                        Button(intent: AdvanceExerciseIntent()) {
+                            Label("Next", systemImage: "forward.fill")
+                                .font(.caption)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(LiveActivityTheme.accent)
+                    }
+
                     Button(intent: TogglePauseIntent()) {
                         Label(
                             context.state.isPaused ? "Resume" : "Pause",
@@ -401,6 +411,15 @@ private struct LockScreenWorkoutView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(context.state.isPaused ? LiveActivityTheme.accent : LiveActivityTheme.muted)
+
+                    Button(intent: ClearLiveActivityIntent()) {
+                        Label("Clear", systemImage: "xmark")
+                            .font(.caption)
+                            .labelStyle(.iconOnly)
+                            .frame(width: 34)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(LiveActivityTheme.muted)
                 }
             }
         }
@@ -431,25 +450,16 @@ private struct ExpandedLeadingView: View {
     let context: ActivityViewContext<TraiWorkoutAttributes>
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             Image(systemName: LiveActivityTheme.statusIcon(isPaused: context.state.isPaused))
                 .font(.title2)
                 .foregroundStyle(LiveActivityTheme.statusColor(isPaused: context.state.isPaused))
 
-            // Heart rate display (shows "--" when unavailable)
-            HStack(spacing: 2) {
-                Image(systemName: "heart.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.red)
-                if let hr = context.state.heartRate {
-                    Text("\(hr)")
-                        .font(.caption2)
-                } else {
-                    Text("--")
-                        .font(.caption2)
-                        .foregroundStyle(LiveActivityTheme.textTertiary)
-                }
-            }
+            Text(context.attributes.workoutName)
+                .font(.caption2)
+                .foregroundStyle(LiveActivityTheme.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
     }
 }
@@ -459,16 +469,20 @@ private struct ExpandedTrailingView: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
-            // Volume display (no timer per user feedback)
-            if context.state.canUseSetShortcut, let volume = context.state.volumeDisplay {
-                Text(volume)
-                    .font(.system(.title3, design: .rounded, weight: .bold))
-                    .foregroundStyle(LiveActivityTheme.accent)
+            if let nextExercise = context.state.nextExercise {
+                Text("Next")
+                    .font(.caption2)
+                    .foregroundStyle(LiveActivityTheme.textTertiary)
+                Text(nextExercise)
+                    .font(.caption)
+                    .foregroundStyle(LiveActivityTheme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            } else {
+                Text(context.state.isPaused ? "Paused" : "Live")
+                    .font(.caption)
+                    .foregroundStyle(LiveActivityTheme.textSecondary)
             }
-
-            Text(context.state.progressDisplay)
-                .font(.caption)
-                .foregroundStyle(LiveActivityTheme.textSecondary)
         }
     }
 }
@@ -491,7 +505,7 @@ private struct ExpandedBottomView: View {
             }
             .frame(height: 6)
 
-            HStack {
+            HStack(alignment: .top, spacing: 10) {
                 // Current exercise with set info
                 if let exercise = context.state.currentExercise {
                     VStack(alignment: .leading, spacing: 2) {
@@ -510,21 +524,59 @@ private struct ExpandedBottomView: View {
                                 .foregroundStyle(LiveActivityTheme.accent)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 Spacer()
 
-                // Volume display
-                if context.state.canUseSetShortcut, let volume = context.state.volumeDisplay {
-                    VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: 2) {
+                    if context.state.canUseSetShortcut, let volume = context.state.volumeDisplay {
                         Text("Volume")
                             .font(.caption2)
                             .foregroundStyle(LiveActivityTheme.textSecondary)
                         Text(volume)
                             .font(.caption)
                             .foregroundStyle(LiveActivityTheme.accent)
+                    } else {
+                        Text(context.state.progressDisplay)
+                            .font(.caption)
+                            .foregroundStyle(LiveActivityTheme.textSecondary)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+
+            HStack(spacing: 8) {
+                if context.state.canUseSetShortcut {
+                    Button(intent: AddSetIntent()) {
+                        Label("Add", systemImage: "plus.circle.fill")
+                            .font(.caption2)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(LiveActivityTheme.accent)
+                }
+
+                if context.state.nextExercise != nil {
+                    Button(intent: AdvanceExerciseIntent()) {
+                        Label("Next", systemImage: "forward.fill")
+                            .font(.caption2)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(LiveActivityTheme.accent)
+                }
+
+                Button(intent: TogglePauseIntent()) {
+                    Label(
+                        context.state.isPaused ? "Resume" : "Pause",
+                        systemImage: context.state.isPaused ? "play.fill" : "pause.fill"
+                    )
+                    .font(.caption2)
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(context.state.isPaused ? LiveActivityTheme.accent : LiveActivityTheme.muted)
             }
         }
     }

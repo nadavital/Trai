@@ -620,9 +620,14 @@ extension LiveWorkoutEntry {
         return weightKg * (36.0 / (37.0 - Double(reps)))
     }
 
-    /// Only completed (non-warmup) sets
+    /// Non-warmup sets with real logged work.
+    var loggedWorkingSets: [SetData] {
+        sets.filter { $0.reps > 0 && !$0.isWarmup }
+    }
+
+    /// Legacy name for logged non-warmup sets with real work.
     var completedSets: [SetData]? {
-        sets.filter { $0.completed && !$0.isWarmup }
+        loggedWorkingSets
     }
 
     /// Total volume for this exercise
@@ -765,9 +770,9 @@ extension LiveWorkoutEntry {
 
     func traiWorkoutContextDetail(usesMetricExerciseWeight: Bool) -> String {
         if isStrength {
-            let completedSets = sets.filter { $0.completed && $0.reps > 0 && !$0.isWarmup }
-            var parts = [exerciseName, "\(completedSets.count) logged sets"]
-            if let bestSet = completedSets.max(by: { $0.volume < $1.volume }) {
+            let loggedSets = loggedWorkingSets
+            var parts = [exerciseName, "\(loggedSets.count) logged sets"]
+            if let bestSet = loggedSets.max(by: { $0.volume < $1.volume }) {
                 parts.append("\(WeightUtility.format(bestSet.weightKg, displayUnit: WeightUnit(usesMetric: usesMetricExerciseWeight))) x \(bestSet.reps)")
             }
             if !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

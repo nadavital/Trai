@@ -74,7 +74,7 @@ struct WorkoutSummarySheet: View {
     private var goalInsights: [WorkoutGoalInsight] {
         WorkoutGoalProgressResolver.insights(
             for: workout,
-            goals: workoutGoals,
+            goals: workoutGoals.filter(\.isActive),
             workouts: allLiveWorkouts,
             sessions: goalProgressSessions,
             exerciseHistory: allExerciseHistory,
@@ -98,28 +98,14 @@ struct WorkoutSummarySheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Success icon with celebration ripple
-                    ZStack {
-                        TraiCelebrationRipple(isActive: showCelebration, color: .green)
-                            .frame(width: 80, height: 80)
-
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 64))
-                            .foregroundStyle(.green)
-                            .symbolEffect(.bounce, value: showConfetti)
-                    }
-
-                    Text(summaryTitle)
-                        .font(.title)
-                        .bold()
-                        .traiGradientText()
-
-                    if usesFlexibleSessionPresentation {
-                        Text(workout.displayFocusSummary)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
+                    WorkoutSummaryHeader(
+                        title: summaryTitle,
+                        subtitle: usesFlexibleSessionPresentation ? workout.displayFocusSummary : nil,
+                        formattedDuration: workout.formattedDuration,
+                        entryStats: entryStats,
+                        showCelebration: showCelebration,
+                        showConfetti: showConfetti
+                    )
 
                     if !goalInsights.isEmpty {
                         WorkoutGoalProgressCard(
@@ -152,11 +138,6 @@ struct WorkoutSummarySheet: View {
                         .background(Color.yellow.opacity(0.15))
                         .clipShape(.rect(cornerRadius: 16))
                     }
-
-                    WorkoutSummaryStatsCard(
-                        formattedDuration: workout.formattedDuration,
-                        entryStats: entryStats
-                    )
 
                     // Exercises completed with full detail
                     if !loggedEntries.isEmpty {
@@ -327,7 +308,7 @@ struct WorkoutSummaryContent: View {
     private var goalInsights: [WorkoutGoalInsight] {
         WorkoutGoalProgressResolver.insights(
             for: workout,
-            goals: workoutGoals,
+            goals: workoutGoals.filter(\.isActive),
             workouts: allLiveWorkouts,
             sessions: goalProgressSessions,
             exerciseHistory: allExerciseHistory,
@@ -350,28 +331,14 @@ struct WorkoutSummaryContent: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Success icon with celebration ripple
-                ZStack {
-                    TraiCelebrationRipple(isActive: showCelebration, color: .green)
-                        .frame(width: 80, height: 80)
-
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 64))
-                        .foregroundStyle(.green)
-                        .symbolEffect(.bounce, value: showConfetti)
-                }
-
-                Text(summaryTitle)
-                    .font(.title)
-                    .bold()
-                    .traiGradientText()
-
-                if usesFlexibleSessionPresentation {
-                    Text(workout.displayFocusSummary)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
+                WorkoutSummaryHeader(
+                    title: summaryTitle,
+                    subtitle: usesFlexibleSessionPresentation ? workout.displayFocusSummary : nil,
+                    formattedDuration: workout.formattedDuration,
+                    entryStats: entryStats,
+                    showCelebration: showCelebration,
+                    showConfetti: showConfetti
+                )
 
                 if !goalInsights.isEmpty {
                     WorkoutGoalProgressCard(
@@ -404,11 +371,6 @@ struct WorkoutSummaryContent: View {
                     .background(Color.yellow.opacity(0.15))
                     .clipShape(.rect(cornerRadius: 16))
                 }
-
-                WorkoutSummaryStatsCard(
-                    formattedDuration: workout.formattedDuration,
-                    entryStats: entryStats
-                )
 
                 // Exercises completed with full detail
                 if !loggedEntries.isEmpty {
@@ -564,9 +526,62 @@ struct PRRow: View {
     }
 }
 
-// MARK: - Summary Stat Row
+// MARK: - Summary Header
 
-private struct WorkoutSummaryStatsCard: View {
+private struct WorkoutSummaryHeader: View {
+    let title: String
+    let subtitle: String?
+    let formattedDuration: String
+    let entryStats: LiveWorkout.EntrySummaryStats
+    let showCelebration: Bool
+    let showConfetti: Bool
+
+    private var subtitleText: String? {
+        let trimmed = subtitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 14) {
+                ZStack {
+                    TraiCelebrationRipple(isActive: showCelebration, color: .green)
+                        .frame(width: 58, height: 58)
+
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 46))
+                        .foregroundStyle(.green)
+                        .symbolEffect(.bounce, value: showConfetti)
+                }
+                .frame(width: 58, height: 58)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.traiHero(26))
+                        .traiGradientText()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+
+                    if let subtitleText {
+                        Text(subtitleText)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            WorkoutSummaryMetricRibbon(
+                formattedDuration: formattedDuration,
+                entryStats: entryStats
+            )
+        }
+        .traiCard()
+    }
+}
+
+private struct WorkoutSummaryMetricRibbon: View {
     let formattedDuration: String
     let entryStats: LiveWorkout.EntrySummaryStats
 
@@ -574,48 +589,67 @@ private struct WorkoutSummaryStatsCard: View {
         entryStats.activityMetricSegments.prefix(2).compactMap(WorkoutActivityMetricDisplayStat.init(segment:))
     }
 
-    var body: some View {
-        VStack(spacing: 16) {
-            SummaryStatRow(
+    private var metrics: [WorkoutSummaryMetricItem] {
+        var items = [
+            WorkoutSummaryMetricItem(
                 label: "Duration",
                 value: formattedDuration,
                 icon: "clock.fill"
             )
+        ]
 
-            if entryStats.strengthEntryCount > 0 {
-                SummaryStatRow(
+        if entryStats.strengthEntryCount > 0 {
+            items.append(
+                WorkoutSummaryMetricItem(
                     label: "Exercises",
                     value: "\(entryStats.strengthEntryCount)",
                     icon: "dumbbell.fill"
                 )
-            }
+            )
+        }
 
-            if entryStats.activityEntryCount > 0 {
-                SummaryStatRow(
+        if entryStats.activityEntryCount > 0 {
+            items.append(
+                WorkoutSummaryMetricItem(
                     label: "Activities",
                     value: "\(entryStats.activityEntryCount)",
                     icon: "list.bullet.rectangle"
                 )
-            }
+            )
+        }
 
-            ForEach(activityMetricStats) { metric in
-                SummaryStatRow(
-                    label: metric.label,
-                    value: metric.value,
-                    icon: metric.icon
-                )
-            }
-
-            if entryStats.totalSets > 0 {
-                SummaryStatRow(
-                    label: "Total Sets",
+        if entryStats.totalSets > 0 {
+            items.append(
+                WorkoutSummaryMetricItem(
+                    label: "Sets",
                     value: "\(entryStats.totalSets)",
                     icon: "square.stack.3d.up.fill"
                 )
+            )
+        }
+
+        items.append(contentsOf: activityMetricStats.map {
+            WorkoutSummaryMetricItem(label: $0.label, value: $0.value, icon: $0.icon)
+        })
+
+        return Array(items.prefix(4))
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(metrics) { metric in
+                WorkoutSummaryMetricPill(metric: metric)
             }
         }
-        .traiCard()
     }
+}
+
+private struct WorkoutSummaryMetricItem: Identifiable {
+    let label: String
+    let value: String
+    let icon: String
+
+    var id: String { "\(label)-\(value)-\(icon)" }
 }
 
 struct WorkoutActivityMetricDisplayStat: Identifiable {
@@ -650,13 +684,11 @@ struct WorkoutActivityMetricDisplayStat: Identifiable {
     }
 }
 
-struct SummaryStatRow: View {
-    let label: String
-    let value: String
-    let icon: String
+private struct WorkoutSummaryMetricPill: View {
+    let metric: WorkoutSummaryMetricItem
 
     private var iconColor: Color {
-        switch icon {
+        switch metric.icon {
         case "dumbbell.fill":
             .green
         case "square.stack.3d.up.fill":
@@ -667,20 +699,27 @@ struct SummaryStatRow: View {
     }
 
     var body: some View {
-        HStack {
-            Image(systemName: icon)
+        VStack(spacing: 5) {
+            Image(systemName: metric.icon)
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(iconColor)
-                .frame(width: 24)
 
-            Text(label)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Text(value)
-                .bold()
+            Text(metric.value)
+                .font(.traiBold(16))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
                 .contentTransition(.numericText())
+
+            Text(metric.label)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 62)
+        .padding(.horizontal, 6)
+        .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
