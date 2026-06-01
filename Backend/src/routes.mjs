@@ -1491,7 +1491,7 @@ export function createRouteHandlers({
   }
 
   async function executeTraiRequestWithRetries(selectedAIProvider, traiRequest, { streaming, feature }) {
-    const providerResult = await selectedAIProvider.execute(traiRequest, { streaming });
+    const providerResult = await selectedAIProvider.execute(traiRequest, { streaming, feature });
     if (streaming || providerResult?.type !== 'single' || feature !== 'foodPhotoAnalysis') {
       return {
         providerResult,
@@ -1522,7 +1522,7 @@ export function createRouteHandlers({
 
     const retryRequest = buildFoodAnalysisRetryRequest(traiRequest, providerResult.response);
     return {
-      providerResult: await selectedAIProvider.execute(retryRequest, { streaming: false }),
+      providerResult: await selectedAIProvider.execute(retryRequest, { streaming: false, feature }),
       retryCount: 1,
       retryReason
     };

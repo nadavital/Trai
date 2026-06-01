@@ -219,8 +219,8 @@ export const UNIT_ECONOMICS = {
 
 export const FEATURE_COSTS = {
   coachChat: 1,
-  agentCoachChat: 3,
-  agentToolFollowUp: 1,
+  agentCoachChat: 6,
+  agentToolFollowUp: 3,
   foodPhotoAnalysis: 6,
   foodRefinement: 2,
   nutritionPlanGeneration: 8,

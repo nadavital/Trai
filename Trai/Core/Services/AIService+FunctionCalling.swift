@@ -31,16 +31,8 @@ extension AIService {
             let systemPrompt = buildFunctionCallingSystemPrompt(context: context)
             var messages: [TraiAIMessage] = []
 
-            // Add system prompt
-            messages.append(
-                AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: systemPrompt)
-            )
-            messages.append(
-                AIBackendPayloadBuilder.canonicalTextMessage(role: .assistant, text: context.coachTone.primingReply)
-            )
-
             // Add conversation history
-            for msg in conversationHistory.suffix(10) {
+            for msg in conversationHistory.suffix(6) {
                 messages.append(
                     AIBackendPayloadBuilder.canonicalTextMessage(
                         role: msg.isFromUser ? .user : .assistant,
@@ -74,10 +66,11 @@ extension AIService {
             }
 
             let canonicalRequest = AIBackendPayloadBuilder.canonicalRequest(
+                system: systemPrompt,
                 messages: messages,
                 tools: canonicalTools,
                 generation: AIBackendPayloadBuilder.canonicalGeneration(
-                    reasoningLevel: .medium,
+                    reasoningLevel: .low,
                     imageResolution: preparedImageData == nil ? nil : .high
                 )
             )
@@ -120,6 +113,7 @@ extension AIService {
                 userMessage: message,
                 context: context,
                 modelContext: modelContext,
+                systemPrompt: systemPrompt,
                 messages: messages,
                 onTextChunk: onTextChunk,
                 onFunctionCall: onFunctionCall
@@ -140,6 +134,7 @@ extension AIService {
         userMessage: String,
         context: ChatFunctionContext,
         modelContext: ModelContext,
+        systemPrompt: String,
         messages: [TraiAIMessage],
         onTextChunk: ((String) -> Void)?,
         onFunctionCall: ((String) -> Void)?
@@ -290,6 +285,7 @@ extension AIService {
                 let followUp = try await sendParallelFunctionResults(
                     functionResults: pendingFunctionResults,
                     previousMessages: messages,
+                    systemPrompt: systemPrompt,
                     originalParts: accumulatedParts,
                     executor: executor,
                     previousText: textResponse,
@@ -338,6 +334,7 @@ extension AIService {
                         : "The user will see a card with this food suggestion. Please write a brief, friendly message acknowledging what they ate. \(toneInstruction)"
                 ],
                 previousMessages: messages,
+                systemPrompt: systemPrompt,
                 originalParts: accumulatedParts,
                 executor: executor
             )
@@ -357,6 +354,7 @@ extension AIService {
                     "instruction": "The user will see a card with these plan changes. Please write a brief message explaining why you're suggesting these adjustments. \(toneInstruction)"
                 ],
                 previousMessages: messages,
+                systemPrompt: systemPrompt,
                 originalParts: accumulatedParts,
                 executor: executor
             )
@@ -375,6 +373,7 @@ extension AIService {
                     "instruction": "The user will see a card with these proposed changes. Please write a brief, friendly message explaining what you're suggesting to update and why. \(toneInstruction)"
                 ],
                 previousMessages: messages,
+                systemPrompt: systemPrompt,
                 originalParts: accumulatedParts,
                 executor: executor
             )
@@ -395,6 +394,7 @@ extension AIService {
                     "instruction": "The user will see a card with these proposed meal component changes. Please write a brief, friendly message explaining what you're suggesting to change in the meal and the resulting nutrition update. \(toneInstruction)"
                 ],
                 previousMessages: messages,
+                systemPrompt: systemPrompt,
                 originalParts: accumulatedParts,
                 executor: executor
             )
@@ -418,6 +418,7 @@ extension AIService {
                     "instruction": "The user will see a card with this workout suggestion. Please write a brief message about why these workout items fit their goals, recovery, and activity focus without reducing custom activities to broad workout categories. \(toneInstruction)"
                 ],
                 previousMessages: messages,
+                systemPrompt: systemPrompt,
                 originalParts: accumulatedParts,
                 executor: executor
             )
@@ -446,6 +447,7 @@ extension AIService {
                     "instruction": "The user will see a card to confirm logging this workout. Please write a brief acknowledgement of their effort using exercise language only for strength items and activity language for cardio, sport, mobility, recovery, conditioning, or custom items. \(toneInstruction)"
                 ],
                 previousMessages: messages,
+                systemPrompt: systemPrompt,
                 originalParts: accumulatedParts,
                 executor: executor
             )
@@ -468,6 +470,7 @@ extension AIService {
                     "instruction": "The data has been retrieved. Please summarize the information for the user and answer their original question based on the data. \(toneInstruction)"
                 ],
                     previousMessages: messages,
+                    systemPrompt: systemPrompt,
                     originalParts: accumulatedParts,
                     executor: executor
                 )

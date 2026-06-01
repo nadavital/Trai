@@ -114,7 +114,10 @@ function createOpenAIProvider(config, HttpError) {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(buildOpenAIResponsesRequest(config, request, { streaming }))
+        body: JSON.stringify(buildOpenAIResponsesRequest(config, request, {
+          streaming,
+          feature
+        }))
       });
 
       if (!upstreamResponse.ok) {
@@ -180,7 +183,7 @@ function openAIKeyScopeForFeature(feature) {
   }
 }
 
-function buildOpenAIResponsesRequest(config, request, { streaming }) {
+function buildOpenAIResponsesRequest(config, request, { streaming, feature } = {}) {
   const state = createToolState();
   const input = [];
   const reasoningEffort = extractOpenAIReasoningEffort(config.openAIModel, request);
@@ -198,6 +201,11 @@ function buildOpenAIResponsesRequest(config, request, { streaming }) {
     parallel_tool_calls: true,
     text: buildOpenAITextSpec(request.output)
   };
+
+  payload.prompt_cache_key = buildPromptCacheKey(feature);
+  if (supportsExtendedPromptCacheRetention(config.openAIModel)) {
+    payload.prompt_cache_retention = '24h';
+  }
 
   if (request.systemText) {
     payload.instructions = request.systemText;
@@ -228,6 +236,22 @@ function buildOpenAIResponsesRequest(config, request, { streaming }) {
   }
 
   return payload;
+}
+
+function buildPromptCacheKey(feature) {
+  const normalizedFeature = String(feature ?? 'general')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    || 'general';
+  return `trai-${normalizedFeature}-v1`.slice(0, 64);
+}
+
+function supportsExtendedPromptCacheRetention(modelName) {
+  const normalizedModelName = String(modelName ?? '').trim().toLowerCase();
+  return normalizedModelName.startsWith('gpt-5')
+    || normalizedModelName.startsWith('gpt-4.1');
 }
 
 function extractOpenAIReasoningEffort(modelName, request) {
@@ -736,7 +760,7 @@ function normalizeOpenAIFunctionCallItem(item) {
     return null;
   }
 
-  const name = typeof item?.name === 'string' ? item.name : null;
+  const name = normalizeOpenAIFunctionName(item?.name);
   if (!name) {
     return null;
   }
@@ -1028,6 +1052,20 @@ function normalizeArray(value) {
 
 function normalizeObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function normalizeOpenAIFunctionName(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return null;
+  }
+
+  const segments = trimmedValue.split('.').filter(Boolean);
+  return segments.at(-1) ?? trimmedValue;
 }
 
 function slugify(value) {

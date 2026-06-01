@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "node --watch src/server.mjs",
     "start": "node src/server.mjs",
+    "eval:chat": "node scripts/eval_trai_chat.mjs",
     "openai:usage": "node scripts/openai_usage_report.mjs",
     "test": "npm run verify:firestore-adapter && npm run verify:apple",
     "verify:ai-adapter": "node scripts/smoke_openai_responses_adapter.mjs",

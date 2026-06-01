@@ -374,8 +374,8 @@ try {
   const usageSummaryPayload = await usageSummaryResponse.json();
   assert.equal(usageSummaryPayload.usageAnalytics?.topUserLimit, 5);
   assert.equal(usageSummaryPayload.usageAnalytics?.activeUserCount, 1);
-  assert.equal(usageSummaryPayload.usageAnalytics?.unitsUsed, 9);
-  assert.equal(usageSummaryPayload.usageAnalytics?.averageUnitsPerActiveUser, 9);
+  assert.equal(usageSummaryPayload.usageAnalytics?.unitsUsed, 12);
+  assert.equal(usageSummaryPayload.usageAnalytics?.averageUnitsPerActiveUser, 12);
   assert.equal(usageSummaryPayload.usageAnalytics?.topUsers?.[0]?.userID, successPayload.session.userID);
   assert.equal(usageSummaryPayload.usageAnalytics?.topUsers?.[0]?.plan, 'pro');
   assert.equal(usageSummaryPayload.usageAnalytics?.topUsers?.[0]?.subscriptionSource, 'adminGrant');
@@ -383,6 +383,10 @@ try {
   assert.equal(usageSummaryPayload.usageAnalytics?.byPlan?.[0]?.plan, 'pro');
   assert.equal(usageSummaryPayload.usageAnalytics?.byPlan?.[0]?.source, 'adminGrant');
   assert.equal(usageSummaryPayload.usageAnalytics?.telemetry?.telemetryCoverageRatio, 1);
+  assert.equal(usageSummaryPayload.usageAnalytics?.telemetry?.trackedInputTokens, 1000);
+  assert.equal(usageSummaryPayload.usageAnalytics?.telemetry?.trackedCachedInputTokens, 100);
+  assert.equal(usageSummaryPayload.usageAnalytics?.telemetry?.cacheHitRatio, 0.1);
+  assert.equal(usageSummaryPayload.usageAnalytics?.telemetry?.byFeature?.[0]?.cacheHitRatio, 0.1);
 
   const adminUsersResponse = await fetch(`http://127.0.0.1:${port}/v1/admin/users?query=tester&plan=pro&limit=10`, {
     headers: {
@@ -396,7 +400,7 @@ try {
   assert.equal(adminUsersPayload.users?.[0]?.email, sharedBody.email);
   assert.equal(adminUsersPayload.users?.[0]?.subscription?.plan, 'pro');
   assert.equal(adminUsersPayload.users?.[0]?.subscription?.source, 'adminGrant');
-  assert.equal(adminUsersPayload.users?.[0]?.usageLast30Days?.unitsUsed, 9);
+  assert.equal(adminUsersPayload.users?.[0]?.usageLast30Days?.unitsUsed, 12);
 
   const rangedUsageSummaryResponse = await fetch(`http://127.0.0.1:${port}/v1/admin/usage-summary?start=2000-01-01T00%3A00%3A00.000Z&end=2000-01-02T00%3A00%3A00.000Z`, {
     headers: {
@@ -610,7 +614,7 @@ function seedAnalyticsUsage(databasePath, userID) {
     db.prepare(`
       INSERT INTO usage_ledger (id, user_id, feature, unit_cost, request_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run('ulg_analytics_1', userID, 'agentCoachChat', 3, 'req_analytics_1', now);
+    `).run('ulg_analytics_1', userID, 'agentCoachChat', 6, 'req_analytics_1', now);
     db.prepare(`
       INSERT INTO usage_ledger (id, user_id, feature, unit_cost, request_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?)

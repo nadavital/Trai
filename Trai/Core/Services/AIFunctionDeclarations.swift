@@ -48,7 +48,7 @@ enum AIFunctionDeclarations {
     static var suggestFoodLog: [String: Any] {
         [
             "name": "suggest_food_log",
-            "description": "Suggest a food entry for the user to log. The user must confirm before it's added to their diary. Use this when the user mentions eating something or shares a food photo. Always provide accurate nutritional estimates. If the user specifies a past day or exact date, include logged_at_date.",
+            "description": "Suggest a food entry for the user to log. The user must confirm before it's added to their diary. Use when the user mentions eating something or shares a food photo. Do not use for progress checks, remaining macros, or plan targets. If the user specifies a past day or exact date, include logged_at_date.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -310,7 +310,7 @@ enum AIFunctionDeclarations {
     static var getTodaysFoodLog: [String: Any] {
         [
             "name": "get_food_log",
-            "description": "Get the user's food log for a specific date or date range, including averages for multi-day queries. IMPORTANT: Use this when reviewing/reassessing the nutrition plan to see their eating patterns and adherence. Also use when the user asks what they've eaten, their progress, remaining calories/macros, nutrition status, or averages. Use this before edit_food_entry when you need to identify which logged meal to update, because it returns entry IDs and exact timestamps. Set include_components=true before edit_food_components so you can inspect and reference meal parts. Returns daily_averages automatically for multi-day ranges.",
+            "description": "Get the user's food log for a specific date or date range, including actual logged foods, calories, macros, and multi-day averages. Use when the user asks what they've eaten, food progress, remaining intake math, nutrition status, or averages. For comparisons against targets or goals, pair this with get_user_plan. Use this before edit_food_entry when you need to identify which logged meal to update, because it returns entry IDs and exact timestamps. Set include_components=true before edit_food_components so you can inspect and reference meal parts.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -347,7 +347,7 @@ enum AIFunctionDeclarations {
     static var getUserPlan: [String: Any] {
         [
             "name": "get_user_plan",
-            "description": "Get the user's current nutrition plan, including their goal, daily calorie/macro targets, and plan rationale. Use when the user asks about their goals, targets, or plan details.",
+            "description": "Get the user's current nutrition plan, including their goal, daily calorie/macro targets, and plan rationale. Use when the user asks about goals, targets, plan details, remaining calories/macros, or whether they are ahead, behind, under, over, or on track versus the plan.",
             "parameters": [
                 "type": "object",
                 "properties": [:],
@@ -360,7 +360,7 @@ enum AIFunctionDeclarations {
     static var updateUserPlan: [String: Any] {
         [
             "name": "update_user_plan",
-            "description": "Propose changes to the user's nutrition plan or goals. The user must confirm before changes are applied. Use when the user wants to adjust their calorie/macro targets or change their goal. You must provide at least one value to change, plus a rationale explaining why.",
+            "description": "Propose changes to the user's nutrition plan, goal, or calorie/macro targets. The user must confirm before changes are applied. Use when the user wants to adjust targets or change the goal, not for simply viewing progress. Provide at least one value to change plus a rationale.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -409,7 +409,7 @@ enum AIFunctionDeclarations {
     static var getRecentWorkouts: [String: Any] {
         [
             "name": "get_recent_workouts",
-            "description": "Get the user's workout history for a specific date or date range. Defaults to recent workouts if no date specified. IMPORTANT: Use this when reviewing/reassessing the nutrition plan to understand their activity level. Also use when the user asks about their workout history, exercise patterns, training frequency, or past workouts.",
+            "description": "Get the user's workout history for a specific date or date range. Defaults to recent workouts if no date specified. Use for past workouts, exercise patterns, training frequency, fatigue context, plan adherence, nutrition-plan reassessment, or deciding what to train next.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -820,7 +820,7 @@ enum AIFunctionDeclarations {
     static var getMuscleRecoveryStatus: [String: Any] {
         [
             "name": "get_muscle_recovery_status",
-            "description": "Get the user's muscle group recovery status showing which muscles are ready to train, recovering, or tired. Use when the user asks what to work out, which muscles are ready, or wants workout suggestions based on recovery.",
+            "description": "Get the user's muscle group recovery/readiness status showing which muscles are ready, recovering, or tired. Use when the user asks what to work out, whether a body part is ready, how soreness/fatigue should affect training, or wants recovery-based workout suggestions.",
             "parameters": [
                 "type": "object",
                 "properties": [:],
@@ -833,7 +833,7 @@ enum AIFunctionDeclarations {
     static var suggestWorkout: [String: Any] {
         [
             "name": "suggest_workout",
-            "description": "Generate a startable workout suggestion from the user's saved plan when they ask what to train today, or from explicit activity, muscle, duration, and equipment preferences when provided.",
+            "description": "Generate a concrete workout suggestion from the saved plan or the user's requested activity, muscle focus, duration, and equipment. Use when the user asks what to train, wants a startable session, or asks for a workout idea; use start_live_workout only when they want to begin tracking now.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -871,7 +871,7 @@ enum AIFunctionDeclarations {
     static var startLiveWorkout: [String: Any] {
         [
             "name": "start_live_workout",
-            "description": "Start a live workout tracking session for the user. Use when the user says they want to start a workout, begin training, or are ready to work out. This creates a new workout where they can track strength exercises, cardio, sport practice, mobility, recovery, conditioning, or custom activities.",
+            "description": "Start a live workout tracking session for the user. Use when the user says they want to start, begin, track, or do a concrete workout now. This creates a new workout where they can track strength exercises, cardio, sport practice, mobility, recovery, conditioning, or custom activities.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -965,7 +965,7 @@ enum AIFunctionDeclarations {
     static var getWeightHistory: [String: Any] {
         [
             "name": "get_weight_history",
-            "description": "Get the user's weight history and trends. Defaults to recent entries if no date specified. IMPORTANT: Use this when reviewing/reassessing the nutrition plan to get actual weight data. Also use when the user asks about their weight, weight progress, weight trends, or how much they've lost/gained.",
+            "description": "Get the user's weight history and trends. Defaults to recent entries if no date specified. Use when reviewing/reassessing the nutrition plan or when the user asks about weight, weight progress, trends, or how much they've lost/gained.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -1028,7 +1028,7 @@ enum AIFunctionDeclarations {
     static var getActivitySummary: [String: Any] {
         [
             "name": "get_activity_summary",
-            "description": "Get the user's daily activity data from Apple Health including steps, active calories burned, and exercise minutes. Use when reviewing/reassessing the nutrition plan or when the user asks about their activity, steps, calories burned, how active they've been, or exercise time for today.",
+            "description": "Get the user's daily activity data from Apple Health including steps, active calories burned, and exercise minutes. Use for nutrition-plan reassessment or when the user asks about activity, steps, calories burned, how active they've been, or exercise time.",
             "parameters": [
                 "type": "object",
                 "properties": [:],
