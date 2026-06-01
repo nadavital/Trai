@@ -20,6 +20,7 @@ private enum LiveActivityTheme {
     static let textTertiary = Color.white.opacity(0.70)
     static let muted = textSecondary
     static let background = Color(red: 0.09, green: 0.09, blue: 0.12)
+    static let supplementalBackground = Color(red: 0.09, green: 0.09, blue: 0.12).opacity(0.72)
     static let actionForeground = Color.white
 
     static func statusIcon(isPaused: Bool) -> String {
@@ -253,8 +254,8 @@ private struct LockScreenWorkoutView: View {
         }
         .foregroundStyle(LiveActivityTheme.textPrimary)
         .padding(12)
-        .traiLiveActivityContainerBackground()
-        .activityBackgroundTint(.clear)
+        .traiLiveActivityContainerBackground(isSupplemental: true)
+        .activityBackgroundTint(LiveActivityTheme.supplementalBackground)
         .activitySystemActionForegroundColor(LiveActivityTheme.actionForeground)
     }
 
@@ -306,7 +307,7 @@ private struct LockScreenWorkoutView: View {
                         .tint(LiveActivityTheme.controlAccent)
                     }
 
-                    if context.state.nextExercise != nil {
+                    if context.state.canUseAdvanceShortcut {
                         Button(intent: AdvanceExerciseIntent()) {
                             Label("Next Exercise", systemImage: "forward.fill")
                                 .font(.caption.weight(.semibold))
@@ -341,13 +342,13 @@ private struct LockScreenWorkoutView: View {
 
 private extension View {
     @ViewBuilder
-    func traiLiveActivityContainerBackground() -> some View {
+    func traiLiveActivityContainerBackground(isSupplemental: Bool = false) -> some View {
         if #available(iOS 17.0, *) {
             self.containerBackground(for: .widget) {
-                Color.clear
+                isSupplemental ? LiveActivityTheme.supplementalBackground : Color.clear
             }
         } else {
-            self.background(Color.clear)
+            self.background(isSupplemental ? LiveActivityTheme.supplementalBackground : Color.clear)
         }
     }
 }
@@ -521,7 +522,7 @@ private struct ExpandedBottomView: View {
                     .tint(LiveActivityTheme.accent)
                 }
 
-                if context.state.nextExercise != nil {
+                if context.state.canUseAdvanceShortcut {
                     Button(intent: AdvanceExerciseIntent()) {
                         Label("Next", systemImage: "forward.fill")
                             .font(.caption2)

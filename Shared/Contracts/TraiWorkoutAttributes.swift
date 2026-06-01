@@ -33,6 +33,7 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         let progressTotal: Int?
         let progressLabel: String?
         let supportsSetShortcut: Bool?
+        let supportsAdvanceShortcut: Bool?
 
         init(
             elapsedSeconds: Int,
@@ -53,7 +54,8 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             progressCompleted: Int? = nil,
             progressTotal: Int? = nil,
             progressLabel: String? = nil,
-            supportsSetShortcut: Bool = true
+            supportsSetShortcut: Bool = true,
+            supportsAdvanceShortcut: Bool? = nil
         ) {
             self.elapsedSeconds = elapsedSeconds
             self.currentExercise = currentExercise
@@ -74,6 +76,7 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             self.progressTotal = progressTotal
             self.progressLabel = progressLabel
             self.supportsSetShortcut = supportsSetShortcut
+            self.supportsAdvanceShortcut = supportsAdvanceShortcut
         }
 
         var formattedTime: String {
@@ -119,6 +122,10 @@ struct TraiWorkoutAttributes: ActivityAttributes {
 
         var canUseSetShortcut: Bool {
             supportsSetShortcut ?? true
+        }
+
+        var canUseAdvanceShortcut: Bool {
+            supportsAdvanceShortcut ?? (nextExercise != nil)
         }
 
         var volumeDisplay: String? {

@@ -30,7 +30,8 @@ final class LiveActivityManager {
     func startActivity(
         workoutName: String,
         targetMuscles: [String],
-        startedAt: Date
+        startedAt: Date,
+        initialState: TraiWorkoutAttributes.ContentState? = nil
     ) {
         // Guard: Don't start if already have an active activity
         guard currentActivity == nil else {
@@ -50,7 +51,7 @@ final class LiveActivityManager {
             startedAt: startedAt
         )
 
-        let initialState = TraiWorkoutAttributes.ContentState(
+        let state = initialState ?? TraiWorkoutAttributes.ContentState(
             elapsedSeconds: 0,
             currentExercise: nil,
             completedSets: 0,
@@ -60,7 +61,7 @@ final class LiveActivityManager {
             supportsSetShortcut: false
         )
 
-        let content = ActivityContent(state: initialState, staleDate: Date().addingTimeInterval(60))
+        let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(60))
 
         do {
             currentActivity = try Activity.request(
@@ -94,10 +95,9 @@ final class LiveActivityManager {
         progressCompleted: Int? = nil,
         progressTotal: Int? = nil,
         progressLabel: String? = nil,
-        supportsSetShortcut: Bool = true
+        supportsSetShortcut: Bool = true,
+        supportsAdvanceShortcut: Bool? = nil
     ) {
-        guard let activity = currentActivity else { return }
-
         let updatedState = TraiWorkoutAttributes.ContentState(
             elapsedSeconds: elapsedSeconds,
             currentExercise: currentExercise,
@@ -117,10 +117,17 @@ final class LiveActivityManager {
             progressCompleted: progressCompleted,
             progressTotal: progressTotal,
             progressLabel: progressLabel,
-            supportsSetShortcut: supportsSetShortcut
+            supportsSetShortcut: supportsSetShortcut,
+            supportsAdvanceShortcut: supportsAdvanceShortcut
         )
 
-        let content = ActivityContent(state: updatedState, staleDate: Date().addingTimeInterval(60))
+        updateActivity(state: updatedState)
+    }
+
+    func updateActivity(state: TraiWorkoutAttributes.ContentState) {
+        guard let activity = currentActivity else { return }
+
+        let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(60))
 
         Task {
             await activity.update(content)

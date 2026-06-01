@@ -709,6 +709,7 @@ final class LiveWorkoutViewModel {
             guard !Task.isCancelled else { return }
             self.loadExerciseUsageFrequency()
             self.rebuildSuggestionPool(reason: .workoutStart)
+            self.updateLiveActivity()
         }
     }
 
@@ -2129,9 +2130,9 @@ final class LiveWorkoutViewModel {
         liveActivityManager.startActivity(
             workoutName: workoutName,
             targetMuscles: targetMuscleGroups,
-            startedAt: workout.startedAt
+            startedAt: workout.startedAt,
+            initialState: liveActivityContentState(isPausedOverride: false)
         )
-        updateLiveActivity()
 
         // Start periodic updates for elapsed time
         startLiveActivityUpdates()
@@ -2244,7 +2245,7 @@ final class LiveWorkoutViewModel {
         return segments.prefix(3).joined(separator: " • ")
     }
 
-    private func updateLiveActivity() {
+    private func liveActivityContentState(isPausedOverride: Bool? = nil) -> TraiWorkoutAttributes.ContentState {
         // Live Activity focus is a presentation pointer; entries are added/logged, not completed one-by-one.
         let currentEntry = liveActivityCurrentEntry()
         let progress = liveActivityProgress()
@@ -2267,11 +2268,12 @@ final class LiveWorkoutViewModel {
 
         // "Next" advances focus only; it does not mark the current exercise complete.
         let currentIndex = entries.firstIndex { $0.id == currentEntry?.id } ?? -1
-        let nextExercise = entries.dropFirst(currentIndex + 1)
+        let nextAddedExercise = entries.dropFirst(currentIndex + 1)
             .first?
             .exerciseName
+        let nextExercise = nextAddedExercise ?? upNextSuggestion?.exerciseName
 
-        liveActivityManager.updateActivity(
+        return TraiWorkoutAttributes.ContentState(
             elapsedSeconds: Int(elapsedTime),
             currentExercise: currentExercise,
             currentEquipment: currentEquipment,
@@ -2279,7 +2281,7 @@ final class LiveWorkoutViewModel {
             completedSets: completedSets,
             totalSets: totalSets,
             heartRate: currentHeartRate.map { Int($0) },
-            isPaused: !isTimerRunning,
+            isPaused: isPausedOverride ?? !isTimerRunning,
             currentWeightKg: currentWeightKg,
             currentWeightLbs: currentWeightLbs,
             currentReps: currentReps,
@@ -2290,7 +2292,12 @@ final class LiveWorkoutViewModel {
             progressCompleted: progress.completed,
             progressTotal: progress.total,
             progressLabel: progress.label,
-            supportsSetShortcut: progress.supportsSetShortcut
+            supportsSetShortcut: progress.supportsSetShortcut,
+            supportsAdvanceShortcut: nextAddedExercise != nil
         )
+    }
+
+    private func updateLiveActivity() {
+        liveActivityManager.updateActivity(state: liveActivityContentState())
     }
 }
