@@ -9,6 +9,7 @@ export function normalizeIncomingTraiRequest(requestBody) {
 
   return {
     requestFormat: 'legacy_gemini_compat',
+    promptVersion: '',
     systemText: extractTextFromParts(normalizeObject(requestBody?.systemInstruction).parts),
     canonicalMessages,
     tools: convertGeminiToolsToTraiTools(requestBody?.tools),
@@ -121,6 +122,7 @@ function normalizeCanonicalTraiRequest(requestBody) {
   const generation = normalizeCanonicalGeneration(normalizeObject(requestBody?.generation));
   return {
     requestFormat: 'trai_v1',
+    promptVersion: typeof requestBody?.promptVersion === 'string' ? requestBody.promptVersion.trim() : '',
     systemText: typeof requestBody?.system === 'string' ? requestBody.system : '',
     canonicalMessages,
     tools: normalizeCanonicalTools(requestBody?.tools),

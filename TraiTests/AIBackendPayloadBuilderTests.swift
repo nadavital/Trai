@@ -178,6 +178,45 @@ final class AIBackendPayloadBuilderTests: XCTestCase {
         XCTAssertEqual((toolResponsePart?["response"] as? [String: Any])?["protein"] as? Double, 1.3)
     }
 
+    func testPromptVersionIsExplicitlySerializedWhenProvided() {
+        let request = AIBackendPayloadBuilder.canonicalRequest(
+            promptVersion: "prompt-v2",
+            system: "You are Trai.",
+            messages: [
+                AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: "Help me plan dinner")
+            ],
+            generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low)
+        )
+
+        let body = AIBackendPayloadBuilder.requestBody(from: request)
+
+        XCTAssertEqual(body["promptVersion"] as? String, "prompt-v2")
+    }
+
+    func testPromptEnvelopePrependsDynamicContextBeforeConversationMessages() {
+        let envelope = TraiPromptCore.envelope(
+            system: "You are Trai.",
+            context: "Current context:\nGoal: build muscle",
+            messages: [
+                AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: "What should I eat?")
+            ],
+            generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low)
+        )
+
+        let body = AIBackendPayloadBuilder.requestBody(from: envelope.request)
+        let messages = body["messages"] as? [[String: Any]]
+
+        XCTAssertEqual(body["promptVersion"] as? String, TraiPromptCore.promptVersion)
+        XCTAssertEqual(messages?.count, 2)
+        XCTAssertEqual(messages?.first?["role"] as? String, "user")
+        XCTAssertEqual(messages?.last?["role"] as? String, "user")
+
+        let contextParts = messages?.first?["parts"] as? [[String: Any]]
+        let userParts = messages?.last?["parts"] as? [[String: Any]]
+        XCTAssertEqual(contextParts?.first?["text"] as? String, "Current context:\nGoal: build muscle")
+        XCTAssertEqual(userParts?.first?["text"] as? String, "What should I eat?")
+    }
+
     func testSharedCanonicalRequestFixturesRoundTripToCanonicalPayloads() throws {
         for fixture in try loadSharedCanonicalRequestFixtures() {
             let request = try traiRequest(from: fixture.request)
@@ -227,6 +266,7 @@ private extension AIBackendPayloadBuilderTests {
         let generation = try traiGeneration(from: try XCTUnwrap(json["generation"] as? [String: Any]))
 
         return TraiAIRequest(
+            promptVersion: json["promptVersion"] as? String,
             system: system,
             messages: messages,
             tools: tools,

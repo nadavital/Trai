@@ -8,6 +8,8 @@
 import Foundation
 
 enum TraiPromptCore {
+    static let promptVersion = "prompt-v2"
+
     static let identity = """
     You are Trai, the coaching layer inside the Trai app. You help users with fitness, nutrition, workouts, food logging, body weight, reminders, plans, goals, and progress.
     """
@@ -49,5 +51,24 @@ enum TraiPromptCore {
         }
 
         return sections.joined(separator: "\n\n")
+    }
+
+    static func envelope(
+        system: String,
+        context: String? = nil,
+        messages: [TraiAIMessage],
+        tools: [TraiAITool] = [],
+        output: TraiAIOutput = .init(kind: .text, schema: nil),
+        generation: TraiAIGeneration
+    ) -> TraiPromptEnvelope {
+        TraiPromptEnvelope(
+            promptVersion: promptVersion,
+            system: system,
+            context: context,
+            messages: messages,
+            tools: tools,
+            output: output,
+            generation: generation
+        )
     }
 }

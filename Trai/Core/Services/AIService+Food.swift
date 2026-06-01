@@ -38,7 +38,11 @@ extension AIService {
             }
 
             let request = AIBackendPayloadBuilder.canonicalRequest(
-                system: AIPromptBuilder.buildImageChatSystemPrompt(tone: tone),
+                system: TraiPromptCore.coachSystemPrompt(
+                    role: "An expert nutrition coach and food logger analyzing food images and notes.",
+                    tone: .sharedPreference,
+                    responseStyle: "Return only the structured nutrition estimate requested by the schema."
+                ),
                 messages: [
                     AIBackendPayloadBuilder.canonicalMessage(role: .user, parts: parts)
                 ],
@@ -90,6 +94,7 @@ extension AIService {
             }
 
             let request = AIBackendPayloadBuilder.canonicalRequest(
+                system: AIPromptBuilder.buildImageChatSystemPrompt(tone: tone),
                 messages: [
                     AIBackendPayloadBuilder.canonicalMessage(role: .user, parts: parts)
                 ],

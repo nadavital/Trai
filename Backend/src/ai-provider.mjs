@@ -202,7 +202,7 @@ function buildOpenAIResponsesRequest(config, request, { streaming, feature } = {
     text: buildOpenAITextSpec(request.output)
   };
 
-  payload.prompt_cache_key = buildPromptCacheKey(feature);
+  payload.prompt_cache_key = buildPromptCacheKey(feature, request.promptVersion);
   if (supportsExtendedPromptCacheRetention(config.openAIModel)) {
     payload.prompt_cache_retention = '24h';
   }
@@ -238,14 +238,20 @@ function buildOpenAIResponsesRequest(config, request, { streaming, feature } = {
   return payload;
 }
 
-function buildPromptCacheKey(feature) {
+function buildPromptCacheKey(feature, promptVersion) {
   const normalizedFeature = String(feature ?? 'general')
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     || 'general';
-  return `trai-${normalizedFeature}-v1`.slice(0, 64);
+  const normalizedVersion = String(promptVersion ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    || 'v1';
+  return `trai-${normalizedFeature}-${normalizedVersion}`.slice(0, 64);
 }
 
 function supportsExtendedPromptCacheRetention(modelName) {

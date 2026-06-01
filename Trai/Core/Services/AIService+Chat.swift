@@ -11,6 +11,7 @@ import os
 extension AIService {
     struct ChatPromptParts {
         let system: String
+        let context: String
         let messages: [TraiAIMessage]
     }
 
@@ -34,11 +35,13 @@ extension AIService {
                 tone: tone
             )
 
-            let request = AIBackendPayloadBuilder.canonicalRequest(
+            let request = TraiPromptCore.envelope(
                 system: parts.system,
+                context: parts.context,
                 messages: parts.messages,
+                output: .init(kind: .text, schema: nil),
                 generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low)
-            )
+            ).request
 
             return try await makeRequest(request: request)
         }
@@ -63,11 +66,13 @@ extension AIService {
                 tone: tone
             )
 
-            let request = AIBackendPayloadBuilder.canonicalRequest(
+            let request = TraiPromptCore.envelope(
                 system: parts.system,
+                context: parts.context,
                 messages: parts.messages,
+                output: .init(kind: .text, schema: nil),
                 generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low)
-            )
+            ).request
 
             try await makeStreamingRequest(request: request, onChunk: onChunk)
         }
@@ -130,6 +135,7 @@ extension AIService {
         var contents: [TraiAIMessage] = []
 
         let systemPrompt = AIPromptBuilder.buildSystemPrompt(context: context, tone: tone)
+        let contextPrompt = AIPromptBuilder.buildChatContextPrompt(context: context)
 
         for msg in conversationHistory.suffix(10) {
             contents.append(
@@ -144,7 +150,7 @@ extension AIService {
             AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: message)
         )
 
-        return ChatPromptParts(system: systemPrompt, messages: contents)
+        return ChatPromptParts(system: systemPrompt, context: contextPrompt, messages: contents)
     }
 
     // MARK: - Nutrition Advice
