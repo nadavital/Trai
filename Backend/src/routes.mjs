@@ -99,7 +99,8 @@ export function createRouteHandlers({
         aiProviderCapabilities: aiProvider.capabilities,
         hasProviderKey: aiProvider.isConfigured(),
         hasGeminiKey: Boolean(config.geminiApiKey),
-        hasOpenAIKey: Boolean(config.openAIApiKey),
+        hasOpenAIKey: configuredOpenAIKeyScopes().length > 0,
+        openAIKeyScopes: configuredOpenAIKeyScopes(),
         allowDevAppleBypass: config.allowDevAppleBypass
       });
     }
@@ -173,6 +174,12 @@ export function createRouteHandlers({
     }
 
     sendJson(res, 404, { error: 'not_found' });
+  }
+
+  function configuredOpenAIKeyScopes() {
+    return Object.entries(config.openAIApiKeys ?? {})
+      .filter(([, value]) => typeof value === 'string' && value.length > 0)
+      .map(([scope]) => scope);
   }
 
   function handleServerError(res, error) {

@@ -97,20 +97,21 @@ function createOpenAIProvider(config, HttpError) {
       imageInputs: true
     },
     isConfigured() {
-      return Boolean(config.openAIApiKey);
+      return Boolean(resolveOpenAIAPIKey(config));
     },
-    async execute(request, { streaming }) {
-      if (!config.openAIApiKey) {
+    async execute(request, { streaming, feature } = {}) {
+      const apiKey = resolveOpenAIAPIKey(config, feature);
+      if (!apiKey) {
         throw new HttpError(503, {
           error: 'openai_not_configured',
-          message: 'OPENAI_API_KEY is required when TRAI_AI_PROVIDER=openai.'
+          message: 'An OpenAI API key is required when TRAI_AI_PROVIDER=openai.'
         });
       }
 
       const upstreamResponse = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${config.openAIApiKey}`,
+          Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(buildOpenAIResponsesRequest(config, request, { streaming }))
@@ -143,6 +144,40 @@ function createOpenAIProvider(config, HttpError) {
       };
     }
   };
+}
+
+function resolveOpenAIAPIKey(config, feature = null) {
+  const keys = config.openAIApiKeys ?? {};
+  const scopedKey = openAIKeyScopeForFeature(feature)
+    .map((scope) => keys[scope])
+    .find((value) => typeof value === 'string' && value.length > 0);
+
+  return scopedKey || keys.default || config.openAIApiKey || '';
+}
+
+function openAIKeyScopeForFeature(feature) {
+  switch (feature) {
+    case 'foodPhotoAnalysis':
+    case 'foodRefinement':
+    case 'nutritionAdvice':
+    case 'nutritionPlanGeneration':
+    case 'nutritionPlanRefinement':
+      return ['food', 'plan'];
+    case 'workoutPlanGeneration':
+    case 'workoutPlanRefinement':
+      return ['workout', 'plan'];
+    case 'exerciseAnalysis':
+    case 'exercisePhotoAnalysis':
+      return ['exercise', 'workout'];
+    case 'memoryExtraction':
+      return ['memory', 'coach'];
+    case 'coachChat':
+    case 'agentCoachChat':
+    case 'agentToolFollowUp':
+      return ['coach'];
+    default:
+      return [];
+  }
 }
 
 function buildOpenAIResponsesRequest(config, request, { streaming }) {

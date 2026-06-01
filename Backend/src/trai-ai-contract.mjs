@@ -35,7 +35,7 @@ export function buildGeminiRequestFromTraiRequest(request) {
         function_declarations: request.tools.map((tool) => ({
           name: tool.name,
           description: tool.description,
-          parameters: normalizeSchema(tool.parameters)
+          parameters: normalizeGeminiSchema(tool.parameters)
         }))
       }
     ];
@@ -69,7 +69,7 @@ export function buildGeminiRequestFromTraiRequest(request) {
     generationConfig.responseMimeType = 'application/json';
   } else if (request.output.kind === 'json_schema' && request.output.schema) {
     generationConfig.responseMimeType = 'application/json';
-    generationConfig.responseSchema = normalizeSchema(request.output.schema);
+    generationConfig.responseSchema = normalizeGeminiSchema(request.output.schema);
   }
 
   if (Object.keys(generationConfig).length > 0) {
@@ -762,6 +762,30 @@ function normalizeSchema(schema) {
   const result = {};
   for (const [key, value] of Object.entries(schema)) {
     result[key] = normalizeSchema(value);
+  }
+  return result;
+}
+
+function normalizeGeminiSchema(schema) {
+  if (Array.isArray(schema)) {
+    return schema.map((item) => normalizeGeminiSchema(item));
+  }
+
+  if (!schema || typeof schema !== 'object') {
+    return schema;
+  }
+
+  const result = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === 'enum' && Array.isArray(value)) {
+      const enumValues = value.filter((item) => item !== '');
+      if (enumValues.length > 0) {
+        result[key] = enumValues.map((item) => normalizeGeminiSchema(item));
+      }
+      continue;
+    }
+
+    result[key] = normalizeGeminiSchema(value);
   }
   return result;
 }

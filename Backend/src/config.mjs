@@ -40,6 +40,15 @@ export function createConfig(env = process.env) {
     geminiApiKey: env.GEMINI_API_KEY ?? '',
     geminiModel,
     openAIApiKey: env.OPENAI_API_KEY ?? '',
+    openAIApiKeys: {
+      default: env.OPENAI_API_KEY ?? '',
+      coach: env.OPENAI_API_KEY_COACH ?? env.OPENAI_API_KEY_CHAT ?? '',
+      food: env.OPENAI_API_KEY_FOOD ?? '',
+      workout: env.OPENAI_API_KEY_WORKOUT ?? '',
+      plan: env.OPENAI_API_KEY_PLAN ?? '',
+      exercise: env.OPENAI_API_KEY_EXERCISE ?? '',
+      memory: env.OPENAI_API_KEY_MEMORY ?? ''
+    },
     openAIModel,
     allowDevAppleBypass: env.ALLOW_DEV_APPLE_BYPASS === 'true',
     appleIssuer: env.APPLE_EXPECTED_ISSUER ?? 'https://appleid.apple.com',
@@ -97,13 +106,21 @@ export function validateConfig(config) {
     throw new Error('ALLOW_DEV_APPLE_BYPASS must never be enabled in production.');
   }
 
-  if (config.aiProvider === 'openai' && !config.openAIApiKey) {
-    throw new Error('OPENAI_API_KEY must be configured when TRAI_AI_PROVIDER=openai.');
+  if (config.aiProvider === 'openai' && !hasConfiguredOpenAIKey(config)) {
+    throw new Error('At least one OpenAI API key must be configured when TRAI_AI_PROVIDER=openai.');
   }
 
   if (config.appleExpectedAudiences.length === 0) {
     throw new Error('APPLE_EXPECTED_AUDIENCES must include at least one bundle or service identifier.');
   }
+}
+
+function hasConfiguredOpenAIKey(config) {
+  if (config.openAIApiKey) {
+    return true;
+  }
+
+  return Object.values(config.openAIApiKeys ?? {}).some((value) => typeof value === 'string' && value.length > 0);
 }
 
 export function loadTrustedAppStoreRoots(config) {

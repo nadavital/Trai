@@ -33,6 +33,12 @@ Optional environment variables:
   APP_STORE_EXPECTED_BUNDLE_IDS  default: Nadav.Trai
   GEMINI_SECRET_NAME             default: GEMINI_API_KEY
   OPENAI_SECRET_NAME             default: OPENAI_API_KEY
+  OPENAI_COACH_SECRET_NAME       optional scoped OpenAI key secret
+  OPENAI_FOOD_SECRET_NAME        optional scoped OpenAI key secret
+  OPENAI_WORKOUT_SECRET_NAME     optional scoped OpenAI key secret
+  OPENAI_PLAN_SECRET_NAME        optional scoped OpenAI key secret
+  OPENAI_EXERCISE_SECRET_NAME    optional scoped OpenAI key secret
+  OPENAI_MEMORY_SECRET_NAME      optional scoped OpenAI key secret
   ADMIN_SECRET_NAME              default: TRAI_ADMIN_API_KEY
 EOF
 }
@@ -84,13 +90,31 @@ fi
 IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}"
 
 echo "Building ${IMAGE_URI}"
-gcloud builds submit --tag "${IMAGE_URI}" .
+gcloud builds submit --project "${PROJECT_ID}" --tag "${IMAGE_URI}" .
 
 secret_mappings="TRAI_ADMIN_API_KEY=${ADMIN_SECRET_NAME}:latest"
 if [[ "${TRAI_AI_PROVIDER}" == "gemini" ]]; then
   secret_mappings="${secret_mappings},GEMINI_API_KEY=${GEMINI_SECRET_NAME}:latest"
 else
   secret_mappings="${secret_mappings},OPENAI_API_KEY=${OPENAI_SECRET_NAME}:latest"
+  if [[ -n "${OPENAI_COACH_SECRET_NAME:-}" ]]; then
+    secret_mappings="${secret_mappings},OPENAI_API_KEY_COACH=${OPENAI_COACH_SECRET_NAME}:latest"
+  fi
+  if [[ -n "${OPENAI_FOOD_SECRET_NAME:-}" ]]; then
+    secret_mappings="${secret_mappings},OPENAI_API_KEY_FOOD=${OPENAI_FOOD_SECRET_NAME}:latest"
+  fi
+  if [[ -n "${OPENAI_WORKOUT_SECRET_NAME:-}" ]]; then
+    secret_mappings="${secret_mappings},OPENAI_API_KEY_WORKOUT=${OPENAI_WORKOUT_SECRET_NAME}:latest"
+  fi
+  if [[ -n "${OPENAI_PLAN_SECRET_NAME:-}" ]]; then
+    secret_mappings="${secret_mappings},OPENAI_API_KEY_PLAN=${OPENAI_PLAN_SECRET_NAME}:latest"
+  fi
+  if [[ -n "${OPENAI_EXERCISE_SECRET_NAME:-}" ]]; then
+    secret_mappings="${secret_mappings},OPENAI_API_KEY_EXERCISE=${OPENAI_EXERCISE_SECRET_NAME}:latest"
+  fi
+  if [[ -n "${OPENAI_MEMORY_SECRET_NAME:-}" ]]; then
+    secret_mappings="${secret_mappings},OPENAI_API_KEY_MEMORY=${OPENAI_MEMORY_SECRET_NAME}:latest"
+  fi
 fi
 env_mappings="HOST=0.0.0.0,TRAI_ENVIRONMENT=${TRAI_ENVIRONMENT},TRAI_AI_PROVIDER=${TRAI_AI_PROVIDER},TRAI_DATABASE_DRIVER=${TRAI_DATABASE_DRIVER},GEMINI_MODEL=${GEMINI_MODEL},OPENAI_MODEL=${OPENAI_MODEL},ALLOW_DEV_APPLE_BYPASS=false,APPLE_EXPECTED_AUDIENCES=${APPLE_EXPECTED_AUDIENCES},APP_STORE_EXPECTED_BUNDLE_IDS=${APP_STORE_EXPECTED_BUNDLE_IDS}"
 
@@ -98,6 +122,7 @@ echo "Deploying ${SERVICE_NAME}"
 deploy_args=(
   run deploy "${SERVICE_NAME}"
   --image "${IMAGE_URI}" \
+  --project "${PROJECT_ID}" \
   --region "${REGION}" \
   --allow-unauthenticated \
   --clear-cloudsql-instances \
@@ -117,5 +142,6 @@ gcloud "${deploy_args[@]}"
 echo
 echo "Service URL:"
 gcloud run services describe "${SERVICE_NAME}" \
+  --project "${PROJECT_ID}" \
   --region "${REGION}" \
   --format='value(status.url)'

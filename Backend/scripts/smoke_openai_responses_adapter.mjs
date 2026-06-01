@@ -18,12 +18,16 @@ class HttpError extends Error {
 const baseConfig = {
   aiProvider: 'openai',
   openAIApiKey: 'test-openai-key',
+  openAIApiKeys: {
+    default: 'test-openai-key'
+  },
   openAIModel: 'gpt-5.4-mini',
   geminiApiKey: '',
   geminiModel: 'gemini-3-flash-preview'
 };
 
 await testNonStreamingTextAndRequestShape();
+await testOpenAIUsesFeatureScopedAPIKeys();
 await testNonStreamingToolCallNormalization();
 await testStreamingTextNormalization();
 await testStreamingToolCallNormalization();
@@ -35,6 +39,7 @@ await testGeminiNullableToolSchemaMapsToOpenAINullTypes();
 await testLegacyGeminiCompatRequestBuildsGeminiPayload();
 await testCanonicalTraiRequestBuildsGeminiPayload();
 await testCanonicalTraiToolMessagesBuildGeminiPayload();
+await testGeminiSchemaDropsEmptyEnumValues();
 await testLegacyGeminiRequestDerivesCanonicalMessages();
 await testGeminiRoundTripPreservesGenerationConfig();
 await testGeminiThinkingLevelMapsToOpenAIReasoning();
@@ -109,6 +114,41 @@ async function testNonStreamingTextAndRequestShape() {
   assert.equal(captured[0].body.text.format.type, 'json_schema');
   assert.equal(captured[0].body.text.format.strict, true);
   assert.equal(captured[0].body.tools[0].strict, true);
+}
+
+async function testOpenAIUsesFeatureScopedAPIKeys() {
+  const captured = [];
+  const provider = withMockedFetch(async (url, init) => {
+    captured.push({ url, authorization: init.headers.Authorization });
+    return jsonResponse({
+      status: 'completed',
+      output: [
+        {
+          type: 'message',
+          content: [
+            { type: 'output_text', text: 'OK' }
+          ]
+        }
+      ]
+    });
+  }, {
+    openAIApiKey: 'fallback-key',
+    openAIApiKeys: {
+      default: 'fallback-key',
+      coach: 'coach-key',
+      food: 'food-key'
+    }
+  });
+
+  await provider.execute(emptyRequest(), { streaming: false, feature: 'foodPhotoAnalysis' });
+  await provider.execute(emptyRequest(), { streaming: false, feature: 'agentCoachChat' });
+  await provider.execute(emptyRequest(), { streaming: false, feature: 'unknownFeature' });
+
+  assert.deepEqual(captured.map((request) => request.authorization), [
+    'Bearer food-key',
+    'Bearer coach-key',
+    'Bearer fallback-key'
+  ]);
 }
 
 async function testNonStreamingToolCallNormalization() {
@@ -740,6 +780,48 @@ async function testCanonicalTraiToolMessagesBuildGeminiPayload() {
     name: 'lookup_food',
     response: { protein: 1.3 }
   });
+}
+
+async function testGeminiSchemaDropsEmptyEnumValues() {
+  const rebuiltRequest = buildGeminiRequestFromTraiRequest({
+    canonicalMessages: [
+      {
+        role: 'user',
+        parts: [{ type: 'text', text: 'Hello' }]
+      }
+    ],
+    tools: [
+      {
+        name: 'update_workout_goal',
+        description: 'Update a workout goal.',
+        parameters: {
+          type: 'object',
+          properties: {
+            workout_type: {
+              type: 'string',
+              enum: ['strength', 'cardio', '']
+            },
+            nested: {
+              type: 'object',
+              properties: {
+                period_unit: {
+                  type: 'string',
+                  enum: ['day', 'week', '']
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    output: { kind: 'text', schema: null },
+    generation: {},
+    backendGenerationConfig: {}
+  });
+
+  const properties = rebuiltRequest.tools[0].function_declarations[0].parameters.properties;
+  assert.deepEqual(properties.workout_type.enum, ['strength', 'cardio']);
+  assert.deepEqual(properties.nested.properties.period_unit.enum, ['day', 'week']);
 }
 
 async function testLegacyGeminiRequestDerivesCanonicalMessages() {
