@@ -145,6 +145,7 @@ final class LiveWorkoutViewModel {
     var availableSuggestions: [ExerciseSuggestion] = []
     var upNextSuggestion: ExerciseSuggestion?
     var suggestionsByMuscle: [String: [ExerciseSuggestion]] = [:]
+    var isHydratingStartupSuggestions = false
 
     // Apple Watch data (via HealthKit)
     var currentHeartRate: Double?
@@ -695,6 +696,7 @@ final class LiveWorkoutViewModel {
     private func scheduleDeferredStartupHydration() {
         deferredPerformanceHydrationTask?.cancel()
         deferredSuggestionHydrationTask?.cancel()
+        isHydratingStartupSuggestions = true
 
         deferredPerformanceHydrationTask = Task(priority: .utility) { @MainActor [weak self] in
             guard let self else { return }
@@ -706,9 +708,13 @@ final class LiveWorkoutViewModel {
         deferredSuggestionHydrationTask = Task(priority: .utility) { @MainActor [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: .milliseconds(460))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                self.isHydratingStartupSuggestions = false
+                return
+            }
             self.loadExerciseUsageFrequency()
             self.rebuildSuggestionPool(reason: .workoutStart)
+            self.isHydratingStartupSuggestions = false
             self.updateLiveActivity()
         }
     }
@@ -1167,6 +1173,7 @@ final class LiveWorkoutViewModel {
         pendingLiveActivityUpdateTask?.cancel()
         deferredPerformanceHydrationTask?.cancel()
         deferredSuggestionHydrationTask?.cancel()
+        isHydratingStartupSuggestions = false
         stopHeartRateMonitoring()
         stopLiveActivityUpdates()
         removeLiveActivityObservers()

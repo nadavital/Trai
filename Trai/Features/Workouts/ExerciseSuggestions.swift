@@ -66,6 +66,31 @@ struct UpNextSuggestionCard: View {
     }
 }
 
+struct UpNextSuggestionLoadingCard: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.small)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Finding Up Next")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text("Matching this session to your plan and history")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding()
+        .traiCard(tint: .accentColor, cornerRadius: 16)
+    }
+}
+
 // MARK: - Exercise Suggestion Chip
 
 struct ExerciseSuggestionChip: View {

@@ -1347,27 +1347,7 @@ struct WorkoutsView: View {
         }
 
         isStartingWorkout = true
-        let workout = templateService.createWorkoutFromTemplate(
-            template,
-            progressionStrategy: workoutPlan?.progressionStrategy ?? .defaultStrategy,
-            modelContext: modelContext,
-            prefillStrengthExercises: false
-        )
-        guard templateService.persistWorkout(workout, modelContext: modelContext) else {
-            isStartingWorkout = false
-            return
-        }
-        BehaviorTracker(modelContext: modelContext).record(
-            actionKey: BehaviorActionKey.startWorkout,
-            domain: .workout,
-            surface: .workouts,
-            outcome: .performed,
-            relatedEntityId: workout.id,
-            metadata: [
-                "type": "template",
-                "template_name": template.name
-            ]
-        )
+        let workout = templateService.createStartWorkout(from: template)
 
         // Preserve the source template context and open the workout sheet
         pendingTemplate = template
@@ -1414,22 +1394,6 @@ struct WorkoutsView: View {
             type: resolvedType,
             muscles: resolvedMuscles,
             focusAreas: resolvedFocusAreas
-        )
-        guard templateService.persistWorkout(workout, modelContext: modelContext) else {
-            isStartingWorkout = false
-            return
-        }
-        BehaviorTracker(modelContext: modelContext).record(
-            actionKey: BehaviorActionKey.startWorkout,
-            domain: .workout,
-            surface: .workouts,
-            outcome: .performed,
-            relatedEntityId: workout.id,
-            metadata: [
-                "type": "custom",
-                "workout_type": resolvedType.rawValue,
-                "focus_areas": resolvedFocusAreas.joined(separator: ",")
-            ]
         )
 
         // Open the workout sheet

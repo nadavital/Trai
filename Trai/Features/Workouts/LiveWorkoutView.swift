@@ -455,6 +455,8 @@ struct LiveWorkoutView: View {
                             ) {
                                 viewModel.addUpNextExercise()
                             }
+                        } else if entries.isEmpty && availableSuggestions.isEmpty && viewModel.isHydratingStartupSuggestions {
+                            UpNextSuggestionLoadingCard()
                         }
 
                         // More suggestions by muscle group
@@ -475,7 +477,7 @@ struct LiveWorkoutView: View {
                             }
                         }
 
-                        if entries.isEmpty && upNext == nil && availableSuggestions.isEmpty {
+                        if entries.isEmpty && upNext == nil && availableSuggestions.isEmpty && !viewModel.isHydratingStartupSuggestions {
                             ContentUnavailableView(
                                 "No Items Yet",
                                 systemImage: "figure.mixed.cardio",
