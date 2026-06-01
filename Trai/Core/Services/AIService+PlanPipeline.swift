@@ -22,11 +22,13 @@ extension AIService {
 
     func executePlanGenerationPipeline<Plan: Decodable>(
         prompt: String,
+        systemPrompt: String? = nil,
         schema: [String: Any],
         decodeFailureLabel: String,
         reasoningLevel: AIReasoningLevel = .medium
     ) async throws -> Plan {
         let request = AIBackendPayloadBuilder.canonicalRequest(
+            system: systemPrompt,
             messages: [
                 AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: prompt)
             ],
@@ -49,9 +51,11 @@ extension AIService {
 
     func executePlanRefinementPipeline<Plan: Decodable>(
         prompt: String,
+        systemPrompt: String? = nil,
         schema: [String: Any]
     ) async throws -> PlanPipelineRefinementEnvelope<Plan> {
         let request = AIBackendPayloadBuilder.canonicalRequest(
+            system: systemPrompt,
             messages: [
                 AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: prompt)
             ],

@@ -9,6 +9,10 @@ import Foundation
 import os
 
 extension AIService {
+    struct ChatPromptParts {
+        let system: String
+        let messages: [TraiAIMessage]
+    }
 
     // MARK: - Chat
 
@@ -23,7 +27,7 @@ extension AIService {
         lastError = nil
         defer { isLoading = false }
         return try await performAIRequest(for: .coachChat) {
-            let messages = buildChatMessages(
+            let parts = buildChatPromptParts(
                 message: message,
                 context: context,
                 conversationHistory: conversationHistory,
@@ -31,7 +35,8 @@ extension AIService {
             )
 
             let request = AIBackendPayloadBuilder.canonicalRequest(
-                messages: messages,
+                system: parts.system,
+                messages: parts.messages,
                 generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low)
             )
 
@@ -51,7 +56,7 @@ extension AIService {
         lastError = nil
         defer { isLoading = false }
         try await performAIRequest(for: .coachChat) {
-            let messages = buildChatMessages(
+            let parts = buildChatPromptParts(
                 message: message,
                 context: context,
                 conversationHistory: conversationHistory,
@@ -59,7 +64,8 @@ extension AIService {
             )
 
             let request = AIBackendPayloadBuilder.canonicalRequest(
-                messages: messages,
+                system: parts.system,
+                messages: parts.messages,
                 generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low)
             )
 
@@ -97,6 +103,7 @@ extension AIService {
             )
 
             let request = AIBackendPayloadBuilder.canonicalRequest(
+                system: AIPromptBuilder.buildTextChatSystemPrompt(tone: tone),
                 messages: [
                     AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: prompt)
                 ],
@@ -114,21 +121,15 @@ extension AIService {
         }
     }
 
-    func buildChatMessages(
+    func buildChatPromptParts(
         message: String,
         context: FitnessContext,
         conversationHistory: [ChatMessage],
         tone: TraiCoachTone = .sharedPreference
-    ) -> [TraiAIMessage] {
+    ) -> ChatPromptParts {
         var contents: [TraiAIMessage] = []
 
         let systemPrompt = AIPromptBuilder.buildSystemPrompt(context: context, tone: tone)
-        contents.append(
-            AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: systemPrompt)
-        )
-        contents.append(
-            AIBackendPayloadBuilder.canonicalTextMessage(role: .assistant, text: tone.primingReply)
-        )
 
         for msg in conversationHistory.suffix(10) {
             contents.append(
@@ -143,7 +144,7 @@ extension AIService {
             AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: message)
         )
 
-        return contents
+        return ChatPromptParts(system: systemPrompt, messages: contents)
     }
 
     // MARK: - Nutrition Advice

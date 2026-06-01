@@ -38,6 +38,7 @@ extension AIService {
             }
 
             let request = AIBackendPayloadBuilder.canonicalRequest(
+                system: AIPromptBuilder.buildImageChatSystemPrompt(tone: tone),
                 messages: [
                     AIBackendPayloadBuilder.canonicalMessage(role: .user, parts: parts)
                 ],
@@ -465,6 +466,11 @@ extension AIService {
             )
 
             let request = AIBackendPayloadBuilder.canonicalRequest(
+                system: TraiPromptCore.coachSystemPrompt(
+                    role: "A friendly fitness coach suggesting a workout from the user's history and goals.",
+                    tone: .sharedPreference,
+                    responseStyle: "Suggest one practical workout. Be specific about what to do and keep it concise."
+                ),
                 messages: [
                     AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: prompt)
                 ],

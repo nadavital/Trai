@@ -64,11 +64,17 @@ extension AIService {
         log("🎯 Workout prefs - Days: \(request.availableDays.map { "\($0)" } ?? "flexible"), Experience: \(request.experienceLevel?.rawValue ?? "unspecified"), Equipment: \(request.equipmentAccess?.rawValue ?? "unspecified")", type: .info)
 
         let prompt = AIPromptBuilder.buildWorkoutPlanGenerationPrompt(request: request)
+        let systemPrompt = TraiPromptCore.coachSystemPrompt(
+            role: "A certified personal trainer creating a personalized workout plan.",
+            tone: .sharedPreference,
+            responseStyle: "Create practical, personalized workout plans that match the app schema exactly."
+        )
         logPrompt(prompt)
 
         do {
             let plan: WorkoutPlan = try await executePlanGenerationPipeline(
                 prompt: prompt,
+                systemPrompt: systemPrompt,
                 schema: AIPromptBuilder.workoutPlanSchema,
                 decodeFailureLabel: "workout plan",
                 reasoningLevel: .low
@@ -84,6 +90,7 @@ extension AIService {
                         invalidPlan: plan,
                         request: request
                     ),
+                    systemPrompt: systemPrompt,
                     schema: AIPromptBuilder.workoutPlanSchema,
                     decodeFailureLabel: "corrected workout plan",
                     reasoningLevel: .low
@@ -128,11 +135,17 @@ extension AIService {
             userIntent: userIntent,
             prefersMetricWeight: prefersMetricWeight
         )
+        let systemPrompt = TraiPromptCore.coachSystemPrompt(
+            role: "A certified personal trainer creating a personalized workout plan and workout goals.",
+            tone: .sharedPreference,
+            responseStyle: "Create practical plans and goal suggestions that match the app schema exactly."
+        )
         logPrompt(prompt)
 
         do {
             let envelope: WorkoutPlanGenerationEnvelope = try await executePlanGenerationPipeline(
                 prompt: prompt,
+                systemPrompt: systemPrompt,
                 schema: AIPromptBuilder.workoutPlanWithGoalSuggestionsSchema,
                 decodeFailureLabel: "workout plan with goals",
                 reasoningLevel: .low
@@ -148,6 +161,7 @@ extension AIService {
                         invalidPlan: envelope.plan,
                         request: request
                     ),
+                    systemPrompt: systemPrompt,
                     schema: AIPromptBuilder.workoutPlanWithGoalSuggestionsSchema,
                     decodeFailureLabel: "corrected workout plan with goals",
                     reasoningLevel: .low
@@ -414,8 +428,6 @@ extension AIService {
             let answered = answeredQuestions.isEmpty ? "None" : answeredQuestions.joined(separator: " | ")
 
             let prompt = """
-            You are Trai, a fitness coach inside a workout plan setup flow.
-
             Choose exactly one follow-up question for a short paid Pro workout plan setup.
 
             The question should make the resulting workout plan and generated goals materially more personal. It must fill the most important remaining gap from the user's context, not repeat what they already answered. The app may ask up to two adaptive follow-ups, so ask the next highest-value question rather than trying to cover every gap at once.
@@ -482,6 +494,11 @@ extension AIService {
             ]
 
             let request = AIBackendPayloadBuilder.canonicalRequest(
+                system: TraiPromptCore.coachSystemPrompt(
+                    role: "A fitness coach inside a workout plan setup flow.",
+                    tone: .sharedPreference,
+                    responseStyle: "Ask exactly one concise, conversational follow-up question."
+                ),
                 messages: [
                     AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: prompt)
                 ],
@@ -528,11 +545,17 @@ extension AIService {
                 userMessage: userMessage,
                 conversationHistory: conversationHistory
             )
+            let systemPrompt = TraiPromptCore.coachSystemPrompt(
+                role: "A friendly personal trainer chatting with the user about their workout plan.",
+                tone: .sharedPreference,
+                responseStyle: "This is a casual chat. Keep user-facing messages short and conversational, usually 1-3 sentences."
+            )
             logPrompt(prompt)
 
             do {
                 let envelope: PlanPipelineRefinementEnvelope<WorkoutPlan> = try await executePlanRefinementPipeline(
                     prompt: prompt,
+                    systemPrompt: systemPrompt,
                     schema: AIPromptBuilder.workoutPlanRefinementSchema
                 )
 

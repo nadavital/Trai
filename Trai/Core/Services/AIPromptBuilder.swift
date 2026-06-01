@@ -196,9 +196,6 @@ enum AIPromptBuilder {
         tone: TraiCoachTone = .sharedPreference
     ) -> String {
         var prompt = """
-        You are Trai, a friendly fitness coach. Suggest a workout based on the user's history and goals. Never refer to yourself as an AI or assistant.
-        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
-
         User's Goal: \(goal)
         """
 
@@ -288,10 +285,15 @@ enum AIPromptBuilder {
         context: FitnessContext,
         tone: TraiCoachTone = .sharedPreference
     ) -> String {
-        var prompt = """
-        You are Trai, a friendly fitness and nutrition coach. Never refer to yourself as an AI, language model, or assistant. Here's the current context:
-        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
+        var prompt = TraiPromptCore.coachSystemPrompt(
+            role: "A friendly fitness and nutrition coach.",
+            tone: tone,
+            responseStyle: "Keep responses concise, helpful, specific, and actionable."
+        )
 
+        prompt += """
+
+        Current context:
         Goal: \(context.userGoal)
         \(context.calorieTargetPromptLine)
         \(context.proteinTargetPromptLine)

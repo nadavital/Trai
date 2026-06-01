@@ -39,11 +39,17 @@ extension AIService {
         log("🏃 Activity: \(request.activityLevel.rawValue), Goal: \(request.goal.rawValue)", type: .info)
 
         let prompt = AIPromptBuilder.buildPlanGenerationPrompt(request: request)
+        let systemPrompt = TraiPromptCore.coachSystemPrompt(
+            role: "A certified nutritionist and fitness coach creating a personalized nutrition plan.",
+            tone: .sharedPreference,
+            responseStyle: "Create practical, personalized nutrition plans that match the app schema exactly."
+        )
         logPrompt(prompt)
 
         do {
             let plan: NutritionPlan = try await executePlanGenerationPipeline(
                 prompt: prompt,
+                systemPrompt: systemPrompt,
                 schema: AIPromptBuilder.nutritionPlanSchema,
                 decodeFailureLabel: "nutrition plan"
             )
@@ -83,11 +89,17 @@ extension AIService {
                 userMessage: userMessage,
                 conversationHistory: conversationHistory
             )
+            let systemPrompt = TraiPromptCore.coachSystemPrompt(
+                role: "A friendly nutrition coach chatting with the user about their plan.",
+                tone: .sharedPreference,
+                responseStyle: "This is a casual chat. Keep user-facing messages short and conversational, usually 1-3 sentences."
+            )
             logPrompt(prompt)
 
             do {
                 let envelope: PlanPipelineRefinementEnvelope<NutritionPlan> = try await executePlanRefinementPipeline(
                     prompt: prompt,
+                    systemPrompt: systemPrompt,
                     schema: AIPromptBuilder.planRefinementSchema
                 )
 
