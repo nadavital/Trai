@@ -157,11 +157,39 @@ struct TraiAIGeneration: Equatable, Sendable {
 }
 
 struct TraiAIRequest: Equatable, Sendable {
+    let promptVersion: String?
     let system: String?
     let messages: [TraiAIMessage]
     let tools: [TraiAITool]
     let output: TraiAIOutput
     let generation: TraiAIGeneration
+}
+
+struct TraiPromptEnvelope: Equatable, Sendable {
+    let promptVersion: String
+    let system: String
+    let context: String?
+    let messages: [TraiAIMessage]
+    let tools: [TraiAITool]
+    let output: TraiAIOutput
+    let generation: TraiAIGeneration
+
+    nonisolated var request: TraiAIRequest {
+        var requestMessages: [TraiAIMessage] = []
+        if let context, context.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            requestMessages.append(AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: context))
+        }
+        requestMessages.append(contentsOf: messages)
+
+        return TraiAIRequest(
+            promptVersion: promptVersion,
+            system: system,
+            messages: requestMessages,
+            tools: tools,
+            output: output,
+            generation: generation
+        )
+    }
 }
 
 enum AIBackendPayloadBuilder {
@@ -246,6 +274,9 @@ enum AIBackendPayloadBuilder {
             "output": outputJSONObject(request.output),
             "generation": generationJSONObject(request.generation)
         ]
+        if let promptVersion = request.promptVersion, !promptVersion.isEmpty {
+            body["promptVersion"] = promptVersion
+        }
         if let system = request.system, !system.isEmpty {
             body["system"] = system
         }
@@ -301,6 +332,7 @@ enum AIBackendPayloadBuilder {
     }
 
     nonisolated static func canonicalRequest(
+        promptVersion: String? = nil,
         system: String? = nil,
         messages: [TraiAIMessage],
         tools: [TraiAITool] = [],
@@ -308,6 +340,7 @@ enum AIBackendPayloadBuilder {
         generation: TraiAIGeneration
     ) -> TraiAIRequest {
         TraiAIRequest(
+            promptVersion: promptVersion?.isEmpty == true ? nil : promptVersion,
             system: system?.isEmpty == true ? nil : system,
             messages: messages,
             tools: tools,
@@ -320,7 +353,8 @@ enum AIBackendPayloadBuilder {
         messages: [JSON],
         generationConfig: JSON,
         toolDeclarations declarations: [JSON] = [],
-        systemText: String? = nil
+        systemText: String? = nil,
+        promptVersion: String? = nil
     ) -> TraiAIRequest {
         let generation = canonicalGeneration(from: generationConfig)
         let output = canonicalOutput(from: generationConfig)
@@ -328,6 +362,7 @@ enum AIBackendPayloadBuilder {
         let traiTools = declarations.compactMap(canonicalTool(from:))
 
         return TraiAIRequest(
+            promptVersion: promptVersion?.isEmpty == true ? nil : promptVersion,
             system: systemText?.isEmpty == true ? nil : systemText,
             messages: traiMessages,
             tools: traiTools,
@@ -340,13 +375,15 @@ enum AIBackendPayloadBuilder {
         messages: [JSON],
         generationConfig: JSON,
         toolDeclarations declarations: [JSON] = [],
-        systemText: String? = nil
+        systemText: String? = nil,
+        promptVersion: String? = nil
     ) -> JSON {
         requestBody(from: canonicalRequest(
             messages: messages,
             generationConfig: generationConfig,
             toolDeclarations: declarations,
-            systemText: systemText
+            systemText: systemText,
+            promptVersion: promptVersion
         ))
     }
 

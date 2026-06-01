@@ -16,9 +16,6 @@ extension AIPromptBuilder {
         tone: TraiCoachTone = .sharedPreference
     ) -> String {
         var prompt = """
-        You are Trai, a certified nutritionist and fitness coach creating a personalized nutrition plan. Never mention being an AI or assistant.
-        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
-
         USER PROFILE:
         - Name: \(request.name)
         - Age: \(request.age) years old
@@ -158,9 +155,6 @@ extension AIPromptBuilder {
         let trackedMacroNames = request.enabledMacros.map(\.displayName).sorted().joined(separator: ", ")
 
         var prompt = """
-        You are Trai, a friendly nutrition coach chatting with the user about their plan. Never refer to yourself as an AI or assistant. This is a casual chat, so keep responses SHORT and conversational (1-3 sentences max).
-        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
-
         RESPONSE TYPES - Choose ONE:
         1. "message" - For questions, clarifications, or one short follow-up when absolutely needed.
         2. "proposePlan" - When you want to SUGGEST a new plan. Prefer this when the user intent is already clear.

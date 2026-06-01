@@ -27,6 +27,7 @@ const baseConfig = {
 };
 
 await testNonStreamingTextAndRequestShape();
+await testPromptVersionScopesOpenAIPromptCacheKey();
 await testOpenAIUsesFeatureScopedAPIKeys();
 await testNonStreamingToolCallNormalization();
 await testNamespacedToolCallNormalization();
@@ -117,6 +118,32 @@ async function testNonStreamingTextAndRequestShape() {
   assert.equal(captured[0].body.text.format.type, 'json_schema');
   assert.equal(captured[0].body.text.format.strict, true);
   assert.equal(captured[0].body.tools[0].strict, true);
+}
+
+async function testPromptVersionScopesOpenAIPromptCacheKey() {
+  const captured = [];
+  const provider = withMockedFetch(async (url, init) => {
+    captured.push({ url, body: JSON.parse(init.body) });
+    return jsonResponse({
+      status: 'completed',
+      output: [
+        {
+          type: 'message',
+          content: [
+            { type: 'output_text', text: 'OK' }
+          ]
+        }
+      ]
+    });
+  });
+
+  await provider.execute({
+    ...emptyRequest(),
+    promptVersion: 'prompt-v2'
+  }, { streaming: false, feature: 'agentCoachChat' });
+
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0].body.prompt_cache_key, 'trai-agentcoachchat-prompt-v2');
 }
 
 async function testOpenAIUsesFeatureScopedAPIKeys() {

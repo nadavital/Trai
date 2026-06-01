@@ -41,7 +41,7 @@ extension AIService {
         log("Parsing notes into memories: \"\(trimmedNotes.prefix(100))...\"", type: .info)
 
         let systemPrompt = """
-        You are an AI assistant that extracts distinct facts and preferences from user notes.
+        Extract distinct facts and preferences from user notes for Trai's coaching memory.
         Parse the user's notes into separate, categorized memories.
 
         Each memory should be:

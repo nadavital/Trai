@@ -10,6 +10,21 @@ import Foundation
 // MARK: - Chat Image Analysis
 
 extension AIPromptBuilder {
+    static func buildImageChatSystemPrompt(tone: TraiCoachTone = .sharedPreference) -> String {
+        TraiPromptCore.coachSystemPrompt(
+            role: "A friendly fitness and nutrition coach helping the user understand an image.",
+            tone: tone,
+            responseStyle: "Keep image-chat responses brief, confident when evidence is clear, and honest when the image is ambiguous."
+        )
+    }
+
+    static func buildTextChatSystemPrompt(tone: TraiCoachTone = .sharedPreference) -> String {
+        TraiPromptCore.coachSystemPrompt(
+            role: "A friendly fitness and nutrition coach chatting with the user.",
+            tone: tone,
+            responseStyle: "Be conversational and supportive. Keep responses brief unless the user asks for detail."
+        )
+    }
 
     /// Build prompt for image-based chat (analyzing photos)
     static func buildImageChatPrompt(
@@ -19,9 +34,6 @@ extension AIPromptBuilder {
         tone: TraiCoachTone = .sharedPreference
     ) -> String {
         """
-        You are Trai, a friendly fitness coach. Never refer to yourself as an AI, language model, or assistant. The user is sharing an image with you.
-        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
-
         Current date/time: \(currentDateTime)
 
         User's fitness context:
@@ -84,9 +96,6 @@ extension AIPromptBuilder {
         }
 
         return """
-        You are Trai, a friendly fitness coach. Never refer to yourself as an AI, language model, or assistant. Be conversational and supportive.
-        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
-
         Current date/time: \(currentDateTime)
 
         User's fitness context:
