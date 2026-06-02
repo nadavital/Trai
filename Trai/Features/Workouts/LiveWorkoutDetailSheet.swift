@@ -215,7 +215,7 @@ struct LiveWorkoutDetailSheet: View {
                         notesSection(workout.notes)
                     }
 
-                    if goalInsights.isEmpty || shouldShowRecentSignals {
+                    if goalInsights.isEmpty {
                         workoutGoalsSection
                     }
 

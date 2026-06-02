@@ -234,13 +234,6 @@ struct WorkoutsView: View {
         visibleWorkoutGoalInsights.map(\.goal)
     }
 
-    private var workoutGoalSignals: [RecentWorkoutSignal] {
-        WorkoutGoalProgressResolver.globalRecentSignals(
-            from: completedLiveWorkouts,
-            sessions: workoutGoalSessions
-        )
-    }
-
     private var staleWorkoutGoalNeedingCheckIn: WorkoutGoal? {
         WorkoutGoalProgressResolver.staleGoalsNeedingCheckIn(
             goals: visibleActiveWorkoutGoals,
@@ -351,7 +344,6 @@ struct WorkoutsView: View {
 
                     WorkoutGoalsOverviewSection(
                         insights: visibleWorkoutGoalInsights,
-                        signals: workoutGoalSignals,
                         celebratedGoal: celebratedWorkoutGoal,
                         canCreateGoalsWithTrai: canAccessAIFeatures,
                         completedGoalCount: completedWorkoutGoals.count,
@@ -361,8 +353,7 @@ struct WorkoutsView: View {
                             proUpsellCoordinator?.present(source: .workoutPlan)
                         },
                         staleCheckInGoal: staleWorkoutGoalNeedingCheckIn,
-                        onGoalTap: { showingWorkoutGoalDetail = $0 },
-                        onToggleCompletion: toggleWorkoutGoalCompletion
+                        onGoalTap: { showingWorkoutGoalDetail = $0 }
                     )
 
                     WorkoutHistorySection(
@@ -1035,7 +1026,13 @@ struct WorkoutsView: View {
         let eligibleInsights = activeWorkoutGoalInsights.filter { insight in
             guard insight.goal.isActive else { return false }
             guard insight.goal.goalKind != .milestone else { return false }
-            guard insight.goal.goalKind != .frequency else { return false }
+            if insight.goal.goalKind == .frequency {
+                guard let recurringProgress = insight.recurringProgress,
+                      !recurringProgress.isOpenEnded else {
+                    return false
+                }
+                return recurringProgress.isComplete
+            }
             return insight.isCompleteEnoughToHide
         }
 
