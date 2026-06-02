@@ -190,6 +190,9 @@ struct TraiApp: App {
                     if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {
                         seedAppStoreScreenshotDataIfNeeded(modelContainer: container)
                     }
+                    if AppLaunchArguments.shouldSeedGoalPreviewData {
+                        seedGoalPreviewDataIfNeeded(modelContainer: container)
+                    }
                 }
 
                 if isRunningTests {
@@ -1043,6 +1046,238 @@ private func seedAppStoreScreenshotDataIfNeeded(modelContainer: ModelContainer) 
     seedScreenshotGoalsAndMemory(context: context, now: now)
 
     try? context.save()
+}
+
+@MainActor
+private func seedGoalPreviewDataIfNeeded(modelContainer: ModelContainer) {
+    let context = modelContainer.mainContext
+    UserDefaults.standard.set(true, forKey: "dashboardActivationChecklistDismissed")
+
+    var markerDescriptor = FetchDescriptor<CoachMemory>(
+        predicate: #Predicate<CoachMemory> { $0.content == "Goal Preview Seed" }
+    )
+    markerDescriptor.fetchLimit = 1
+    guard ((try? context.fetch(markerDescriptor)) ?? []).isEmpty else { return }
+
+    let calendar = Calendar.current
+    let now = Date()
+    let today = calendar.startOfDay(for: now)
+    let currentWeekStart = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? today
+    let currentMonthStart = calendar.dateInterval(of: .month, for: now)?.start ?? today
+
+    let profile = fetchOrCreateScreenshotProfile(context: context)
+    profile.name = "Nadav"
+    profile.hasCompletedOnboarding = true
+    profile.goal = .recomposition
+    profile.preferredWorkoutDays = 4
+    profile.usesMetricExerciseWeight = false
+    profile.workoutPlan = screenshotWorkoutPlan()
+
+    let weeklyGoal = WorkoutGoal(
+        title: "Strength 3x weekly",
+        goalKind: .frequency,
+        linkedWorkoutType: .strength,
+        targetValue: 3,
+        targetUnit: "sessions",
+        periodUnit: .week,
+        periodCount: 1,
+        successCriteria: "Complete three strength sessions each week.",
+        notes: "Open-ended habit preview: four complete weeks, current week in progress."
+    )
+    weeklyGoal.createdAt = calendar.date(byAdding: .weekOfYear, value: -4, to: currentWeekStart)?
+        .addingTimeInterval(3_600) ?? now
+
+    let dailyGoal = WorkoutGoal(
+        title: "Move every day",
+        goalKind: .frequency,
+        linkedWorkoutType: .cardio,
+        targetValue: 1,
+        targetUnit: "session",
+        periodUnit: .day,
+        periodCount: 1,
+        successCriteria: "Log one easy cardio session each day.",
+        notes: "Open-ended daily habit preview with a live streak."
+    )
+    dailyGoal.createdAt = calendar.date(byAdding: .day, value: -120, to: today) ?? now
+
+    let monthlyGoal = WorkoutGoal(
+        title: "Mobility 8x monthly",
+        goalKind: .frequency,
+        linkedWorkoutType: .mobility,
+        targetValue: 8,
+        targetUnit: "sessions",
+        periodUnit: .month,
+        periodCount: 1,
+        successCriteria: "Log eight mobility sessions each month.",
+        notes: "Open-ended monthly habit preview with a partial current month."
+    )
+    monthlyGoal.createdAt = calendar.date(byAdding: .month, value: -5, to: currentMonthStart) ?? now
+
+    let challengeGoal = WorkoutGoal(
+        title: "Yoga 2x weekly for 4 weeks",
+        goalKind: .frequency,
+        linkedWorkoutType: .yoga,
+        targetValue: 2,
+        targetUnit: "sessions",
+        periodUnit: .week,
+        periodCount: 1,
+        successCriteria: "Complete two yoga sessions each week for four weeks.",
+        notes: "Finite challenge preview.",
+        targetDate: calendar.date(byAdding: .weekOfYear, value: 1, to: currentWeekStart)
+    )
+    challengeGoal.createdAt = calendar.date(byAdding: .weekOfYear, value: -3, to: currentWeekStart)?
+        .addingTimeInterval(3_600) ?? now
+
+    let completedGoal = WorkoutGoal(
+        title: "Finish first plan block",
+        goalKind: .milestone,
+        status: .completed,
+        linkedWorkoutType: .strength,
+        successCriteria: "Complete the first structured training block.",
+        notes: "Completed goal preview."
+    )
+    completedGoal.createdAt = calendar.date(byAdding: .weekOfYear, value: -6, to: currentWeekStart) ?? now
+    completedGoal.completedAt = calendar.date(byAdding: .day, value: -2, to: today)?.addingTimeInterval(18 * 60 * 60)
+    completedGoal.updatedAt = completedGoal.completedAt ?? now
+
+    for goal in [weeklyGoal, dailyGoal, monthlyGoal, challengeGoal, completedGoal] {
+        context.insert(goal)
+    }
+
+    if let firstWeekStart = calendar.dateInterval(of: .weekOfYear, for: weeklyGoal.createdAt)?.start {
+        seedGoalPreviewWeeklyWorkouts(
+            context: context,
+            calendar: calendar,
+            firstWeekStart: firstWeekStart,
+            weeklyCounts: [3, 3, 3, 3, 2],
+            mode: .strength,
+            name: "Strength Session"
+        )
+    }
+
+    if let firstChallengeWeekStart = calendar.dateInterval(of: .weekOfYear, for: challengeGoal.createdAt)?.start {
+        seedGoalPreviewWeeklyWorkouts(
+            context: context,
+            calendar: calendar,
+            firstWeekStart: firstChallengeWeekStart,
+            weeklyCounts: [2, 2, 1, 1],
+            mode: .yoga,
+            name: "Yoga Flow"
+        )
+    }
+
+    seedGoalPreviewDailyWorkouts(
+        context: context,
+        calendar: calendar,
+        today: today,
+        startOffset: -120,
+        mode: .cardio,
+        name: "Morning Walk"
+    )
+
+    for monthOffset in [-3, -2, -1] {
+        guard let monthStart = calendar.date(byAdding: .month, value: monthOffset, to: currentMonthStart) else {
+            continue
+        }
+        seedGoalPreviewMonthlyWorkouts(
+            context: context,
+            calendar: calendar,
+            monthStart: monthStart,
+            count: 8,
+            mode: .mobility,
+            name: "Mobility Flow"
+        )
+    }
+    seedGoalPreviewMonthlyWorkouts(
+        context: context,
+        calendar: calendar,
+        monthStart: currentMonthStart,
+        count: 5,
+        mode: .mobility,
+        name: "Mobility Flow"
+    )
+
+    context.insert(CoachMemory(
+        content: "Goal Preview Seed",
+        category: .context,
+        topic: .general,
+        source: "goal_preview_seed",
+        importance: 1
+    ))
+
+    try? context.save()
+}
+
+@MainActor
+private func seedGoalPreviewWeeklyWorkouts(
+    context: ModelContext,
+    calendar: Calendar,
+    firstWeekStart: Date,
+    weeklyCounts: [Int],
+    mode: WorkoutMode,
+    name: String
+) {
+    for (weekOffset, count) in weeklyCounts.enumerated() {
+        guard let weekStart = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: firstWeekStart) else {
+            continue
+        }
+        for sessionOffset in 0..<count {
+            guard let candidateDate = calendar.date(byAdding: .day, value: min(sessionOffset * 2, 5), to: weekStart)?
+                .addingTimeInterval(12 * 60 * 60) else { continue }
+            let completedAt = min(candidateDate, Date().addingTimeInterval(-Double(count - sessionOffset) * 60 * 60))
+            context.insert(goalPreviewWorkout(name: name, mode: mode, completedAt: completedAt))
+        }
+    }
+}
+
+@MainActor
+private func seedGoalPreviewDailyWorkouts(
+    context: ModelContext,
+    calendar: Calendar,
+    today: Date,
+    startOffset: Int,
+    mode: WorkoutMode,
+    name: String
+) {
+    let sparseHitOffsets = Set(
+        Array(-4...0) +
+        Array(-28 ... -21) +
+        [-100, -91, -82, -73, -64, -55, -46, -37]
+    )
+
+    for dayOffset in startOffset...0 {
+        guard sparseHitOffsets.contains(dayOffset) else {
+            continue
+        }
+
+        guard let date = calendar.date(byAdding: .day, value: dayOffset, to: today)?
+            .addingTimeInterval(8 * 60 * 60) else { continue }
+        context.insert(goalPreviewWorkout(name: name, mode: mode, completedAt: date))
+    }
+}
+
+@MainActor
+private func seedGoalPreviewMonthlyWorkouts(
+    context: ModelContext,
+    calendar: Calendar,
+    monthStart: Date,
+    count: Int,
+    mode: WorkoutMode,
+    name: String
+) {
+    for sessionOffset in 0..<count {
+        guard let candidateDate = calendar.date(byAdding: .day, value: min(sessionOffset * 3, 24), to: monthStart)?
+            .addingTimeInterval(9 * 60 * 60) else { continue }
+        let completedAt = min(candidateDate, Date().addingTimeInterval(-Double(count - sessionOffset) * 60 * 60))
+        context.insert(goalPreviewWorkout(name: name, mode: mode, completedAt: completedAt))
+    }
+}
+
+private func goalPreviewWorkout(name: String, mode: WorkoutMode, completedAt: Date) -> LiveWorkout {
+    let workout = LiveWorkout(name: name, workoutType: mode, focusAreas: [mode.displayName])
+    workout.startedAt = completedAt.addingTimeInterval(-45 * 60)
+    workout.completedAt = completedAt
+    return workout
 }
 
 @MainActor

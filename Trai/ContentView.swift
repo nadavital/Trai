@@ -420,7 +420,7 @@ struct MainTabView: View {
     private func handleTabViewAppear() {
         if !hasInitializedSelection {
             hasInitializedSelection = true
-            if AppLaunchArguments.shouldUseAppStoreScreenshotSeed,
+            if (AppLaunchArguments.shouldUseAppStoreScreenshotSeed || AppLaunchArguments.shouldSeedGoalPreviewData),
                let rawTab = AppLaunchArguments.appStoreScreenshotInitialTabRawValue,
                let screenshotTab = AppTab(rawValue: rawTab) {
                 selectedTabState = screenshotTab

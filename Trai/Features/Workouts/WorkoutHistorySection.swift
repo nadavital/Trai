@@ -124,12 +124,22 @@ struct WorkoutHistorySection: View {
 
 // MARK: - Compact Live Workout Row
 
-private struct CompactLiveWorkoutRow: View {
+struct CompactLiveWorkoutRow: View {
     let workout: LiveWorkout
     let onTap: () -> Void
-    let onDelete: () -> Void
+    let onDelete: (() -> Void)?
 
     @State private var showDeleteConfirmation = false
+
+    init(
+        workout: LiveWorkout,
+        onTap: @escaping () -> Void,
+        onDelete: (() -> Void)? = nil
+    ) {
+        self.workout = workout
+        self.onTap = onTap
+        self.onDelete = onDelete
+    }
 
     private var workoutDate: Date {
         workout.completedAt ?? workout.startedAt
@@ -169,20 +179,22 @@ private struct CompactLiveWorkoutRow: View {
             }
             .buttonStyle(.plain)
 
-            Menu {
-                Button(role: .destructive) {
-                    showDeleteConfirmation = true
+            if onDelete != nil {
+                Menu {
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Label("Delete Workout", systemImage: "trash")
+                    }
                 } label: {
-                    Label("Delete Workout", systemImage: "trash")
+                    Image(systemName: "ellipsis")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
+                .accessibilityLabel("Workout options")
             }
-            .accessibilityLabel("Workout options")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
@@ -191,7 +203,9 @@ private struct CompactLiveWorkoutRow: View {
             isPresented: $showDeleteConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Delete Workout", role: .destructive, action: onDelete)
+            if let onDelete {
+                Button("Delete Workout", role: .destructive, action: onDelete)
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes \"\(workout.name)\" from your history.")
@@ -201,12 +215,22 @@ private struct CompactLiveWorkoutRow: View {
 
 // MARK: - Compact Workout Session Row
 
-private struct CompactWorkoutSessionRow: View {
+struct CompactWorkoutSessionRow: View {
     let workout: WorkoutSession
     let onTap: () -> Void
-    let onDelete: () -> Void
+    let onDelete: (() -> Void)?
 
     @State private var showDeleteConfirmation = false
+
+    init(
+        workout: WorkoutSession,
+        onTap: @escaping () -> Void,
+        onDelete: (() -> Void)? = nil
+    ) {
+        self.workout = workout
+        self.onTap = onTap
+        self.onDelete = onDelete
+    }
 
     private var subtitle: String {
         workout.historyDetailSegments.first ?? workout.loggedAt.formatted(.dateTime.month(.abbreviated).day())
@@ -242,20 +266,22 @@ private struct CompactWorkoutSessionRow: View {
             }
             .buttonStyle(.plain)
 
-            Menu {
-                Button(role: .destructive) {
-                    showDeleteConfirmation = true
+            if onDelete != nil {
+                Menu {
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Label("Delete Workout", systemImage: "trash")
+                    }
                 } label: {
-                    Label("Delete Workout", systemImage: "trash")
+                    Image(systemName: "ellipsis")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
+                .accessibilityLabel("Workout options")
             }
-            .accessibilityLabel("Workout options")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
@@ -264,7 +290,9 @@ private struct CompactWorkoutSessionRow: View {
             isPresented: $showDeleteConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Delete Workout", role: .destructive, action: onDelete)
+            if let onDelete {
+                Button("Delete Workout", role: .destructive, action: onDelete)
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes \"\(workout.displayName)\" from your history.")

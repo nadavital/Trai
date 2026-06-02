@@ -1097,6 +1097,251 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(insight?.progressFraction, 1)
     }
 
+    func testWeeklyFrequencyGoalBuildsTargetDatePeriodLedger() throws {
+        let calendar = Calendar.current
+        let currentWeekStart = try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: Date())?.start)
+        let createdAt = try XCTUnwrap(calendar.date(byAdding: .weekOfYear, value: -3, to: currentWeekStart))
+            .addingTimeInterval(3_600)
+        let targetDate = try XCTUnwrap(calendar.date(byAdding: .weekOfYear, value: 1, to: currentWeekStart))
+
+        let goal = WorkoutGoal(
+            title: "Train 3x weekly for 4 weeks",
+            goalKind: .frequency,
+            linkedWorkoutType: .strength,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete three strength sessions each week for four weeks.",
+            targetDate: targetDate
+        )
+        goal.createdAt = createdAt
+
+        let workouts = makeWeeklyCompletedWorkouts(
+            calendar: calendar,
+            firstWeekStart: try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: createdAt)?.start),
+            weeklyCounts: [3, 3, 3, 2]
+        )
+
+        let insight = try XCTUnwrap(WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: workouts,
+            exerciseHistory: [],
+            useLbs: false
+        ).first)
+        let recurringProgress = try XCTUnwrap(insight.recurringProgress)
+
+        XCTAssertEqual(recurringProgress.totalPeriodCount, 4)
+        XCTAssertEqual(recurringProgress.completedPeriodCount, 3)
+        XCTAssertEqual(recurringProgress.currentPeriod?.currentCount, 2)
+        XCTAssertEqual(insight.progressText, "This week: 2 of 3")
+        XCTAssertFalse(recurringProgress.isComplete)
+    }
+
+    func testWeeklyFrequencyGoalCompletesOnlyWhenEveryTargetDatePeriodIsHit() throws {
+        let calendar = Calendar.current
+        let currentWeekStart = try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: Date())?.start)
+        let createdAt = try XCTUnwrap(calendar.date(byAdding: .weekOfYear, value: -3, to: currentWeekStart))
+            .addingTimeInterval(3_600)
+        let targetDate = try XCTUnwrap(calendar.date(byAdding: .weekOfYear, value: 1, to: currentWeekStart))
+
+        let goal = WorkoutGoal(
+            title: "Train 3x weekly for 4 weeks",
+            goalKind: .frequency,
+            linkedWorkoutType: .strength,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete three strength sessions each week for four weeks.",
+            targetDate: targetDate
+        )
+        goal.createdAt = createdAt
+
+        let workouts = makeWeeklyCompletedWorkouts(
+            calendar: calendar,
+            firstWeekStart: try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: createdAt)?.start),
+            weeklyCounts: [3, 3, 3, 3]
+        )
+
+        let insight = try XCTUnwrap(WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: workouts,
+            exerciseHistory: [],
+            useLbs: false
+        ).first)
+
+        XCTAssertEqual(insight.recurringProgress?.completedPeriodCount, 4)
+        XCTAssertTrue(insight.recurringProgress?.isComplete == true)
+        XCTAssertEqual(insight.progressFraction, 1)
+    }
+
+    func testLongFiniteFrequencyGoalDoesNotCompleteFromVisibleWindowOnly() throws {
+        let calendar = Calendar.current
+        let currentWeekStart = try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: Date())?.start)
+        let createdAt = try XCTUnwrap(calendar.date(byAdding: .weekOfYear, value: -99, to: currentWeekStart))
+            .addingTimeInterval(3_600)
+        let targetDate = try XCTUnwrap(calendar.date(byAdding: .weekOfYear, value: 1, to: currentWeekStart))
+
+        let goal = WorkoutGoal(
+            title: "Train 3x weekly for 100 weeks",
+            goalKind: .frequency,
+            linkedWorkoutType: .strength,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete three strength sessions each week for one hundred weeks.",
+            targetDate: targetDate
+        )
+        goal.createdAt = createdAt
+
+        let workouts = makeWeeklyCompletedWorkouts(
+            calendar: calendar,
+            firstWeekStart: try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: createdAt)?.start),
+            weeklyCounts: [2] + Array(repeating: 3, count: 99)
+        )
+
+        let insight = try XCTUnwrap(WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: workouts,
+            exerciseHistory: [],
+            useLbs: false
+        ).first)
+        let recurringProgress = try XCTUnwrap(insight.recurringProgress)
+
+        XCTAssertFalse(recurringProgress.isOpenEnded)
+        XCTAssertEqual(recurringProgress.totalPeriodCount, 100)
+        XCTAssertEqual(recurringProgress.completedPeriodCount, 99)
+        XCTAssertEqual(recurringProgress.periods.count, 52)
+        XCTAssertTrue(recurringProgress.periods.allSatisfy(\.isTargetMet))
+        XCTAssertFalse(recurringProgress.isComplete)
+        XCTAssertLessThan(insight.progressFraction ?? 1, 1)
+    }
+
+    func testOpenEndedWeeklyFrequencyGoalBuildsRollingPeriodLedger() throws {
+        let calendar = Calendar.current
+        let currentWeekStart = try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: Date())?.start)
+        let createdAt = try XCTUnwrap(calendar.date(byAdding: .weekOfYear, value: -4, to: currentWeekStart))
+            .addingTimeInterval(3_600)
+
+        let goal = WorkoutGoal(
+            title: "Train 3x weekly",
+            goalKind: .frequency,
+            linkedWorkoutType: .strength,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete three strength sessions each week."
+        )
+        goal.createdAt = createdAt
+
+        let workouts = makeWeeklyCompletedWorkouts(
+            calendar: calendar,
+            firstWeekStart: try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: createdAt)?.start),
+            weeklyCounts: [3, 3, 3, 3, 2]
+        )
+
+        let insight = try XCTUnwrap(WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: workouts,
+            exerciseHistory: [],
+            useLbs: false
+        ).first)
+        let recurringProgress = try XCTUnwrap(insight.recurringProgress)
+
+        XCTAssertTrue(recurringProgress.isOpenEnded)
+        XCTAssertEqual(recurringProgress.totalPeriodCount, 5)
+        XCTAssertEqual(recurringProgress.completedPeriodCount, 4)
+        XCTAssertEqual(recurringProgress.streakCount, 4)
+        XCTAssertEqual(recurringProgress.streakText, "4 week streak")
+        XCTAssertEqual(recurringProgress.currentPeriod?.currentCount, 2)
+        XCTAssertEqual(insight.progressText, "This week: 2 of 3")
+        XCTAssertEqual(insight.progressFraction ?? 0, 2.0 / 3.0, accuracy: 0.001)
+        XCTAssertFalse(recurringProgress.isComplete)
+    }
+
+    func testOpenEndedWeeklyFrequencyGoalDoesNotCompleteWhenRollingWindowIsHit() throws {
+        let calendar = Calendar.current
+        let currentWeekStart = try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: Date())?.start)
+        let createdAt = try XCTUnwrap(calendar.date(byAdding: .weekOfYear, value: -4, to: currentWeekStart))
+            .addingTimeInterval(3_600)
+
+        let goal = WorkoutGoal(
+            title: "Train 3x weekly",
+            goalKind: .frequency,
+            linkedWorkoutType: .strength,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete three strength sessions each week."
+        )
+        goal.createdAt = createdAt
+
+        let workouts = makeWeeklyCompletedWorkouts(
+            calendar: calendar,
+            firstWeekStart: try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: createdAt)?.start),
+            weeklyCounts: [3, 3, 3, 3, 3]
+        )
+
+        let insight = try XCTUnwrap(WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: workouts,
+            exerciseHistory: [],
+            useLbs: false
+        ).first)
+        let recurringProgress = try XCTUnwrap(insight.recurringProgress)
+
+        XCTAssertTrue(recurringProgress.isOpenEnded)
+        XCTAssertEqual(recurringProgress.completedPeriodCount, 5)
+        XCTAssertEqual(recurringProgress.streakCount, 5)
+        XCTAssertEqual(insight.progressFraction, 1)
+        XCTAssertFalse(recurringProgress.isComplete)
+    }
+
+    func testLongRunningOpenEndedFrequencyGoalKeepsExtendedHistory() throws {
+        let calendar = Calendar.current
+        let currentWeekStart = try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: Date())?.start)
+        let createdAt = try XCTUnwrap(calendar.date(byAdding: .weekOfYear, value: -32, to: currentWeekStart))
+            .addingTimeInterval(3_600)
+
+        let goal = WorkoutGoal(
+            title: "Train 3x weekly",
+            goalKind: .frequency,
+            linkedWorkoutType: .strength,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete three strength sessions each week."
+        )
+        goal.createdAt = createdAt
+
+        let workouts = makeWeeklyCompletedWorkouts(
+            calendar: calendar,
+            firstWeekStart: try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: createdAt)?.start),
+            weeklyCounts: Array(repeating: 3, count: 33)
+        )
+
+        let insight = try XCTUnwrap(WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: workouts,
+            exerciseHistory: [],
+            useLbs: false
+        ).first)
+        let recurringProgress = try XCTUnwrap(insight.recurringProgress)
+
+        XCTAssertTrue(recurringProgress.isOpenEnded)
+        XCTAssertTrue(recurringProgress.hasExtendedHistory)
+        XCTAssertEqual(recurringProgress.periods.count, 26)
+        XCTAssertEqual(recurringProgress.historyPeriodCount, 33)
+        XCTAssertEqual(recurringProgress.streakCount, 33)
+        XCTAssertEqual(recurringProgress.bestStreakCount, 33)
+        XCTAssertEqual(recurringProgress.completionRateText, "100%")
+    }
+
     func testActivityScopedSessionFrequencyCountsWorkoutOnceNotMatchingEntries() {
         let workout = LiveWorkout(
             name: "Full-Body Strength A",
@@ -2270,6 +2515,33 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         entry.workout = workout
         workout.entries = [entry]
         return (workout, entry)
+    }
+
+    private func makeWeeklyCompletedWorkouts(
+        calendar: Calendar,
+        firstWeekStart: Date,
+        weeklyCounts: [Int]
+    ) -> [LiveWorkout] {
+        var workouts: [LiveWorkout] = []
+        for (weekOffset, count) in weeklyCounts.enumerated() {
+            guard let weekStart = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: firstWeekStart) else {
+                continue
+            }
+            for sessionOffset in 0..<count {
+                if let completedAt = calendar.date(byAdding: .day, value: sessionOffset * 2, to: weekStart)?
+                    .addingTimeInterval(12 * 60 * 60) {
+                    workouts.append(makeCompletedGoalWorkout(completedAt: completedAt))
+                }
+            }
+        }
+        return workouts
+    }
+
+    private func makeCompletedGoalWorkout(completedAt: Date) -> LiveWorkout {
+        let workout = LiveWorkout(name: "Strength Session", workoutType: .strength)
+        workout.startedAt = completedAt.addingTimeInterval(-3_600)
+        workout.completedAt = completedAt
+        return workout
     }
 }
 
