@@ -623,18 +623,7 @@ extension WorkoutGoalSuggestion {
            !explicitWorkoutType.isEmpty {
             return Self.uniqueMentionedWorkoutMode(in: [explicitWorkoutType])?.rawValue ?? linkedWorkoutTypeRaw
         }
-
-        guard !hasGeneratedPlanScope,
-              !hasActivitySpecificScope else {
-            return nil
-        }
-
-        return Self.uniqueMentionedWorkoutMode(in: [
-            title,
-            successCriteria,
-            rationale,
-            notes
-        ])?.rawValue
+        return nil
     }
 
     var normalizedDeduplicationKey: String {
@@ -747,21 +736,6 @@ extension WorkoutGoalSuggestion {
 
     private var hasMixedGeneratedPlanScope: Bool {
         generatedPlanTemplateIDs?.isEmpty == false && generatedPlanBlockIDs?.isEmpty == false
-    }
-
-    private var hasGeneratedPlanScope: Bool {
-        tracksGeneratedPlanAdherence == true
-            || generatedPlanTemplateIDs?.isEmpty == false
-            || generatedPlanBlockIDs?.isEmpty == false
-    }
-
-    private var hasActivitySpecificScope: Bool {
-        linkedActivityName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            || linkedActivityTags?.contains(where: {
-                !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            }) == true
-            || linkedActivityKindRaw.flatMap(WorkoutPlan.TrainingBlock.BlockKind.init(rawValue:)) != nil
-            || linkedActivityRoleRaw.flatMap(WorkoutPlan.TrainingBlock.Role.init(rawValue:)) != nil
     }
 
     private static func uniqueMentionedWorkoutMode(in values: [String?]) -> WorkoutMode? {

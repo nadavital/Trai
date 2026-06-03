@@ -806,7 +806,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(goal.linkedWorkoutType, .strength)
     }
 
-    func testWorkoutGoalSuggestionsInferBroadWorkoutTypeWhenMissing() throws {
+    func testWorkoutGoalSuggestionsDoNotInferWorkoutTypeFromTitle() {
         let suggestion = WorkoutGoalSuggestion(
             title: "Complete 3 strength workouts",
             rationale: "Builds the requested strength routine.",
@@ -826,9 +826,9 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             checkInCadenceDays: nil
         )
 
-        let goal = try XCTUnwrap(WorkoutGoalSuggestion.validatedUnique([suggestion]).first?.asWorkoutGoal())
+        let validated = WorkoutGoalSuggestion.validatedUnique([suggestion])
 
-        XCTAssertEqual(goal.linkedWorkoutType, .strength)
+        XCTAssertTrue(validated.isEmpty)
     }
 
     func testWorkoutGoalSuggestionsDoNotInferParentTypeForActivitySpecificWork() throws {
