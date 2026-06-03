@@ -22,8 +22,6 @@ struct FoodMemoryShadowSummary: Sendable {
     let averageMatchedConfidence: Double
 }
 
-typealias FoodMemoryCameraSuggestion = FoodSuggestion
-
 nonisolated struct FoodMemoryService {
     private let matcher = FoodMemoryMatcher()
 
@@ -192,21 +190,6 @@ nonisolated struct FoodMemoryService {
             candidateMemories: memories.filter { $0.status == .candidate }.count,
             averageMatchConfidence: averageMatchConfidence,
             averageMatchedConfidence: averageMatchedConfidence
-        )
-    }
-
-    @MainActor
-    func cameraSuggestions(
-        limit: Int,
-        now: Date = .now,
-        sessionId: UUID? = nil,
-        modelContext: ModelContext
-    ) throws -> [FoodMemoryCameraSuggestion] {
-        try FoodSuggestionService().cameraSuggestions(
-            limit: limit,
-            now: now,
-            sessionId: sessionId,
-            modelContext: modelContext
         )
     }
 

@@ -969,7 +969,7 @@ final class FoodMemoryModelStorageTests: XCTestCase {
             )
         )
         let context = ModelContext(container)
-        let service = FoodMemoryService()
+        let service = FoodSuggestionService()
         let calendar = Calendar.current
 
         var lunchDateComponents = DateComponents()
@@ -1062,7 +1062,7 @@ final class FoodMemoryModelStorageTests: XCTestCase {
             )
         )
         let context = ModelContext(container)
-        let service = FoodMemoryService()
+        let service = FoodSuggestionService()
 
         let candidateMemory = makeMemory(
             name: "Single Protein Shake",
@@ -1103,7 +1103,7 @@ final class FoodMemoryModelStorageTests: XCTestCase {
             )
         )
         let context = ModelContext(container)
-        let service = FoodMemoryService()
+        let service = FoodSuggestionService()
         let calendar = Calendar.current
 
         var coffeeDateComponents = DateComponents()
@@ -1176,7 +1176,7 @@ final class FoodMemoryModelStorageTests: XCTestCase {
             )
         )
         let context = ModelContext(container)
-        let service = FoodMemoryService()
+        let service = FoodSuggestionService()
 
         let memory = makeMemory(
             name: "Cold Brew Coffee",
