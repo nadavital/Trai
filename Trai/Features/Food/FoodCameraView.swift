@@ -464,9 +464,14 @@ private struct FoodLogCaptureStepView: View {
             return
         }
 
+        let recommendationDate = resolvedFoodLogDate(
+            targetDate: targetDate,
+            sessionId: sessionId,
+            modelContext: modelContext
+        )
         memorySuggestions = (try? FoodSuggestionService().cameraSuggestions(
             limit: 3,
-            targetDate: targetDate,
+            targetDate: recommendationDate,
             sessionId: sessionId,
             modelContext: modelContext
         )) ?? []

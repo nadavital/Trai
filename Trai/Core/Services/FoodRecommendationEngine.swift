@@ -63,6 +63,7 @@ struct FoodRecommendationDebugReport: Sendable, Equatable {
     let candidateCountBySource: [FoodRecommendationSource: Int]
     let suppressedOneOffCount: Int
     let suppressedAlreadyTodayCount: Int
+    let demotedAlreadyTodayCount: Int
     let suppressedNegativeFeedbackCount: Int
     let suppressedLowConfidenceCount: Int
     let finalShownTitles: [String]
@@ -97,6 +98,7 @@ struct FoodRecommendationEngine {
                 candidateCountBySource: recommendationCandidateCounts(from: patternResult.debugReport.candidateCountBySource),
                 suppressedOneOffCount: patternResult.debugReport.suppressedOneOffCount,
                 suppressedAlreadyTodayCount: patternResult.debugReport.suppressedAlreadyTodayCount,
+                demotedAlreadyTodayCount: patternResult.debugReport.demotedAlreadyTodayCount,
                 suppressedNegativeFeedbackCount: patternResult.debugReport.suppressedNegativeFeedbackCount,
                 suppressedLowConfidenceCount: patternResult.debugReport.suppressedLowConfidenceCount,
                 finalShownTitles: suggestions.map(\.title)

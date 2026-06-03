@@ -32,6 +32,11 @@ struct FoodSuggestionDebugSummary: Sendable {
     let candidateCountBySource: [String: Int]
     let suppressedOneOffCount: Int
     let suppressedAlreadyTodayCount: Int
+    let demotedAlreadyTodayCount: Int
+    let directMemoryCandidateCount: Int
+    let directSuppressedAlreadyTodayCount: Int
+    let directDemotedAlreadyTodayCount: Int
+    let directPassiveExposureDemotedCount: Int
     let retrievedCandidateCount: Int
     let suppressedNegativeFeedbackCount: Int
     let suppressedLowConfidenceCount: Int
@@ -42,6 +47,7 @@ struct FoodSuggestionDebugSummary: Sendable {
 struct FoodSuggestionService {
     private let matcher = FoodMemoryMatcher()
     private let normalizationService = FoodNormalizationService()
+    private let semanticScorer = FoodSemanticSatisfactionScorer()
 
     @MainActor
     func cameraSuggestions(
@@ -117,10 +123,18 @@ struct FoodSuggestionService {
         let shownIDSet = Set(uniqueShownIDs)
         let memories = try modelContext.fetch(FetchDescriptor<FoodMemory>())
         let shownMemories = memories.filter { shownIDSet.contains($0.id) }
-        guard !shownMemories.isEmpty else { return }
 
         var matchedMemoryIDs = shownMemories.compactMap { memory in
             matcher.matches(memory: memory, snapshot: savedSnapshot) ? memory.id : nil
+        }
+
+        if matchedMemoryIDs.isEmpty,
+           let preferredMemoryID,
+           shownIDSet.contains(preferredMemoryID),
+           !shownMemories.contains(where: { $0.id == preferredMemoryID }) {
+            matchedMemoryIDs = memories.compactMap { memory in
+                matcher.matches(memory: memory, snapshot: savedSnapshot) ? memory.id : nil
+            }
         }
 
         if matchedMemoryIDs.isEmpty,
@@ -173,6 +187,10 @@ struct FoodSuggestionService {
             )
         ).debugReport
 
+        let directDiagnostics = sessionId == nil
+            ? directSuggestionDiagnostics(memories: memories, entries: entries, now: now, targetDate: referenceDate)
+            : .empty
+
         return FoodSuggestionDebugSummary(
             totalMemories: memories.count,
             totalObservations: engineDebugReport.observationCount,
@@ -182,6 +200,11 @@ struct FoodSuggestionService {
             },
             suppressedOneOffCount: engineDebugReport.suppressedOneOffCount,
             suppressedAlreadyTodayCount: engineDebugReport.suppressedAlreadyTodayCount,
+            demotedAlreadyTodayCount: engineDebugReport.demotedAlreadyTodayCount,
+            directMemoryCandidateCount: directDiagnostics.candidateCount,
+            directSuppressedAlreadyTodayCount: directDiagnostics.suppressedAlreadyTodayCount,
+            directDemotedAlreadyTodayCount: directDiagnostics.demotedAlreadyTodayCount,
+            directPassiveExposureDemotedCount: directDiagnostics.passiveExposureDemotedCount,
             retrievedCandidateCount: engineDebugReport.candidateCountBySource.values.reduce(0, +),
             suppressedNegativeFeedbackCount: engineDebugReport.suppressedNegativeFeedbackCount,
             suppressedLowConfidenceCount: engineDebugReport.suppressedLowConfidenceCount,
@@ -252,6 +275,42 @@ struct FoodSuggestionService {
         return Array(merged.prefix(limit))
     }
 
+    private func directSuggestionDiagnostics(
+        memories: [FoodMemory],
+        entries: [FoodEntry],
+        now: Date,
+        targetDate: Date
+    ) -> FoodDirectMemorySuggestionDiagnostics {
+        let linkedMemoryIDs = Set(entries.compactMap { $0.foodMemoryIdString.flatMap(UUID.init(uuidString:)) })
+        return memories
+            .filter { !linkedMemoryIDs.contains($0.id) }
+            .reduce(into: FoodDirectMemorySuggestionDiagnostics.empty) { diagnostics, memory in
+                guard memory.status == .confirmed,
+                      hasSufficientEvidence(memory),
+                      !isStale(memory, targetDate: targetDate) || hasPositiveFeedback(memory)
+                else {
+                    return
+                }
+                guard !hasRecentNegativeFeedback(memory, now: now) else { return }
+                diagnostics.candidateCount += 1
+
+                let opportunityState = opportunityState(for: memory, targetDate: targetDate, entries: entries)
+                switch opportunityState.availability {
+                case .eligible:
+                    break
+                case .demote:
+                    diagnostics.demotedAlreadyTodayCount += 1
+                case .suppress:
+                    diagnostics.suppressedAlreadyTodayCount += 1
+                    return
+                }
+
+                if passiveExposurePenalty(memory) > 0 {
+                    diagnostics.passiveExposureDemotedCount += 1
+                }
+            }
+    }
+
     private func directSuggestion(
         from memory: FoodMemory,
         now: Date,
@@ -262,7 +321,8 @@ struct FoodSuggestionService {
         guard hasSufficientEvidence(memory) else { return nil }
         guard !hasRecentNegativeFeedback(memory, now: now) else { return nil }
         guard !isStale(memory, targetDate: targetDate) || hasPositiveFeedback(memory) else { return nil }
-        guard !alreadyLogged(memory, targetDate: targetDate, entries: existingEntries) else { return nil }
+        let opportunityState = opportunityState(for: memory, targetDate: targetDate, entries: existingEntries)
+        guard opportunityState.availability != .suppress else { return nil }
 
         let timeSupport = memoryTimeSupport(memory, targetDate: targetDate)
         let bucketSupport = memoryBucketSupport(memory, targetDate: targetDate)
@@ -278,7 +338,8 @@ struct FoodSuggestionService {
             memory: memory,
             targetDate: targetDate,
             timeSupport: timeSupport,
-            bucketSupport: bucketSupport
+            bucketSupport: bucketSupport,
+            opportunityState: opportunityState
         )
         return FoodSuggestion(
             memoryID: memory.id,
@@ -335,9 +396,6 @@ struct FoodSuggestionService {
 
     private func hasRecentNegativeFeedback(_ memory: FoodMemory, now: Date) -> Bool {
         guard let stats = memory.suggestionStats else { return false }
-        if stats.timesShown >= 4, stats.timesAccepted == 0, stats.timesDismissed == 0 {
-            return true
-        }
         guard stats.timesDismissed > stats.timesAccepted else { return false }
         guard let lastDismissedAt = stats.lastDismissedAt else { return stats.timesDismissed >= 3 }
         let hours = Calendar.current.dateComponents([.hour], from: lastDismissedAt, to: now).hour ?? 999
@@ -349,30 +407,132 @@ struct FoodSuggestionService {
         return days > 45
     }
 
-    private func alreadyLogged(_ memory: FoodMemory, targetDate: Date, entries: [FoodEntry]) -> Bool {
+    private func opportunityState(
+        for memory: FoodMemory,
+        targetDate: Date,
+        entries: [FoodEntry]
+    ) -> FoodMemoryOpportunityState {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: targetDate)
         let memoryComponents = Set(memory.components.map { normalizationService.normalizeComponentName($0.normalizedName) }.filter { !$0.isEmpty })
-        return entries.contains { entry in
-            guard entry.loggedAt >= startOfDay, entry.loggedAt < targetDate else { return false }
+        let satisfiedDates = entries.compactMap { entry -> Date? in
+            guard entry.loggedAt >= startOfDay, entry.loggedAt < targetDate else { return nil }
             if entry.foodMemoryIdString == memory.id.uuidString {
-                return true
+                return entry.loggedAt
+            }
+            if matcher.matches(entry: entry, memory: memory) || semanticallySatisfies(memory: memory, entry: entry) {
+                return entry.loggedAt
             }
             let entryName = normalizationService.normalizeFoodName(entry.name)
             if !entryName.isEmpty, entryName == memory.primaryNormalizedName {
-                return true
+                return entry.loggedAt
             }
             if entry.acceptedSnapshot == nil,
                !entryName.isEmpty,
                !memory.primaryNormalizedName.isEmpty,
                (entryName.contains(memory.primaryNormalizedName) || memory.primaryNormalizedName.contains(entryName)),
                nutritionLooksSimilar(entry: entry, memory: memory) {
-                return true
+                return entry.loggedAt
             }
-            guard let snapshot = entry.acceptedSnapshot, !memoryComponents.isEmpty else { return false }
+            guard let snapshot = entry.acceptedSnapshot, !memoryComponents.isEmpty else { return nil }
             let entryComponents = Set(snapshot.components.map { normalizationService.normalizeComponentName($0.displayName) }.filter { !$0.isEmpty })
-            return entryComponents == memoryComponents
+            return entryComponents == memoryComponents ? entry.loggedAt : nil
         }
+        guard let lastSatisfiedAt = satisfiedDates.max() else {
+            return FoodMemoryOpportunityState(availability: .eligible, rankingPenalty: passiveExposurePenalty(memory))
+        }
+
+        guard let repeatPattern = memory.repeatPattern else {
+            return FoodMemoryOpportunityState(availability: .suppress, rankingPenalty: 1)
+        }
+
+        let minutesSinceLast = calendar.dateComponents([.minute], from: lastSatisfiedAt, to: targetDate).minute ?? 0
+        let learnedSpacing = learnedRepeatSpacingMinutes(repeatPattern)
+        if hasStrongSameDayRepeatEvidence(repeatPattern), minutesSinceLast >= learnedSpacing {
+            return FoodMemoryOpportunityState(availability: .eligible, rankingPenalty: passiveExposurePenalty(memory))
+        }
+
+        if hasEmergingSameDayRepeatEvidence(repeatPattern), minutesSinceLast >= max(90, learnedSpacing - 60) {
+            return FoodMemoryOpportunityState(availability: .demote, rankingPenalty: max(0.20, passiveExposurePenalty(memory)))
+        }
+
+        return FoodMemoryOpportunityState(availability: .suppress, rankingPenalty: 1)
+    }
+
+    private func learnedRepeatSpacingMinutes(_ repeatPattern: FoodMemoryRepeatPattern) -> Int {
+        guard let averageRepeatGapMinutes = repeatPattern.averageRepeatGapMinutes,
+              averageRepeatGapMinutes.isFinite,
+              averageRepeatGapMinutes > 0
+        else {
+            return 120
+        }
+        return max(90, min(Int(averageRepeatGapMinutes.rounded()), 360))
+    }
+
+    private func hasStrongSameDayRepeatEvidence(_ repeatPattern: FoodMemoryRepeatPattern) -> Bool {
+        repeatPattern.daysWithMultipleUses >= 2
+            && repeatPattern.repeatGapObservationCount >= 2
+            || repeatPattern.maxUsesInDay >= 3
+            || repeatPattern.averageUsesPerDay >= 1.45
+    }
+
+    private func hasEmergingSameDayRepeatEvidence(_ repeatPattern: FoodMemoryRepeatPattern) -> Bool {
+        repeatPattern.daysWithMultipleUses >= 1
+            || repeatPattern.maxUsesInDay > 1
+            || repeatPattern.averageUsesPerDay >= 1.20
+    }
+
+    private func semanticallySatisfies(memory: FoodMemory, entry: FoodEntry) -> Bool {
+        guard let snapshot = entry.acceptedSnapshot else { return false }
+        let memoryComponents = memory.components.map(\.normalizedName).filter { !$0.isEmpty }
+        let snapshotComponents = snapshot.components.map(\.normalizedName).filter { !$0.isEmpty }
+        let memoryNames = ([memory.displayName, memory.primaryNormalizedName] + memory.aliases.map(\.displayName) + memory.aliases.map(\.normalizedName))
+            .map(normalizationService.normalizeFoodName)
+        let snapshotName = snapshot.normalizedDisplayName.isEmpty
+            ? normalizationService.normalizeFoodName(snapshot.displayName)
+            : snapshot.normalizedDisplayName
+        let nutrition = memory.nutritionProfile
+        return semanticScorer.decision(
+            exactComponentScore: FoodSemanticSatisfactionScorer.jaccard(
+                lhs: Set(memoryComponents),
+                rhs: Set(snapshotComponents)
+            ),
+            componentSemanticScore: semanticScorer.componentSemanticSimilarity(
+                candidateComponents: memoryComponents,
+                loggedComponents: snapshotComponents
+            ),
+            nameScore: semanticScorer.nameSimilarity(candidateNames: memoryNames, loggedName: snapshotName),
+            macroScore: semanticScorer.macroSimilarity(
+                candidate: nutrition.map {
+                    FoodSemanticNutritionProfile(
+                        calories: Double($0.medianCalories),
+                        proteinGrams: $0.medianProteinGrams,
+                        carbsGrams: $0.medianCarbsGrams,
+                        fatGrams: $0.medianFatGrams
+                    )
+                },
+                logged: FoodSemanticNutritionProfile(
+                    calories: Double(snapshot.totalCalories),
+                    proteinGrams: snapshot.totalProteinGrams,
+                    carbsGrams: snapshot.totalCarbsGrams,
+                    fatGrams: snapshot.totalFatGrams
+                )
+            ),
+            servingScore: semanticScorer.servingSimilarity(
+                candidate: memory.servingProfile.map {
+                    FoodSemanticServingProfile(
+                        servingText: $0.commonServingText,
+                        quantity: $0.commonQuantity,
+                        unit: $0.commonUnit
+                    )
+                },
+                logged: FoodSemanticServingProfile(
+                    servingText: snapshot.servingText,
+                    quantity: snapshot.servingQuantity,
+                    unit: snapshot.servingUnit
+                )
+            )
+        ).isSatisfied
     }
 
     private func memoryTimeSupport(_ memory: FoodMemory, targetDate: Date) -> Double {
@@ -422,21 +582,32 @@ struct FoodSuggestionService {
         memory: FoodMemory,
         targetDate: Date,
         timeSupport: Double,
-        bucketSupport: Double
+        bucketSupport: Double,
+        opportunityState: FoodMemoryOpportunityState
     ) -> Double {
         let days = Double(max(Calendar.current.dateComponents([.day], from: memory.lastObservedAt, to: targetDate).day ?? 0, 0))
         let recency = max(0, 1 - min(days / 45.0, 1))
         let repetition = min(Double(max(memory.observationCount, memory.confirmedReuseCount + 1)) / 8.0, 1)
         let confidence = min(max(memory.confidenceScore, 0), 1)
         let feedback = hasPositiveFeedback(memory) ? 0.12 : 0
-        return min(
-            0.30 * max(timeSupport, bucketSupport)
-                + 0.22 * repetition
-                + 0.18 * recency
-                + 0.18 * confidence
-                + feedback,
-            1
-        )
+        let score = 0.30 * max(timeSupport, bucketSupport)
+            + 0.22 * repetition
+            + 0.18 * recency
+            + 0.18 * confidence
+            + feedback
+            - opportunityState.rankingPenalty
+        return min(max(score, 0), 1)
+    }
+
+    private func passiveExposurePenalty(_ memory: FoodMemory) -> Double {
+        guard let stats = memory.suggestionStats,
+              stats.timesShown >= 4,
+              stats.timesAccepted == 0,
+              stats.timesDismissed == 0
+        else {
+            return 0
+        }
+        return min(Double(stats.timesShown - 3) * 0.04, 0.18)
     }
 
     private func nutritionLooksSimilar(entry: FoodEntry, memory: FoodMemory) -> Bool {
@@ -618,6 +789,11 @@ struct FoodSuggestionService {
             candidateCountBySource: [:],
             suppressedOneOffCount: 0,
             suppressedAlreadyTodayCount: 0,
+            demotedAlreadyTodayCount: 0,
+            directMemoryCandidateCount: 0,
+            directSuppressedAlreadyTodayCount: 0,
+            directDemotedAlreadyTodayCount: 0,
+            directPassiveExposureDemotedCount: 0,
             retrievedCandidateCount: 0,
             suppressedNegativeFeedbackCount: 0,
             suppressedLowConfidenceCount: 0,
@@ -625,4 +801,29 @@ struct FoodSuggestionService {
             shownSuggestionTitles: []
         )
     }
+}
+
+private enum FoodMemoryOpportunityAvailability {
+    case eligible
+    case demote
+    case suppress
+}
+
+private struct FoodMemoryOpportunityState {
+    let availability: FoodMemoryOpportunityAvailability
+    let rankingPenalty: Double
+}
+
+private struct FoodDirectMemorySuggestionDiagnostics {
+    var candidateCount: Int
+    var suppressedAlreadyTodayCount: Int
+    var demotedAlreadyTodayCount: Int
+    var passiveExposureDemotedCount: Int
+
+    static let empty = FoodDirectMemorySuggestionDiagnostics(
+        candidateCount: 0,
+        suppressedAlreadyTodayCount: 0,
+        demotedAlreadyTodayCount: 0,
+        passiveExposureDemotedCount: 0
+    )
 }
