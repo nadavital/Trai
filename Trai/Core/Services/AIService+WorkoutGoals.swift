@@ -582,11 +582,59 @@ extension WorkoutGoalSuggestion {
     static func validatedUnique(_ suggestions: [WorkoutGoalSuggestion]) -> [WorkoutGoalSuggestion] {
         var seenKeys: Set<String> = []
         return suggestions.compactMap { suggestion in
-            guard suggestion.isTrackableAndSpecific else { return nil }
-            let key = suggestion.normalizedDeduplicationKey
+            let normalizedSuggestion = suggestion.normalizedForStructuredTracking
+            guard normalizedSuggestion.isTrackableAndSpecific else { return nil }
+            let key = normalizedSuggestion.normalizedDeduplicationKey
             guard seenKeys.insert(key).inserted else { return nil }
-            return suggestion
+            return normalizedSuggestion
         }
+    }
+
+    private var normalizedForStructuredTracking: WorkoutGoalSuggestion {
+        let normalizedWorkoutTypeRaw = normalizedLinkedWorkoutTypeRaw
+        guard normalizedWorkoutTypeRaw != linkedWorkoutTypeRaw else { return self }
+
+        var suggestion = WorkoutGoalSuggestion(
+            title: title,
+            rationale: rationale,
+            goalKindRaw: goalKindRaw,
+            linkedWorkoutTypeRaw: normalizedWorkoutTypeRaw,
+            linkedActivityName: linkedActivityName,
+            linkedActivityTags: linkedActivityTags,
+            linkedActivityKindRaw: linkedActivityKindRaw,
+            linkedActivityRoleRaw: linkedActivityRoleRaw,
+            targetValue: targetValue,
+            targetUnit: targetUnit,
+            periodUnitRaw: periodUnitRaw,
+            periodCount: periodCount,
+            successCriteria: successCriteria,
+            notes: notes,
+            targetDateISO8601: targetDateISO8601,
+            checkInCadenceDays: checkInCadenceDays
+        )
+        suggestion.tracksGeneratedPlanAdherence = tracksGeneratedPlanAdherence
+        suggestion.generatedPlanTemplateIDs = generatedPlanTemplateIDs
+        suggestion.generatedPlanBlockIDs = generatedPlanBlockIDs
+        return suggestion
+    }
+
+    private var normalizedLinkedWorkoutTypeRaw: String? {
+        if let explicitWorkoutType = linkedWorkoutTypeRaw?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !explicitWorkoutType.isEmpty {
+            return Self.uniqueMentionedWorkoutMode(in: [explicitWorkoutType])?.rawValue ?? linkedWorkoutTypeRaw
+        }
+
+        guard !hasGeneratedPlanScope,
+              !hasActivitySpecificScope else {
+            return nil
+        }
+
+        return Self.uniqueMentionedWorkoutMode(in: [
+            title,
+            successCriteria,
+            rationale,
+            notes
+        ])?.rawValue
     }
 
     var normalizedDeduplicationKey: String {
@@ -699,5 +747,56 @@ extension WorkoutGoalSuggestion {
 
     private var hasMixedGeneratedPlanScope: Bool {
         generatedPlanTemplateIDs?.isEmpty == false && generatedPlanBlockIDs?.isEmpty == false
+    }
+
+    private var hasGeneratedPlanScope: Bool {
+        tracksGeneratedPlanAdherence == true
+            || generatedPlanTemplateIDs?.isEmpty == false
+            || generatedPlanBlockIDs?.isEmpty == false
+    }
+
+    private var hasActivitySpecificScope: Bool {
+        linkedActivityName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            || linkedActivityTags?.contains(where: {
+                !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }) == true
+            || linkedActivityKindRaw.flatMap(WorkoutPlan.TrainingBlock.BlockKind.init(rawValue:)) != nil
+            || linkedActivityRoleRaw.flatMap(WorkoutPlan.TrainingBlock.Role.init(rawValue:)) != nil
+    }
+
+    private static func uniqueMentionedWorkoutMode(in values: [String?]) -> WorkoutMode? {
+        var modes: Set<WorkoutMode> = []
+        for value in values {
+            modes.formUnion(mentionedWorkoutModes(in: value))
+        }
+        return modes.count == 1 ? modes.first : nil
+    }
+
+    private static func mentionedWorkoutModes(in value: String?) -> Set<WorkoutMode> {
+        guard let value else { return [] }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        let tokens = trimmed
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var fragments = tokens
+        if tokens.count > 1 {
+            for width in 2...min(3, tokens.count) {
+                for startIndex in 0...(tokens.count - width) {
+                    fragments.append(tokens[startIndex..<(startIndex + width)].joined(separator: " "))
+                }
+            }
+        }
+
+        let modes = Set(fragments.compactMap { WorkoutMode.normalized(from: $0) })
+        if !modes.isEmpty {
+            return modes
+        }
+
+        return Set([WorkoutMode.normalized(from: trimmed)].compactMap { $0 })
     }
 }

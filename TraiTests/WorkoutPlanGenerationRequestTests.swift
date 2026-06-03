@@ -781,6 +781,83 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(validated.map(\.title), ["Complete all 3 planned sessions"])
     }
 
+    func testWorkoutGoalSuggestionsNormalizeSemanticWorkoutTypeRaw() throws {
+        let suggestion = WorkoutGoalSuggestion(
+            title: "Complete 3 strength sessions",
+            rationale: "Matches the requested strength training rhythm.",
+            goalKindRaw: WorkoutGoal.GoalKind.frequency.rawValue,
+            linkedWorkoutTypeRaw: "Strength Training",
+            linkedActivityName: nil,
+            linkedActivityTags: nil,
+            linkedActivityKindRaw: nil,
+            linkedActivityRoleRaw: nil,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnitRaw: WorkoutGoal.PeriodUnit.week.rawValue,
+            periodCount: 1,
+            successCriteria: "You log three strength sessions each week.",
+            notes: nil,
+            targetDateISO8601: nil,
+            checkInCadenceDays: nil
+        )
+
+        let goal = try XCTUnwrap(WorkoutGoalSuggestion.validatedUnique([suggestion]).first?.asWorkoutGoal())
+
+        XCTAssertEqual(goal.linkedWorkoutType, .strength)
+    }
+
+    func testWorkoutGoalSuggestionsInferBroadWorkoutTypeWhenMissing() throws {
+        let suggestion = WorkoutGoalSuggestion(
+            title: "Complete 3 strength workouts",
+            rationale: "Builds the requested strength routine.",
+            goalKindRaw: WorkoutGoal.GoalKind.frequency.rawValue,
+            linkedWorkoutTypeRaw: nil,
+            linkedActivityName: nil,
+            linkedActivityTags: nil,
+            linkedActivityKindRaw: nil,
+            linkedActivityRoleRaw: nil,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnitRaw: WorkoutGoal.PeriodUnit.week.rawValue,
+            periodCount: 1,
+            successCriteria: "You log three strength workouts each week.",
+            notes: nil,
+            targetDateISO8601: nil,
+            checkInCadenceDays: nil
+        )
+
+        let goal = try XCTUnwrap(WorkoutGoalSuggestion.validatedUnique([suggestion]).first?.asWorkoutGoal())
+
+        XCTAssertEqual(goal.linkedWorkoutType, .strength)
+    }
+
+    func testWorkoutGoalSuggestionsDoNotInferParentTypeForActivitySpecificWork() throws {
+        let suggestion = WorkoutGoalSuggestion(
+            title: "Complete mobility warmups",
+            rationale: "Keeps support work attached to the plan.",
+            goalKindRaw: WorkoutGoal.GoalKind.frequency.rawValue,
+            linkedWorkoutTypeRaw: nil,
+            linkedActivityName: nil,
+            linkedActivityTags: ["Mobility"],
+            linkedActivityKindRaw: nil,
+            linkedActivityRoleRaw: WorkoutPlan.TrainingBlock.Role.warmup.rawValue,
+            targetValue: 1,
+            targetUnit: "blocks",
+            periodUnitRaw: WorkoutGoal.PeriodUnit.week.rawValue,
+            periodCount: 1,
+            successCriteria: "You complete the planned mobility warmup each week.",
+            notes: nil,
+            targetDateISO8601: nil,
+            checkInCadenceDays: nil
+        )
+
+        let goal = try XCTUnwrap(WorkoutGoalSuggestion.validatedUnique([suggestion]).first?.asWorkoutGoal())
+
+        XCTAssertNil(goal.linkedWorkoutType)
+        XCTAssertEqual(goal.linkedActivityTags, ["Mobility"])
+        XCTAssertEqual(goal.linkedActivityRole, .warmup)
+    }
+
     func testWorkoutGoalSuggestionsKeepStructurallyTrackableWeightGoals() {
         let suggestion = makeGoalSuggestion(
             title: "Add weight to squat",
