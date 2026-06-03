@@ -693,6 +693,35 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         )
     }
 
+    func testWorkoutHistoryRecencyFormatterUsesCompactBuckets() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+
+        XCTAssertEqual(
+            WorkoutHistoryRecencyFormatter.compactLabel(for: now.addingTimeInterval(-30 * 60), now: now),
+            "now"
+        )
+        XCTAssertEqual(
+            WorkoutHistoryRecencyFormatter.compactLabel(for: now.addingTimeInterval(-90 * 60), now: now),
+            "1h"
+        )
+        XCTAssertEqual(
+            WorkoutHistoryRecencyFormatter.compactLabel(for: now.addingTimeInterval(-26 * 60 * 60), now: now),
+            "1d"
+        )
+        XCTAssertEqual(
+            WorkoutHistoryRecencyFormatter.compactLabel(for: now.addingTimeInterval(-9 * 24 * 60 * 60), now: now),
+            "1w"
+        )
+        XCTAssertEqual(
+            WorkoutHistoryRecencyFormatter.compactLabel(for: now.addingTimeInterval(-45 * 24 * 60 * 60), now: now),
+            "1m"
+        )
+        XCTAssertEqual(
+            WorkoutHistoryRecencyFormatter.compactLabel(for: now.addingTimeInterval(-400 * 24 * 60 * 60), now: now),
+            "1y"
+        )
+    }
+
     func testWorkoutHistoryDistributionUsesActivityIdentityOverStableMode() {
         let workout = LiveWorkout(name: "Open Practice", workoutType: .mixed)
         let entry = LiveWorkoutEntry(

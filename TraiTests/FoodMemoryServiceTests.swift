@@ -969,7 +969,7 @@ final class FoodMemoryModelStorageTests: XCTestCase {
             )
         )
         let context = ModelContext(container)
-        let service = FoodMemoryService()
+        let service = FoodSuggestionService()
         let calendar = Calendar.current
 
         var lunchDateComponents = DateComponents()
@@ -1038,7 +1038,10 @@ final class FoodMemoryModelStorageTests: XCTestCase {
         context.insert(dinnerMemory)
         try context.save()
 
-        var lunchComponents = calendar.dateComponents([.year, .month, .day], from: Date())
+        var lunchComponents = DateComponents()
+        lunchComponents.year = 2026
+        lunchComponents.month = 4
+        lunchComponents.day = 16
         lunchComponents.hour = 12
         lunchComponents.minute = 15
         let lunchtime = try XCTUnwrap(calendar.date(from: lunchComponents))
@@ -1059,7 +1062,7 @@ final class FoodMemoryModelStorageTests: XCTestCase {
             )
         )
         let context = ModelContext(container)
-        let service = FoodMemoryService()
+        let service = FoodSuggestionService()
 
         let candidateMemory = makeMemory(
             name: "Single Protein Shake",
@@ -1100,7 +1103,7 @@ final class FoodMemoryModelStorageTests: XCTestCase {
             )
         )
         let context = ModelContext(container)
-        let service = FoodMemoryService()
+        let service = FoodSuggestionService()
         let calendar = Calendar.current
 
         var coffeeDateComponents = DateComponents()
@@ -1173,7 +1176,7 @@ final class FoodMemoryModelStorageTests: XCTestCase {
             )
         )
         let context = ModelContext(container)
-        let service = FoodMemoryService()
+        let service = FoodSuggestionService()
 
         let memory = makeMemory(
             name: "Cold Brew Coffee",
@@ -1596,7 +1599,7 @@ final class FoodMemoryModelStorageTests: XCTestCase {
         XCTAssertTrue(suggestions.isEmpty)
     }
 
-    func testFoodSuggestionServiceSuppressesRepeatedlyIgnoredSuggestion() throws {
+    func testFoodSuggestionServiceDemotesRepeatedPassiveExposureWithoutBlacklisting() throws {
         let schema = Schema([
             FoodEntry.self,
             FoodMemory.self
@@ -1652,7 +1655,8 @@ final class FoodMemoryModelStorageTests: XCTestCase {
 
         let suggestions = try service.cameraSuggestions(limit: 3, now: now, modelContext: context)
 
-        XCTAssertTrue(suggestions.isEmpty)
+        let suggestion = try XCTUnwrap(suggestions.first { $0.title == "Greek Yogurt Bowl" })
+        XCTAssertLessThan(suggestion.relevanceScore, 0.75)
     }
 
     func testFoodSuggestionServiceSuppressesRecentlyDismissedSuggestion() throws {

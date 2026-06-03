@@ -3,11 +3,15 @@ import Foundation
 struct FoodPatternRankerDiagnostics: Sendable, Equatable {
     let suppressedOneOffCount: Int
     let suppressedAlreadyTodayCount: Int
+    let demotedAlreadyTodayCount: Int
     let suppressedNegativeFeedbackCount: Int
     let suppressedLowConfidenceCount: Int
 }
 
 struct FoodPatternRanker {
+    private let normalizationService = FoodNormalizationService()
+    private let semanticScorer = FoodSemanticSatisfactionScorer()
+
     func rank(_ candidates: [FoodPatternSuggestion], context: FoodPatternRecommendationContext) -> [FoodPatternSuggestion] {
         let filtered = candidates.filter { !suppressionReasons(for: $0, context: context).isSuppressed }
         let bestByPattern = Dictionary(grouping: filtered, by: \.pattern.id).compactMap { _, candidates in
@@ -30,6 +34,7 @@ struct FoodPatternRanker {
     ) -> FoodPatternRankerDiagnostics {
         var oneOff = Set<String>()
         var alreadyToday = Set<String>()
+        var demotedAlreadyToday = Set<String>()
         var negative = Set<String>()
         var lowConfidence = Set<String>()
 
@@ -37,6 +42,7 @@ struct FoodPatternRanker {
             let reasons = suppressionReasons(for: candidate, context: context)
             if reasons.oneOff { oneOff.insert(candidate.pattern.id) }
             if reasons.alreadyToday { alreadyToday.insert(candidate.pattern.id) }
+            if reasons.demotedAlreadyToday { demotedAlreadyToday.insert(candidate.pattern.id) }
             if reasons.negativeFeedback { negative.insert(candidate.pattern.id) }
             if reasons.lowConfidence { lowConfidence.insert(candidate.pattern.id) }
         }
@@ -44,6 +50,7 @@ struct FoodPatternRanker {
         return FoodPatternRankerDiagnostics(
             suppressedOneOffCount: oneOff.count,
             suppressedAlreadyTodayCount: alreadyToday.count,
+            demotedAlreadyTodayCount: demotedAlreadyToday.count,
             suppressedNegativeFeedbackCount: negative.count,
             suppressedLowConfidenceCount: lowConfidence.count
         )
@@ -58,6 +65,8 @@ struct FoodPatternRanker {
             repetition: min(Double(pattern.distinctDays) / 6.0, 1),
             recency: Self.recencyScore(for: pattern, targetDate: context.targetDate),
             timeSupport: Self.timeSupport(for: pattern, targetDate: context.targetDate),
+            temporalMismatchPenalty: temporalMismatchPenalty(for: pattern, targetDate: context.targetDate),
+            opportunityPenalty: opportunityState(for: pattern, context: context).rankingPenalty,
             dayTypeSupport: Self.dayTypeSupport(for: pattern, targetDate: context.targetDate),
             sessionSupport: Self.sessionSupport(for: pattern, context: context),
             patternConfidence: patternConfidence(for: pattern),
@@ -79,6 +88,8 @@ struct FoodPatternRanker {
             0.16 * features.practicalUtility +
             0.08 * features.positiveFeedback +
             features.sourceBoost -
+            features.temporalMismatchPenalty -
+            features.opportunityPenalty -
             features.negativeFeedbackPenalty
         return min(max(rawScore, 0), 1)
     }
@@ -88,11 +99,13 @@ struct FoodPatternRanker {
         context: FoodPatternRecommendationContext
     ) -> FoodPatternSuppressionReasons {
         let pattern = suggestion.pattern
+        let opportunityState = opportunityState(for: pattern, context: context)
         let oneOff = suggestion.source != .continueSession
             && pattern.distinctDays < 2
             && pattern.feedbackProfile.timesAccepted == 0
             && pattern.feedbackProfile.timesRefined == 0
-        let alreadyToday = isAlreadyLoggedToday(pattern, context: context) && !supportsSameDayRepeat(pattern, context: context)
+        let alreadyToday = opportunityState.availability == .suppress
+        let demotedAlreadyToday = opportunityState.availability == .demote
         let negativeFeedback = suggestion.features.negativeFeedbackPenalty >= 1.0
         let lowConfidence = suggestion.features.patternConfidence < 0.42
             && suggestion.features.sessionSupport < 0.55
@@ -106,6 +119,7 @@ struct FoodPatternRanker {
         return FoodPatternSuppressionReasons(
             oneOff: oneOff,
             alreadyToday: alreadyToday,
+            demotedAlreadyToday: demotedAlreadyToday,
             negativeFeedback: negativeFeedback,
             lowConfidence: lowConfidence || weakSimpleRepeat
         )
@@ -163,33 +177,130 @@ struct FoodPatternRanker {
         return selected
     }
 
-    private func isAlreadyLoggedToday(_ pattern: FoodPattern, context: FoodPatternRecommendationContext) -> Bool {
-        let patternComponents = Set(pattern.componentProfile.map(\.canonicalName).filter { !$0.isEmpty })
-        guard !patternComponents.isEmpty else { return false }
-        return context.todayObservations.contains { observation in
-            let observationComponents = Set(observation.components.map(\.canonicalName).filter { !$0.isEmpty })
-            return observationComponents == patternComponents
+    private func opportunityState(
+        for pattern: FoodPattern,
+        context: FoodPatternRecommendationContext
+    ) -> FoodPatternOpportunityState {
+        let satisfiedTodayDates = context.todayObservations
+            .filter { semanticallySatisfies(pattern: pattern, observation: $0) }
+            .map(\.loggedAt)
+            .sorted()
+        guard let lastSatisfiedAt = satisfiedTodayDates.last else {
+            return FoodPatternOpportunityState(availability: .eligible, rankingPenalty: 0)
         }
+
+        let repeatEvidence = sameDayRepeatEvidence(for: pattern)
+        guard repeatEvidence.repeatDayCount > 0 else {
+            return FoodPatternOpportunityState(availability: .suppress, rankingPenalty: 1)
+        }
+
+        let minutesSinceLast = Calendar.current.dateComponents([.minute], from: lastSatisfiedAt, to: context.targetDate).minute ?? 0
+        let learnedSpacing = repeatEvidence.learnedSpacingMinutes
+        if repeatEvidence.repeatDayCount >= 2, minutesSinceLast >= learnedSpacing {
+            return FoodPatternOpportunityState(availability: .eligible, rankingPenalty: 0)
+        }
+
+        let emergingRepeatWindow = max(90, learnedSpacing - 60)
+        if minutesSinceLast >= emergingRepeatWindow {
+            return FoodPatternOpportunityState(availability: .demote, rankingPenalty: 0.20)
+        }
+
+        return FoodPatternOpportunityState(availability: .suppress, rankingPenalty: 1)
     }
 
-    private func supportsSameDayRepeat(_ pattern: FoodPattern, context: FoodPatternRecommendationContext) -> Bool {
+    private func sameDayRepeatEvidence(for pattern: FoodPattern) -> FoodPatternSameDayRepeatEvidence {
         let groupedByDay = Dictionary(grouping: pattern.observations) {
             Calendar.current.startOfDay(for: $0.loggedAt)
         }
-        let repeatDays = groupedByDay.values.filter { $0.count > 1 }
-        guard repeatDays.count >= 2 else { return false }
-
-        let patternComponents = Set(pattern.componentProfile.map(\.canonicalName).filter { !$0.isEmpty })
-        guard let lastToday = context.todayObservations
-            .filter({ Set($0.components.map(\.canonicalName).filter { !$0.isEmpty }) == patternComponents })
-            .map(\.loggedAt)
-            .max()
-        else {
-            return true
+        let repeatDays = groupedByDay.values.filter { observations in
+            observations.count > 1 && minimumSpacingMinutes(in: observations) >= 90
         }
+        return FoodPatternSameDayRepeatEvidence(
+            repeatDayCount: repeatDays.count,
+            learnedSpacingMinutes: learnedSameDayRepeatSpacingMinutes(for: repeatDays)
+        )
+    }
 
-        let minutes = Calendar.current.dateComponents([.minute], from: lastToday, to: context.targetDate).minute ?? 0
-        return minutes >= 120
+    private func minimumSpacingMinutes(in observations: [FoodObservation]) -> Int {
+        let sortedDates = observations.map(\.loggedAt).sorted()
+        guard sortedDates.count > 1 else { return 0 }
+        return zip(sortedDates, sortedDates.dropFirst())
+            .map { Calendar.current.dateComponents([.minute], from: $0, to: $1).minute ?? 0 }
+            .min() ?? 0
+    }
+
+    private func learnedSameDayRepeatSpacingMinutes(for repeatDays: [[FoodObservation]]) -> Int {
+        let spacings = repeatDays
+            .map(minimumSpacingMinutes(in:))
+            .filter { $0 > 0 }
+            .sorted()
+        guard !spacings.isEmpty else { return 120 }
+        let middle = spacings.count / 2
+        let median = spacings.count.isMultiple(of: 2)
+            ? (spacings[middle - 1] + spacings[middle]) / 2
+            : spacings[middle]
+        return max(90, min(median, 360))
+    }
+
+    private func semanticallySatisfies(pattern: FoodPattern, observation: FoodObservation) -> Bool {
+        let patternComponents = pattern.componentProfile.map(\.canonicalName).filter { !$0.isEmpty }
+        let observationComponents = observation.components.map(\.canonicalName).filter { !$0.isEmpty }
+        let exactComponentScore = FoodSemanticSatisfactionScorer.jaccard(
+            lhs: Set(patternComponents),
+            rhs: Set(observationComponents)
+        )
+        let componentSemanticScore = semanticScorer.componentSemanticSimilarity(
+            candidateComponents: patternComponents,
+            loggedComponents: observationComponents
+        )
+        let observationName = observation.normalizedName.isEmpty
+            ? normalizationService.normalizeFoodName(observation.displayName)
+            : observation.normalizedName
+        let candidateNames = ([pattern.canonicalTitle] + pattern.aliases.map(\.displayName) + pattern.aliases.map(\.normalizedName))
+            .map(normalizationService.normalizeFoodName)
+        let nutrition = pattern.nutritionProfile
+        return semanticScorer.decision(
+            exactComponentScore: exactComponentScore,
+            componentSemanticScore: componentSemanticScore,
+            nameScore: semanticScorer.nameSimilarity(candidateNames: candidateNames, loggedName: observationName),
+            macroScore: semanticScorer.macroSimilarity(
+                candidate: FoodSemanticNutritionProfile(
+                    calories: Double(nutrition.medianCalories),
+                    proteinGrams: nutrition.medianProteinGrams,
+                    carbsGrams: nutrition.medianCarbsGrams,
+                    fatGrams: nutrition.medianFatGrams
+                ),
+                logged: FoodSemanticNutritionProfile(
+                    calories: Double(observation.calories),
+                    proteinGrams: observation.proteinGrams,
+                    carbsGrams: observation.carbsGrams,
+                    fatGrams: observation.fatGrams
+                )
+            ),
+            servingScore: semanticScorer.servingSimilarity(
+                candidate: pattern.servingProfile.map {
+                    FoodSemanticServingProfile(
+                        servingText: $0.commonServingText,
+                        quantity: $0.commonQuantity,
+                        unit: $0.commonUnit
+                    )
+                },
+                logged: FoodSemanticServingProfile(
+                    servingText: observation.servingText,
+                    quantity: observation.servingQuantity,
+                    unit: observation.servingUnit
+                )
+            )
+        ).isSatisfied
+    }
+
+    private func temporalMismatchPenalty(for pattern: FoodPattern, targetDate: Date) -> Double {
+        let topHourCount = pattern.timeProfile.hourCounts.max() ?? 0
+        let specificity = Double(topHourCount) / Double(max(pattern.observationCount, 1))
+        guard specificity >= 0.55 else { return 0 }
+        let support = Self.timeSupport(for: pattern, targetDate: targetDate)
+        guard support < 0.18 else { return 0 }
+        return min((specificity - support) * 0.20, 0.16)
     }
 
     private func patternConfidence(for pattern: FoodPattern) -> Double {
@@ -258,7 +369,7 @@ struct FoodPatternRanker {
         if pattern.feedbackProfile.timesShown >= 4,
            pattern.feedbackProfile.timesAccepted == 0,
            pattern.feedbackProfile.timesDismissed == 0 {
-            return 1.0
+            return 0.18
         }
         guard pattern.feedbackProfile.timesDismissed > pattern.feedbackProfile.timesAccepted else { return 0 }
         guard let lastDismissedAt = pattern.feedbackProfile.lastDismissedAt else {
@@ -338,20 +449,36 @@ struct FoodPatternRanker {
     }
 
     private static func componentSimilarity(lhs: Set<String>, rhs: Set<String>) -> Double {
-        guard !lhs.isEmpty, !rhs.isEmpty else { return 0 }
-        return Double(lhs.intersection(rhs).count) / Double(lhs.union(rhs).count)
+        FoodSemanticSatisfactionScorer.jaccard(lhs: lhs, rhs: rhs)
     }
 }
 
 private struct FoodPatternSuppressionReasons {
     let oneOff: Bool
     let alreadyToday: Bool
+    let demotedAlreadyToday: Bool
     let negativeFeedback: Bool
     let lowConfidence: Bool
 
     var isSuppressed: Bool {
         oneOff || alreadyToday || negativeFeedback || lowConfidence
     }
+}
+
+private enum FoodPatternOpportunityAvailability {
+    case eligible
+    case demote
+    case suppress
+}
+
+private struct FoodPatternOpportunityState {
+    let availability: FoodPatternOpportunityAvailability
+    let rankingPenalty: Double
+}
+
+private struct FoodPatternSameDayRepeatEvidence {
+    let repeatDayCount: Int
+    let learnedSpacingMinutes: Int
 }
 
 private extension Array {

@@ -7,6 +7,32 @@
 
 import SwiftUI
 
+enum WorkoutHistoryRecencyFormatter {
+    static func compactLabel(for date: Date, now: Date = .now) -> String {
+        let elapsed = max(0, now.timeIntervalSince(date))
+        let hour: TimeInterval = 60 * 60
+        let day: TimeInterval = 24 * hour
+        let week: TimeInterval = 7 * day
+        let month: TimeInterval = 30 * day
+        let year: TimeInterval = 365 * day
+
+        switch elapsed {
+        case ..<hour:
+            return "now"
+        case ..<day:
+            return "\(max(1, Int(elapsed / hour)))h"
+        case ..<week:
+            return "\(max(1, Int(elapsed / day)))d"
+        case ..<month:
+            return "\(max(1, Int(elapsed / week)))w"
+        case ..<year:
+            return "\(max(1, Int(elapsed / month)))m"
+        default:
+            return "\(max(1, Int(elapsed / year)))y"
+        }
+    }
+}
+
 // MARK: - Workout History Section
 
 struct WorkoutHistorySection: View {
@@ -149,6 +175,10 @@ struct CompactLiveWorkoutRow: View {
         workout.historySummarySegments.first ?? workoutDate.formatted(.dateTime.month(.abbreviated).day())
     }
 
+    private var recencyLabel: String {
+        WorkoutHistoryRecencyFormatter.compactLabel(for: workoutDate)
+    }
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Button(action: onTap) {
@@ -178,6 +208,19 @@ struct CompactLiveWorkoutRow: View {
                 .contentShape(RoundedRectangle(cornerRadius: 14))
             }
             .buttonStyle(.plain)
+
+            Text(recencyLabel)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(Color(.secondarySystemFill), in: Capsule())
+                .frame(minWidth: 34, minHeight: 24)
+                .padding(6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
 
             if onDelete != nil {
                 Menu {
@@ -236,6 +279,10 @@ struct CompactWorkoutSessionRow: View {
         workout.historyDetailSegments.first ?? workout.loggedAt.formatted(.dateTime.month(.abbreviated).day())
     }
 
+    private var recencyLabel: String {
+        WorkoutHistoryRecencyFormatter.compactLabel(for: workout.loggedAt)
+    }
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Button(action: onTap) {
@@ -265,6 +312,19 @@ struct CompactWorkoutSessionRow: View {
                 .contentShape(RoundedRectangle(cornerRadius: 14))
             }
             .buttonStyle(.plain)
+
+            Text(recencyLabel)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(Color(.secondarySystemFill), in: Capsule())
+                .frame(minWidth: 34, minHeight: 24)
+                .padding(6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
 
             if onDelete != nil {
                 Menu {

@@ -30,6 +30,8 @@ struct FoodPatternRankingFeatures: Sendable, Equatable {
     let repetition: Double
     let recency: Double
     let timeSupport: Double
+    let temporalMismatchPenalty: Double
+    let opportunityPenalty: Double
     let dayTypeSupport: Double
     let sessionSupport: Double
     let patternConfidence: Double
@@ -51,6 +53,7 @@ struct FoodPatternRecommendationDebugReport: Sendable, Equatable {
     let candidateCountBySource: [FoodPatternSuggestionSource: Int]
     let suppressedOneOffCount: Int
     let suppressedAlreadyTodayCount: Int
+    let demotedAlreadyTodayCount: Int
     let suppressedNegativeFeedbackCount: Int
     let suppressedLowConfidenceCount: Int
     let finalShownTitles: [String]
@@ -91,6 +94,7 @@ struct FoodPatternRecommendationEngine {
                 candidateCountBySource: Dictionary(grouping: candidates, by: \.source).mapValues(\.count),
                 suppressedOneOffCount: diagnostics.suppressedOneOffCount,
                 suppressedAlreadyTodayCount: diagnostics.suppressedAlreadyTodayCount,
+                demotedAlreadyTodayCount: diagnostics.demotedAlreadyTodayCount,
                 suppressedNegativeFeedbackCount: diagnostics.suppressedNegativeFeedbackCount,
                 suppressedLowConfidenceCount: diagnostics.suppressedLowConfidenceCount,
                 finalShownTitles: ranked.prefix(request.limit).map(\.suggestedEntry.name),
@@ -221,6 +225,7 @@ struct FoodPatternRecommendationEngine {
             candidateCountBySource: [:],
             suppressedOneOffCount: 0,
             suppressedAlreadyTodayCount: 0,
+            demotedAlreadyTodayCount: 0,
             suppressedNegativeFeedbackCount: 0,
             suppressedLowConfidenceCount: 0,
             finalShownTitles: [],
