@@ -247,20 +247,63 @@ struct EditFoodEntrySheet: View {
     }
 
     private func saveChanges() {
+        var editedFields = Set<String>()
+        if entry.name != name { editedFields.insert("name") }
+        if entry.calories != (Int(caloriesText) ?? entry.calories) { editedFields.insert("calories") }
+        if entry.proteinGrams != (Double(proteinText) ?? entry.proteinGrams) { editedFields.insert("protein") }
+        if entry.carbsGrams != (Double(carbsText) ?? entry.carbsGrams) { editedFields.insert("carbs") }
+        if entry.fatGrams != (Double(fatText) ?? entry.fatGrams) { editedFields.insert("fat") }
+        let nextFiber = Double(fiberText).flatMap { $0 > 0 ? $0 : nil }
+        let nextSugar = Double(sugarText).flatMap { $0 > 0 ? $0 : nil }
+        let nextServingSize = servingSize.isEmpty ? nil : servingSize
+        if entry.fiberGrams != nextFiber { editedFields.insert("fiber") }
+        if entry.sugarGrams != nextSugar { editedFields.insert("sugar") }
+        if entry.servingSize != nextServingSize { editedFields.insert("serving") }
+
         entry.name = name
         entry.calories = Int(caloriesText) ?? entry.calories
         entry.proteinGrams = Double(proteinText) ?? entry.proteinGrams
         entry.carbsGrams = Double(carbsText) ?? entry.carbsGrams
         entry.fatGrams = Double(fatText) ?? entry.fatGrams
-        entry.fiberGrams = Double(fiberText).flatMap { $0 > 0 ? $0 : nil }
-        entry.sugarGrams = Double(sugarText).flatMap { $0 > 0 ? $0 : nil }
-        entry.servingSize = servingSize.isEmpty ? nil : servingSize
+        entry.fiberGrams = nextFiber
+        entry.sugarGrams = nextSugar
+        entry.servingSize = nextServingSize
         entry.userDescription = notes.isEmpty ? nil : notes
+        entry.ensureDisplayMetadata()
+
+        if !editedFields.isEmpty {
+            entry.refreshAcceptedSnapshotAfterUserEdit(
+                editedFields: editedFields,
+                source: acceptedSource(for: entry)
+            )
+        }
 
         try? modelContext.save()
+        if !editedFields.isEmpty {
+            scheduleFoodMemoryResolution(for: entry.id)
+        }
         WidgetDataProvider.shared.scheduleRefresh()
         HapticManager.success()
         dismiss()
+    }
+
+    private func acceptedSource(for entry: FoodEntry) -> AcceptedFoodSource {
+        switch entry.input {
+        case .manual:
+            return .manual
+        case .camera:
+            return .camera
+        case .photo:
+            return .photo
+        case .description:
+            return .description
+        case .memorySuggestion:
+            return .memorySuggestion
+        case .chat:
+            return .chat
+        case .appIntent:
+            return .appIntent
+        }
     }
 
     private func askTraiAboutMeal() {
@@ -353,5 +396,13 @@ private struct MacroInputRow: View {
             carbsGrams: 15,
             fatGrams: 22
         )
+    )
+}
+
+private func scheduleFoodMemoryResolution(for entryID: UUID) {
+    guard let modelContainer = TraiApp.sharedModelContainer else { return }
+    FoodMemoryBackgroundService.shared.scheduleResolveEntry(
+        id: entryID,
+        modelContainer: modelContainer
     )
 }

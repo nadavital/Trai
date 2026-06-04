@@ -97,6 +97,34 @@ final class FoodRecommendationEvaluatorTests: XCTestCase {
         XCTAssertEqual(result.metrics.completeMealCoverageRate, 0)
     }
 
+    func testBeverageTargetsDoNotCreateCompleteMealCoveragePressure() async throws {
+        let latte = FoodRecommendationTestSupport.component("latte", role: .drink, calories: 160, protein: 8, carbs: 14, fat: 6)
+        let entries = [
+            FoodRecommendationTestSupport.entry(name: "Iced Latte", loggedAt: FoodRecommendationTestSupport.day(0, hour: 8), calories: 160, protein: 8, carbs: 14, fat: 6, components: [latte]),
+            FoodRecommendationTestSupport.entry(name: "Iced Latte", loggedAt: FoodRecommendationTestSupport.day(1, hour: 8), calories: 160, protein: 8, carbs: 14, fat: 6, components: [latte]),
+            FoodRecommendationTestSupport.entry(name: "Iced Latte", loggedAt: FoodRecommendationTestSupport.day(2, hour: 8), calories: 160, protein: 8, carbs: 14, fat: 6, components: [latte])
+        ]
+
+        let result = try await FoodRecommendationReplayRunner().evaluate(
+            observations: FoodObservationBuilder().observations(from: entries),
+            entries: entries,
+            memories: [],
+            provider: { _, _, _, _, _, _ in
+                [
+                    FoodRecommendationTestSupport.suggestion(name: "Iced Latte", calories: 160, protein: 8, carbs: 14, fat: 6, components: [latte]),
+                    FoodRecommendationTestSupport.suggestion(name: "Coffee", calories: 5, protein: 0, carbs: 1, fat: 0, components: [
+                        FoodRecommendationTestSupport.component("coffee", role: .drink, calories: 5, protein: 0, carbs: 1, fat: 0)
+                    ])
+                ]
+            },
+            config: FoodRecommendationReplayConfig(minimumTrainingObservations: 2, maximumCases: 1)
+        )
+
+        XCTAssertEqual(result.metrics.hitAt1, 1)
+        XCTAssertEqual(result.metrics.beverageDominationRate, 0)
+        XCTAssertEqual(result.metrics.completeMealCoverageRate, 0)
+    }
+
     func testSessionAwareReplayCanUseCurrentSessionPrefix() async throws {
         var entries = sessionPairEntries(previousSessionCount: 3)
         let targetSessionID = UUID()
@@ -267,6 +295,48 @@ final class FoodRecommendationEvaluatorTests: XCTestCase {
         XCTAssertEqual(capturedPrefixCounts, [0])
     }
 
+    func testReplayReportSummaryIncludesBaselineComparisonMetrics() {
+        let report = FoodRecommendationReplayReport(
+            generatedAt: FoodRecommendationTestSupport.day(10),
+            metrics: replayMetrics(hitAt3: 0.75, mrr: 0.70, noSuggestionRate: 0.10),
+            baselineMetrics: replayMetrics(hitAt3: 0.50, mrr: 0.40, noSuggestionRate: 0.30),
+            sliceMetrics: [],
+            failedCases: [
+                FoodRecommendationReplayFailedCase(
+                    targetDate: FoodRecommendationTestSupport.day(10, hour: 12),
+                    hiddenDisplayName: "Chicken Rice Bowl",
+                    hiddenCanonicalComponents: ["chicken", "rice"],
+                    topSuggestionTitles: [],
+                    topSuggestionCanonicalComponents: [],
+                    missReason: "noSuggestions"
+                )
+            ],
+            currentSnapshots: []
+        )
+
+        XCTAssertTrue(report.summaryText.contains("recent-repeat-baseline"))
+        XCTAssertTrue(report.summaryText.contains("current_vs_recent-repeat,0.250,0.300,-0.200"))
+        XCTAssertTrue(report.summaryText.contains("noSuggestions=1"))
+    }
+
+    func testReplayDebugReportCountsMissReasons() async throws {
+        let entries = [
+            FoodRecommendationTestSupport.entry(name: "Chicken Rice Bowl", loggedAt: FoodRecommendationTestSupport.day(0), components: chickenRiceComponents()),
+            FoodRecommendationTestSupport.entry(name: "Chicken Rice", loggedAt: FoodRecommendationTestSupport.day(1), components: chickenRiceComponents()),
+            FoodRecommendationTestSupport.entry(name: "Grilled Chicken With Rice", loggedAt: FoodRecommendationTestSupport.day(2), components: chickenRiceComponents())
+        ]
+        let result = try await FoodRecommendationReplayRunner().evaluate(
+            observations: FoodObservationBuilder().observations(from: entries),
+            entries: entries,
+            memories: [],
+            provider: { _, _, _, _, _, _ in [] },
+            config: FoodRecommendationReplayConfig(minimumTrainingObservations: 2)
+        )
+
+        XCTAssertEqual(result.debugReport.missReasonCounts["noSuggestions"], 1)
+        XCTAssertEqual(result.debugReport.failedCases.first?.missReason, "noSuggestions")
+    }
+
     private func chickenRiceComponents() -> [AcceptedFoodComponent] {
         [
             FoodRecommendationTestSupport.component("grilled chicken", role: .protein, calories: 240, protein: 38, carbs: 0, fat: 5),
@@ -313,5 +383,26 @@ final class FoodRecommendationEvaluatorTests: XCTestCase {
             )
         }
         return entries
+    }
+
+    private func replayMetrics(
+        hitAt3: Double,
+        mrr: Double,
+        noSuggestionRate: Double
+    ) -> FoodRecommendationReplayMetrics {
+        FoodRecommendationReplayMetrics(
+            evaluatedCases: 4,
+            hitAt1: 0.25,
+            hitAt3: hitAt3,
+            hitAt5: hitAt3,
+            meanReciprocalRank: mrr,
+            oneOffFalsePositiveRate: 0,
+            beverageDominationRate: 0,
+            completeMealCoverageRate: 1,
+            duplicateSuggestionRate: 0,
+            noSuggestionRate: noSuggestionRate,
+            medianRuntimeMilliseconds: 1,
+            p95RuntimeMilliseconds: 2
+        )
     }
 }

@@ -5,6 +5,7 @@ import SwiftData
 struct FoodRecommendationReplayReport: Sendable {
     let generatedAt: Date
     let metrics: FoodRecommendationReplayMetrics
+    let baselineMetrics: FoodRecommendationReplayMetrics?
     let sliceMetrics: [FoodRecommendationReplaySliceMetrics]
     let failedCases: [FoodRecommendationReplayFailedCase]
     let currentSnapshots: [FoodRecommendationCurrentSnapshot]
@@ -16,12 +17,19 @@ struct FoodRecommendationReplayReport: Sendable {
 
         provider,cases,hit@1,hit@3,hit@5,mrr,oneOffFP,beverageDomination,completeMealCoverage,duplicates,noSuggestions,medianMs,p95Ms
         current,\(metrics.evaluatedCases),\(format(metrics.hitAt1)),\(format(metrics.hitAt3)),\(format(metrics.hitAt5)),\(format(metrics.meanReciprocalRank)),\(format(metrics.oneOffFalsePositiveRate)),\(format(metrics.beverageDominationRate)),\(format(metrics.completeMealCoverageRate)),\(format(metrics.duplicateSuggestionRate)),\(format(metrics.noSuggestionRate)),\(format(metrics.medianRuntimeMilliseconds)),\(format(metrics.p95RuntimeMilliseconds))
+        \(baselineMetrics.map { "recent-repeat-baseline,\($0.evaluatedCases),\(format($0.hitAt1)),\(format($0.hitAt3)),\(format($0.hitAt5)),\(format($0.meanReciprocalRank)),\(format($0.oneOffFalsePositiveRate)),\(format($0.beverageDominationRate)),\(format($0.completeMealCoverageRate)),\(format($0.duplicateSuggestionRate)),\(format($0.noSuggestionRate)),\(format($0.medianRuntimeMilliseconds)),\(format($0.p95RuntimeMilliseconds))" } ?? "")
+
+        current_vs_baseline,hit@3_delta,mrr_delta,noSuggestion_delta
+        current_vs_recent-repeat,\(format(metrics.hitAt3 - (baselineMetrics?.hitAt3 ?? 0))),\(format(metrics.meanReciprocalRank - (baselineMetrics?.meanReciprocalRank ?? 0))),\(format(metrics.noSuggestionRate - (baselineMetrics?.noSuggestionRate ?? 0)))
 
         provider,slice,cases,hit@1,hit@3,hit@5,mrr,oneOffFP,beverageDomination,completeMealCoverage,duplicates,noSuggestions,medianMs,p95Ms
         \(sliceSummary(provider: "current", slices: sliceMetrics))
 
         current snapshots
         \(currentSnapshots.map(\.summaryText).joined(separator: "\n"))
+
+        miss reasons
+        \(missReasonSummary(failedCases))
 
         anonymized failed cases
         \(failedCases.prefix(5).map(\.anonymizedSummary).joined(separator: " | "))
@@ -37,6 +45,17 @@ struct FoodRecommendationReplayReport: Sendable {
             let metrics = slice.metrics
             return "\(provider),\(slice.label),\(metrics.evaluatedCases),\(format(metrics.hitAt1)),\(format(metrics.hitAt3)),\(format(metrics.hitAt5)),\(format(metrics.meanReciprocalRank)),\(format(metrics.oneOffFalsePositiveRate)),\(format(metrics.beverageDominationRate)),\(format(metrics.completeMealCoverageRate)),\(format(metrics.duplicateSuggestionRate)),\(format(metrics.noSuggestionRate)),\(format(metrics.medianRuntimeMilliseconds)),\(format(metrics.p95RuntimeMilliseconds))"
         }.joined(separator: "\n")
+    }
+
+    private func missReasonSummary(_ failedCases: [FoodRecommendationReplayFailedCase]) -> String {
+        Dictionary(grouping: failedCases, by: \.missReason)
+            .mapValues(\.count)
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value { return lhs.key < rhs.key }
+                return lhs.value > rhs.value
+            }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: ",")
     }
 }
 
@@ -84,10 +103,24 @@ struct FoodRecommendationReplayService {
             },
             config: config
         )
+        let baselineResult = try await FoodRecommendationReplayRunner().evaluate(
+            observations: observations,
+            entries: entries,
+            memories: [],
+            provider: { trainingEntries, _, now, limit, _, _ in
+                return FoodRecommendationRecentRepeatBaselineProvider().suggestions(
+                    entries: trainingEntries,
+                    now: now,
+                    limit: limit
+                )
+            },
+            config: config
+        )
 
         let report = FoodRecommendationReplayReport(
             generatedAt: .now,
             metrics: result.metrics,
+            baselineMetrics: baselineResult.metrics,
             sliceMetrics: result.debugReport.sliceMetrics,
             failedCases: result.debugReport.failedCases,
             currentSnapshots: try currentMomentSnapshots(entries: entries, modelContext: modelContext)

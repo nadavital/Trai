@@ -603,6 +603,7 @@ struct DashboardView: View {
                 }
                 tabActivationPolicy.activate()
                 isDashboardTabVisible = true
+                prewarmFoodCameraSuggestions(targetDate: selectedDate, modelContext: modelContext)
                 updateActivationChecklistCompletionCache()
                 guard didPrimeInitialData else { return }
 
@@ -628,6 +629,7 @@ struct DashboardView: View {
             }
             .onChange(of: selectedDate) { _, newDate in
                 refreshDateScopedCaches()
+                prewarmFoodCameraSuggestions(targetDate: newDate, modelContext: modelContext)
                 updateActivationChecklistCompletionCache()
                 if Calendar.current.isDateInToday(newDate) {
                     Task {
@@ -637,6 +639,8 @@ struct DashboardView: View {
             }
             .onChange(of: foodEntriesRefreshFingerprint) { _, _ in
                 guard isDashboardTabActive else { return }
+                invalidateFoodCameraSuggestions()
+                prewarmFoodCameraSuggestions(targetDate: selectedDate, modelContext: modelContext)
                 refreshFoodDateCaches()
                 updateActivationChecklistCompletionCache()
             }
@@ -1751,6 +1755,12 @@ struct DashboardView: View {
     }
 
     private func presentFoodCamera(sessionId: UUID? = nil, targetDate: Date? = nil) {
+        prewarmFoodCameraSuggestions(
+            sessionId: sessionId,
+            targetDate: targetDate,
+            modelContext: modelContext
+        )
+
         if let onPresentFoodCamera {
             onPresentFoodCamera(sessionId, targetDate)
             return

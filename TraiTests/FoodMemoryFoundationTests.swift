@@ -114,6 +114,44 @@ final class FoodMemoryFoundationTests: XCTestCase {
         XCTAssertEqual(snapshot.servingUnit, "bottle")
     }
 
+    func testFoodEntryRefreshAcceptedSnapshotAfterUserEditQueuesResolutionAndUsesCurrentTotals() throws {
+        let entry = FoodRecommendationTestSupport.entry(
+            name: "Chicken Rice Bowl",
+            loggedAt: Date(timeIntervalSince1970: 1_714_010_000),
+            components: [
+                FoodRecommendationTestSupport.component("chicken", role: .protein, calories: 240, protein: 38, carbs: 0, fat: 5),
+                FoodRecommendationTestSupport.component("rice", role: .carb, calories: 205, protein: 4, carbs: 45, fat: 0)
+            ]
+        )
+        entry.foodMemoryIdString = UUID().uuidString
+        entry.foodMemoryMatchConfidence = 0.94
+        entry.foodMemoryResolutionState = .matched
+
+        entry.name = "Turkey Sandwich"
+        entry.calories = 430
+        entry.proteinGrams = 28
+        entry.carbsGrams = 38
+        entry.fatGrams = 18
+        entry.servingSize = "1 sandwich"
+        entry.refreshAcceptedSnapshotAfterUserEdit(
+            editedFields: ["name", "calories", "protein", "carbs", "fat", "serving"],
+            source: .manual
+        )
+
+        let snapshot = try XCTUnwrap(entry.acceptedSnapshot)
+        XCTAssertEqual(snapshot.displayName, "Turkey Sandwich")
+        XCTAssertEqual(snapshot.totalCalories, 430)
+        XCTAssertEqual(snapshot.components.count, 1)
+        XCTAssertEqual(snapshot.components[0].source, .derived)
+        XCTAssertEqual(snapshot.components[0].normalizedName, "turkey sandwich")
+        XCTAssertEqual(snapshot.components[0].calories, 430)
+        XCTAssertTrue(snapshot.wasUserEdited)
+        XCTAssertEqual(entry.foodMemoryResolutionState, .queued)
+        XCTAssertTrue(entry.foodMemoryNeedsResolution)
+        XCTAssertNil(entry.foodMemoryIdString)
+        XCTAssertEqual(entry.foodMemoryMatchConfidence, 0)
+    }
+
     func testSnapshotBuilderDecodesLegacySnapshotWithoutAliases() throws {
         let legacySnapshot = """
         {

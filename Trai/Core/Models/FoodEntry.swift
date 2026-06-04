@@ -389,6 +389,17 @@ extension FoodEntry {
         foodMemoryResolutionExplanation = nil
     }
 
+    func refreshAcceptedSnapshotAfterUserEdit(editedFields: Set<String>, source: AcceptedFoodSource) {
+        guard !editedFields.isEmpty else { return }
+        replaceLoggedComponentsWithDerivedCurrentTotals()
+        let snapshot = FoodSnapshotBuilder().buildAcceptedSnapshot(
+            from: self,
+            source: source,
+            userEditedFields: editedFields
+        )
+        setAcceptedSnapshot(snapshot)
+    }
+
     func bootstrapLoggedComponentsIfNeeded(from snapshot: AcceptedFoodSnapshot? = nil) {
         let baseline: [LoggedFoodComponent]
         if let snapshot {

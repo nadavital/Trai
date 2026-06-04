@@ -53,6 +53,18 @@ final class FoodMemoryBackgroundService {
             )
         }
     }
+
+    func suspendProcessing() {
+        Task {
+            await worker.suspendProcessing()
+        }
+    }
+
+    func resumeProcessing(modelContainer: ModelContainer) {
+        Task {
+            await worker.resumeProcessing(modelContainer: modelContainer)
+        }
+    }
 }
 
 private actor FoodMemoryBackgroundWorker {
@@ -60,6 +72,7 @@ private actor FoodMemoryBackgroundWorker {
     private var pendingResolveLimit = 0
     private var resolveTask: Task<Void, Never>?
     private var maintenanceTask: Task<Void, Never>?
+    private var isSuspended = false
 
     func scheduleResolveEntry(
         id entryID: UUID,
@@ -67,6 +80,7 @@ private actor FoodMemoryBackgroundWorker {
         delay: Duration
     ) {
         pendingEntryIDs.insert(entryID)
+        guard !isSuspended else { return }
         scheduleResolveDrain(modelContainer: modelContainer, delay: delay)
     }
 
@@ -76,6 +90,7 @@ private actor FoodMemoryBackgroundWorker {
         delay: Duration
     ) {
         pendingResolveLimit = max(pendingResolveLimit, limit)
+        guard !isSuspended else { return }
         scheduleResolveDrain(modelContainer: modelContainer, delay: delay)
     }
 
@@ -85,12 +100,14 @@ private actor FoodMemoryBackgroundWorker {
         resolveLimit: Int,
         delay: Duration
     ) {
+        guard !isSuspended else { return }
         maintenanceTask?.cancel()
         maintenanceTask = Task {
             if delay > .zero {
                 try? await Task.sleep(for: delay)
             }
             guard !Task.isCancelled else { return }
+            guard !isSuspended else { return }
             let modelContext = ModelContext(modelContainer)
             _ = try? FoodMemoryService().runMaintenance(
                 backfillLimit: backfillLimit,
@@ -98,6 +115,21 @@ private actor FoodMemoryBackgroundWorker {
                 modelContext: modelContext
             )
         }
+    }
+
+    func suspendProcessing() {
+        isSuspended = true
+        resolveTask?.cancel()
+        maintenanceTask?.cancel()
+        resolveTask = nil
+        maintenanceTask = nil
+    }
+
+    func resumeProcessing(modelContainer: ModelContainer) {
+        guard isSuspended else { return }
+        isSuspended = false
+        guard !pendingEntryIDs.isEmpty || pendingResolveLimit > 0 else { return }
+        scheduleResolveDrain(modelContainer: modelContainer, delay: .seconds(2))
     }
 
     private func scheduleResolveDrain(
@@ -110,11 +142,13 @@ private actor FoodMemoryBackgroundWorker {
                 try? await Task.sleep(for: delay)
             }
             guard !Task.isCancelled else { return }
+            guard !isSuspended else { return }
             drainResolveQueue(modelContainer: modelContainer)
         }
     }
 
     private func drainResolveQueue(modelContainer: ModelContainer) {
+        guard !isSuspended else { return }
         let entryIDs = Array(pendingEntryIDs)
         let resolveLimit = pendingResolveLimit
         pendingEntryIDs.removeAll()

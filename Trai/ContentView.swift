@@ -388,6 +388,11 @@ struct MainTabView: View {
                         onSelectTab: selectTab,
                         onPresentFoodCamera: { sessionId, targetDate in
                             guard foodCameraPresentation == nil else { return }
+                            prewarmFoodCameraSuggestions(
+                                sessionId: sessionId,
+                                targetDate: targetDate,
+                                modelContext: modelContext
+                            )
                             foodCameraPresentation = FoodCameraPresentation(
                                 sessionId: sessionId,
                                 targetDate: targetDate
@@ -511,6 +516,7 @@ struct MainTabView: View {
         switch destination {
         case .logFood:
             guard foodCameraPresentation == nil else { return }
+            prewarmFoodCameraSuggestions(modelContext: modelContext)
             Task { @MainActor in
                 await Task.yield()
                 guard foodCameraPresentation == nil else { return }

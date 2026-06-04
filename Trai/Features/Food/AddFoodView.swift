@@ -404,6 +404,7 @@ struct AddFoodView: View {
             return
         }
         WidgetDataProvider.shared.scheduleRefresh()
+        scheduleFoodMemoryResolution(for: entry.id)
         FoodHealthKitMacroSync.saveIfAllowed(entry, profile: profiles.first, healthKitService: healthKitService)
         dismiss()
     }
@@ -444,6 +445,7 @@ struct AddFoodView: View {
             return
         }
         WidgetDataProvider.shared.scheduleRefresh()
+        scheduleFoodMemoryResolution(for: entry.id)
         FoodHealthKitMacroSync.saveIfAllowed(entry, profile: profiles.first, healthKitService: healthKitService)
         dismiss()
     }
@@ -452,4 +454,12 @@ struct AddFoodView: View {
 #Preview {
     AddFoodView()
         .modelContainer(for: FoodEntry.self, inMemory: true)
+}
+
+private func scheduleFoodMemoryResolution(for entryID: UUID) {
+    guard let modelContainer = TraiApp.sharedModelContainer else { return }
+    FoodMemoryBackgroundService.shared.scheduleResolveEntry(
+        id: entryID,
+        modelContainer: modelContainer
+    )
 }

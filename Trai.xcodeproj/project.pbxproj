@@ -48,6 +48,7 @@
 		F3A1000F2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A1000E2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift */; };
 		F3A100112E00000100A10001 /* FoodPatternIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100102E00000100A10001 /* FoodPatternIdentityTests.swift */; };
 		F3A100132E00000100A10001 /* FoodPatternRecommendationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100122E00000100A10001 /* FoodPatternRecommendationTests.swift */; };
+		F3A100152E00000100A10001 /* FoodRecommendationGoldenReplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100142E00000100A10001 /* FoodRecommendationGoldenReplayTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -132,6 +133,7 @@
 		F3A1000E2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationLegacyCleanupTests.swift; sourceTree = "<group>"; };
 		F3A100102E00000100A10001 /* FoodPatternIdentityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodPatternIdentityTests.swift; sourceTree = "<group>"; };
 		F3A100122E00000100A10001 /* FoodPatternRecommendationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodPatternRecommendationTests.swift; sourceTree = "<group>"; };
+		F3A100142E00000100A10001 /* FoodRecommendationGoldenReplayTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationGoldenReplayTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -262,6 +264,7 @@
 				F3A1000E2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift */,
 				F3A100102E00000100A10001 /* FoodPatternIdentityTests.swift */,
 				F3A100122E00000100A10001 /* FoodPatternRecommendationTests.swift */,
+				F3A100142E00000100A10001 /* FoodRecommendationGoldenReplayTests.swift */,
 				7C10000C3C00000100C10001 /* NutritionDisplayPolicyTests.swift */,
 				7C10000E3C00000100C10001 /* OnboardingFlowPlannerTests.swift */,
 				7C1000103C00000100C10001 /* OnboardingProAccessStateTests.swift */,
@@ -526,6 +529,7 @@
 				F3A1000F2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift in Sources */,
 				F3A100112E00000100A10001 /* FoodPatternIdentityTests.swift in Sources */,
 				F3A100132E00000100A10001 /* FoodPatternRecommendationTests.swift in Sources */,
+				F3A100152E00000100A10001 /* FoodRecommendationGoldenReplayTests.swift in Sources */,
 				090355E73CD8CE91D184469F /* TraiCoachContextAssemblerTests.swift in Sources */,
 				F200000B2A00000100F20001 /* TraiCoachPatternServiceTests.swift in Sources */,
 				F200000F2A00000100F20001 /* WorkoutTemplateServiceTests.swift in Sources */,

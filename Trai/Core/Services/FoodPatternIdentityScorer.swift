@@ -1,6 +1,6 @@
 import Foundation
 
-struct FoodPatternIdentityScore: Sendable, Equatable {
+nonisolated struct FoodPatternIdentityScore: Sendable, Equatable {
     let value: Double
     let shouldMerge: Bool
     let componentAgreement: Double
@@ -10,7 +10,7 @@ struct FoodPatternIdentityScore: Sendable, Equatable {
     let embeddingSimilarity: Double?
 }
 
-struct FoodPatternIdentityScorer {
+nonisolated struct FoodPatternIdentityScorer {
     func identityScore(
         _ lhs: FoodObservation,
         _ rhs: FoodObservation,
@@ -20,7 +20,9 @@ struct FoodPatternIdentityScorer {
         let macroCompatibility = macroCompatibility(lhs, rhs)
         let servingCompatibility = servingCompatibility(lhs, rhs)
         let nameSimilarity = tokenSimilarity(lhs.normalizedName, rhs.normalizedName)
-        let componentCount = min(nonEmptyComponents(lhs).count, nonEmptyComponents(rhs).count)
+        let lhsComponentCount = nonEmptyComponents(lhs).count
+        let rhsComponentCount = nonEmptyComponents(rhs).count
+        let componentCount = min(lhsComponentCount, rhsComponentCount)
 
         let weightedValue =
             0.40 * componentAgreement +
@@ -34,11 +36,17 @@ struct FoodPatternIdentityScorer {
             shouldMerge = componentAgreement >= 0.60 && macroCompatibility >= 0.62 && weightedValue >= 0.68
         } else if componentCount == 1 {
             let exactComponentMatch = componentAgreement >= 0.99
-            let strongSemanticMatch = (embeddingSimilarity ?? 0) >= 0.82 || nameSimilarity >= 0.78
-            shouldMerge = macroCompatibility >= 0.68 && (exactComponentMatch || strongSemanticMatch) && weightedValue >= 0.70
+            let isSingleComponentComparedWithComposite = max(lhsComponentCount, rhsComponentCount) > 1
+            let strongSemanticMatch = (embeddingSimilarity ?? 0) >= 0.64 || nameSimilarity >= 0.78
+            shouldMerge = macroCompatibility >= 0.68
+                && (exactComponentMatch || (!isSingleComponentComparedWithComposite && strongSemanticMatch))
+                && weightedValue >= 0.70
         } else {
-            let strongSemanticMatch = (embeddingSimilarity ?? 0) >= 0.86 || nameSimilarity >= 0.84
-            shouldMerge = macroCompatibility >= 0.72 && strongSemanticMatch && weightedValue >= 0.74
+            let strongSemanticMatch = (embeddingSimilarity ?? 0) >= 0.66 || nameSimilarity >= 0.84
+            shouldMerge = macroCompatibility >= 0.72
+                && servingCompatibility >= 0.55
+                && strongSemanticMatch
+                && weightedValue >= 0.46
         }
 
         return FoodPatternIdentityScore(

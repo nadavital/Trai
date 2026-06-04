@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-struct FoodSuggestion: Identifiable, Sendable, Equatable {
+nonisolated struct FoodSuggestion: Identifiable, Sendable, Equatable {
     let memoryID: UUID
     let title: String
     let subtitle: String
@@ -25,7 +25,7 @@ struct FoodSuggestion: Identifiable, Sendable, Equatable {
     }
 }
 
-struct FoodSuggestionDebugSummary: Sendable {
+nonisolated struct FoodSuggestionDebugSummary: Sendable {
     let totalMemories: Int
     let totalObservations: Int
     let patternCount: Int
@@ -40,11 +40,16 @@ struct FoodSuggestionDebugSummary: Sendable {
     let retrievedCandidateCount: Int
     let suppressedNegativeFeedbackCount: Int
     let suppressedLowConfidenceCount: Int
+    let recallFallbackCount: Int
+    let occasionAlternateCount: Int
+    let semanticSubstituteCount: Int
+    let completeMealPromotionCount: Int
     let finalEligibleCount: Int
     let shownSuggestionTitles: [String]
 }
 
-struct FoodSuggestionService {
+nonisolated struct FoodSuggestionService {
+    private static let cameraEntryFetchLimit = 180
     private let matcher = FoodMemoryMatcher()
     private let normalizationService = FoodNormalizationService()
     private let semanticScorer = FoodSemanticSatisfactionScorer()
@@ -57,10 +62,54 @@ struct FoodSuggestionService {
         sessionId: UUID? = nil,
         modelContext: ModelContext
     ) throws -> [FoodSuggestion] {
+        try cameraSuggestionsOnCurrentActor(
+            limit: limit,
+            now: now,
+            targetDate: targetDate,
+            sessionId: sessionId,
+            modelContext: modelContext
+        )
+    }
+
+    func cameraSuggestions(
+        limit: Int,
+        now: Date = .now,
+        targetDate: Date? = nil,
+        sessionId: UUID? = nil,
+        modelContainer: ModelContainer
+    ) async throws -> [FoodSuggestion] {
+        try await FoodSuggestionWorker().cameraSuggestions(
+            limit: limit,
+            now: now,
+            targetDate: targetDate,
+            sessionId: sessionId,
+            modelContainer: modelContainer
+        )
+    }
+
+    fileprivate func cameraSuggestionsOnCurrentActor(
+        limit: Int,
+        now: Date,
+        targetDate: Date?,
+        sessionId: UUID?,
+        modelContext: ModelContext
+    ) throws -> [FoodSuggestion] {
         guard limit > 0 else { return [] }
         let referenceDate = targetDate ?? now
         let memories = try fetchMemories(modelContext: modelContext)
         let entries = try fetchEntries(modelContext: modelContext)
+        let suggestionFeedback = fetchSuggestionFeedback(modelContext: modelContext)
+        let directSuggestions = directMemorySuggestions(
+            memories: memories,
+            entries: entries,
+            now: now,
+            targetDate: referenceDate,
+            limit: limit
+        )
+
+        if sessionId == nil, directSuggestions.count >= limit {
+            return Array(directSuggestions.prefix(limit))
+        }
 
         let engineResult = FoodRecommendationEngine().recommendationsSync(
             for: FoodRecommendationRequest(
@@ -69,7 +118,8 @@ struct FoodSuggestionService {
                 sessionID: sessionId,
                 limit: limit,
                 entries: entries,
-                memories: memories
+                memories: memories,
+                suggestionFeedback: suggestionFeedback
             )
         )
         let suggestions = try materializedEngineSuggestions(
@@ -78,6 +128,7 @@ struct FoodSuggestionService {
         )
         let completedSuggestions = completedSuggestions(
             engineSuggestions: suggestions,
+            directSuggestions: directSuggestions,
             memories: memories,
             entries: entries,
             now: now,
@@ -85,7 +136,6 @@ struct FoodSuggestionService {
             sessionId: sessionId,
             limit: limit
         )
-        try recordOutcomes(.shown, for: completedSuggestions.map(\.memoryID), at: now, modelContext: modelContext)
         return completedSuggestions
     }
 
@@ -107,6 +157,20 @@ struct FoodSuggestionService {
         modelContext: ModelContext
     ) throws {
         try recordOutcomes(outcome, for: memoryIDs, at: at, modelContext: modelContext)
+    }
+
+    func recordOutcome(
+        _ outcome: FoodSuggestionOutcome,
+        for memoryIDs: [UUID],
+        at: Date = .now,
+        modelContainer: ModelContainer
+    ) async throws {
+        try await FoodSuggestionWorker().recordOutcome(
+            outcome,
+            for: memoryIDs,
+            at: at,
+            modelContainer: modelContainer
+        )
     }
 
     @MainActor
@@ -161,7 +225,6 @@ struct FoodSuggestionService {
         }
     }
 
-    @MainActor
     func debugCameraSuggestions(
         limit: Int = 3,
         now: Date = .now,
@@ -176,6 +239,7 @@ struct FoodSuggestionService {
 
         let memories = try fetchMemories(modelContext: modelContext)
         let entries = try fetchEntries(modelContext: modelContext)
+        let suggestionFeedback = fetchSuggestionFeedback(modelContext: modelContext)
         let engineDebugReport = FoodRecommendationEngine().recommendationsSync(
             for: FoodRecommendationRequest(
                 now: now,
@@ -183,7 +247,8 @@ struct FoodSuggestionService {
                 sessionID: sessionId,
                 limit: limit,
                 entries: entries,
-                memories: memories
+                memories: memories,
+                suggestionFeedback: suggestionFeedback
             )
         ).debugReport
 
@@ -208,12 +273,31 @@ struct FoodSuggestionService {
             retrievedCandidateCount: engineDebugReport.candidateCountBySource.values.reduce(0, +),
             suppressedNegativeFeedbackCount: engineDebugReport.suppressedNegativeFeedbackCount,
             suppressedLowConfidenceCount: engineDebugReport.suppressedLowConfidenceCount,
+            recallFallbackCount: engineDebugReport.recallFallbackCount,
+            occasionAlternateCount: engineDebugReport.occasionAlternateCount,
+            semanticSubstituteCount: engineDebugReport.semanticSubstituteCount,
+            completeMealPromotionCount: engineDebugReport.completeMealPromotionCount,
             finalEligibleCount: engineDebugReport.finalShownTitles.count,
             shownSuggestionTitles: engineDebugReport.finalShownTitles
         )
     }
 
-    @MainActor
+    func debugCameraSuggestions(
+        limit: Int = 3,
+        now: Date = .now,
+        targetDate: Date? = nil,
+        sessionId: UUID? = nil,
+        modelContainer: ModelContainer
+    ) async throws -> FoodSuggestionDebugSummary {
+        try await FoodSuggestionWorker().debugCameraSuggestions(
+            limit: limit,
+            now: now,
+            targetDate: targetDate,
+            sessionId: sessionId,
+            modelContainer: modelContainer
+        )
+    }
+
     private func fetchMemories(modelContext: ModelContext) throws -> [FoodMemory] {
         try modelContext.fetch(
             FetchDescriptor<FoodMemory>(
@@ -222,16 +306,27 @@ struct FoodSuggestionService {
         )
     }
 
-    @MainActor
     private func fetchEntries(modelContext: ModelContext) throws -> [FoodEntry] {
-        try modelContext.fetch(
-            FetchDescriptor<FoodEntry>(
-                sortBy: [SortDescriptor(\FoodEntry.loggedAt, order: .reverse)]
-            )
+        var descriptor = FetchDescriptor<FoodEntry>(
+            sortBy: [SortDescriptor(\FoodEntry.loggedAt, order: .reverse)]
         )
+        descriptor.fetchLimit = Self.cameraEntryFetchLimit
+        return try modelContext.fetch(descriptor)
     }
 
-    @MainActor
+    private func fetchSuggestionFeedback(modelContext: ModelContext) -> [FoodSuggestionFeedbackSnapshot] {
+        do {
+            return try modelContext.fetch(FetchDescriptor<FoodSuggestionFeedback>()).compactMap { feedback in
+                guard let suggestionID = feedback.suggestionID,
+                      let stats = feedback.stats
+                else { return nil }
+                return FoodSuggestionFeedbackSnapshot(suggestionID: suggestionID, stats: stats)
+            }
+        } catch {
+            return []
+        }
+    }
+
     private func materializedEngineSuggestions(
         _ suggestions: [FoodSuggestion],
         memories: [FoodMemory]
@@ -250,6 +345,7 @@ struct FoodSuggestionService {
 
     private func completedSuggestions(
         engineSuggestions: [FoodSuggestion],
+        directSuggestions: [FoodSuggestion]? = nil,
         memories: [FoodMemory],
         entries: [FoodEntry],
         now: Date,
@@ -258,21 +354,50 @@ struct FoodSuggestionService {
         limit: Int
     ) -> [FoodSuggestion] {
         guard limit > 0 else { return [] }
-        let linkedMemoryIDs = Set(entries.compactMap { $0.foodMemoryIdString.flatMap(UUID.init(uuidString:)) })
-        let directSuggestions = sessionId == nil
-            ? memories
-                .filter { !linkedMemoryIDs.contains($0.id) }
-                .compactMap { directSuggestion(from: $0, now: now, targetDate: targetDate, existingEntries: entries) }
-            : []
-        let merged = deduplicatedSuggestions(engineSuggestions + directSuggestions)
+        let directSuggestions = directSuggestions ?? directMemorySuggestions(
+            memories: memories,
+            entries: entries,
+            now: now,
+            targetDate: targetDate,
+            limit: limit
+        )
+        let merged = deduplicatedSuggestions(directSuggestions + engineSuggestions)
             .filter { sessionId != nil || isStandaloneSuggestion($0) }
             .sorted {
                 if $0.relevanceScore != $1.relevanceScore {
                     return $0.relevanceScore > $1.relevanceScore
                 }
                 return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
-            }
+        }
         return Array(merged.prefix(limit))
+    }
+
+    private func directMemorySuggestions(
+        memories: [FoodMemory],
+        entries: [FoodEntry],
+        now: Date,
+        targetDate: Date,
+        limit: Int
+    ) -> [FoodSuggestion] {
+        guard limit > 0 else { return [] }
+        return memories
+            .compactMap { directSuggestion(from: $0, now: now, targetDate: targetDate, existingEntries: entries) }
+            .sorted {
+                if $0.relevanceScore != $1.relevanceScore {
+                    return $0.relevanceScore > $1.relevanceScore
+                }
+                return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            }
+            .reduce(into: [FoodSuggestion]()) { output, suggestion in
+                guard output.count < max(limit * 2, limit) else { return }
+                if let existingIndex = output.firstIndex(where: { suggestionsOverlap($0, suggestion) }) {
+                    if suggestion.relevanceScore > output[existingIndex].relevanceScore {
+                        output[existingIndex] = suggestion
+                    }
+                } else {
+                    output.append(suggestion)
+                }
+            }
     }
 
     private func directSuggestionDiagnostics(
@@ -281,12 +406,9 @@ struct FoodSuggestionService {
         now: Date,
         targetDate: Date
     ) -> FoodDirectMemorySuggestionDiagnostics {
-        let linkedMemoryIDs = Set(entries.compactMap { $0.foodMemoryIdString.flatMap(UUID.init(uuidString:)) })
         return memories
-            .filter { !linkedMemoryIDs.contains($0.id) }
             .reduce(into: FoodDirectMemorySuggestionDiagnostics.empty) { diagnostics, memory in
-                guard memory.status == .confirmed,
-                      hasSufficientEvidence(memory),
+                guard isSuggestibleMemory(memory),
                       !isStale(memory, targetDate: targetDate) || hasPositiveFeedback(memory)
                 else {
                     return
@@ -317,8 +439,7 @@ struct FoodSuggestionService {
         targetDate: Date,
         existingEntries: [FoodEntry]
     ) -> FoodSuggestion? {
-        guard memory.status == .confirmed else { return nil }
-        guard hasSufficientEvidence(memory) else { return nil }
+        guard isSuggestibleMemory(memory) else { return nil }
         guard !hasRecentNegativeFeedback(memory, now: now) else { return nil }
         guard !isStale(memory, targetDate: targetDate) || hasPositiveFeedback(memory) else { return nil }
         let opportunityState = opportunityState(for: memory, targetDate: targetDate, entries: existingEntries)
@@ -331,11 +452,13 @@ struct FoodSuggestionService {
             || bucketSupport >= 0.12
             || strongHabit
             || hasPositiveFeedback(memory)
+            || (isEmergingUsefulMemory(memory) && max(timeSupport, bucketSupport) >= 0.15)
         guard shouldShow else { return nil }
 
         let entry = suggestedEntry(from: memory)
         let score = directSuggestionScore(
             memory: memory,
+            now: now,
             targetDate: targetDate,
             timeSupport: timeSupport,
             bucketSupport: bucketSupport,
@@ -373,7 +496,71 @@ struct FoodSuggestionService {
         }
         let lhsTitle = normalizationService.normalizeFoodName(lhs.title)
         let rhsTitle = normalizationService.normalizeFoodName(rhs.title)
-        return !lhsTitle.isEmpty && lhsTitle == rhsTitle
+        if !lhsTitle.isEmpty && lhsTitle == rhsTitle {
+            return true
+        }
+        return suggestionsSemanticallyOverlap(
+            lhs,
+            rhs,
+            lhsComponents: lhsComponents,
+            rhsComponents: rhsComponents,
+            lhsTitle: lhsTitle,
+            rhsTitle: rhsTitle
+        )
+    }
+
+    private func suggestionsSemanticallyOverlap(
+        _ lhs: FoodSuggestion,
+        _ rhs: FoodSuggestion,
+        lhsComponents: Set<String>,
+        rhsComponents: Set<String>,
+        lhsTitle: String,
+        rhsTitle: String
+    ) -> Bool {
+        let exactComponentScore = FoodSemanticSatisfactionScorer.jaccard(lhs: lhsComponents, rhs: rhsComponents)
+        let componentSemanticScore = semanticScorer.componentSemanticSimilarity(
+            candidateComponents: Array(lhsComponents),
+            loggedComponents: Array(rhsComponents)
+        )
+        let nameScore = semanticScorer.nameSimilarity(
+            candidateNames: [lhsTitle].filter { !$0.isEmpty },
+            loggedName: rhsTitle
+        )
+        let macroScore = semanticScorer.macroSimilarity(
+            candidate: semanticNutritionProfile(for: lhs.suggestedEntry),
+            logged: semanticNutritionProfile(for: rhs.suggestedEntry)
+        )
+        let servingScore = semanticScorer.servingSimilarity(
+            candidate: semanticServingProfile(for: lhs.suggestedEntry),
+            logged: semanticServingProfile(for: rhs.suggestedEntry)
+        )
+        let decision = semanticScorer.decision(
+            exactComponentScore: exactComponentScore,
+            componentSemanticScore: componentSemanticScore,
+            nameScore: nameScore,
+            macroScore: macroScore,
+            servingScore: servingScore
+        )
+        return decision.isSatisfied
+            && max(exactComponentScore, componentSemanticScore, nameScore) >= 0.28
+            && macroScore >= 0.70
+    }
+
+    private func semanticNutritionProfile(for entry: SuggestedFoodEntry) -> FoodSemanticNutritionProfile {
+        FoodSemanticNutritionProfile(
+            calories: Double(entry.calories),
+            proteinGrams: entry.proteinGrams,
+            carbsGrams: entry.carbsGrams,
+            fatGrams: entry.fatGrams
+        )
+    }
+
+    private func semanticServingProfile(for entry: SuggestedFoodEntry) -> FoodSemanticServingProfile {
+        FoodSemanticServingProfile(
+            servingText: entry.servingSize,
+            quantity: nil,
+            unit: nil
+        )
     }
 
     private func isStandaloneSuggestion(_ suggestion: FoodSuggestion) -> Bool {
@@ -387,6 +574,46 @@ struct FoodSuggestionService {
         memory.observationCount >= 2
             || memory.confirmedReuseCount > 0
             || hasPositiveFeedback(memory)
+    }
+
+    private func isSuggestibleMemory(_ memory: FoodMemory) -> Bool {
+        switch memory.status {
+        case .confirmed:
+            return hasSufficientEvidence(memory)
+        case .candidate:
+            return isEmergingUsefulMemory(memory)
+        case .retired, .merged:
+            return false
+        }
+    }
+
+    private func isEmergingUsefulMemory(_ memory: FoodMemory) -> Bool {
+        guard memory.observationCount >= 2 else { return hasPositiveFeedback(memory) }
+        guard memory.confidenceScore >= 0.72 || hasPositiveFeedback(memory) else { return false }
+        let distinctDays = memory.qualitySignals?.distinctObservationDays
+            ?? memory.repeatPattern?.distinctConsumptionDays
+            ?? 1
+        let repeatedTimeBucketScore = memory.qualitySignals?.repeatedTimeBucketScore
+            ?? memoryTimeConsistencyEstimate(memory)
+        let hasRepeatedBehavior = distinctDays >= 2
+            || (memory.repeatPattern?.daysWithMultipleUses ?? 0) > 0
+            || hasPositiveFeedback(memory)
+        return hasRepeatedBehavior
+            && (repeatedTimeBucketScore >= 0.45 || memory.observationCount >= 3 || hasPositiveFeedback(memory))
+    }
+
+    private func memoryTimeConsistencyEstimate(_ memory: FoodMemory) -> Double {
+        guard let profile = memory.timeProfile else { return 0 }
+        let total = max(profile.hourCounts.reduce(0, +), memory.observationCount, 1)
+        let strongestBucket = profile.bucketCounts.values.max() ?? 0
+        var strongestHourWindow = 0
+        for hour in 0..<24 {
+            let window = [-1, 0, 1].reduce(0) { partial, offset in
+                partial + hourCount(profile.hourCounts, at: (hour + offset + 24) % 24)
+            }
+            strongestHourWindow = max(strongestHourWindow, window)
+        }
+        return max(Double(strongestBucket), Double(strongestHourWindow)) / Double(total)
     }
 
     private func hasPositiveFeedback(_ memory: FoodMemory) -> Bool {
@@ -567,19 +794,13 @@ struct FoodSuggestionService {
     }
 
     private func isStrongUsefulHabit(_ memory: FoodMemory) -> Bool {
-        let nutrition = memory.nutritionProfile
-        let calories = nutrition?.medianCalories ?? memory.components.map(\.typicalCalories).reduce(0, +)
-        let protein = nutrition?.medianProteinGrams ?? memory.components.map(\.typicalProteinGrams).reduce(0, +)
-        let isLiquidOnly = !memory.components.isEmpty && memory.components.allSatisfy { $0.role == .drink }
-        let substantial = !isLiquidOnly && (calories >= 320 || protein >= 22 || memory.components.count >= 2)
-        return substantial
-            && memory.observationCount >= 6
-            && memory.confirmedReuseCount >= 4
+        memory.observationCount >= 6
             && memory.confidenceScore >= 0.9
     }
 
     private func directSuggestionScore(
         memory: FoodMemory,
+        now: Date,
         targetDate: Date,
         timeSupport: Double,
         bucketSupport: Double,
@@ -596,7 +817,27 @@ struct FoodSuggestionService {
             + 0.18 * confidence
             + feedback
             - opportunityState.rankingPenalty
+            - ignoredFeedbackPenalty(for: memory, now: now)
         return min(max(score, 0), 1)
+    }
+
+    private func ignoredFeedbackPenalty(for memory: FoodMemory, now: Date) -> Double {
+        guard let stats = memory.suggestionStats,
+              stats.timesIgnored > stats.timesAccepted + stats.timesRefined
+        else {
+            return 0
+        }
+        guard let lastIgnoredAt = stats.lastIgnoredAt else {
+            return min(Double(stats.timesIgnored) * 0.04, 0.16)
+        }
+        let hours = Double(Calendar.current.dateComponents([.hour], from: lastIgnoredAt, to: now).hour ?? 999)
+        if hours < 6 {
+            return min(Double(stats.timesIgnored) * 0.06, 0.24)
+        }
+        if hours < 48 {
+            return min(Double(stats.timesIgnored) * 0.04, 0.16)
+        }
+        return 0
     }
 
     private func passiveExposurePenalty(_ memory: FoodMemory) -> Double {
@@ -705,7 +946,7 @@ struct FoodSuggestionService {
             && abs(fat - suggestedEntry.fatGrams) <= max(suggestedEntry.fatGrams * 0.5, 10)
     }
 
-    private func recordOutcomes(
+    fileprivate func recordOutcomes(
         _ outcome: FoodSuggestionOutcome,
         for memoryIDs: [UUID],
         at: Date,
@@ -715,6 +956,7 @@ struct FoodSuggestionService {
         guard !ids.isEmpty else { return }
 
         let memories = try modelContext.fetch(FetchDescriptor<FoodMemory>())
+        let existingMemoryIDs = Set(memories.map(\.id))
         var didChange = false
 
         for memory in memories where ids.contains(memory.id) {
@@ -724,6 +966,35 @@ struct FoodSuggestionService {
                 at: at
             )
             didChange = true
+        }
+
+        let missingIDs = ids.subtracting(existingMemoryIDs)
+        if !missingIDs.isEmpty {
+            do {
+                let existingFeedback = try modelContext.fetch(FetchDescriptor<FoodSuggestionFeedback>())
+                for suggestionID in missingIDs {
+                    if let feedback = existingFeedback.first(where: { $0.suggestionID == suggestionID }) {
+                        feedback.stats = updatedSuggestionStats(
+                            existing: feedback.stats,
+                            outcome: outcome,
+                            at: at
+                        )
+                        feedback.updatedAt = at
+                    } else {
+                        let feedback = FoodSuggestionFeedback(
+                            suggestionID: suggestionID,
+                            stats: updatedSuggestionStats(existing: nil, outcome: outcome, at: at),
+                            createdAt: at,
+                            updatedAt: at
+                        )
+                        modelContext.insert(feedback)
+                    }
+                    didChange = true
+                }
+            } catch {
+                // Feedback for generated suggestions is auxiliary. Keep suggestion actions usable in previews and tests
+                // that intentionally construct narrower SwiftData schemas.
+            }
         }
 
         if didChange {
@@ -738,11 +1009,13 @@ struct FoodSuggestionService {
     ) -> FoodMemorySuggestionStats {
         var timesShown = existing?.timesShown ?? 0
         var timesTapped = existing?.timesTapped ?? 0
+        var timesIgnored = existing?.timesIgnored ?? 0
         var timesAccepted = existing?.timesAccepted ?? 0
         var timesDismissed = existing?.timesDismissed ?? 0
         var timesRefined = existing?.timesRefined ?? 0
         var lastShownAt = existing?.lastShownAt
         var lastTappedAt = existing?.lastTappedAt
+        var lastIgnoredAt = existing?.lastIgnoredAt
         var lastAcceptedAt = existing?.lastAcceptedAt
         var lastDismissedAt = existing?.lastDismissedAt
         var lastRefinedAt = existing?.lastRefinedAt
@@ -754,6 +1027,9 @@ struct FoodSuggestionService {
         case .tapped:
             timesTapped += 1
             lastTappedAt = at
+        case .ignored:
+            timesIgnored += 1
+            lastIgnoredAt = at
         case .accepted:
             timesAccepted += 1
             lastAcceptedAt = at
@@ -770,11 +1046,13 @@ struct FoodSuggestionService {
         return FoodMemorySuggestionStats(
             timesShown: timesShown,
             timesTapped: timesTapped,
+            timesIgnored: timesIgnored,
             timesAccepted: timesAccepted,
             timesDismissed: timesDismissed,
             timesRefined: timesRefined,
             lastShownAt: lastShownAt,
             lastTappedAt: lastTappedAt,
+            lastIgnoredAt: lastIgnoredAt,
             lastAcceptedAt: lastAcceptedAt,
             lastDismissedAt: lastDismissedAt,
             lastRefinedAt: lastRefinedAt
@@ -797,24 +1075,28 @@ struct FoodSuggestionService {
             retrievedCandidateCount: 0,
             suppressedNegativeFeedbackCount: 0,
             suppressedLowConfidenceCount: 0,
+            recallFallbackCount: 0,
+            occasionAlternateCount: 0,
+            semanticSubstituteCount: 0,
+            completeMealPromotionCount: 0,
             finalEligibleCount: 0,
             shownSuggestionTitles: []
         )
     }
 }
 
-private enum FoodMemoryOpportunityAvailability {
+nonisolated private enum FoodMemoryOpportunityAvailability {
     case eligible
     case demote
     case suppress
 }
 
-private struct FoodMemoryOpportunityState {
+nonisolated private struct FoodMemoryOpportunityState {
     let availability: FoodMemoryOpportunityAvailability
     let rankingPenalty: Double
 }
 
-private struct FoodDirectMemorySuggestionDiagnostics {
+nonisolated private struct FoodDirectMemorySuggestionDiagnostics {
     var candidateCount: Int
     var suppressedAlreadyTodayCount: Int
     var demotedAlreadyTodayCount: Int
@@ -826,4 +1108,186 @@ private struct FoodDirectMemorySuggestionDiagnostics {
         demotedAlreadyTodayCount: 0,
         passiveExposureDemotedCount: 0
     )
+}
+
+private actor FoodSuggestionWorker {
+    func cameraSuggestions(
+        limit: Int,
+        now: Date,
+        targetDate: Date?,
+        sessionId: UUID?,
+        modelContainer: ModelContainer
+    ) throws -> [FoodSuggestion] {
+        let modelContext = ModelContext(modelContainer)
+        return try FoodSuggestionService().cameraSuggestionsOnCurrentActor(
+            limit: limit,
+            now: now,
+            targetDate: targetDate,
+            sessionId: sessionId,
+            modelContext: modelContext
+        )
+    }
+
+    func recordOutcome(
+        _ outcome: FoodSuggestionOutcome,
+        for memoryIDs: [UUID],
+        at: Date,
+        modelContainer: ModelContainer
+    ) throws {
+        let modelContext = ModelContext(modelContainer)
+        try FoodSuggestionService().recordOutcomes(
+            outcome,
+            for: memoryIDs,
+            at: at,
+            modelContext: modelContext
+        )
+    }
+
+    func debugCameraSuggestions(
+        limit: Int,
+        now: Date,
+        targetDate: Date?,
+        sessionId: UUID?,
+        modelContainer: ModelContainer
+    ) throws -> FoodSuggestionDebugSummary {
+        let modelContext = ModelContext(modelContainer)
+        return try FoodSuggestionService().debugCameraSuggestions(
+            limit: limit,
+            now: now,
+            targetDate: targetDate,
+            sessionId: sessionId,
+            modelContext: modelContext
+        )
+    }
+}
+
+actor FoodSuggestionWarmCache {
+    static let shared = FoodSuggestionWarmCache()
+
+    private let cacheTTL: TimeInterval = 10 * 60
+    private let targetDateBucketSize: TimeInterval = 15 * 60
+    private var cache: [FoodSuggestionWarmCacheKey: CachedFoodSuggestions] = [:]
+    private var inFlight: [FoodSuggestionWarmCacheKey: Task<[FoodSuggestion], Never>] = [:]
+
+    func cachedSuggestions(limit: Int, targetDate: Date, sessionId: UUID?) -> [FoodSuggestion]? {
+        let key = cacheKey(limit: limit, targetDate: targetDate, sessionId: sessionId)
+        pruneExpired(now: Date())
+        guard let cached = cache[key], !cached.isExpired(ttl: cacheTTL) else {
+            cache[key] = nil
+            return nil
+        }
+        return cached.suggestions
+    }
+
+    func suggestions(
+        limit: Int,
+        targetDate: Date,
+        sessionId: UUID?,
+        modelContainer: ModelContainer
+    ) async -> [FoodSuggestion] {
+        let key = cacheKey(limit: limit, targetDate: targetDate, sessionId: sessionId)
+        pruneExpired(now: Date())
+
+        if let cached = cache[key], !cached.isExpired(ttl: cacheTTL) {
+            return cached.suggestions
+        }
+
+        if let task = inFlight[key] {
+            let suggestions = await task.value
+            store(suggestions: suggestions, key: key)
+            return suggestions
+        }
+
+        let task = suggestionTask(
+            limit: limit,
+            targetDate: targetDate,
+            sessionId: sessionId,
+            modelContainer: modelContainer
+        )
+        inFlight[key] = task
+        let suggestions = await task.value
+        store(suggestions: suggestions, key: key)
+        return suggestions
+    }
+
+    func prewarm(
+        limit: Int,
+        targetDate: Date,
+        sessionId: UUID?,
+        modelContainer: ModelContainer
+    ) {
+        let key = cacheKey(limit: limit, targetDate: targetDate, sessionId: sessionId)
+        pruneExpired(now: Date())
+
+        if let cached = cache[key], !cached.isExpired(ttl: cacheTTL) {
+            return
+        }
+        guard inFlight[key] == nil else { return }
+
+        let task = suggestionTask(
+            limit: limit,
+            targetDate: targetDate,
+            sessionId: sessionId,
+            modelContainer: modelContainer
+        )
+        inFlight[key] = task
+        Task { [weak self] in
+            let suggestions = await task.value
+            await self?.store(suggestions: suggestions, key: key)
+        }
+    }
+
+    func invalidate() {
+        cache.removeAll()
+        inFlight.values.forEach { $0.cancel() }
+        inFlight.removeAll()
+    }
+
+    private func store(suggestions: [FoodSuggestion], key: FoodSuggestionWarmCacheKey) {
+        inFlight[key] = nil
+        cache[key] = CachedFoodSuggestions(suggestions: suggestions, cachedAt: Date())
+    }
+
+    private func suggestionTask(
+        limit: Int,
+        targetDate: Date,
+        sessionId: UUID?,
+        modelContainer: ModelContainer
+    ) -> Task<[FoodSuggestion], Never> {
+        Task.detached(priority: .utility) {
+            (try? await FoodSuggestionService().cameraSuggestions(
+                limit: limit,
+                targetDate: targetDate,
+                sessionId: sessionId,
+                modelContainer: modelContainer
+            )) ?? []
+        }
+    }
+
+    private func cacheKey(limit: Int, targetDate: Date, sessionId: UUID?) -> FoodSuggestionWarmCacheKey {
+        FoodSuggestionWarmCacheKey(
+            sessionId: sessionId,
+            targetDateBucket: Int(targetDate.timeIntervalSinceReferenceDate / targetDateBucketSize),
+            limit: limit
+        )
+    }
+
+    private func pruneExpired(now: Date) {
+        cache = cache.filter { now.timeIntervalSince($0.value.cachedAt) <= cacheTTL }
+    }
+}
+
+nonisolated private struct FoodSuggestionWarmCacheKey: Hashable, Sendable {
+    let sessionId: UUID?
+    let targetDateBucket: Int
+    let limit: Int
+}
+
+nonisolated private struct CachedFoodSuggestions: Sendable {
+    let suggestions: [FoodSuggestion]
+    let cachedAt: Date
+
+    func isExpired(ttl: TimeInterval) -> Bool {
+        Date().timeIntervalSince(cachedAt) > ttl
+    }
 }

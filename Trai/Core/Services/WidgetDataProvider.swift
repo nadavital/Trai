@@ -37,6 +37,12 @@ final class WidgetDataProvider {
         }
     }
 
+    func cancelScheduledRefresh() {
+        Task {
+            await refreshActor.cancelScheduledRefresh()
+        }
+    }
+
     nonisolated func readWidgetData() -> WidgetData? {
         Self.readPersistedWidgetData()
     }
@@ -77,6 +83,11 @@ private actor WidgetDataRefreshActor {
             WidgetDataProvider.persistWidgetData(data)
             WidgetCenter.shared.reloadAllTimelines()
         }
+    }
+
+    func cancelScheduledRefresh() {
+        pendingRefreshTask?.cancel()
+        pendingRefreshTask = nil
     }
 }
 
