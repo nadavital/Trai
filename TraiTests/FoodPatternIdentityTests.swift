@@ -33,6 +33,31 @@ final class FoodPatternIdentityTests: XCTestCase {
         XCTAssertEqual(patterns.count, 2)
     }
 
+    func testSemanticEmbeddingClustersFlatNameVariantsWithCompatibleMacros() {
+        let observations = FoodObservationBuilder().observations(from: [
+            flatEntry("Chicken rice bowl", day: 0),
+            flatEntry("Grilled chicken with rice", day: 1),
+            flatEntry("Chicken and rice", day: 2)
+        ])
+
+        let patterns = FoodPatternBuilder().patterns(from: observations)
+
+        XCTAssertEqual(patterns.count, 1)
+        XCTAssertEqual(patterns.first?.observationCount, 3)
+        XCTAssertNotNil(patterns.first?.identityEvidence.averageEmbeddingSimilarity)
+    }
+
+    func testSemanticEmbeddingDoesNotMergeUnrelatedFlatFoodsWithoutLexicalAnchor() {
+        let observations = FoodObservationBuilder().observations(from: [
+            flatEntry("Chicken rice bowl", day: 0),
+            flatEntry("Pastrami sandwich", day: 1)
+        ])
+
+        let patterns = FoodPatternBuilder().patterns(from: observations)
+
+        XCTAssertEqual(patterns.count, 2)
+    }
+
     func testEmbeddingCannotOverrideMacroIncompatibility() {
         let observations = FoodObservationBuilder().observations(from: [
             entry("Chicken and rice", day: 0, calories: 450, protein: 36, carbs: 48, fat: 8),
@@ -67,6 +92,25 @@ final class FoodPatternIdentityTests: XCTestCase {
                 FoodRecommendationTestSupport.component("rice", role: .carb, calories: 260, protein: 5, carbs: 58, fat: 1),
                 FoodRecommendationTestSupport.component("curry sauce", role: .sauce, calories: 60, protein: 1, carbs: 14, fat: 3)
             ]
+        )
+    }
+
+    private func flatEntry(
+        _ name: String,
+        day: Int,
+        calories: Int = 620,
+        protein: Double = 42,
+        carbs: Double = 58,
+        fat: Double = 16
+    ) -> FoodEntry {
+        FoodRecommendationTestSupport.entry(
+            name: name,
+            loggedAt: FoodRecommendationTestSupport.day(day),
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            components: []
         )
     }
 }

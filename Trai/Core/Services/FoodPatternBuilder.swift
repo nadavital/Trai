@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-struct FoodPattern: Identifiable, Sendable, Equatable {
+nonisolated struct FoodPattern: Identifiable, Sendable, Equatable {
     let id: String
     let canonicalTitle: String
     let emoji: String?
@@ -19,7 +19,7 @@ struct FoodPattern: Identifiable, Sendable, Equatable {
     let observationCount: Int
 }
 
-struct FoodPatternAlias: Sendable, Equatable, Hashable {
+nonisolated struct FoodPatternAlias: Sendable, Equatable, Hashable {
     let displayName: String
     let normalizedName: String
     let observationCount: Int
@@ -27,7 +27,7 @@ struct FoodPatternAlias: Sendable, Equatable, Hashable {
     let lastObservedAt: Date
 }
 
-struct FoodPatternComponent: Identifiable, Sendable, Equatable, Hashable {
+nonisolated struct FoodPatternComponent: Identifiable, Sendable, Equatable, Hashable {
     let id: String
     let displayName: String
     let canonicalName: String
@@ -39,7 +39,7 @@ struct FoodPatternComponent: Identifiable, Sendable, Equatable, Hashable {
     let medianFatGrams: Double
 }
 
-struct FoodPatternNutritionProfile: Sendable, Equatable {
+nonisolated struct FoodPatternNutritionProfile: Sendable, Equatable {
     let medianCalories: Int
     let medianProteinGrams: Double
     let medianCarbsGrams: Double
@@ -56,33 +56,35 @@ struct FoodPatternNutritionProfile: Sendable, Equatable {
     let upperFatBound: Double
 }
 
-struct FoodPatternServingProfile: Sendable, Equatable {
+nonisolated struct FoodPatternServingProfile: Sendable, Equatable {
     let commonServingText: String?
     let commonQuantity: Double?
     let commonUnit: String?
 }
 
-struct FoodPatternTimeProfile: Sendable, Equatable {
+nonisolated struct FoodPatternTimeProfile: Sendable, Equatable {
     let hourCounts: [Int]
     let weekdayCount: Int
     let weekendCount: Int
 }
 
-struct FoodPatternSessionProfile: Sendable, Equatable {
+nonisolated struct FoodPatternSessionProfile: Sendable, Equatable {
     let sessionPositionCounts: [Int: Int]
     let coOccurringComponentCounts: [String: Int]
     let coOccurringPatternIDs: [String: Int]
 }
 
-struct FoodPatternFeedbackProfile: Sendable, Equatable {
+nonisolated struct FoodPatternFeedbackProfile: Sendable, Equatable {
     let timesShown: Int
+    let timesIgnored: Int
     let timesAccepted: Int
     let timesDismissed: Int
     let timesRefined: Int
+    let lastIgnoredAt: Date?
     let lastDismissedAt: Date?
 }
 
-struct FoodPatternIdentityEvidence: Sendable, Equatable {
+nonisolated struct FoodPatternIdentityEvidence: Sendable, Equatable {
     let averageComponentAgreement: Double
     let averageMacroCompatibility: Double
     let averageServingCompatibility: Double
@@ -91,10 +93,15 @@ struct FoodPatternIdentityEvidence: Sendable, Equatable {
     let representativeEntryIDs: [UUID]
 }
 
-struct FoodPatternBuilder {
+nonisolated struct FoodPatternBuilder {
     private let identityScorer = FoodPatternIdentityScorer()
+    private let semanticScorer = FoodSemanticSatisfactionScorer()
 
-    func patterns(from observations: [FoodObservation], memories: [FoodMemory] = []) -> [FoodPattern] {
+    func patterns(
+        from observations: [FoodObservation],
+        memories: [FoodMemory] = [],
+        suggestionFeedback: [FoodSuggestionFeedbackSnapshot] = []
+    ) -> [FoodPattern] {
         let sortedObservations = observations.sorted {
             if $0.loggedAt != $1.loggedAt {
                 return $0.loggedAt < $1.loggedAt
@@ -102,6 +109,7 @@ struct FoodPatternBuilder {
             return $0.sessionOrder < $1.sessionOrder
         }
         let memoryFeedback = feedbackByMemoryID(memories)
+        let suggestionFeedbackByID = feedbackBySuggestionID(suggestionFeedback)
 
         var clusters: [[FoodObservation]] = []
         for observation in sortedObservations {
@@ -113,7 +121,11 @@ struct FoodPatternBuilder {
         }
 
         let patterns = clusters.compactMap { cluster in
-            buildPattern(observations: cluster, feedbackByMemoryID: memoryFeedback)
+            buildPattern(
+                observations: cluster,
+                feedbackByMemoryID: memoryFeedback,
+                suggestionFeedbackByID: suggestionFeedbackByID
+            )
         }
         return patterns.sorted {
             if $0.observationCount != $1.observationCount {
@@ -129,7 +141,7 @@ struct FoodPatternBuilder {
 
         for (index, cluster) in clusters.enumerated() {
             guard let representative = cluster.last else { continue }
-            let score = identityScorer.identityScore(observation, representative)
+            let score = identityScore(observation, representative)
             guard score.shouldMerge, score.value > bestScore else { continue }
             bestScore = score.value
             bestIndex = index
@@ -140,7 +152,8 @@ struct FoodPatternBuilder {
 
     private func buildPattern(
         observations: [FoodObservation],
-        feedbackByMemoryID: [UUID: FoodPatternFeedbackProfile]
+        feedbackByMemoryID: [UUID: FoodPatternFeedbackProfile],
+        suggestionFeedbackByID: [UUID: FoodPatternFeedbackProfile]
     ) -> FoodPattern? {
         guard let first = observations.first else { return nil }
         let sortedObservations = observations.sorted { $0.loggedAt < $1.loggedAt }
@@ -161,7 +174,7 @@ struct FoodPatternBuilder {
             upperFatBound: sortedObservations.map(\.fatGrams).max() ?? first.fatGrams
         )
         let components = componentProfile(for: sortedObservations)
-        let id = patternID(components: components, fallbackName: first.normalizedName, nutrition: nutrition)
+        let id = patternID(components: components, fallbackName: first.normalizedName)
         let distinctDays = Set(sortedObservations.map { Calendar.current.startOfDay(for: $0.loggedAt) }).count
 
         return FoodPattern(
@@ -175,7 +188,12 @@ struct FoodPatternBuilder {
             servingProfile: servingProfile(for: sortedObservations),
             timeProfile: timeProfile(for: sortedObservations),
             sessionProfile: sessionProfile(for: sortedObservations),
-            feedbackProfile: aggregateFeedback(sortedObservations: sortedObservations, feedbackByMemoryID: feedbackByMemoryID),
+            feedbackProfile: aggregateFeedback(
+                sortedObservations: sortedObservations,
+                patternID: id,
+                feedbackByMemoryID: feedbackByMemoryID,
+                suggestionFeedbackByID: suggestionFeedbackByID
+            ),
             identityEvidence: identityEvidence(for: sortedObservations),
             lastObservedAt: sortedObservations.last?.loggedAt ?? first.loggedAt,
             distinctDays: distinctDays,
@@ -185,13 +203,11 @@ struct FoodPatternBuilder {
 
     private func patternID(
         components: [FoodPatternComponent],
-        fallbackName: String,
-        nutrition: FoodPatternNutritionProfile
+        fallbackName: String
     ) -> String {
         let componentKey = components.map(\.canonicalName).filter { !$0.isEmpty }.sorted().joined(separator: "|")
         let identityKey = componentKey.isEmpty ? fallbackName : componentKey
-        let macroBucket = "cal\(nutrition.medianCalories / 250)-protein\(Int(nutrition.medianProteinGrams / 20))"
-        return "pattern:\(identityKey)|\(macroBucket)"
+        return "pattern:\(identityKey)"
     }
 
     private func canonicalTitle(for observations: [FoodObservation]) -> String {
@@ -318,21 +334,56 @@ struct FoodPatternBuilder {
         var componentScores: [Double] = []
         var macroScores: [Double] = []
         var servingScores: [Double] = []
+        var embeddingScores: [Double] = []
         for index in observations.indices.dropFirst() {
-            let score = identityScorer.identityScore(observations[index], observations[index - 1])
+            let score = identityScore(observations[index], observations[index - 1])
             componentScores.append(score.componentAgreement)
             macroScores.append(score.macroCompatibility)
             servingScores.append(score.servingCompatibility)
+            if let embeddingSimilarity = score.embeddingSimilarity {
+                embeddingScores.append(embeddingSimilarity)
+            }
         }
 
         return FoodPatternIdentityEvidence(
             averageComponentAgreement: average(componentScores),
             averageMacroCompatibility: average(macroScores),
             averageServingCompatibility: average(servingScores),
-            averageEmbeddingSimilarity: nil,
+            averageEmbeddingSimilarity: embeddingScores.isEmpty ? nil : average(embeddingScores),
             hasUserEditedObservation: observations.contains(where: \.wasUserEdited),
             representativeEntryIDs: observations.map(\.entryID)
         )
+    }
+
+    private func identityScore(_ lhs: FoodObservation, _ rhs: FoodObservation) -> FoodPatternIdentityScore {
+        identityScorer.identityScore(
+            lhs,
+            rhs,
+            embeddingSimilarity: semanticIdentitySimilarity(lhs, rhs)
+        )
+    }
+
+    private func semanticIdentitySimilarity(_ lhs: FoodObservation, _ rhs: FoodObservation) -> Double? {
+        let lexicalNameSimilarity = tokenSimilarity(lhs.normalizedName, rhs.normalizedName)
+        let semanticNameSimilarity = semanticScorer.identityTextSimilarity(lhs.normalizedName, rhs.normalizedName)
+        let lhsComponents = lhs.components.map(\.canonicalName).filter { !$0.isEmpty }
+        let rhsComponents = rhs.components.map(\.canonicalName).filter { !$0.isEmpty }
+        let exactComponentSimilarity = FoodSemanticSatisfactionScorer.jaccard(lhs: Set(lhsComponents), rhs: Set(rhsComponents))
+        let semanticComponentSimilarity = semanticScorer.componentSemanticSimilarity(
+            candidateComponents: lhsComponents,
+            loggedComponents: rhsComponents
+        )
+        let semanticLift = max(
+            semanticNameSimilarity > lexicalNameSimilarity ? semanticNameSimilarity : 0,
+            semanticComponentSimilarity > exactComponentSimilarity ? semanticComponentSimilarity : 0
+        )
+        return semanticLift > 0 ? semanticLift : nil
+    }
+
+    private func tokenSimilarity(_ lhs: String, _ rhs: String) -> Double {
+        let lhsTokens = Set(lhs.split(separator: " ").map(String.init).filter { !$0.isEmpty })
+        let rhsTokens = Set(rhs.split(separator: " ").map(String.init).filter { !$0.isEmpty })
+        return FoodSemanticSatisfactionScorer.jaccard(lhs: lhsTokens, rhs: rhsTokens)
     }
 
     private func feedbackByMemoryID(_ memories: [FoodMemory]) -> [UUID: FoodPatternFeedbackProfile] {
@@ -342,27 +393,74 @@ struct FoodPatternBuilder {
                 memory.id,
                 FoodPatternFeedbackProfile(
                     timesShown: stats.timesShown,
+                    timesIgnored: stats.timesIgnored,
                     timesAccepted: stats.timesAccepted,
                     timesDismissed: stats.timesDismissed,
                     timesRefined: stats.timesRefined,
+                    lastIgnoredAt: stats.lastIgnoredAt,
                     lastDismissedAt: stats.lastDismissedAt
                 )
             )
         })
     }
 
+    private func feedbackBySuggestionID(_ feedback: [FoodSuggestionFeedbackSnapshot]) -> [UUID: FoodPatternFeedbackProfile] {
+        feedback.reduce(into: [UUID: FoodPatternFeedbackProfile]()) { profiles, snapshot in
+            let profile = FoodPatternFeedbackProfile(
+                timesShown: snapshot.stats.timesShown,
+                timesIgnored: snapshot.stats.timesIgnored,
+                timesAccepted: snapshot.stats.timesAccepted,
+                timesDismissed: snapshot.stats.timesDismissed,
+                timesRefined: snapshot.stats.timesRefined,
+                lastIgnoredAt: snapshot.stats.lastIgnoredAt,
+                lastDismissedAt: snapshot.stats.lastDismissedAt
+            )
+            guard let existing = profiles[snapshot.suggestionID] else {
+                profiles[snapshot.suggestionID] = profile
+                return
+            }
+            profiles[snapshot.suggestionID] = FoodPatternFeedbackProfile(
+                timesShown: existing.timesShown + profile.timesShown,
+                timesIgnored: existing.timesIgnored + profile.timesIgnored,
+                timesAccepted: existing.timesAccepted + profile.timesAccepted,
+                timesDismissed: existing.timesDismissed + profile.timesDismissed,
+                timesRefined: existing.timesRefined + profile.timesRefined,
+                lastIgnoredAt: [existing.lastIgnoredAt, profile.lastIgnoredAt].compactMap { $0 }.max(),
+                lastDismissedAt: [existing.lastDismissedAt, profile.lastDismissedAt].compactMap { $0 }.max()
+            )
+        }
+    }
+
     private func aggregateFeedback(
         sortedObservations: [FoodObservation],
-        feedbackByMemoryID: [UUID: FoodPatternFeedbackProfile]
+        patternID: String,
+        feedbackByMemoryID: [UUID: FoodPatternFeedbackProfile],
+        suggestionFeedbackByID: [UUID: FoodPatternFeedbackProfile]
     ) -> FoodPatternFeedbackProfile {
-        let profiles = Set(sortedObservations.compactMap(\.linkedMemoryID)).compactMap { feedbackByMemoryID[$0] }
+        let linkedProfiles = Set(sortedObservations.compactMap(\.linkedMemoryID)).compactMap { feedbackByMemoryID[$0] }
+        let directProfile = suggestionFeedbackByID[Self.stableUUID(forPatternID: patternID)]
+        let profiles = linkedProfiles + [directProfile].compactMap { $0 }
         return FoodPatternFeedbackProfile(
             timesShown: profiles.map(\.timesShown).reduce(0, +),
+            timesIgnored: profiles.map(\.timesIgnored).reduce(0, +),
             timesAccepted: profiles.map(\.timesAccepted).reduce(0, +),
             timesDismissed: profiles.map(\.timesDismissed).reduce(0, +),
             timesRefined: profiles.map(\.timesRefined).reduce(0, +),
+            lastIgnoredAt: profiles.compactMap(\.lastIgnoredAt).max(),
             lastDismissedAt: profiles.compactMap(\.lastDismissedAt).max()
         )
+    }
+
+    fileprivate static func stableUUID(forPatternID id: String) -> UUID {
+        let digest = SHA256.hash(data: Data(id.utf8))
+        let bytes = Array(digest.prefix(16))
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5],
+            bytes[6], bytes[7],
+            bytes[8], bytes[9],
+            bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
     }
 
     private func median(_ values: [Double]) -> Double {
@@ -397,16 +495,8 @@ struct FoodPatternBuilder {
     }
 }
 
-extension FoodPattern {
+nonisolated extension FoodPattern {
     var stableUUID: UUID {
-        let digest = SHA256.hash(data: Data(id.utf8))
-        let bytes = Array(digest.prefix(16))
-        return UUID(uuid: (
-            bytes[0], bytes[1], bytes[2], bytes[3],
-            bytes[4], bytes[5],
-            bytes[6], bytes[7],
-            bytes[8], bytes[9],
-            bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
-        ))
+        FoodPatternBuilder.stableUUID(forPatternID: id)
     }
 }

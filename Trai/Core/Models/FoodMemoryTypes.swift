@@ -432,6 +432,7 @@ nonisolated struct FoodMemoryQualitySignals: Codable, Sendable {
 enum FoodSuggestionOutcome: String, Codable, Sendable {
     case shown
     case tapped
+    case ignored
     case accepted
     case refined
     case dismissed
@@ -440,14 +441,75 @@ enum FoodSuggestionOutcome: String, Codable, Sendable {
 nonisolated struct FoodMemorySuggestionStats: Codable, Sendable {
     let timesShown: Int
     let timesTapped: Int
+    let timesIgnored: Int
     let timesAccepted: Int
     let timesDismissed: Int
     let timesRefined: Int
     let lastShownAt: Date?
     let lastTappedAt: Date?
+    let lastIgnoredAt: Date?
     let lastAcceptedAt: Date?
     let lastDismissedAt: Date?
     let lastRefinedAt: Date?
+
+    init(
+        timesShown: Int,
+        timesTapped: Int,
+        timesIgnored: Int = 0,
+        timesAccepted: Int,
+        timesDismissed: Int,
+        timesRefined: Int,
+        lastShownAt: Date?,
+        lastTappedAt: Date?,
+        lastIgnoredAt: Date? = nil,
+        lastAcceptedAt: Date?,
+        lastDismissedAt: Date?,
+        lastRefinedAt: Date?
+    ) {
+        self.timesShown = timesShown
+        self.timesTapped = timesTapped
+        self.timesIgnored = timesIgnored
+        self.timesAccepted = timesAccepted
+        self.timesDismissed = timesDismissed
+        self.timesRefined = timesRefined
+        self.lastShownAt = lastShownAt
+        self.lastTappedAt = lastTappedAt
+        self.lastIgnoredAt = lastIgnoredAt
+        self.lastAcceptedAt = lastAcceptedAt
+        self.lastDismissedAt = lastDismissedAt
+        self.lastRefinedAt = lastRefinedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case timesShown
+        case timesTapped
+        case timesIgnored
+        case timesAccepted
+        case timesDismissed
+        case timesRefined
+        case lastShownAt
+        case lastTappedAt
+        case lastIgnoredAt
+        case lastAcceptedAt
+        case lastDismissedAt
+        case lastRefinedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        timesShown = try container.decodeIfPresent(Int.self, forKey: .timesShown) ?? 0
+        timesTapped = try container.decodeIfPresent(Int.self, forKey: .timesTapped) ?? 0
+        timesIgnored = try container.decodeIfPresent(Int.self, forKey: .timesIgnored) ?? 0
+        timesAccepted = try container.decodeIfPresent(Int.self, forKey: .timesAccepted) ?? 0
+        timesDismissed = try container.decodeIfPresent(Int.self, forKey: .timesDismissed) ?? 0
+        timesRefined = try container.decodeIfPresent(Int.self, forKey: .timesRefined) ?? 0
+        lastShownAt = try container.decodeIfPresent(Date.self, forKey: .lastShownAt)
+        lastTappedAt = try container.decodeIfPresent(Date.self, forKey: .lastTappedAt)
+        lastIgnoredAt = try container.decodeIfPresent(Date.self, forKey: .lastIgnoredAt)
+        lastAcceptedAt = try container.decodeIfPresent(Date.self, forKey: .lastAcceptedAt)
+        lastDismissedAt = try container.decodeIfPresent(Date.self, forKey: .lastDismissedAt)
+        lastRefinedAt = try container.decodeIfPresent(Date.self, forKey: .lastRefinedAt)
+    }
 }
 
 nonisolated struct FoodMemoryRepeatPattern: Codable, Sendable {

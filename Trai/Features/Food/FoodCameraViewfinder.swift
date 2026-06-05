@@ -19,10 +19,15 @@ struct FoodCameraViewfinder: View {
     let onSubmitDescription: () -> Void
     @Binding var selectedPhotoItem: PhotosPickerItem?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var isDescriptionFocused: Bool
 
     private var canSubmitDescription: Bool {
         !description.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private var suggestionIDs: [UUID] {
+        suggestions.map(\.id)
     }
 
     var body: some View {
@@ -68,6 +73,12 @@ struct FoodCameraViewfinder: View {
                         }
                     )
                     .padding(.bottom, 12)
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal: .opacity
+                        )
+                    )
                 }
 
                 FoodCameraDescriptionBar(
@@ -87,6 +98,10 @@ struct FoodCameraViewfinder: View {
                 .padding(.top, 20)
                 .padding(.bottom, AppLaunchArguments.shouldUseAppStoreScreenshotSeed ? 92 : 40)
             }
+            .animation(
+                reduceMotion ? nil : .snappy(duration: 0.34, extraBounce: 0.08),
+                value: suggestionIDs
+            )
         }
     }
 
@@ -125,14 +140,31 @@ struct FoodCameraSuggestionRail: View {
     let onSelectSuggestion: (FoodSuggestion) -> Void
     let onDismissKeyboard: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var glassNamespace
+
+    private var suggestionIDs: [UUID] {
+        suggestions.map(\.id)
+    }
+
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             GlassEffectContainer(spacing: 12) {
                 HStack(spacing: 12) {
-                    ForEach(suggestions) { suggestion in
-                        FoodCameraSuggestionChip(suggestion: suggestion) {
+                    ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
+                        FoodCameraSuggestionChip(
+                            suggestion: suggestion,
+                            appearanceDelay: reduceMotion ? 0 : Double(index) * 0.045
+                        ) {
                             onSelectSuggestion(suggestion)
                         }
+                        .glassEffectID(suggestion.id, in: glassNamespace)
+                        .transition(
+                            .asymmetric(
+                                insertion: .scale(scale: 0.92, anchor: .bottom).combined(with: .opacity),
+                                removal: .opacity
+                            )
+                        )
                     }
                 }
                 .padding(.horizontal, 1)
@@ -152,6 +184,10 @@ struct FoodCameraSuggestionRail: View {
             }
         )
         .frame(height: 116, alignment: .topLeading)
+        .animation(
+            reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0.10),
+            value: suggestionIDs
+        )
         .scrollClipDisabled()
         .padding(.horizontal)
     }
@@ -288,7 +324,11 @@ struct FoodCameraAccessoryButtonLabel: View {
 
 struct FoodCameraSuggestionChip: View {
     let suggestion: FoodSuggestion
+    var appearanceDelay: TimeInterval = 0
     let action: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hasAppeared = false
 
     var body: some View {
         Button(action: action) {
@@ -328,5 +368,18 @@ struct FoodCameraSuggestionChip: View {
             )
         }
         .buttonStyle(.plain)
+        .opacity(hasAppeared ? 1 : 0)
+        .scaleEffect(hasAppeared || reduceMotion ? 1 : 0.94, anchor: .bottom)
+        .offset(y: hasAppeared || reduceMotion ? 0 : 8)
+        .onAppear {
+            guard !hasAppeared else { return }
+            if reduceMotion {
+                hasAppeared = true
+            } else {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.82).delay(appearanceDelay)) {
+                    hasAppeared = true
+                }
+            }
+        }
     }
 }

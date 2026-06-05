@@ -80,7 +80,7 @@ final class FoodPatternRecommendationTests: XCTestCase {
         XCTAssertTrue(suggestion?.provenance.reasonCodes.contains("repeated-history") ?? false)
     }
 
-    func testSubstantialPatternsRankAheadOfFrequentSimpleDrinks() {
+    func testSubstantialPatternsStayCompetitiveWithFrequentSimpleDrinks() {
         let entries = [
             drink("Latte", component: "latte", day: 0, hour: 12),
             drink("Latte", component: "latte", day: 1, hour: 12),
@@ -97,7 +97,149 @@ final class FoodPatternRecommendationTests: XCTestCase {
         )
 
         XCTAssertEqual(result.suggestions.first?.suggestedEntry.name, "Chicken Rice Bowl")
-        XCTAssertLessThanOrEqual(result.suggestions.filter { $0.pattern.componentProfile.allSatisfy { $0.role == .drink } }.count, 1)
+        XCTAssertTrue(result.suggestions.contains { $0.pattern.componentProfile.allSatisfy { $0.role == .drink } })
+    }
+
+    func testMorningLatteHabitRanksFirstWithoutBreakfastBias() {
+        var entries: [FoodEntry] = []
+        for day in 0..<7 {
+            entries.append(drink("Iced Latte", component: "iced latte", day: day, hour: 8))
+            entries.append(chickenRice("Chicken Rice Bowl", day: day, hour: 19))
+        }
+
+        let result = FoodPatternRecommendationEngine().recommendationsSync(
+            for: request(entries: entries, targetDay: 7, targetHour: 8)
+        )
+
+        XCTAssertEqual(result.suggestions.first?.suggestedEntry.name, "Iced Latte")
+    }
+
+    func testBeverageOnlyHabitsCanFillTopSuggestionsWhenThatIsTheUserPattern() {
+        var entries: [FoodEntry] = []
+        for day in 0..<4 {
+            entries.append(drink("Iced Latte", component: "iced latte", day: day, hour: 8))
+            entries.append(drink("Coffee", component: "coffee", day: day, hour: 8))
+            entries.append(drink("Protein Shake", component: "protein shake", day: day, hour: 8))
+        }
+
+        let result = FoodPatternRecommendationEngine().recommendationsSync(
+            for: request(entries: entries, targetDay: 4, targetHour: 8)
+        )
+
+        XCTAssertEqual(result.suggestions.count, 3)
+        XCTAssertTrue(result.suggestions.allSatisfy { $0.pattern.componentProfile.allSatisfy { $0.role == .drink } })
+    }
+
+    func testSemanticallySatisfiedPatternDoesNotCrowdOutCurrentOpportunity() {
+        let entries = [
+            oatsYogurt("Oats Yogurt Bowl", day: 0, hour: 8),
+            oatsYogurt("Oats Yogurt Bowl", day: 1, hour: 8),
+            chickenRice("Chicken Rice Bowl", day: 0),
+            chickenRice("Chicken Rice Bowl", day: 1),
+            FoodRecommendationTestSupport.entry(
+                name: "Oats Yogurt",
+                loggedAt: FoodRecommendationTestSupport.day(2, hour: 8),
+                calories: 360,
+                protein: 24,
+                carbs: 48,
+                fat: 8,
+                components: [
+                    FoodRecommendationTestSupport.component("oats", role: .carb, calories: 210, protein: 6, carbs: 38, fat: 4),
+                    FoodRecommendationTestSupport.component("greek yogurt", role: .protein, calories: 150, protein: 18, carbs: 10, fat: 4)
+                ]
+            )
+        ]
+
+        let result = FoodPatternRecommendationEngine().recommendationsSync(
+            for: request(entries: entries, targetDay: 2, targetHour: 12)
+        )
+
+        XCTAssertFalse(result.suggestions.contains { $0.suggestedEntry.name == "Oats Yogurt Bowl" })
+        XCTAssertEqual(result.suggestions.first?.suggestedEntry.name, "Chicken Rice Bowl")
+    }
+
+    func testPartialComponentOverlapDoesNotCountAsAlreadySatisfied() {
+        let entries = [
+            chickenRice("Chicken Rice Bowl", day: 0),
+            chickenRice("Chicken Rice Bowl", day: 1),
+            chickenSalad(day: 2, hour: 9)
+        ]
+
+        let result = FoodPatternRecommendationEngine().recommendationsSync(
+            for: request(entries: entries, targetDay: 2, targetHour: 12)
+        )
+
+        XCTAssertEqual(result.debugReport.suppressedAlreadyTodayCount, 0)
+        XCTAssertTrue(result.suggestions.contains { $0.suggestedEntry.name == "Chicken Rice Bowl" })
+    }
+
+    func testEmbeddingSatisfiedSingleItemDoesNotRemainSuggestedAllDay() {
+        let entries = [
+            drink("Coffee", component: "coffee", day: 0, hour: 8),
+            drink("Coffee", component: "coffee", day: 1, hour: 8),
+            chickenRice("Chicken Rice Bowl", day: 0),
+            chickenRice("Chicken Rice Bowl", day: 1),
+            drink("Iced Latte", component: "latte", day: 2, hour: 8)
+        ]
+
+        let result = FoodPatternRecommendationEngine().recommendationsSync(
+            for: request(entries: entries, targetDay: 2, targetHour: 12)
+        )
+
+        XCTAssertFalse(result.suggestions.contains { $0.suggestedEntry.name == "Coffee" })
+        XCTAssertEqual(result.suggestions.first?.suggestedEntry.name, "Chicken Rice Bowl")
+    }
+
+    func testLearnedSameDayRepeatCanStillSuggestAfterHistoricalSpacing() {
+        let targetDay = 2
+        let entries = [
+            oatsYogurt("Oats Yogurt Bowl", day: 0, hour: 8),
+            oatsYogurt("Oats Yogurt Bowl", day: 0, hour: 15),
+            oatsYogurt("Oats Yogurt Bowl", day: 1, hour: 8),
+            oatsYogurt("Oats Yogurt Bowl", day: 1, hour: 15),
+            oatsYogurt("Oats Yogurt Bowl", day: targetDay, hour: 8)
+        ]
+
+        let result = FoodPatternRecommendationEngine().recommendationsSync(
+            for: request(entries: entries, targetDay: targetDay, targetHour: 15)
+        )
+
+        XCTAssertTrue(result.suggestions.contains { $0.suggestedEntry.name == "Oats Yogurt Bowl" })
+    }
+
+    func testLearnedSameDayRepeatDoesNotSuggestTooEarlyAfterTodayUse() {
+        let targetDay = 2
+        let entries = [
+            oatsYogurt("Oats Yogurt Bowl", day: 0, hour: 8),
+            oatsYogurt("Oats Yogurt Bowl", day: 0, hour: 15),
+            oatsYogurt("Oats Yogurt Bowl", day: 1, hour: 8),
+            oatsYogurt("Oats Yogurt Bowl", day: 1, hour: 15),
+            oatsYogurt("Oats Yogurt Bowl", day: targetDay, hour: 8)
+        ]
+
+        let result = FoodPatternRecommendationEngine().recommendationsSync(
+            for: request(entries: entries, targetDay: targetDay, targetHour: 10)
+        )
+
+        XCTAssertGreaterThan(result.debugReport.suppressedAlreadyTodayCount, 0)
+        XCTAssertFalse(result.suggestions.contains { $0.suggestedEntry.name == "Oats Yogurt Bowl" })
+    }
+
+    func testEmergingSameDayRepeatIsDemotedInsteadOfSuppressed() {
+        let targetDay = 1
+        let entries = [
+            oatsYogurt("Oats Yogurt Bowl", day: 0, hour: 8),
+            oatsYogurt("Oats Yogurt Bowl", day: 0, hour: 14),
+            oatsYogurt("Oats Yogurt Bowl", day: targetDay, hour: 8)
+        ]
+
+        let result = FoodPatternRecommendationEngine().recommendationsSync(
+            for: request(entries: entries, targetDay: targetDay, targetHour: 13)
+        )
+
+        XCTAssertEqual(result.debugReport.suppressedAlreadyTodayCount, 0)
+        XCTAssertGreaterThan(result.debugReport.demotedAlreadyTodayCount, 0)
+        XCTAssertTrue(result.suggestions.contains { $0.suggestedEntry.name == "Oats Yogurt Bowl" })
     }
 
     func testSemanticallySatisfiedPatternDoesNotCrowdOutCurrentOpportunity() {
@@ -228,10 +370,10 @@ final class FoodPatternRecommendationTests: XCTestCase {
         )
     }
 
-    private func chickenRice(_ name: String, day: Int) -> FoodEntry {
+    private func chickenRice(_ name: String, day: Int, hour: Int = 12) -> FoodEntry {
         FoodRecommendationTestSupport.entry(
             name: name,
-            loggedAt: FoodRecommendationTestSupport.day(day),
+            loggedAt: FoodRecommendationTestSupport.day(day, hour: hour),
             components: [
                 FoodRecommendationTestSupport.component("chicken", role: .protein, calories: 240, protein: 38, carbs: 0, fat: 5),
                 FoodRecommendationTestSupport.component("rice", role: .carb, calories: 205, protein: 4, carbs: 45, fat: 0)

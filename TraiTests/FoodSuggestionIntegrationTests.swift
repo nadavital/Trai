@@ -55,7 +55,7 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
         XCTAssertEqual(suggestions.first?.suggestedEntry.components.map(\.displayName).sorted(), ["Chicken", "Rice"])
     }
 
-    func testCameraSuggestionsPreserveExistingOutcomeRecording() throws {
+    func testCameraSuggestionsDoNotRecordShownUntilExposureIsRecorded() throws {
         let context = try modelContext()
         let first = entry("Chicken Rice Bowl", day: 0)
         let second = entry("Chicken Rice Bowl", day: 1)
@@ -75,6 +75,9 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
             ).first
         )
 
+        XCTAssertNil(try context.fetch(FetchDescriptor<FoodMemory>()).first { $0.id == suggestion.memoryID }?.suggestionStats)
+
+        try FoodSuggestionService().recordOutcome(.shown, for: suggestion.memoryID, modelContext: context)
         XCTAssertNoThrow(
             try FoodSuggestionService().recordOutcome(.accepted, for: suggestion.memoryID, modelContext: context)
         )
@@ -84,7 +87,7 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
         XCTAssertEqual(memory.suggestionStats?.timesAccepted, 1)
     }
 
-    func testObservationBuiltSuggestionRecordsShownOnPersistedMemory() throws {
+    func testObservationBuiltSuggestionRecordsShownOnPersistedMemoryWhenExplicitlyRecorded() throws {
         let context = try modelContext()
         let first = entry("Chicken Rice Bowl", day: 0)
         let second = entry("Chicken Rice Bowl", day: 1)
@@ -104,11 +107,42 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
                 modelContext: context
             ).first
         )
+        try FoodSuggestionService().recordOutcome(.shown, for: suggestion.memoryID, modelContext: context)
         let memories = try context.fetch(FetchDescriptor<FoodMemory>())
         let memory = try XCTUnwrap(memories.first { $0.id == suggestion.memoryID })
 
         XCTAssertGreaterThan(memory.suggestionStats?.timesShown ?? 0, 0)
         XCTAssertTrue(memory.representativeEntryIds.isEmpty == false)
+    }
+
+    func testIgnoredSuggestionOutcomeIsTrackedSeparatelyFromDismissal() throws {
+        let context = try modelContext()
+        let first = entry("Chicken Rice Bowl", day: 0)
+        let second = entry("Chicken Rice Bowl", day: 1)
+        let persistedMemory = memory(title: "Chicken Rice Bowl", entries: [first, second])
+        first.foodMemoryIdString = persistedMemory.id.uuidString
+        second.foodMemoryIdString = persistedMemory.id.uuidString
+        context.insert(first)
+        context.insert(second)
+        context.insert(persistedMemory)
+        try context.save()
+
+        let suggestion = try XCTUnwrap(
+            FoodSuggestionService().cameraSuggestions(
+                limit: 1,
+                now: FoodRecommendationTestSupport.day(2),
+                targetDate: FoodRecommendationTestSupport.day(2),
+                modelContext: context
+            ).first
+        )
+        try FoodSuggestionService().recordOutcome(.shown, for: suggestion.memoryID, modelContext: context)
+        try FoodSuggestionService().recordOutcome(.ignored, for: suggestion.memoryID, modelContext: context)
+        let memory = try XCTUnwrap(try context.fetch(FetchDescriptor<FoodMemory>()).first { $0.id == suggestion.memoryID })
+
+        XCTAssertEqual(memory.suggestionStats?.timesShown, 1)
+        XCTAssertEqual(memory.suggestionStats?.timesIgnored, 1)
+        XCTAssertEqual(memory.suggestionStats?.timesDismissed, 0)
+        XCTAssertNotNil(memory.suggestionStats?.lastIgnoredAt)
     }
 
     func testObservationBuiltSuggestionReconcileRecordsAcceptance() throws {
@@ -191,6 +225,202 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
 
         XCTAssertFalse(suggestions.isEmpty)
         XCTAssertTrue(memories.isEmpty)
+    }
+
+    func testPatternSuggestionFeedbackPersistsWithoutFoodMemoryRow() throws {
+        let context = try modelContext()
+        context.insert(entry("Chicken Rice Bowl", day: 0))
+        context.insert(entry("Chicken Rice Bowl", day: 1))
+        try context.save()
+
+        let suggestion = try XCTUnwrap(
+            FoodSuggestionService().cameraSuggestions(
+                limit: 1,
+                now: FoodRecommendationTestSupport.day(2, hour: 12),
+                targetDate: FoodRecommendationTestSupport.day(2, hour: 12),
+                modelContext: context
+            ).first
+        )
+        try FoodSuggestionService().recordOutcome(.shown, for: suggestion.memoryID, at: FoodRecommendationTestSupport.day(2, hour: 12), modelContext: context)
+        try FoodSuggestionService().recordOutcome(.ignored, for: suggestion.memoryID, at: FoodRecommendationTestSupport.day(2, hour: 12), modelContext: context)
+
+        let memories = try context.fetch(FetchDescriptor<FoodMemory>())
+        let feedback = try XCTUnwrap(try context.fetch(FetchDescriptor<FoodSuggestionFeedback>()).first { $0.suggestionID == suggestion.memoryID })
+        let laterSuggestions = try FoodSuggestionService().cameraSuggestions(
+            limit: 3,
+            now: FoodRecommendationTestSupport.day(3, hour: 12),
+            targetDate: FoodRecommendationTestSupport.day(3, hour: 12),
+            modelContext: context
+        )
+
+        XCTAssertTrue(memories.isEmpty)
+        XCTAssertEqual(feedback.stats?.timesShown, 1)
+        XCTAssertEqual(feedback.stats?.timesIgnored, 1)
+        XCTAssertTrue(laterSuggestions.contains { $0.memoryID == suggestion.memoryID })
+    }
+
+    func testGeneratedPatternFeedbackSurvivesNormalPortionDrift() throws {
+        let context = try modelContext()
+        context.insert(entry("Chicken Rice Bowl", day: 0, calories: 490, protein: 38, carbs: 54, fat: 12))
+        context.insert(entry("Chicken Rice Bowl", day: 1, calories: 490, protein: 38, carbs: 54, fat: 12))
+        try context.save()
+
+        let originalSuggestion = try XCTUnwrap(
+            FoodSuggestionService().cameraSuggestions(
+                limit: 1,
+                now: FoodRecommendationTestSupport.day(2, hour: 12),
+                targetDate: FoodRecommendationTestSupport.day(2, hour: 12),
+                modelContext: context
+            ).first
+        )
+        try FoodSuggestionService().recordOutcome(
+            .ignored,
+            for: originalSuggestion.memoryID,
+            at: FoodRecommendationTestSupport.day(2, hour: 12),
+            modelContext: context
+        )
+
+        context.insert(entry("Chicken Rice Bowl", day: 3, calories: 520, protein: 40, carbs: 58, fat: 13))
+        context.insert(entry("Chicken Rice Bowl", day: 4, calories: 520, protein: 40, carbs: 58, fat: 13))
+        try context.save()
+
+        let driftedSuggestion = try XCTUnwrap(
+            FoodSuggestionService().cameraSuggestions(
+                limit: 3,
+                now: FoodRecommendationTestSupport.day(5, hour: 12),
+                targetDate: FoodRecommendationTestSupport.day(5, hour: 12),
+                modelContext: context
+            ).first(where: { Set($0.suggestedEntry.components.map(\.displayName)) == Set(["Chicken", "Rice"]) })
+        )
+        let feedback = try XCTUnwrap(try context.fetch(FetchDescriptor<FoodSuggestionFeedback>()).first { $0.suggestionID == originalSuggestion.memoryID })
+
+        XCTAssertEqual(driftedSuggestion.memoryID, originalSuggestion.memoryID)
+        XCTAssertEqual(feedback.stats?.timesIgnored, 1)
+    }
+
+    func testDuplicateGeneratedFeedbackRowsAreMergedForPatternRanking() throws {
+        let context = try modelContext()
+        context.insert(entry("Chicken Rice Bowl", day: 0))
+        context.insert(entry("Chicken Rice Bowl", day: 1))
+        try context.save()
+
+        let suggestion = try XCTUnwrap(
+            FoodSuggestionService().cameraSuggestions(
+                limit: 1,
+                now: FoodRecommendationTestSupport.day(2, hour: 12),
+                targetDate: FoodRecommendationTestSupport.day(2, hour: 12),
+                modelContext: context
+            ).first
+        )
+        context.insert(FoodSuggestionFeedback(
+            suggestionID: suggestion.memoryID,
+            stats: FoodMemorySuggestionStats(
+                timesShown: 1,
+                timesTapped: 0,
+                timesIgnored: 1,
+                timesAccepted: 0,
+                timesDismissed: 0,
+                timesRefined: 0,
+                lastShownAt: nil,
+                lastTappedAt: nil,
+                lastIgnoredAt: FoodRecommendationTestSupport.day(2, hour: 12),
+                lastAcceptedAt: nil,
+                lastDismissedAt: nil,
+                lastRefinedAt: nil
+            )
+        ))
+        context.insert(FoodSuggestionFeedback(
+            suggestionID: suggestion.memoryID,
+            stats: FoodMemorySuggestionStats(
+                timesShown: 2,
+                timesTapped: 0,
+                timesIgnored: 2,
+                timesAccepted: 0,
+                timesDismissed: 0,
+                timesRefined: 0,
+                lastShownAt: nil,
+                lastTappedAt: nil,
+                lastIgnoredAt: FoodRecommendationTestSupport.day(2, hour: 13),
+                lastAcceptedAt: nil,
+                lastDismissedAt: nil,
+                lastRefinedAt: nil
+            )
+        ))
+        try context.save()
+
+        let laterSuggestions = try FoodSuggestionService().cameraSuggestions(
+            limit: 3,
+            now: FoodRecommendationTestSupport.day(2, hour: 14),
+            targetDate: FoodRecommendationTestSupport.day(2, hour: 14),
+            modelContext: context
+        )
+
+        XCTAssertFalse(laterSuggestions.isEmpty)
+    }
+
+    func testGeneratedFeedbackGracefullySkipsPartialSchemas() throws {
+        let context = try partialModelContext()
+        context.insert(entry("Chicken Rice Bowl", day: 0))
+        context.insert(entry("Chicken Rice Bowl", day: 1))
+        try context.save()
+
+        let suggestion = try XCTUnwrap(
+            FoodSuggestionService().cameraSuggestions(
+                limit: 1,
+                now: FoodRecommendationTestSupport.day(2, hour: 12),
+                targetDate: FoodRecommendationTestSupport.day(2, hour: 12),
+                modelContext: context
+            ).first
+        )
+
+        XCTAssertNoThrow(
+            try FoodSuggestionService().recordOutcome(
+                .ignored,
+                for: suggestion.memoryID,
+                at: FoodRecommendationTestSupport.day(2, hour: 12),
+                modelContext: context
+            )
+        )
+
+        let laterSuggestions = try FoodSuggestionService().cameraSuggestions(
+            limit: 3,
+            now: FoodRecommendationTestSupport.day(3, hour: 12),
+            targetDate: FoodRecommendationTestSupport.day(3, hour: 12),
+            modelContext: context
+        )
+
+        XCTAssertTrue(laterSuggestions.contains { $0.memoryID == suggestion.memoryID })
+    }
+
+    func testOldIgnoredPatternFeedbackDoesNotHideLongTermHabit() throws {
+        let context = try modelContext()
+        for day in 0..<8 {
+            context.insert(entry(day % 2 == 0 ? "Chicken Rice Bowl" : "Grilled Chicken With Rice", day: day))
+        }
+        try context.save()
+
+        let suggestion = try XCTUnwrap(
+            FoodSuggestionService().cameraSuggestions(
+                limit: 1,
+                now: FoodRecommendationTestSupport.day(8, hour: 12),
+                targetDate: FoodRecommendationTestSupport.day(8, hour: 12),
+                modelContext: context
+            ).first
+        )
+        for day in 8..<11 {
+            try FoodSuggestionService().recordOutcome(.shown, for: suggestion.memoryID, at: FoodRecommendationTestSupport.day(day, hour: 12), modelContext: context)
+            try FoodSuggestionService().recordOutcome(.ignored, for: suggestion.memoryID, at: FoodRecommendationTestSupport.day(day, hour: 12), modelContext: context)
+        }
+
+        let recoveredSuggestions = try FoodSuggestionService().cameraSuggestions(
+            limit: 3,
+            now: FoodRecommendationTestSupport.day(14, hour: 12),
+            targetDate: FoodRecommendationTestSupport.day(14, hour: 12),
+            modelContext: context
+        )
+
+        XCTAssertEqual(recoveredSuggestions.first?.memoryID, suggestion.memoryID)
+        XCTAssertEqual(recoveredSuggestions.first?.suggestedEntry.components.map(\.displayName).sorted(), ["Chicken", "Rice"])
     }
 
     func testAcceptedPatternSuggestionCreditsResolvedMemory() throws {
@@ -503,6 +733,155 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
         XCTAssertGreaterThan(summary.directPassiveExposureDemotedCount, 0)
     }
 
+    func testRecentIgnoredPersistedMemoryDemotesButDecays() throws {
+        let context = try modelContext()
+        let ignoredMemory = drinkMemory(
+            title: "Protein Shake",
+            component: "shake",
+            hourCounts: [12: 6],
+            bucketCounts: ["lunch": 6]
+        )
+        ignoredMemory.suggestionStats = FoodMemorySuggestionStats(
+            timesShown: 3,
+            timesTapped: 0,
+            timesIgnored: 3,
+            timesAccepted: 0,
+            timesDismissed: 0,
+            timesRefined: 0,
+            lastShownAt: FoodRecommendationTestSupport.day(2, hour: 12),
+            lastTappedAt: nil,
+            lastIgnoredAt: FoodRecommendationTestSupport.day(2, hour: 12),
+            lastAcceptedAt: nil,
+            lastDismissedAt: nil,
+            lastRefinedAt: nil
+        )
+        let alternativeMemory = drinkMemory(
+            title: "Zucchini Smoothie",
+            component: "smoothie",
+            hourCounts: [12: 6],
+            bucketCounts: ["lunch": 6]
+        )
+        context.insert(ignoredMemory)
+        context.insert(alternativeMemory)
+        try context.save()
+
+        let recentSuggestions = try FoodSuggestionService().cameraSuggestions(
+            limit: 2,
+            now: FoodRecommendationTestSupport.day(2, hour: 13),
+            targetDate: FoodRecommendationTestSupport.day(2, hour: 13),
+            modelContext: context
+        )
+        let recoveredSuggestions = try FoodSuggestionService().cameraSuggestions(
+            limit: 2,
+            now: FoodRecommendationTestSupport.day(5, hour: 13),
+            targetDate: FoodRecommendationTestSupport.day(5, hour: 13),
+            modelContext: context
+        )
+
+        XCTAssertEqual(recentSuggestions.map(\.title), ["Zucchini Smoothie", "Protein Shake"])
+        XCTAssertEqual(recoveredSuggestions.map(\.title), ["Protein Shake", "Zucchini Smoothie"])
+    }
+
+    func testRepeatedMorningDrinkHabitCanRankFirstWhenThatIsTheUserPattern() throws {
+        let context = try modelContext()
+        let latte = drinkMemory(
+            title: "Iced Latte",
+            component: "latte",
+            hourCounts: [8: 8],
+            bucketCounts: ["breakfast": 8]
+        )
+        let lunch = memory(
+            title: "Chicken Rice Bowl",
+            entries: [
+                entry("Chicken Rice Bowl", day: 0),
+                entry("Chicken Rice Bowl", day: 1)
+            ]
+        )
+        lunch.timeProfile = FoodMemoryTimeProfile(
+            hourCounts: hourCounts([12: 2]),
+            bucketCounts: ["lunch": 2],
+            weekdayCount: 2,
+            weekendCount: 0
+        )
+        context.insert(latte)
+        context.insert(lunch)
+        try context.save()
+
+        let suggestions = try FoodSuggestionService().cameraSuggestions(
+            limit: 3,
+            now: FoodRecommendationTestSupport.day(2, hour: 8),
+            targetDate: FoodRecommendationTestSupport.day(2, hour: 8),
+            modelContext: context
+        )
+
+        XCTAssertEqual(suggestions.first?.title, "Iced Latte")
+    }
+
+    func testLinkedHistoricalMemoryStillSurfacesAsLearnedHabit() throws {
+        let context = try modelContext()
+        let latte = drinkMemory(
+            title: "Iced Latte",
+            component: "latte",
+            hourCounts: [8: 4],
+            bucketCounts: ["breakfast": 4]
+        )
+        let first = drinkEntry("Iced Latte", component: "latte", day: 0, hour: 8)
+        let second = drinkEntry("Low-fat Iced Latte", component: "latte", day: 1, hour: 8)
+        first.foodMemoryIdString = latte.id.uuidString
+        second.foodMemoryIdString = latte.id.uuidString
+        context.insert(first)
+        context.insert(second)
+        context.insert(latte)
+        try context.save()
+
+        let suggestions = try FoodSuggestionService().cameraSuggestions(
+            limit: 3,
+            now: FoodRecommendationTestSupport.day(2, hour: 8),
+            targetDate: FoodRecommendationTestSupport.day(2, hour: 8),
+            modelContext: context
+        )
+
+        XCTAssertEqual(suggestions.first?.title, "Iced Latte")
+    }
+
+    func testEmergingMultiDayMemoryCanSurfaceWithoutRawPatternHistory() throws {
+        let context = try modelContext()
+        let latte = drinkMemory(
+            title: "Iced Latte",
+            component: "latte",
+            hourCounts: [8: 2],
+            bucketCounts: ["breakfast": 2]
+        )
+        latte.status = .candidate
+        latte.observationCount = 2
+        latte.confidenceScore = 0.86
+        latte.qualitySignals = FoodMemoryQualitySignals(
+            proportionUserEdited: 0,
+            proportionWithStructuredComponents: 1,
+            distinctObservationDays: 2,
+            repeatedTimeBucketScore: 1
+        )
+        context.insert(latte)
+        try context.save()
+
+        let suggestions = try FoodSuggestionService().cameraSuggestions(
+            limit: 3,
+            now: FoodRecommendationTestSupport.day(2, hour: 8),
+            targetDate: FoodRecommendationTestSupport.day(2, hour: 8),
+            modelContext: context
+        )
+        let summary = try FoodSuggestionService().debugCameraSuggestions(
+            limit: 3,
+            now: FoodRecommendationTestSupport.day(2, hour: 8),
+            targetDate: FoodRecommendationTestSupport.day(2, hour: 8),
+            modelContext: context
+        )
+
+        XCTAssertEqual(suggestions.first?.title, "Iced Latte")
+        XCTAssertEqual(summary.totalObservations, 0)
+        XCTAssertEqual(summary.directMemoryCandidateCount, 1)
+    }
+
     func testDebugCameraSuggestionsReportsNewEngineStages() throws {
         let context = try modelContext()
         context.insert(entry("Chicken Rice Bowl", day: 0))
@@ -525,6 +904,15 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
     }
 
     private func modelContext() throws -> ModelContext {
+        let schema = Schema([FoodEntry.self, FoodMemory.self, FoodSuggestionFeedback.self])
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        )
+        return ModelContext(container)
+    }
+
+    private func partialModelContext() throws -> ModelContext {
         let schema = Schema([FoodEntry.self, FoodMemory.self])
         let container = try ModelContainer(
             for: schema,
@@ -533,10 +921,21 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
         return ModelContext(container)
     }
 
-    private func entry(_ name: String, day: Int) -> FoodEntry {
+    private func entry(
+        _ name: String,
+        day: Int,
+        calories: Int = 620,
+        protein: Double = 42,
+        carbs: Double = 58,
+        fat: Double = 16
+    ) -> FoodEntry {
         FoodRecommendationTestSupport.entry(
             name: name,
             loggedAt: FoodRecommendationTestSupport.day(day),
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
             components: chickenRiceComponents()
         )
     }
@@ -636,6 +1035,14 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
         return memory
     }
 
+    private func hourCounts(_ counts: [Int: Int]) -> [Int] {
+        var output = Array(repeating: 0, count: 24)
+        for (hour, count) in counts where output.indices.contains(hour) {
+            output[hour] = count
+        }
+        return output
+    }
+
     private func drinkMemory(
         title: String,
         component: String,
@@ -704,6 +1111,13 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
         memory.observationCount = observationCount
         memory.repeatPattern = repeatPattern
         memory.lastObservedAt = FoodRecommendationTestSupport.day(1, hour: 8)
+        memory.confidenceScore = 0.9
+        memory.qualitySignals = FoodMemoryQualitySignals(
+            proportionUserEdited: 0,
+            proportionWithStructuredComponents: 1,
+            distinctObservationDays: min(observationCount, 3),
+            repeatedTimeBucketScore: 1
+        )
         return memory
     }
 }

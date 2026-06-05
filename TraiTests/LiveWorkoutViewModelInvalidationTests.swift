@@ -1084,6 +1084,46 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertFalse(goal.matches(workout: workout))
     }
 
+    func testStrengthActivityScopedGoalIgnoresNonStrengthWorkoutWithMatchingTags() {
+        let workout = LiveWorkout(
+            name: "Strength Mobility",
+            workoutType: .mobility,
+            focusAreas: ["Strength", "Mobility"]
+        )
+        workout.completedAt = Date()
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Strength Mobility Flow",
+            orderIndex: 0,
+            exerciseType: "mobility"
+        )
+        entry.activityTypeName = "Mobility"
+        entry.targetTags = ["Strength", "Mobility"]
+        entry.durationSeconds = 1_200
+        workout.entries = [entry]
+
+        let goal = WorkoutGoal(
+            title: "Keep strength work consistent",
+            goalKind: .frequency,
+            linkedWorkoutType: .strength,
+            linkedActivityTags: ["Strength"],
+            targetValue: 1,
+            targetUnit: "session",
+            periodUnit: .week,
+            successCriteria: "You log one strength session this week."
+        )
+
+        let insight = WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: [workout],
+            exerciseHistory: [],
+            useLbs: false
+        ).first
+
+        XCTAssertFalse(goal.matches(workout: workout))
+        XCTAssertEqual(insight?.currentValueText, "0")
+        XCTAssertEqual(insight?.progressFraction, 0)
+    }
+
     func testActivityScopedGoalCanProgressInsideMixedWorkoutWithDifferentBroadType() {
         let workout = LiveWorkout(name: "Strength + Climbing", workoutType: .mixed)
         workout.completedAt = Date()
@@ -1165,6 +1205,43 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(recurringProgress.currentPeriod?.currentCount, 2)
         XCTAssertEqual(insight.progressText, "This week: 2 of 3")
         XCTAssertFalse(recurringProgress.isComplete)
+    }
+
+    func testFiniteFrequencyGoalCardProgressUsesCurrentPeriodInsteadOfWholeHorizon() throws {
+        let calendar = Calendar.current
+        let currentWeekStart = try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: Date())?.start)
+        let createdAt = currentWeekStart.addingTimeInterval(3_600)
+        let targetDate = try XCTUnwrap(calendar.date(byAdding: .weekOfYear, value: 9, to: currentWeekStart))
+
+        let goal = WorkoutGoal(
+            title: "Train 3x weekly for 9 weeks",
+            goalKind: .frequency,
+            linkedWorkoutType: .strength,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete three strength sessions each week for nine weeks.",
+            targetDate: targetDate
+        )
+        goal.createdAt = createdAt
+
+        let workouts = makeWeeklyCompletedWorkouts(
+            calendar: calendar,
+            firstWeekStart: currentWeekStart,
+            weeklyCounts: [3]
+        )
+
+        let insight = try XCTUnwrap(WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: workouts,
+            exerciseHistory: [],
+            useLbs: false
+        ).first)
+
+        XCTAssertEqual(insight.progressFraction ?? 0, 1.0 / 9.0, accuracy: 0.001)
+        XCTAssertEqual(insight.cardProgressFraction ?? 0, 1, accuracy: 0.001)
+        XCTAssertEqual(insight.progressText, "This week: 3 of 3")
     }
 
     func testWeeklyFrequencyGoalCompletesOnlyWhenEveryTargetDatePeriodIsHit() throws {

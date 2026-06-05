@@ -1,6 +1,6 @@
 import Foundation
 
-struct FoodPatternSuggestion: Identifiable, Sendable, Equatable {
+nonisolated struct FoodPatternSuggestion: Identifiable, Sendable, Equatable {
     let id: String
     let pattern: FoodPattern
     let source: FoodPatternSuggestionSource
@@ -10,13 +10,13 @@ struct FoodPatternSuggestion: Identifiable, Sendable, Equatable {
     let suggestedEntry: SuggestedFoodEntry
 }
 
-enum FoodPatternSuggestionSource: String, Sendable {
+nonisolated enum FoodPatternSuggestionSource: String, Sendable {
     case likelyNow
     case continueSession
     case recentAgain
 }
 
-struct FoodPatternSuggestionProvenance: Sendable, Equatable {
+nonisolated struct FoodPatternSuggestionProvenance: Sendable, Equatable {
     let patternID: String
     let sourceObservationIDs: [UUID]
     let sourceEntryIDs: [UUID]
@@ -26,7 +26,7 @@ struct FoodPatternSuggestionProvenance: Sendable, Equatable {
     let reasonCodes: [String]
 }
 
-struct FoodPatternRankingFeatures: Sendable, Equatable {
+nonisolated struct FoodPatternRankingFeatures: Sendable, Equatable {
     let repetition: Double
     let recency: Double
     let timeSupport: Double
@@ -41,12 +41,12 @@ struct FoodPatternRankingFeatures: Sendable, Equatable {
     let sourceBoost: Double
 }
 
-struct FoodPatternRecommendationResult: Sendable, Equatable {
+nonisolated struct FoodPatternRecommendationResult: Sendable, Equatable {
     let suggestions: [FoodPatternSuggestion]
     let debugReport: FoodPatternRecommendationDebugReport
 }
 
-struct FoodPatternRecommendationDebugReport: Sendable, Equatable {
+nonisolated struct FoodPatternRecommendationDebugReport: Sendable, Equatable {
     let observationCount: Int
     let patternCount: Int
     let eligiblePatternCount: Int
@@ -56,11 +56,13 @@ struct FoodPatternRecommendationDebugReport: Sendable, Equatable {
     let demotedAlreadyTodayCount: Int
     let suppressedNegativeFeedbackCount: Int
     let suppressedLowConfidenceCount: Int
+    let recallFallbackCount: Int
+    let completeMealPromotionCount: Int
     let finalShownTitles: [String]
     let provenanceByTitle: [String: FoodPatternSuggestionProvenance]
 }
 
-struct FoodPatternRecommendationEngine {
+nonisolated struct FoodPatternRecommendationEngine {
     private let observationBuilder = FoodObservationBuilder()
     private let patternBuilder = FoodPatternBuilder()
     private let ranker = FoodPatternRanker()
@@ -73,7 +75,11 @@ struct FoodPatternRecommendationEngine {
         let observations = observationBuilder
             .observations(from: request.entries)
             .filter { $0.loggedAt < request.targetDate }
-        let patterns = patternBuilder.patterns(from: observations, memories: request.memories)
+        let patterns = patternBuilder.patterns(
+            from: observations,
+            memories: request.memories,
+            suggestionFeedback: request.suggestionFeedback
+        )
         let context = FoodPatternRecommendationContext(
             now: request.now,
             targetDate: request.targetDate,
@@ -97,6 +103,8 @@ struct FoodPatternRecommendationEngine {
                 demotedAlreadyTodayCount: diagnostics.demotedAlreadyTodayCount,
                 suppressedNegativeFeedbackCount: diagnostics.suppressedNegativeFeedbackCount,
                 suppressedLowConfidenceCount: diagnostics.suppressedLowConfidenceCount,
+                recallFallbackCount: diagnostics.recallFallbackCount,
+                completeMealPromotionCount: diagnostics.completeMealPromotionCount,
                 finalShownTitles: ranked.prefix(request.limit).map(\.suggestedEntry.name),
                 provenanceByTitle: ranked.prefix(request.limit).reduce(into: [:]) { output, suggestion in
                     output[suggestion.suggestedEntry.name] = suggestion.provenance
@@ -228,13 +236,15 @@ struct FoodPatternRecommendationEngine {
             demotedAlreadyTodayCount: 0,
             suppressedNegativeFeedbackCount: 0,
             suppressedLowConfidenceCount: 0,
+            recallFallbackCount: 0,
+            completeMealPromotionCount: 0,
             finalShownTitles: [],
             provenanceByTitle: [:]
         )
     }
 }
 
-struct FoodPatternRecommendationContext: Sendable, Equatable {
+nonisolated struct FoodPatternRecommendationContext: Sendable, Equatable {
     let now: Date
     let targetDate: Date
     let sessionID: UUID?

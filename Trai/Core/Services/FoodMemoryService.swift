@@ -1149,11 +1149,13 @@ nonisolated struct FoodMemoryService {
             return FoodMemorySuggestionStats(
                 timesShown: lhs.timesShown + rhs.timesShown,
                 timesTapped: lhs.timesTapped + rhs.timesTapped,
+                timesIgnored: lhs.timesIgnored + rhs.timesIgnored,
                 timesAccepted: lhs.timesAccepted + rhs.timesAccepted,
                 timesDismissed: lhs.timesDismissed + rhs.timesDismissed,
                 timesRefined: lhs.timesRefined + rhs.timesRefined,
                 lastShownAt: latestDate(lhs.lastShownAt, rhs.lastShownAt),
                 lastTappedAt: latestDate(lhs.lastTappedAt, rhs.lastTappedAt),
+                lastIgnoredAt: latestDate(lhs.lastIgnoredAt, rhs.lastIgnoredAt),
                 lastAcceptedAt: latestDate(lhs.lastAcceptedAt, rhs.lastAcceptedAt),
                 lastDismissedAt: latestDate(lhs.lastDismissedAt, rhs.lastDismissedAt),
                 lastRefinedAt: latestDate(lhs.lastRefinedAt, rhs.lastRefinedAt)

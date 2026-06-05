@@ -25,14 +25,6 @@ struct WorkoutDetailSheet: View {
     @State private var noteDraft = ""
     @State private var presentedAccountSetupContext: AccountSetupContext?
 
-    private struct WorkoutStatItem: Identifiable {
-        let id = UUID()
-        let value: String
-        let label: String
-        let icon: String
-        let color: Color
-    }
-
     private struct DetailItem: Identifiable {
         let id = UUID()
         let label: String
@@ -78,11 +70,11 @@ struct WorkoutDetailSheet: View {
         workout.activityContextSegments.prefix(2).joined(separator: " • ")
     }
 
-    private var statsItems: [WorkoutStatItem] {
-        var items: [WorkoutStatItem] = []
+    private var statsItems: [WorkoutDetailHeaderStat] {
+        var items: [WorkoutDetailHeaderStat] = []
 
         if workout.sets > 0 {
-            items.append(WorkoutStatItem(
+            items.append(WorkoutDetailHeaderStat(
                 value: "\(workout.sets)",
                 label: workout.setMetricLabel,
                 icon: "square.stack.3d.up.fill",
@@ -91,7 +83,7 @@ struct WorkoutDetailSheet: View {
         }
 
         if workout.reps > 0 {
-            items.append(WorkoutStatItem(
+            items.append(WorkoutDetailHeaderStat(
                 value: "\(workout.reps)",
                 label: workout.repMetricLabel,
                 icon: "repeat",
@@ -100,7 +92,7 @@ struct WorkoutDetailSheet: View {
         }
 
         if let weight = workout.weightKg {
-            items.append(WorkoutStatItem(
+            items.append(WorkoutDetailHeaderStat(
                 value: "\(displayWeight(weight))",
                 label: weightUnit,
                 icon: "scalemass.fill",
@@ -109,7 +101,7 @@ struct WorkoutDetailSheet: View {
         }
 
         if let duration = workout.durationMinutes {
-            items.append(WorkoutStatItem(
+            items.append(WorkoutDetailHeaderStat(
                 value: formatDuration(duration),
                 label: "Duration",
                 icon: "clock.fill",
@@ -118,7 +110,7 @@ struct WorkoutDetailSheet: View {
         }
 
         if let distance = workout.distanceMeters {
-            items.append(WorkoutStatItem(
+            items.append(WorkoutDetailHeaderStat(
                 value: formatDistance(distance),
                 label: "Distance",
                 icon: "figure.walk",
@@ -127,7 +119,7 @@ struct WorkoutDetailSheet: View {
         }
 
         if let heartRate = workout.averageHeartRate {
-            items.append(WorkoutStatItem(
+            items.append(WorkoutDetailHeaderStat(
                 value: "\(heartRate)",
                 label: "Avg BPM",
                 icon: "heart.fill",
@@ -136,7 +128,7 @@ struct WorkoutDetailSheet: View {
         }
 
         if let calories = workout.caloriesBurned {
-            items.append(WorkoutStatItem(
+            items.append(WorkoutDetailHeaderStat(
                 value: "\(calories)",
                 label: "kcal",
                 icon: "flame.fill",
@@ -179,11 +171,6 @@ struct WorkoutDetailSheet: View {
 
                     traiReviewSection
 
-                    // Stats summary
-                    if !statsItems.isEmpty {
-                        statsSection
-                    }
-
                     // PR highlights (if any)
                     if !prHighlights.isEmpty {
                         prSection
@@ -225,28 +212,13 @@ struct WorkoutDetailSheet: View {
     // MARK: - Header Section
 
     private var headerSection: some View {
-        VStack(spacing: 12) {
-            // Icon
-            Image(systemName: workout.iconName)
-                .font(.system(size: 48))
-                .foregroundStyle(.tint)
-
-            // Name
-            Text(workout.displayName)
-                .font(.title2)
-                .bold()
-
-            Text(workoutCategoryTitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            // Date and time
-            Text(workout.loggedAt, format: .dateTime.weekday(.wide).month().day().hour().minute())
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .traiCard()
+        WorkoutDetailHeaderCard(
+            icon: workout.iconName,
+            title: workout.displayName,
+            subtitle: workoutCategoryTitle,
+            date: workout.loggedAt,
+            stats: statsItems
+        )
     }
 
     @ViewBuilder
@@ -266,24 +238,6 @@ struct WorkoutDetailSheet: View {
                     proUpsellCoordinator?.present(source: .workoutReview)
                 }
             )
-        }
-    }
-
-    // MARK: - Stats Section
-
-    private var statsSection: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible(), spacing: 16),
-            GridItem(.flexible(), spacing: 16)
-        ], spacing: 16) {
-            ForEach(statsItems) { item in
-                WorkoutStatCard(
-                    value: item.value,
-                    label: item.label,
-                    icon: item.icon,
-                    color: item.color
-                )
-            }
         }
     }
 
@@ -546,33 +500,6 @@ struct WorkoutDetailSheet: View {
     }
 }
 
-// MARK: - Workout Stat Card
-
-struct WorkoutStatCard: View {
-    let value: String
-    let label: String
-    let icon: String
-    let color: Color
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(color)
-
-            Text(value)
-                .font(.title2)
-                .bold()
-
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .traiCard()
-    }
-}
-
 // MARK: - Detail Row
 
 struct DetailRow: View {
@@ -588,6 +515,120 @@ struct DetailRow: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 12)
+    }
+}
+
+// MARK: - Shared Workout Detail Header
+
+struct WorkoutDetailHeaderStat: Identifiable {
+    let value: String
+    let label: String
+    let icon: String
+    let color: Color
+
+    var id: String { "\(icon)-\(value)-\(label)" }
+}
+
+struct WorkoutDetailHeaderCard: View {
+    let icon: String
+    let title: String
+    let subtitle: String?
+    let date: Date
+    let stats: [WorkoutDetailHeaderStat]
+
+    private var subtitleText: String? {
+        let trimmed = subtitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                titleCluster
+                if !stats.isEmpty {
+                    Spacer(minLength: 8)
+                    statRow(stats)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                titleCluster
+                if !stats.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        statRow(stats)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .traiCard(cornerRadius: 16, contentPadding: 0)
+    }
+
+    private var titleCluster: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 32, weight: .semibold))
+                .foregroundStyle(.accent)
+                .frame(width: 38, height: 38)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.traiBold(20))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                if let subtitleText {
+                    Text(subtitleText)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+
+                Text(date, format: .dateTime.weekday(.wide).month().day().hour().minute())
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func statRow(_ stats: [WorkoutDetailHeaderStat]) -> some View {
+        HStack(spacing: 8) {
+            ForEach(stats) { stat in
+                WorkoutDetailHeaderStatPill(stat: stat)
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+private struct WorkoutDetailHeaderStatPill: View {
+    let stat: WorkoutDetailHeaderStat
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: stat.icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(stat.color)
+
+            Text(stat.value)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+
+            Text(stat.label)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .frame(minWidth: 64)
+        .frame(height: 32)
+        .padding(.horizontal, 8)
+        .background(Color(.secondarySystemFill), in: Capsule())
     }
 }
 

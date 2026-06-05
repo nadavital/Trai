@@ -460,6 +460,8 @@ private struct DeveloperFoodMemorySection: View {
                     LabeledContent("Direct Passive Demoted", value: "\(suggestionDebugSummary.directPassiveExposureDemotedCount)")
                     LabeledContent("Suppressed Feedback", value: "\(suggestionDebugSummary.suppressedNegativeFeedbackCount)")
                     LabeledContent("Suppressed Low Confidence", value: "\(suggestionDebugSummary.suppressedLowConfidenceCount)")
+                    LabeledContent("Recall Fallbacks", value: "\(suggestionDebugSummary.recallFallbackCount)")
+                    LabeledContent("Complete Meal Promotions", value: "\(suggestionDebugSummary.completeMealPromotionCount)")
                     LabeledContent("Shown Suggestions", value: "\(suggestionDebugSummary.finalEligibleCount)")
 
                     if suggestionDebugSummary.shownSuggestionTitles.isEmpty {

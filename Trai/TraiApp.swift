@@ -141,7 +141,8 @@ struct TraiApp: App {
                 ReminderCompletion.self,
                 SuggestionUsage.self,
                 BehaviorEvent.self,
-                FoodMemory.self
+                FoodMemory.self,
+                FoodSuggestionFeedback.self
             ])
 
             let modelConfiguration: ModelConfiguration
@@ -320,25 +321,24 @@ struct TraiApp: App {
         .onChange(of: scenePhase) { _, newPhase in
             guard !isRunningTests else { return }
 
+            if newPhase == .active {
+                FoodMemoryBackgroundService.shared.resumeProcessing(modelContainer: modelContainer)
+            } else {
+                FoodMemoryBackgroundService.shared.suspendProcessing()
+                WidgetDataProvider.shared.cancelScheduledRefresh()
+            }
+
             if newPhase == .background {
                 deferredHealthKitSyncTask?.cancel()
                 reminderScheduleRefreshTask?.cancel()
                 NotificationCenter.default.post(name: .liveWorkoutForceFlush, object: nil)
-                // Keep background transition work minimal. Food-memory resolution is
-                // non-critical and already runs on launch/foreground maintenance.
-                Task { @MainActor in
-                    guard !hasActiveLiveWorkoutInProgress() else { return }
-                    WidgetDataProvider.shared.scheduleRefresh(
-                        modelContainer: modelContainer,
-                        delay: .zero
-                    )
-                }
             } else if newPhase == .active {
                 billingService.refreshLocalState()
                 monetizationService.refreshStateIfNeeded()
                 scheduleForegroundHealthKitSyncIfEligible()
                 scheduleReminderScheduleRefreshIfNeeded()
                 scheduleReminderBackgroundRefresh()
+                scheduleFoodMemoryMaintenanceIfNeeded()
             }
         }
         .backgroundTask(.appRefresh(Self.reminderBackgroundRefreshTaskIdentifier)) {

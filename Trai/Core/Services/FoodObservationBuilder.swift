@@ -1,6 +1,6 @@
 import Foundation
 
-struct FoodObservation: Identifiable, Sendable, Equatable {
+nonisolated struct FoodObservation: Identifiable, Sendable, Equatable {
     let id: UUID
     let entryID: UUID
     let linkedMemoryID: UUID?
@@ -27,7 +27,7 @@ struct FoodObservation: Identifiable, Sendable, Equatable {
     let userEditedFields: Set<String>
 }
 
-struct FoodObservationComponent: Identifiable, Sendable, Equatable, Hashable {
+nonisolated struct FoodObservationComponent: Identifiable, Sendable, Equatable, Hashable {
     let id: String
     let displayName: String
     let normalizedName: String
@@ -42,7 +42,7 @@ struct FoodObservationComponent: Identifiable, Sendable, Equatable, Hashable {
     let source: FoodComponentSource
 }
 
-struct FoodObservationBuilder {
+nonisolated struct FoodObservationBuilder {
     private let normalizationService = FoodNormalizationService()
 
     func observations(from entries: [FoodEntry]) -> [FoodObservation] {
