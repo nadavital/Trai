@@ -19,9 +19,7 @@ struct LiveWorkoutView: View {
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
     @Query private var profiles: [UserProfile]
     @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
-    @Query(filter: #Predicate<Exercise> { exercise in
-        exercise.category != "strength"
-    }, sort: \Exercise.name) private var activityExerciseLibrary: [Exercise]
+    @Query(sort: \Exercise.name) private var exerciseLibrary: [Exercise]
 
     private var usesMetricExerciseWeight: Bool {
         profiles.first?.usesMetricExerciseWeight ?? true
@@ -53,7 +51,9 @@ struct LiveWorkoutView: View {
 
     private var activityTypeTargets: [MuscleGroupSelector.ActivityTypeTarget] {
         var seen: Set<String> = []
-        return activityExerciseLibrary.compactMap { exercise in
+        return exerciseLibrary.compactMap { exercise in
+            guard exercise.exerciseCategory != .strength,
+                  exercise.isCustom else { return nil }
             let title = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !title.isEmpty else { return nil }
             let key = title.goalNormalizedKey
@@ -104,196 +104,219 @@ struct LiveWorkoutView: View {
     @State private var showingGeneralActivitySheet = false
     @State private var showingGoalSheet = false
     @State private var didApplyPresentationFinishRequest = false
+    @State private var shouldDismissAfterCancelConfirmation = false
     @State private var focusedSetID: UUID?
+    private let onCancel: (() -> Void)?
 
     // MARK: - Initialization
 
     init(
         workout: LiveWorkout,
         template: WorkoutPlan.WorkoutTemplate? = nil,
-        finishOnPresentation: Bool = false
+        finishOnPresentation: Bool = false,
+        onCancel: (() -> Void)? = nil
     ) {
         self._viewModel = State(initialValue: LiveWorkoutViewModel(workout: workout, template: template))
         self.finishOnPresentation = finishOnPresentation
+        self.onCancel = onCancel
     }
 
     // MARK: - Body
 
     var body: some View {
         NavigationStack {
-            Group {
-                if showingSummary {
-                    // Show summary inline instead of nested sheet
-                    WorkoutSummaryContent(
-                        workout: viewModel.workout,
-                        achievedPRs: viewModel.achievedPRs,
-                        onDismiss: handleSummaryDone
-                    )
-                } else {
-                    workoutContent
-                }
-            }
-            .navigationTitle(showingSummary ? "Summary" : viewModel.workoutName)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if showingSummary {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done", systemImage: "checkmark") {
-                            handleSummaryDone()
-                        }
-                        .labelStyle(.iconOnly)
-                    }
-                } else {
-                    if AppLaunchArguments.isUITesting && AppLaunchArguments.shouldUseLiveWorkoutUITestPreset {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("Stress +4", systemImage: "bolt.fill") {
-                                applyUITestStressMutationBurst()
-                            }
-                            .accessibilityIdentifier("liveWorkoutStressAddSetBurst")
-                        }
-                    }
-
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button {
-                            showingCancelConfirmation = true
-                        } label: {
-                            Image(systemName: "xmark")
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("End", systemImage: "checkmark") {
-                            showingEndConfirmation = true
-                        }
-                        .labelStyle(.iconOnly)
-                        .accessibilityIdentifier("liveWorkoutEndButton")
-                        .tint(.accentColor)
-                        .disabled(viewModel.isWorkoutFinished || viewModel.isFinishingWorkout)
-                    }
-                }
-            }
-            .onAppear {
-                activeWorkoutRuntimeState.beginLiveWorkoutPresentation()
-                viewModel.setup(with: modelContext, healthKitService: healthKitService)
-                startHeartRateUpdates()
-                applyPresentationFinishRequestIfNeeded()
-
-                // Check if Live Activities are disabled
-                if !AppLaunchArguments.isUITesting && !ActivityAuthorizationInfo().areActivitiesEnabled {
-                    showingLiveActivityDisabledAlert = true
-                }
-            }
-            .onDisappear {
-                activeWorkoutRuntimeState.endLiveWorkoutPresentation()
-                stopHeartRateUpdates()
-            }
-            .sheet(isPresented: $showingExerciseList) {
-                ExerciseListView(
-                    targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup },
-                    targetActivityCategories: viewModel.targetActivityCategories,
-                    targetActivityTypes: viewModel.targetActivityTypes
-                ) { exercise in
-                    viewModel.addExercise(exercise)
-                }
-            }
-            .sheet(isPresented: $showingExerciseReplacement) {
-                ExerciseListView(
-                    targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup },
-                    targetActivityCategories: viewModel.targetActivityCategories,
-                    targetActivityTypes: viewModel.targetActivityTypes
-                ) { exercise in
-                    if let entry = entryToReplace {
-                        viewModel.replaceExercise(entry, with: exercise)
-                    }
-                    entryToReplace = nil
-                }
-            }
-            .sheet(isPresented: $showingChat) {
-                NavigationStack {
-                    ChatView(workoutContext: buildWorkoutContext())
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Done", systemImage: "checkmark") {
-                                    showingChat = false
-                                }
-                                .labelStyle(.iconOnly)
-                            }
-                        }
-                }
-            }
-            .sheet(isPresented: $showingGeneralActivitySheet) {
-                AddGeneralActivitySheet(title: "Add Activity") { name, notes, durationSeconds, kind, role in
-                    viewModel.addGeneralActivity(
-                        name: name,
-                        notes: notes,
-                        durationSeconds: durationSeconds,
-                        kind: kind,
-                        role: role
-                    )
-                }
-            }
-            .sheet(isPresented: $showingGoalSheet) {
-                AddWorkoutGoalSheet(
-                    workoutType: viewModel.workout.type,
-                    activitySuggestions: activitySuggestions,
-                    prefersMetricWeight: usesMetricExerciseWeight
-                ) { goal in
-                    modelContext.insert(goal)
-                    do {
-                        try modelContext.save()
-                        return true
-                    } catch {
-                        modelContext.rollback()
-                        return false
-                    }
-                }
-            }
-            .confirmationDialog(
-                "Cancel Workout",
-                isPresented: $showingCancelConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Cancel Workout", role: .destructive) {
-                    viewModel.cancelWorkout()
-                    dismiss()
-                }
-                Button("Continue Workout", role: .cancel) {}
-            } message: {
-                Text("Are you sure you want to cancel this workout? All progress will be lost.")
-            }
-            .confirmationDialog(
-                "End Workout",
-                isPresented: $showingEndConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("End Workout") {
-                    finishAndShowSummary()
-                }
-                .disabled(viewModel.isWorkoutFinished || viewModel.isFinishingWorkout)
-                Button("Continue", role: .cancel) {}
-            } message: {
-                Text("Are you ready to finish this workout?")
-            }
-            .alert(
-                "Live Activity Disabled",
-                isPresented: $showingLiveActivityDisabledAlert
-            ) {
-                Button("Open Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                }
-                Button("Not Now", role: .cancel) {}
-            } message: {
-                Text("Enable Live Activities in Settings to see workout progress on your Lock Screen and Dynamic Island.")
-            }
+            navigationContent
         }
         .tint(Color("AccentColor"))
         .accentColor(Color("AccentColor"))
         .traiBackground()
         .accessibilityIdentifier("liveWorkoutView")
+    }
+
+    private var navigationContent: some View {
+        Group {
+            if showingSummary {
+                WorkoutSummaryContent(
+                    workout: viewModel.workout,
+                    achievedPRs: viewModel.achievedPRs,
+                    onDismiss: handleSummaryDone
+                )
+            } else {
+                workoutContent
+            }
+        }
+        .navigationTitle(showingSummary ? "Summary" : viewModel.workoutName)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { liveWorkoutToolbar }
+        .onAppear(perform: handleAppear)
+        .onDisappear(perform: handleDisappear)
+        .sheet(isPresented: $showingExerciseList, content: exerciseListSheet)
+        .sheet(isPresented: $showingExerciseReplacement, content: exerciseReplacementSheet)
+        .sheet(isPresented: $showingChat, content: chatSheet)
+        .sheet(isPresented: $showingGeneralActivitySheet, content: generalActivitySheet)
+        .sheet(isPresented: $showingGoalSheet, content: goalSheet)
+        .confirmationDialog("Cancel Workout", isPresented: $showingCancelConfirmation, titleVisibility: .visible) {
+            Button("Cancel Workout", role: .destructive, action: cancelWorkout)
+            Button("Continue Workout", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to cancel this workout? All progress will be lost.")
+        }
+        .onChange(of: showingCancelConfirmation, handleCancelConfirmationChange)
+        .confirmationDialog("End Workout", isPresented: $showingEndConfirmation, titleVisibility: .visible) {
+            Button("End Workout", action: finishAndShowSummary)
+                .disabled(viewModel.isWorkoutFinished || viewModel.isFinishingWorkout)
+            Button("Continue", role: .cancel) {}
+        } message: {
+            Text("Are you ready to finish this workout?")
+        }
+        .alert("Live Activity Disabled", isPresented: $showingLiveActivityDisabledAlert) {
+            Button("Open Settings", action: openAppSettings)
+            Button("Not Now", role: .cancel) {}
+        } message: {
+            Text("Enable Live Activities in Settings to see workout progress on your Lock Screen and Dynamic Island.")
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var liveWorkoutToolbar: some ToolbarContent {
+        if showingSummary {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done", systemImage: "checkmark", action: handleSummaryDone)
+                    .labelStyle(.iconOnly)
+            }
+        } else {
+            if AppLaunchArguments.isUITesting && AppLaunchArguments.shouldUseLiveWorkoutUITestPreset {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Stress +4", systemImage: "bolt.fill", action: applyUITestStressMutationBurst)
+                        .accessibilityIdentifier("liveWorkoutStressAddSetBurst")
+                }
+            }
+
+            ToolbarItem(placement: .cancellationAction) {
+                Button {
+                    showingCancelConfirmation = true
+                } label: {
+                    Image(systemName: "xmark")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            ToolbarItem(placement: .confirmationAction) {
+                Button("End", systemImage: "checkmark") {
+                    showingEndConfirmation = true
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityIdentifier("liveWorkoutEndButton")
+                .tint(.accentColor)
+                .disabled(viewModel.isWorkoutFinished || viewModel.isFinishingWorkout)
+            }
+        }
+    }
+
+    private func handleAppear() {
+        activeWorkoutRuntimeState.beginLiveWorkoutPresentation()
+        viewModel.setup(with: modelContext, healthKitService: healthKitService)
+        startHeartRateUpdates()
+        applyPresentationFinishRequestIfNeeded()
+
+        if !AppLaunchArguments.isUITesting && !ActivityAuthorizationInfo().areActivitiesEnabled {
+            showingLiveActivityDisabledAlert = true
+        }
+    }
+
+    private func handleDisappear() {
+        activeWorkoutRuntimeState.endLiveWorkoutPresentation()
+        stopHeartRateUpdates()
+    }
+
+    private func cancelWorkout() {
+        viewModel.cancelWorkout(using: modelContext)
+        onCancel?()
+        shouldDismissAfterCancelConfirmation = true
+        showingCancelConfirmation = false
+    }
+
+    private func handleCancelConfirmationChange(_ oldValue: Bool, _ isShowing: Bool) {
+        guard !isShowing, shouldDismissAfterCancelConfirmation else { return }
+        shouldDismissAfterCancelConfirmation = false
+        Task { @MainActor in
+            await Task.yield()
+            dismiss()
+        }
+    }
+
+    private func openAppSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private func exerciseListSheet() -> some View {
+        ExerciseListView(
+            targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup },
+            targetActivityCategories: viewModel.targetActivityCategories,
+            targetActivityTypes: viewModel.targetActivityTypes,
+            title: viewModel.usesFocusedCardioWorkspace ? "Select Activity" : "Select Exercise"
+        ) { exercise in
+            viewModel.addExercise(exercise)
+        }
+    }
+
+    private func exerciseReplacementSheet() -> some View {
+        ExerciseListView(
+            targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup },
+            targetActivityCategories: viewModel.targetActivityCategories,
+            targetActivityTypes: viewModel.targetActivityTypes,
+            title: "Replace Exercise"
+        ) { exercise in
+            if let entry = entryToReplace {
+                viewModel.replaceExercise(entry, with: exercise)
+            }
+            entryToReplace = nil
+        }
+    }
+
+    private func chatSheet() -> some View {
+        NavigationStack {
+            ChatView(workoutContext: buildWorkoutContext())
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done", systemImage: "checkmark") {
+                            showingChat = false
+                        }
+                        .labelStyle(.iconOnly)
+                    }
+                }
+        }
+    }
+
+    private func generalActivitySheet() -> some View {
+        AddGeneralActivitySheet(title: "Add Activity") { name, notes, durationSeconds, kind, role in
+            viewModel.addGeneralActivity(
+                name: name,
+                notes: notes,
+                durationSeconds: durationSeconds,
+                kind: kind,
+                role: role
+            )
+        }
+    }
+
+    private func goalSheet() -> some View {
+        AddWorkoutGoalSheet(
+            workoutType: viewModel.workout.type,
+            activitySuggestions: activitySuggestions,
+            prefersMetricWeight: usesMetricExerciseWeight
+        ) { goal in
+            modelContext.insert(goal)
+            do {
+                try modelContext.save()
+                return true
+            } catch {
+                modelContext.rollback()
+                return false
+            }
+        }
     }
 
     // MARK: - Workout Content
@@ -398,7 +421,7 @@ struct LiveWorkoutView: View {
             WorkoutBottomBar(
                 onAddExercise: { showingExerciseList = true },
                 onAskTrai: { showingChat = true },
-                addLabel: "Add Item",
+                addLabel: "Add Exercise",
                 addSystemImage: "plus.circle.fill"
             )
         }
@@ -455,8 +478,6 @@ struct LiveWorkoutView: View {
                             ) {
                                 viewModel.addUpNextExercise()
                             }
-                        } else if entries.isEmpty && availableSuggestions.isEmpty && viewModel.isHydratingStartupSuggestions {
-                            UpNextSuggestionLoadingCard()
                         }
 
                         // More suggestions by muscle group
@@ -477,7 +498,7 @@ struct LiveWorkoutView: View {
                             }
                         }
 
-                        if entries.isEmpty && upNext == nil && availableSuggestions.isEmpty && !viewModel.isHydratingStartupSuggestions {
+                        if entries.isEmpty && upNext == nil && availableSuggestions.isEmpty {
                             ContentUnavailableView(
                                 "No Items Yet",
                                 systemImage: "figure.mixed.cardio",
@@ -506,7 +527,7 @@ struct LiveWorkoutView: View {
             WorkoutBottomBar(
                 onAddExercise: { showingExerciseList = true },
                 onAskTrai: { showingChat = true },
-                addLabel: viewModel.usesFocusedCardioWorkspace ? "Add Interval" : "Add Item",
+                addLabel: viewModel.usesFocusedCardioWorkspace ? "Add Interval" : "Add Exercise",
                 addSystemImage: "plus.circle.fill"
             )
         }
@@ -736,28 +757,39 @@ struct LiveWorkoutView: View {
     private func buildWorkoutContext() -> AIService.WorkoutContext {
         let entries = viewModel.entries
 
-        let loggedEntries = entries.filter { entry in
+        let completedExercises = entries.filter { entry in
+            if entry.isCardio {
+                return entry.completedAt != nil || entry.hasExercisePreferenceSignal
+            }
             if entry.isGeneralActivity {
                 guard !entry.isPlannedActivityGuidance else { return false }
+                return entry.completedAt != nil || entry.hasExercisePreferenceSignal
             }
-            return entry.hasExercisePreferenceSignal
+            let workingSets = entry.sets.filter { !$0.isWarmup }
+            return !workingSets.isEmpty && workingSets.allSatisfy { $0.completed && $0.reps > 0 }
         }.count
 
-        let currentExercise = entries.last(where: { entry in
+        let currentExercise = entries.first { entry in
             if entry.isGeneralActivity {
-                return !entry.isPlannedActivityGuidance && entry.hasExercisePreferenceSignal
+                return !entry.isPlannedActivityGuidance
+                    && entry.completedAt == nil
+                    && !entry.hasExercisePreferenceSignal
             }
-            return entry.hasExercisePreferenceSignal
-        })?.exerciseName ?? entries.first?.exerciseName
+            if entry.isCardio {
+                return entry.completedAt == nil && !entry.hasExercisePreferenceSignal
+            }
+            let workingSets = entry.sets.filter { !$0.isWarmup }
+            return workingSets.isEmpty || workingSets.contains { !$0.completed || $0.reps == 0 }
+        }?.exerciseName ?? entries.last?.exerciseName
 
         let setsWithData = entries.reduce(0) { total, entry in
             guard entry.isStrength else { return total }
-            return total + entry.loggedWorkingSets.count
+            return total + entry.sets.filter { $0.completed && $0.reps > 0 && !$0.isWarmup }.count
         }
 
         let volumeWithData = entries.reduce(0.0) { total, entry in
             guard !entry.isCardio, !entry.isGeneralActivity else { return total }
-            return total + entry.loggedWorkingSets.reduce(0.0) { $0 + $1.volume }
+            return total + entry.sets.filter { $0.completed && $0.reps > 0 && !$0.isWarmup }.reduce(0.0) { $0 + $1.volume }
         }
 
         return AIService.WorkoutContext(
@@ -765,7 +797,7 @@ struct LiveWorkoutView: View {
             workoutType: viewModel.workout.type.displayName,
             focusAreas: viewModel.sessionFocusAreas,
             elapsedMinutes: Int(viewModel.elapsedTime / 60),
-            entriesLogged: loggedEntries,
+            entriesLogged: completedExercises,
             exercisesTotal: entries.count,
             currentExercise: currentExercise,
             setsLogged: setsWithData,

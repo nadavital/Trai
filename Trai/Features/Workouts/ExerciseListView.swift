@@ -28,6 +28,7 @@ struct ExerciseListView: View {
     private let targetMuscleGroups: [Exercise.MuscleGroup]
     private let targetActivityCategories: [Exercise.Category]
     private let targetActivityTypes: [String]
+    private let title: String
 
     // Search and filter state
     @State private var searchText = ""
@@ -59,11 +60,13 @@ struct ExerciseListView: View {
         targetMuscleGroups: [Exercise.MuscleGroup] = [],
         targetActivityCategories: [Exercise.Category] = [],
         targetActivityTypes: [String] = [],
+        title: String = "Select Item",
         onSelect: @escaping (Exercise) -> Void
     ) {
         self.targetMuscleGroups = targetMuscleGroups
         self.targetActivityCategories = targetActivityCategories
         self.targetActivityTypes = targetActivityTypes
+        self.title = title
         self.onSelect = onSelect
         self._selectedExercise = .constant(nil)
         self._selectedCategory = State(initialValue: Self.initialCategory(
@@ -79,6 +82,7 @@ struct ExerciseListView: View {
         self.targetMuscleGroups = []
         self.targetActivityCategories = []
         self.targetActivityTypes = []
+        self.title = "Select Item"
         self.onSelect = nil
         self._selectedExercise = selectedExercise
     }
@@ -120,6 +124,11 @@ struct ExerciseListView: View {
         let secondaryMuscles: [String]?
         let targetTags: [String]
         let trackingFields: [Exercise.TrackingField]
+    }
+
+    private struct ActivityFilterOption {
+        let title: String
+        let priority: Int
     }
 
     private var targetMusclePriority: [Exercise.MuscleGroup: Int] {
@@ -406,32 +415,62 @@ struct ExerciseListView: View {
 
     private var activityTypesForFilterChips: [String] {
         let targetKeys = targetActivityTypePriority
-        var bestNameByKey: [String: String] = [:]
-        for activityType in targetActivityTypes {
-            let title = activityType.trimmingCharacters(in: .whitespacesAndNewlines)
+        let usageSummary = usageSummaryCache
+        var bestOptionByKey: [String: ActivityFilterOption] = [:]
+
+        func addOption(title rawTitle: String, priority: Int) {
+            let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
             let key = Exercise.normalizedActivityKey(title)
-            guard !title.isEmpty, !key.isEmpty else { continue }
-            bestNameByKey[key] = title
+            guard !title.isEmpty, !key.isEmpty else { return }
+            if let current = bestOptionByKey[key], current.priority <= priority {
+                return
+            }
+            bestOptionByKey[key] = ActivityFilterOption(title: title, priority: priority)
         }
+
+        for (index, activityType) in targetActivityTypes.enumerated() {
+            addOption(title: activityType, priority: index)
+        }
+
         for exercise in exercises where exercise.exerciseCategory != .strength {
             let title = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
             let key = Exercise.normalizedActivityKey(title)
             guard !title.isEmpty, !key.isEmpty else { continue }
-            if bestNameByKey[key] == nil {
-                bestNameByKey[key] = title
+
+            if targetKeys[key] != nil {
+                addOption(title: title, priority: targetKeys[key] ?? 0)
+                continue
             }
+
+            let wasRecentlyUsed = usageSummary.usageFrequencyByExerciseName[exercise.name] != nil
+            guard exercise.isCustom || wasRecentlyUsed else { continue }
+
+            let personalPriority = wasRecentlyUsed ? 100 : 200
+            addOption(title: title, priority: personalPriority)
         }
 
-        return bestNameByKey
+        return bestOptionByKey
             .values
             .sorted { lhs, rhs in
-                let lhsPriority = targetKeys[Exercise.normalizedActivityKey(lhs)] ?? Int.max
-                let rhsPriority = targetKeys[Exercise.normalizedActivityKey(rhs)] ?? Int.max
-                if lhsPriority != rhsPriority { return lhsPriority < rhsPriority }
-                return lhs.localizedStandardCompare(rhs) == .orderedAscending
+                if lhs.priority != rhs.priority { return lhs.priority < rhs.priority }
+                return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
             }
-            .prefix(14)
-            .map { $0 }
+            .prefix(10)
+            .map(\.title)
+    }
+
+    private var categoriesForFilterChips: [Exercise.Category] {
+        Exercise.Category.userFacingCases.filter { category in
+            if isCategoryFilterSelected(category) {
+                return true
+            }
+            if targetActivityCategories.contains(where: { !$0.suggestionCategories.isDisjoint(with: category.suggestionCategories) }) {
+                return true
+            }
+            return exercises.contains { exercise in
+                !category.suggestionCategories.isDisjoint(with: exercise.exerciseCategory.suggestionCategories)
+            }
+        }
     }
 
     private var canAccessExerciseAI: Bool {
@@ -567,7 +606,7 @@ struct ExerciseListView: View {
                     }
                 }
             }
-            .navigationTitle("Select Item")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "Search exercises and activities")
             .toolbar {
@@ -785,57 +824,18 @@ struct ExerciseListView: View {
         let activityTypes = activityTypesForFilterChips
 
         return VStack(spacing: 0) {
-            if !activityTypes.isEmpty && selectedMuscleGroup == nil {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        FilterChip(
-                            label: "All",
-                            isSelected: selectedCategory == nil && selectedMuscleGroup == nil && selectedActivityTypeFilter == nil
-                        ) {
-                            selectedCategory = nil
-                            selectedMuscleGroup = nil
-                            selectedActivityTypeFilter = nil
-                        }
-
-                        ForEach(activityTypes, id: \.self) { activityType in
-                            FilterChip(
-                                label: activityType,
-                                isSelected: selectedActivityTypeFilter == activityType,
-                                isHighlighted: targetActivityTypes.contains { Exercise.normalizedActivityKey($0) == Exercise.normalizedActivityKey(activityType) }
-                            ) {
-                                if selectedActivityTypeFilter == activityType {
-                                    selectedActivityTypeFilter = nil
-                                } else {
-                                    selectedActivityTypeFilter = activityType
-                                    selectedCategory = nil
-                                    selectedMuscleGroup = nil
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                }
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        FilterChip(
-                            label: "All",
-                            isSelected: selectedCategory == nil && selectedMuscleGroup == nil && selectedActivityTypeFilter == nil
-                        ) {
-                            selectedCategory = nil
-                            selectedMuscleGroup = nil
-                            selectedActivityTypeFilter = nil
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                }
-            }
-
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(Exercise.Category.userFacingCases) { category in
+                    FilterChip(
+                        label: "All",
+                        isSelected: selectedCategory == nil && selectedMuscleGroup == nil && selectedActivityTypeFilter == nil
+                    ) {
+                        selectedCategory = nil
+                        selectedMuscleGroup = nil
+                        selectedActivityTypeFilter = nil
+                    }
+
+                    ForEach(categoriesForFilterChips) { category in
                         FilterChip(
                             label: category.displayName,
                             icon: category.iconName,
@@ -852,19 +852,19 @@ struct ExerciseListView: View {
                     }
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 8)
+                .padding(.vertical, 8)
             }
 
-            if !activityTypes.isEmpty && selectedMuscleGroup != nil {
+            if !activityTypes.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(activityTypes, id: \.self) { activityType in
                             FilterChip(
                                 label: activityType,
-                                isSelected: selectedActivityTypeFilter == activityType,
+                                isSelected: isActivityTypeFilterSelected(activityType),
                                 isHighlighted: targetActivityTypes.contains { Exercise.normalizedActivityKey($0) == Exercise.normalizedActivityKey(activityType) }
                             ) {
-                                if selectedActivityTypeFilter == activityType {
+                                if isActivityTypeFilterSelected(activityType) {
                                     selectedActivityTypeFilter = nil
                                 } else {
                                     selectedActivityTypeFilter = activityType
@@ -911,6 +911,11 @@ struct ExerciseListView: View {
     private func isCategoryFilterSelected(_ category: Exercise.Category) -> Bool {
         guard let selectedCategory else { return false }
         return !selectedCategory.suggestionCategories.isDisjoint(with: category.suggestionCategories)
+    }
+
+    private func isActivityTypeFilterSelected(_ activityType: String) -> Bool {
+        guard let selectedActivityTypeFilter else { return false }
+        return Exercise.normalizedActivityKey(selectedActivityTypeFilter) == Exercise.normalizedActivityKey(activityType)
     }
 
     // MARK: - Exercise Row

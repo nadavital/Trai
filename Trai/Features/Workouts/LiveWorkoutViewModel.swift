@@ -38,7 +38,6 @@ final class LiveWorkoutViewModel {
     private var lastAddSetTimestamp: TimeInterval = 0
     private var lastTogglePauseTimestamp: TimeInterval = 0
     private var lastAdvanceExerciseTimestamp: TimeInterval = 0
-    private var lastClearLiveActivityTimestamp: TimeInterval = 0
     private var lastLiveActivityIntentInteractionAt: Date?
     private var lastPublishedWatchPayload: LiveWorkoutUpdatePolicy.WatchPayload?
     private var backgroundFlushObserver: NSObjectProtocol?
@@ -138,14 +137,12 @@ final class LiveWorkoutViewModel {
     private var cachedMetrics: WorkoutMetrics = .zero
     private var cachedCurrentExerciseNameSet: Set<String> = []
     private var cachedMuscleGroupByExerciseName: [String: String] = [:]
-    private var liveActivityFocusedEntryID: UUID?
 
     // User preferences cache (exercise usage frequency)
     var exerciseUsageFrequency: [String: Int] = [:]
     var availableSuggestions: [ExerciseSuggestion] = []
     var upNextSuggestion: ExerciseSuggestion?
     var suggestionsByMuscle: [String: [ExerciseSuggestion]] = [:]
-    var isHydratingStartupSuggestions = false
 
     // Apple Watch data (via HealthKit)
     var currentHeartRate: Double?
@@ -247,7 +244,7 @@ final class LiveWorkoutViewModel {
     }
 
     var isWorkoutComplete: Bool {
-        workout.completedAt != nil
+        !entries.isEmpty && entries.allSatisfy(isEntryComplete)
     }
 
     var volumePRMode: UserProfile.VolumePRMode {
@@ -579,12 +576,14 @@ final class LiveWorkoutViewModel {
         }
 
         refreshEntriesAndMetrics()
-        startLiveActivity()
         startTimer()
         scheduleDeferredStartupHydration()
 
-        // Start heart rate streaming from Apple Watch after the Live Activity is requested.
+        // Start heart rate streaming from Apple Watch
         startHeartRateMonitoring()
+
+        // Start Live Activity
+        startLiveActivity()
         
         // Set up Live Activity intent observers
         setupLiveActivityObservers()
@@ -598,28 +597,10 @@ final class LiveWorkoutViewModel {
     }
 
     private func seedStaleLiveActivityIntentTimestampsIfNeeded() {
-        guard let defaults = UserDefaults(suiteName: LiveActivityIntentKeys.suiteName) else { return }
-
         let workoutStartTimestamp = workout.startedAt.timeIntervalSince1970
-        let addSetTimestamp = defaults.double(forKey: LiveActivityIntentKeys.addSetTimestamp)
-        if addSetTimestamp > 0, addSetTimestamp < workoutStartTimestamp {
-            lastAddSetTimestamp = addSetTimestamp
-        }
-
-        let togglePauseTimestamp = defaults.double(forKey: LiveActivityIntentKeys.togglePauseTimestamp)
-        if togglePauseTimestamp > 0, togglePauseTimestamp < workoutStartTimestamp {
-            lastTogglePauseTimestamp = togglePauseTimestamp
-        }
-
-        let advanceExerciseTimestamp = defaults.double(forKey: LiveActivityIntentKeys.advanceExerciseTimestamp)
-        if advanceExerciseTimestamp > 0, advanceExerciseTimestamp < workoutStartTimestamp {
-            lastAdvanceExerciseTimestamp = advanceExerciseTimestamp
-        }
-
-        let clearTimestamp = defaults.double(forKey: LiveActivityIntentKeys.clearTimestamp)
-        if clearTimestamp > 0, clearTimestamp < workoutStartTimestamp {
-            lastClearLiveActivityTimestamp = clearTimestamp
-        }
+        lastAddSetTimestamp = max(lastAddSetTimestamp, workoutStartTimestamp)
+        lastTogglePauseTimestamp = max(lastTogglePauseTimestamp, workoutStartTimestamp)
+        lastAdvanceExerciseTimestamp = max(lastAdvanceExerciseTimestamp, workoutStartTimestamp)
     }
 
     private func scheduleNextLiveActivityIntentPoll() {
@@ -639,38 +620,97 @@ final class LiveWorkoutViewModel {
     private func checkLiveActivityIntents() {
         guard let defaults = UserDefaults(suiteName: LiveActivityIntentKeys.suiteName) else { return }
         
-        // Check for "Add Set" action
-        let addSetTimestamp = defaults.double(forKey: LiveActivityIntentKeys.addSetTimestamp)
-        if addSetTimestamp > lastAddSetTimestamp {
-            lastAddSetTimestamp = addSetTimestamp
+        let addSetTimestamps = pendingLiveActivityIntentTimestamps(
+            defaults: defaults,
+            queueKey: LiveActivityIntentKeys.addSetTimestamps,
+            legacyTimestampKey: LiveActivityIntentKeys.addSetTimestamp,
+            handledAfter: lastAddSetTimestamp
+        )
+        if !addSetTimestamps.isEmpty {
+            for timestamp in addSetTimestamps {
+                lastAddSetTimestamp = timestamp
+                handleAddSetFromLiveActivity()
+            }
             lastLiveActivityIntentInteractionAt = Date()
-            handleAddSetFromLiveActivity()
-            defaults.removeObject(forKey: LiveActivityIntentKeys.addSetTimestamp)
+            pruneLiveActivityIntentTimestamps(
+                defaults: defaults,
+                queueKey: LiveActivityIntentKeys.addSetTimestamps,
+                legacyTimestampKey: LiveActivityIntentKeys.addSetTimestamp,
+                through: lastAddSetTimestamp
+            )
         }
         
-        // Check for "Toggle Pause" action
-        let togglePauseTimestamp = defaults.double(forKey: LiveActivityIntentKeys.togglePauseTimestamp)
-        if togglePauseTimestamp > lastTogglePauseTimestamp {
-            lastTogglePauseTimestamp = togglePauseTimestamp
+        let togglePauseTimestamps = pendingLiveActivityIntentTimestamps(
+            defaults: defaults,
+            queueKey: LiveActivityIntentKeys.togglePauseTimestamps,
+            legacyTimestampKey: LiveActivityIntentKeys.togglePauseTimestamp,
+            handledAfter: lastTogglePauseTimestamp
+        )
+        if !togglePauseTimestamps.isEmpty {
+            for timestamp in togglePauseTimestamps {
+                lastTogglePauseTimestamp = timestamp
+                handleTogglePauseFromLiveActivity()
+            }
             lastLiveActivityIntentInteractionAt = Date()
-            handleTogglePauseFromLiveActivity()
-            defaults.removeObject(forKey: LiveActivityIntentKeys.togglePauseTimestamp)
+            pruneLiveActivityIntentTimestamps(
+                defaults: defaults,
+                queueKey: LiveActivityIntentKeys.togglePauseTimestamps,
+                legacyTimestampKey: LiveActivityIntentKeys.togglePauseTimestamp,
+                through: lastTogglePauseTimestamp
+            )
         }
 
-        let advanceExerciseTimestamp = defaults.double(forKey: LiveActivityIntentKeys.advanceExerciseTimestamp)
-        if advanceExerciseTimestamp > lastAdvanceExerciseTimestamp {
-            lastAdvanceExerciseTimestamp = advanceExerciseTimestamp
+        let advanceExerciseTimestamps = pendingLiveActivityIntentTimestamps(
+            defaults: defaults,
+            queueKey: LiveActivityIntentKeys.advanceExerciseTimestamps,
+            legacyTimestampKey: LiveActivityIntentKeys.advanceExerciseTimestamp,
+            handledAfter: lastAdvanceExerciseTimestamp
+        )
+        if !advanceExerciseTimestamps.isEmpty {
+            for timestamp in advanceExerciseTimestamps {
+                lastAdvanceExerciseTimestamp = timestamp
+                handleAdvanceExerciseFromLiveActivity()
+            }
             lastLiveActivityIntentInteractionAt = Date()
-            handleAdvanceExerciseFromLiveActivity()
-            defaults.removeObject(forKey: LiveActivityIntentKeys.advanceExerciseTimestamp)
+            pruneLiveActivityIntentTimestamps(
+                defaults: defaults,
+                queueKey: LiveActivityIntentKeys.advanceExerciseTimestamps,
+                legacyTimestampKey: LiveActivityIntentKeys.advanceExerciseTimestamp,
+                through: lastAdvanceExerciseTimestamp
+            )
+        }
+    }
+
+    private func pendingLiveActivityIntentTimestamps(
+        defaults: UserDefaults,
+        queueKey: String,
+        legacyTimestampKey: String,
+        handledAfter lastHandledTimestamp: TimeInterval
+    ) -> [TimeInterval] {
+        let queuedTimestamps = defaults.array(forKey: queueKey) as? [Double] ?? []
+        let legacyTimestamp = defaults.double(forKey: legacyTimestampKey)
+        let allTimestamps = queuedTimestamps + (legacyTimestamp > 0 ? [legacyTimestamp] : [])
+        return Array(Set(allTimestamps))
+            .filter { $0 > lastHandledTimestamp }
+            .sorted()
+    }
+
+    private func pruneLiveActivityIntentTimestamps(
+        defaults: UserDefaults,
+        queueKey: String,
+        legacyTimestampKey: String,
+        through handledTimestamp: TimeInterval
+    ) {
+        let remainingTimestamps = (defaults.array(forKey: queueKey) as? [Double] ?? [])
+            .filter { $0 > handledTimestamp }
+        if remainingTimestamps.isEmpty {
+            defaults.removeObject(forKey: queueKey)
+        } else {
+            defaults.set(remainingTimestamps, forKey: queueKey)
         }
 
-        let clearTimestamp = defaults.double(forKey: LiveActivityIntentKeys.clearTimestamp)
-        if clearTimestamp > lastClearLiveActivityTimestamp {
-            lastClearLiveActivityTimestamp = clearTimestamp
-            lastLiveActivityIntentInteractionAt = Date()
-            handleClearLiveActivityFromLiveActivity()
-            defaults.removeObject(forKey: LiveActivityIntentKeys.clearTimestamp)
+        if defaults.double(forKey: legacyTimestampKey) <= handledTimestamp {
+            defaults.removeObject(forKey: legacyTimestampKey)
         }
     }
 
@@ -696,7 +736,6 @@ final class LiveWorkoutViewModel {
     private func scheduleDeferredStartupHydration() {
         deferredPerformanceHydrationTask?.cancel()
         deferredSuggestionHydrationTask?.cancel()
-        isHydratingStartupSuggestions = true
 
         deferredPerformanceHydrationTask = Task(priority: .utility) { @MainActor [weak self] in
             guard let self else { return }
@@ -708,14 +747,9 @@ final class LiveWorkoutViewModel {
         deferredSuggestionHydrationTask = Task(priority: .utility) { @MainActor [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: .milliseconds(460))
-            guard !Task.isCancelled else {
-                self.isHydratingStartupSuggestions = false
-                return
-            }
+            guard !Task.isCancelled else { return }
             self.loadExerciseUsageFrequency()
             self.rebuildSuggestionPool(reason: .workoutStart)
-            self.isHydratingStartupSuggestions = false
-            self.updateLiveActivity()
         }
     }
 
@@ -752,6 +786,7 @@ final class LiveWorkoutViewModel {
         guard let targetEntry else { return }
 
         addSet(to: targetEntry)
+        updateLiveActivity()
         HapticManager.mediumTap()
     }
     
@@ -765,22 +800,25 @@ final class LiveWorkoutViewModel {
         HapticManager.lightTap()
     }
 
-    /// Handle "Next Exercise" button tap from Live Activity.
+    /// Handle "Up Next" button tap from Live Activity
     private func handleAdvanceExerciseFromLiveActivity() {
         guard let currentEntry = liveActivityCurrentEntry(),
               let currentIndex = entries.firstIndex(where: { $0.id == currentEntry.id }),
-              entries.indices.contains(currentIndex + 1) else {
-            return
+              entries.indices.contains(currentIndex + 1) else { return }
+
+        if currentEntry.isStrength {
+            var sets = currentEntry.sets
+            for index in sets.indices where !sets[index].isWarmup && hasLoggedSetData(sets[index]) {
+                sets[index].completed = true
+            }
+            currentEntry.sets = sets
+        } else if !currentEntry.isPlannedActivityGuidance {
+            currentEntry.completedAt = currentEntry.completedAt ?? Date()
         }
 
-        focusLiveActivity(on: entries[currentIndex + 1])
+        refreshEntriesAndMetrics()
         saveDebounced(updateLiveActivity: true)
-        HapticManager.lightTap()
-    }
-
-    /// Handle "Clear" button tap from Live Activity without deleting the active workout.
-    private func handleClearLiveActivityFromLiveActivity() {
-        liveActivityManager.endActivity(showSummary: false)
+        updateLiveActivity()
         HapticManager.lightTap()
     }
 
@@ -1173,7 +1211,6 @@ final class LiveWorkoutViewModel {
         pendingLiveActivityUpdateTask?.cancel()
         deferredPerformanceHydrationTask?.cancel()
         deferredSuggestionHydrationTask?.cancel()
-        isHydratingStartupSuggestions = false
         stopHeartRateMonitoring()
         stopLiveActivityUpdates()
         removeLiveActivityObservers()
@@ -1302,7 +1339,6 @@ final class LiveWorkoutViewModel {
             workout.entries = []
         }
         workout.entries?.append(entry)
-        focusLiveActivity(on: entry)
         refreshEntriesAndMetrics()
         saveImmediately()
     }
@@ -1323,9 +1359,6 @@ final class LiveWorkoutViewModel {
         guard index < entries.count else { return }
         let entry = entries[index]
         workout.entries?.removeAll { $0.id == entry.id }
-        if liveActivityFocusedEntryID == entry.id {
-            liveActivityFocusedEntryID = nil
-        }
 
         // Reorder remaining entries
         for (newIndex, entry) in (workout.entries ?? []).enumerated() {
@@ -1349,7 +1382,6 @@ final class LiveWorkoutViewModel {
             modelContext?.insert(newEntry)
             workout.entries?.append(newEntry)
             workout.entries?.sort { $0.orderIndex < $1.orderIndex }
-            focusLiveActivity(on: newEntry)
             refreshEntriesAndMetrics()
             saveImmediately()
             return
@@ -1381,7 +1413,6 @@ final class LiveWorkoutViewModel {
 
         // Re-sort entries by order index
         workout.entries?.sort { $0.orderIndex < $1.orderIndex }
-        focusLiveActivity(on: newEntry)
 
         refreshEntriesAndMetrics()
         saveImmediately()
@@ -1402,7 +1433,6 @@ final class LiveWorkoutViewModel {
     // MARK: - Set Management
 
     func addSet(to entry: LiveWorkoutEntry) {
-        focusLiveActivity(on: entry)
         let currentSetIndex = entry.sets.count
         let lastSet = entry.sets.last
 
@@ -1499,7 +1529,6 @@ final class LiveWorkoutViewModel {
         }
         guard didChange else { return }
         entry.updateSet(at: index, with: set)
-        focusLiveActivity(on: entry)
         if metricsImpactChanged(from: originalSet, to: set) {
             refreshCachedMetrics()
         }
@@ -1508,7 +1537,6 @@ final class LiveWorkoutViewModel {
 
     func removeSet(at index: Int, from entry: LiveWorkoutEntry) {
         entry.removeSet(at: index)
-        focusLiveActivity(on: entry)
         refreshCachedMetrics()
         saveImmediately()
     }
@@ -1527,13 +1555,11 @@ final class LiveWorkoutViewModel {
     // MARK: - Cardio Management
 
     func updateCardioDuration(for entry: LiveWorkoutEntry, seconds: Int) {
-        focusLiveActivity(on: entry)
         entry.durationSeconds = seconds
         saveDebounced(updateLiveActivity: false)
     }
 
     func updateCardioDistance(for entry: LiveWorkoutEntry, meters: Double) {
-        focusLiveActivity(on: entry)
         entry.distanceMeters = meters
         saveDebounced(updateLiveActivity: false)
     }
@@ -1546,14 +1572,12 @@ final class LiveWorkoutViewModel {
 
     func updateEntryNotes(for entry: LiveWorkoutEntry, notes: String) {
         guard entry.notes != notes else { return }
-        focusLiveActivity(on: entry)
         entry.notes = notes
         saveDebounced(updateLiveActivity: false)
     }
 
     func updateEntryDuration(for entry: LiveWorkoutEntry, seconds: Int?) {
         guard entry.durationSeconds != seconds else { return }
-        focusLiveActivity(on: entry)
         entry.durationSeconds = seconds
         saveDebounced(updateLiveActivity: false)
     }
@@ -1577,7 +1601,6 @@ final class LiveWorkoutViewModel {
             sets[0] = firstSet
         }
         entry.sets = sets
-        focusLiveActivity(on: entry)
         refreshEntriesAndMetrics()
         saveDebounced(updateLiveActivity: false)
     }
@@ -1603,7 +1626,6 @@ final class LiveWorkoutViewModel {
             sets = Array(sets.prefix(normalizedCount))
         }
         entry.sets = sets
-        focusLiveActivity(on: entry)
         refreshEntriesAndMetrics()
         saveDebounced(updateLiveActivity: false)
     }
@@ -1627,13 +1649,11 @@ final class LiveWorkoutViewModel {
             sets[0] = firstSet
         }
         entry.sets = sets
-        focusLiveActivity(on: entry)
         refreshEntriesAndMetrics()
         saveDebounced(updateLiveActivity: false)
     }
 
     func addActivitySegment(to entry: LiveWorkoutEntry) {
-        focusLiveActivity(on: entry)
         entry.addActivitySegment()
         refreshEntriesAndMetrics()
         saveDebounced(updateLiveActivity: false)
@@ -1670,7 +1690,6 @@ final class LiveWorkoutViewModel {
         segments[index] = segment
         entry.activitySegments = segments
         syncActivityTotals(from: segments, into: entry)
-        focusLiveActivity(on: entry)
         refreshEntriesAndMetrics()
         saveDebounced(updateLiveActivity: false)
     }
@@ -1678,7 +1697,6 @@ final class LiveWorkoutViewModel {
     func removeActivitySegment(from entry: LiveWorkoutEntry, at index: Int) {
         entry.removeActivitySegment(at: index)
         syncActivityTotals(from: entry.activitySegments, into: entry)
-        focusLiveActivity(on: entry)
         refreshEntriesAndMetrics()
         saveDebounced(updateLiveActivity: false)
     }
@@ -1719,7 +1737,6 @@ final class LiveWorkoutViewModel {
             workout.entries = []
         }
         workout.entries?.append(entry)
-        focusLiveActivity(on: entry)
         refreshEntriesAndMetrics()
         saveImmediately()
     }
@@ -1855,6 +1872,13 @@ final class LiveWorkoutViewModel {
         stopTimer()
         workout.completedAt = Date()
 
+        for entry in entries {
+            if (entry.isCardio || entry.isGeneralActivity)
+                && !entry.isPlannedActivityGuidance
+                && entry.hasExercisePreferenceSignal {
+                entry.completedAt = entry.completedAt ?? Date()
+            }
+        }
         refreshEntriesAndMetrics()
 
         // Create ExerciseHistory entries for each exercise
@@ -1938,12 +1962,14 @@ final class LiveWorkoutViewModel {
         }
     }
 
-    func cancelWorkout() {
+    @discardableResult
+    func cancelWorkout(using modelContext: ModelContext) -> Bool {
+        self.modelContext = modelContext
         stopTimer()
         // End Live Activity immediately (no summary)
         liveActivityManager.endActivity(showSummary: false)
-        guard let modelContext else { return }
-        _ = LiveWorkoutCancellation.cancelActiveWorkouts(in: modelContext, including: workout)
+
+        return LiveWorkoutCancellation.cancelActiveWorkouts(in: modelContext, including: workout)
     }
 
     // MARK: - Private Methods
@@ -1952,10 +1978,6 @@ final class LiveWorkoutViewModel {
         let sortedEntries = (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
         if entryListSignature(for: sortedEntries) != entryListSignature(for: cachedEntries) {
             cachedEntries = sortedEntries
-        }
-        if let focusedID = liveActivityFocusedEntryID,
-           !sortedEntries.contains(where: { $0.id == focusedID }) {
-            liveActivityFocusedEntryID = nil
         }
         updateCachedMetrics(calculateMetrics(for: sortedEntries))
         let updatedExerciseNameSet = Set(sortedEntries.map { $0.exerciseName.lowercased() })
@@ -1990,12 +2012,12 @@ final class LiveWorkoutViewModel {
         from originalSet: LiveWorkoutEntry.SetData,
         to updatedSet: LiveWorkoutEntry.SetData
     ) -> Bool {
-        let originalHasData = originalSet.reps > 0 && !originalSet.isWarmup
-        let updatedHasData = updatedSet.reps > 0 && !updatedSet.isWarmup
+        let originalHasData = originalSet.completed && originalSet.reps > 0 && !originalSet.isWarmup
+        let updatedHasData = updatedSet.completed && updatedSet.reps > 0 && !updatedSet.isWarmup
         guard originalHasData == updatedHasData else { return true }
 
-        let originalVolume = originalHasData ? originalSet.volume : 0
-        let updatedVolume = updatedHasData ? updatedSet.volume : 0
+        let originalVolume = originalSet.completed && !originalSet.isWarmup ? originalSet.volume : 0
+        let updatedVolume = updatedSet.completed && !updatedSet.isWarmup ? updatedSet.volume : 0
         return originalVolume != updatedVolume
     }
 
@@ -2007,9 +2029,13 @@ final class LiveWorkoutViewModel {
         for entry in entries {
             let sets = entry.sets
             totalSets += sets.count
-            for set in entry.loggedWorkingSets {
-                completedSetsWithData += 1
-                totalVolume += set.volume
+            for set in sets where !set.isWarmup {
+                if set.completed && set.reps > 0 {
+                    completedSetsWithData += 1
+                }
+                if set.completed && set.reps > 0 {
+                    totalVolume += set.volume
+                }
             }
         }
 
@@ -2137,9 +2163,9 @@ final class LiveWorkoutViewModel {
         liveActivityManager.startActivity(
             workoutName: workoutName,
             targetMuscles: targetMuscleGroups,
-            startedAt: workout.startedAt,
-            initialState: liveActivityContentState(isPausedOverride: false)
+            startedAt: workout.startedAt
         )
+        updateLiveActivity()
 
         // Start periodic updates for elapsed time
         startLiveActivityUpdates()
@@ -2165,41 +2191,43 @@ final class LiveWorkoutViewModel {
         set.reps > 0
     }
 
+    private func isEntryComplete(_ entry: LiveWorkoutEntry) -> Bool {
+        if entry.isCardio || entry.isGeneralActivity {
+            return entry.completedAt != nil || entry.hasExercisePreferenceSignal
+        }
+
+        let workingSets = entry.sets.filter { !$0.isWarmup }
+        guard !workingSets.isEmpty else { return false }
+        return workingSets.allSatisfy(\.completed)
+    }
+
     private func isEntryStartedForLiveActivity(_ entry: LiveWorkoutEntry) -> Bool {
         if entry.isCardio || entry.isGeneralActivity {
-            return entry.trackedDurationSeconds > 0
+            return entry.completedAt != nil
+                || entry.trackedDurationSeconds > 0
                 || entry.trackedDistanceMeters > 0
                 || entry.activitySegments.contains { $0.hasLoggedData }
                 || !entry.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
-        return entry.loggedWorkingSets.isEmpty == false
+        return entry.sets.contains { !$0.isWarmup && $0.completed && hasLoggedSetData($0) }
     }
 
-    private func focusLiveActivity(on entry: LiveWorkoutEntry?) {
-        liveActivityFocusedEntryID = entry?.id
+    private func isEntryCompleteForLiveActivity(_ entry: LiveWorkoutEntry) -> Bool {
+        isEntryComplete(entry)
     }
 
     private func liveActivityCurrentEntry() -> LiveWorkoutEntry? {
-        if let focusedID = liveActivityFocusedEntryID,
-           let focusedEntry = entries.first(where: { $0.id == focusedID }) {
-            return focusedEntry
-        }
-        return entries.last(where: isEntryStartedForLiveActivity) ?? entries.first
+        entries.first { !isEntryCompleteForLiveActivity($0) } ?? entries.last
     }
 
     private func liveActivityEntryForAddSet() -> LiveWorkoutEntry? {
-        let currentEntry = liveActivityCurrentEntry()
-        if let currentEntry, currentEntry.isStrength {
+        if let currentEntry = liveActivityCurrentEntry(), currentEntry.isStrength {
             return currentEntry
         }
 
-        // If the current item is timed/general work, route "Add Set" to the nearest strength entry.
-        if let currentEntry,
-           let currentIndex = entries.firstIndex(where: { $0.id == currentEntry.id }),
-           let nextStrength = entries.dropFirst(currentIndex + 1).first(where: \.isStrength) {
-            return nextStrength
-        }
-        return entries.last(where: \.isStrength)
+        // If the current item is timed/general work, route "Add Set" to a real strength entry.
+        return entries.first { $0.isStrength && !isEntryCompleteForLiveActivity($0) }
+            ?? entries.last(where: \.isStrength)
     }
 
     var liveActivityProgressSummary: LiveActivityProgressSummary {
@@ -2220,22 +2248,25 @@ final class LiveWorkoutViewModel {
             let progressEntries = countableEntries.isEmpty
                 ? entries.filter { $0.isCardio || $0.isGeneralActivity }
                 : countableEntries
-            let totalItems = progressEntries.count
             let loggedItems = progressEntries.filter { entry in
-                isEntryStartedForLiveActivity(entry)
+                entry.isStrength
+                    ? isEntryCompleteForLiveActivity(entry)
+                    : isEntryStartedForLiveActivity(entry)
             }.count
+            let label = loggedItems == 1 ? "item" : "items"
             return LiveActivityProgressSummary(
                 completed: loggedItems,
-                total: totalItems,
-                label: totalItems == 1 ? "item" : "items",
+                total: 0,
+                label: label,
                 supportsSetShortcut: supportsSetShortcut
             )
         }
 
+        let label = completedSets == 1 ? "set" : "sets"
         return LiveActivityProgressSummary(
             completed: completedSets,
-            total: totalSets,
-            label: totalSets == 1 ? "set" : "sets",
+            total: 0,
+            label: label,
             supportsSetShortcut: supportsSetShortcut
         )
     }
@@ -2252,8 +2283,8 @@ final class LiveWorkoutViewModel {
         return segments.prefix(3).joined(separator: " • ")
     }
 
-    private func liveActivityContentState(isPausedOverride: Bool? = nil) -> TraiWorkoutAttributes.ContentState {
-        // Live Activity focus is a presentation pointer; entries are added/logged, not completed one-by-one.
+    private func updateLiveActivity() {
+        // Track progression from logged data (or cardio completion), not the legacy set.completed flag.
         let currentEntry = liveActivityCurrentEntry()
         let progress = liveActivityProgress()
 
@@ -2261,26 +2292,38 @@ final class LiveWorkoutViewModel {
         let currentEquipment = currentEntry?.equipmentName
         let currentDetail = liveActivityCurrentDetail(for: currentEntry)
 
-        // Prefer the currently editable set so Add Set immediately moves the displayed target forward.
-        // Use both kg and lbs values to avoid rounding errors (200 lbs -> 199 bug).
-        let currentSet = currentEntry?.sets.last { !$0.isWarmup && hasLoggedSetData($0) }
-            ?? currentEntry?.sets.last { hasLoggedSetData($0) }
+        // Prefer the next planned working set so the activity reflects what the user is doing now.
+        // Use both kg and lbs values to avoid rounding errors (200 lbs → 199 bug)
+        let currentSet = currentEntry?.sets.first { !$0.isWarmup && !$0.completed && hasLoggedSetData($0) }
+            ?? currentEntry?.sets.last { !$0.isWarmup && $0.completed && hasLoggedSetData($0) }
+            ?? currentEntry?.sets.first { !$0.isWarmup && hasLoggedSetData($0) }
+            ?? currentEntry?.sets.last { $0.completed && hasLoggedSetData($0) }
+            ?? currentEntry?.sets.first { hasLoggedSetData($0) }
         let currentWeightKg = currentSet?.weightKg
         let currentWeightLbs = currentSet?.weightLbs
         let currentReps = currentSet?.reps
+        let currentWorkingSets = currentEntry?.sets.filter { !$0.isWarmup } ?? []
+        let loggedCurrentSets = currentWorkingSets.filter { $0.completed && hasLoggedSetData($0) }.count
+        let currentExerciseCompletedSets = currentEntry?.isStrength == true ? loggedCurrentSets : nil
+        let currentExerciseTotalSets = currentEntry?.isStrength == true
+            ? max(currentWorkingSets.count, loggedCurrentSets + 1, 1)
+            : nil
+
+        let liveActivityEntries = entries.filter(shouldCountEntryForLiveActivityProgress)
+        let currentExerciseIndex = liveActivityEntries.firstIndex { $0.id == currentEntry?.id }.map { $0 + 1 }
+        let exerciseTotal = liveActivityEntries.count
 
         // Calculate total volume in both units
         let totalVolumeKg = totalVolume
         let totalVolumeLbs = totalVolume * 2.20462
 
-        // "Next" advances focus only; it does not mark the current exercise complete.
+        // Find next exercise (first after current that isn't started yet)
         let currentIndex = entries.firstIndex { $0.id == currentEntry?.id } ?? -1
-        let nextAddedExercise = entries.dropFirst(currentIndex + 1)
-            .first?
+        let nextExercise = entries.dropFirst(currentIndex + 1)
+            .first { !isEntryStartedForLiveActivity($0) }?
             .exerciseName
-        let nextExercise = nextAddedExercise ?? upNextSuggestion?.exerciseName
 
-        return TraiWorkoutAttributes.ContentState(
+        liveActivityManager.updateActivity(
             elapsedSeconds: Int(elapsedTime),
             currentExercise: currentExercise,
             currentEquipment: currentEquipment,
@@ -2288,7 +2331,7 @@ final class LiveWorkoutViewModel {
             completedSets: completedSets,
             totalSets: totalSets,
             heartRate: currentHeartRate.map { Int($0) },
-            isPaused: isPausedOverride ?? !isTimerRunning,
+            isPaused: !isTimerRunning,
             currentWeightKg: currentWeightKg,
             currentWeightLbs: currentWeightLbs,
             currentReps: currentReps,
@@ -2300,12 +2343,11 @@ final class LiveWorkoutViewModel {
             progressTotal: progress.total,
             progressLabel: progress.label,
             supportsSetShortcut: progress.supportsSetShortcut,
-            supportsAdvanceShortcut: nextAddedExercise != nil
+            currentExerciseCompletedSets: currentExerciseCompletedSets,
+            currentExerciseTotalSets: currentExerciseTotalSets,
+            currentExerciseIndex: currentExerciseIndex,
+            exerciseTotal: exerciseTotal
         )
-    }
-
-    private func updateLiveActivity() {
-        liveActivityManager.updateActivity(state: liveActivityContentState())
     }
 }
 

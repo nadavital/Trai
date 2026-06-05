@@ -58,11 +58,9 @@ struct ProfileView: View {
     @AppStorage("profile_cached_owner_id") private var cachedOwnerProfileID = ""
     @AppStorage("profile_metrics_last_refresh_at") private var profileMetricsLastRefreshAt: Double = 0
     @AppStorage("profile_reminders_last_refresh_at") private var remindersCountLastRefreshAt: Double = 0
-    @AppStorage("account_setup_prompt_last_dismissed_at") private var accountSetupPromptLastDismissedAt: Double = 0
     private static let profileChatWindowDays = 90
     private static let profileMetricsStaleAfterSeconds: Double = 24 * 60 * 60
     private static let profileRemindersStaleAfterSeconds: Double = 24 * 60 * 60
-    private static let accountSetupPromptCooldownSeconds: Double = 14 * 24 * 60 * 60
     private static var profileHeavyMetricsDelayMilliseconds: Int {
         AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 4200 : 420
     }
@@ -169,21 +167,9 @@ struct ProfileView: View {
             activeWorkoutGoalContext: OnboardingWorkoutPlanUserContext.activeGoalContext(from: activeWorkoutGoalsForPlanSetup())
         )
     }
-    private var hasClaimableLocalProgress: Bool {
-        guard let profile else { return false }
-        return profile.hasWorkoutPlan
-            || !historicalWorkouts.isEmpty
-            || !loggedFoodEntries.isEmpty
-            || !loggedChatMessages.isEmpty
-            || latestWeightKg != nil
-            || customRemindersCount > 0
-    }
-
-    private var shouldShowAccountCompletionCard: Bool {
-        guard hasClaimableLocalProgress else { return false }
-        guard accountSessionService?.isAuthenticated != true else { return false }
-        let secondsSinceDismissal = Date().timeIntervalSince1970 - accountSetupPromptLastDismissedAt
-        return secondsSinceDismissal >= Self.accountSetupPromptCooldownSeconds
+    private var shouldShowAccountSignInCard: Bool {
+        guard accountSessionService != nil else { return false }
+        return accountSessionService?.isAuthenticated != true
     }
 
     private var shouldShowProUpsellCard: Bool {
@@ -197,8 +183,8 @@ struct ProfileView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     if let currentProfile {
-                        if shouldShowAccountCompletionCard {
-                            accountCompletionCard
+                        if shouldShowAccountSignInCard {
+                            accountSignInCard
                         }
                         headerCard(currentProfile)
                         planCard(currentProfile)
@@ -262,7 +248,7 @@ struct ProfileView: View {
                 }
             }
             .sheet(item: $presentedAccountSetupContext) { context in
-                AccountSetupView(context: context)
+                AccountSetupView(context: context, showsDismissButton: context != .secureExistingData)
                     .traiSheetBranding()
             }
             .alert(item: $workoutPlanSaveError) { error in
@@ -341,25 +327,23 @@ struct ProfileView: View {
         }
     }
 
-    private var accountCompletionCard: some View {
+    private var accountSignInCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Finish setting up your Trai account")
+            Text("Sign in to Trai")
                 .font(.traiHeadline(20))
 
-            HStack(spacing: 12) {
-                Button {
-                    presentedAccountSetupContext = .secureExistingData
-                } label: {
-                    Text("Set Up Account")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.traiPrimary(color: .accentColor, fullWidth: true))
+            Text("Trai accounts keep your plan, Pro access, AI features, and history connected.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-                Button("Not Now") {
-                    accountSetupPromptLastDismissedAt = Date().timeIntervalSince1970
-                }
-                .buttonStyle(.traiTertiary(size: .compact, width: 96, height: 44))
+            Button {
+                presentedAccountSetupContext = .secureExistingData
+            } label: {
+                Text("Sign In")
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.traiPrimary(color: .accentColor, fullWidth: true))
         }
         .padding(20)
         .traiCard(cornerRadius: 20, contentPadding: 0)
