@@ -332,7 +332,8 @@ struct MainTabView: View {
             .sheet(item: $presentedWorkout) { workout in
                 LiveWorkoutView(
                     workout: workout,
-                    finishOnPresentation: workoutIDToFinishOnPresentation == workout.id
+                    finishOnPresentation: workoutIDToFinishOnPresentation == workout.id,
+                    onCancel: clearActiveWorkoutPresentation
                 )
                     .traiSheetBranding()
             }
@@ -360,7 +361,7 @@ struct MainTabView: View {
                     .traiSheetBranding()
             }
             .sheet(item: $intentTriggeredWorkout) { workout in
-                LiveWorkoutView(workout: workout)
+                LiveWorkoutView(workout: workout, onCancel: clearActiveWorkoutPresentation)
                     .traiSheetBranding()
             }
             .onAppear {
@@ -548,6 +549,13 @@ struct MainTabView: View {
     private func selectTab(_ tab: AppTab) {
         _ = loadedTabs.insert(tab)
         selectedTabState = tab
+    }
+
+    private func clearActiveWorkoutPresentation() {
+        LiveWorkoutCancellation.cancelActiveWorkouts(in: modelContext, including: activeWorkout)
+        presentedWorkout = nil
+        intentTriggeredWorkout = nil
+        workoutIDToFinishOnPresentation = nil
     }
 
     // MARK: - App Intent Handling
