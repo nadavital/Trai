@@ -72,7 +72,7 @@ struct AddCustomExerciseSheet: View {
                 .padding(.vertical, 14)
             }
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle("New Item")
+            .navigationTitle("New Exercise")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -158,7 +158,7 @@ struct AddCustomExerciseSheet: View {
     private var activityGroupPickerContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text("Activity Group")
+                Text("Saved Groups")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
@@ -353,7 +353,7 @@ struct AddCustomExerciseSheet: View {
         collapsibleManualSection(
             isExpanded: $isTargetsExpanded,
             title: "Targets",
-            icon: resolvedExerciseCategory.iconName,
+            icon: "target",
             summary: selectedTargets.isEmpty ? "None selected" : selectedTargets.sorted().prefix(3).joined(separator: ", ")
         ) {
             targetPickerContent
@@ -374,8 +374,8 @@ struct AddCustomExerciseSheet: View {
     private var detailsDisclosure: some View {
         collapsibleManualSection(
             isExpanded: $isCategoryExpanded,
-            title: "Details",
-            icon: resolvedExerciseCategory.iconName,
+            title: "Activity Group",
+            icon: "tag.fill",
             summary: resolvedActivityTypeName
         ) {
             activityGroupPickerContent
@@ -595,7 +595,7 @@ struct AddCustomExerciseSheet: View {
         case .strength:
             options += ["Strength Training", "Accessory Work"]
         case .cardio:
-            options += ["Running", "Cycling", "Rowing", "Swimming"]
+            options += ["Steady Cardio", "Intervals", "Endurance", "Conditioning"]
         case .mobility, .flexibility:
             options += ["Mobility Flow", "Stretching", "Yoga"]
         case .recovery:
@@ -605,7 +605,7 @@ struct AddCustomExerciseSheet: View {
         case .skill:
             options += ["Skill Practice", "Technique Work"]
         case .sportPractice:
-            options += ["Basketball", "Tennis", "Pickleball", "Climbing"]
+            options += ["Sport Practice", "Court Session", "Field Session", "Skill Practice"]
         case .custom:
             options += ["Custom Activity"]
         }

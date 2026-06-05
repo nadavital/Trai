@@ -651,43 +651,15 @@ struct ProfileView: View {
             }
 
             if shouldShowProUpsellCard {
-                HStack {
-                    Button {
-                        proUpsellCoordinator?.present(source: .settings)
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "circle.hexagongrid.circle")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(TraiColors.brandAccent)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Unlock Trai Pro")
-                                    .font(.traiHeadline(15))
-                                    .foregroundStyle(.primary)
-
-                                Text("Coaching, food analysis, and personalized plans.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(TraiColors.brandAccent.opacity(0.08))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .stroke(TraiColors.brandAccent.opacity(0.10), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
+                ProUpsellInlineCard(
+                    source: .settings,
+                    title: "Unlock Trai Pro",
+                    message: "Coaching, food analysis, and personalized plans.",
+                    actionTitle: "Unlock Trai Pro",
+                    showsActionButton: false,
+                    showsShadow: false
+                ) {
+                    proUpsellCoordinator?.present(source: .settings)
                 }
                 .padding(.horizontal, 6)
             }

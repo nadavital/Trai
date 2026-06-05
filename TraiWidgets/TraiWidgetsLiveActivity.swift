@@ -33,60 +33,47 @@ private enum LiveActivityTheme {
     }
 }
 
-private enum LiveActivityFormat {
-    static func shortElapsed(_ seconds: Int) -> String {
-        let safeSeconds = max(0, seconds)
-        let hours = safeSeconds / 3600
-        let minutes = (safeSeconds % 3600) / 60
-
-        if hours > 0 {
-            return "\(hours)h \(minutes)m"
+private extension TraiWorkoutAttributes.ContentState {
+    var liveActivityStatusSummary: String {
+        if isPaused {
+            return "Paused"
         }
-        return "\(max(minutes, 1))m"
-    }
-
-    static func clockElapsed(_ seconds: Int) -> String {
-        let safeSeconds = max(0, seconds)
-        let hours = safeSeconds / 3600
-        let minutes = (safeSeconds % 3600) / 60
-        let seconds = safeSeconds % 60
-
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        if let currentSetProgressDisplay {
+            return currentSetProgressDisplay
         }
-        return String(format: "%02d:%02d", minutes, seconds)
+        if let totalSetsSummaryDisplay {
+            return totalSetsSummaryDisplay
+        }
+        if let exerciseTotalSummaryDisplay {
+            return exerciseTotalSummaryDisplay
+        }
+        return progressCountDisplay
     }
-}
 
-private struct LiveActivityElapsedText: View {
-    let state: TraiWorkoutAttributes.ContentState
-    let font: Font
-
-    var body: some View {
-        Text(LiveActivityFormat.clockElapsed(state.elapsedSeconds))
-        .font(font)
-        .monospacedDigit()
-        .foregroundStyle(LiveActivityTheme.textPrimary)
-        .shadow(color: .black.opacity(0.28), radius: 2, x: 0, y: 1)
-        .lineLimit(1)
-        .minimumScaleFactor(0.58)
-        .contentTransition(.numericText())
+    var liveActivityShortStatus: String {
+        if isPaused {
+            return "Paused"
+        }
+        if let currentSetOrdinalDisplay {
+            return currentSetOrdinalDisplay
+        }
+        if let totalSetsSummaryDisplay {
+            return totalSetsSummaryDisplay
+        }
+        if let exerciseTotalSummaryDisplay {
+            return exerciseTotalSummaryDisplay
+        }
+        return progressCountDisplay
     }
-}
 
-private struct LiveActivityLockElapsedText: View {
-    let state: TraiWorkoutAttributes.ContentState
-    let font: Font
-
-    var body: some View {
-        Text(LiveActivityFormat.clockElapsed(state.elapsedSeconds))
-        .font(font)
-        .monospacedDigit()
-        .foregroundStyle(LiveActivityTheme.textPrimary)
-        .shadow(color: .black.opacity(0.28), radius: 2, x: 0, y: 1)
-        .lineLimit(1)
-        .minimumScaleFactor(0.65)
-        .contentTransition(.numericText())
+    var liveActivityCompactStatus: String {
+        if let currentSetOrdinalDisplay {
+            return currentSetOrdinalDisplay.replacingOccurrences(of: "Set ", with: "S")
+        }
+        if progressTotalValue > 0 || progressCompletedValue > 0 {
+            return progressCountDisplay
+        }
+        return isPaused ? "Pause" : "Live"
     }
 }
 
@@ -279,9 +266,8 @@ private struct LockScreenWorkoutView: View {
                         .minimumScaleFactor(0.72)
                         .layoutPriority(1)
 
-                    Text(context.state.isPaused ? "Paused" : LiveActivityFormat.shortElapsed(context.state.elapsedSeconds))
+                    Text(context.state.liveActivityShortStatus)
                         .font(.caption2.weight(.semibold))
-                        .monospacedDigit()
                         .foregroundStyle(LiveActivityTheme.textSecondary)
                         .lineLimit(1)
                 }
@@ -313,13 +299,20 @@ private struct LockScreenWorkoutView: View {
                         .tint(LiveActivityTheme.controlAccent)
                     }
 
-                    if let nextExercise = context.state.nextExercise {
-                        Text("Next \(compactExerciseName(nextExercise))")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(LiveActivityTheme.textSecondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    if context.state.nextExercise != nil {
+                        Button(intent: AdvanceExerciseIntent()) {
+                            Label("Next", systemImage: "forward.fill")
+                                .font(.caption2.weight(.semibold))
+                                .labelStyle(.titleAndIcon)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.72)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.small)
+                        .tint(LiveActivityTheme.muted)
+                        .accessibilityLabel(context.state.nextExercise.map { "Next exercise, \($0)" } ?? "Next exercise")
                     }
                 }
             }
@@ -345,7 +338,7 @@ private struct LockScreenWorkoutView: View {
         case let (nil, work?):
             return work
         case (nil, nil):
-            return context.state.totalSetsSummaryDisplay ?? LiveActivityFormat.shortElapsed(context.state.elapsedSeconds)
+            return context.state.liveActivityStatusSummary
         }
     }
 
@@ -383,7 +376,7 @@ private struct LockScreenWorkoutView: View {
                     Spacer(minLength: 8)
 
                     VStack(alignment: .trailing, spacing: 6) {
-                        LiveActivityElapsedBadge(state: context.state, isCompact: isMediumFamily)
+                        LiveActivityStatusBadge(state: context.state, isCompact: isMediumFamily)
                         LiveActivityPauseControl(state: context.state, isCompact: true)
                     }
                 }
@@ -440,16 +433,18 @@ private extension View {
     }
 }
 
-private struct LiveActivityElapsedBadge: View {
+private struct LiveActivityStatusBadge: View {
     let state: TraiWorkoutAttributes.ContentState
     var isCompact = false
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
-            LiveActivityLockElapsedText(
-                state: state,
-                font: .system(isCompact ? .headline : .title3, design: .rounded, weight: .semibold)
-            )
+            Text(state.liveActivityStatusSummary)
+                .font(.system(isCompact ? .subheadline : .headline, design: .rounded, weight: .semibold))
+                .foregroundStyle(LiveActivityTheme.textPrimary)
+                .shadow(color: .black.opacity(0.28), radius: 2, x: 0, y: 1)
+                .lineLimit(1)
+                .minimumScaleFactor(0.62)
 
             if state.isPaused {
                 Text("Paused")
@@ -458,7 +453,7 @@ private struct LiveActivityElapsedBadge: View {
                     .lineLimit(1)
             }
         }
-        .frame(width: isCompact ? 104 : 120, alignment: .trailing)
+        .frame(width: isCompact ? 108 : 124, alignment: .trailing)
         .clipped()
         .layoutPriority(2)
     }
@@ -586,11 +581,13 @@ private struct ExpandedTrailingView: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 5) {
-            LiveActivityElapsedText(
-                state: context.state,
-                font: .system(.caption, design: .rounded, weight: .semibold)
-            )
-            .frame(width: 54, alignment: .trailing)
+            Text(context.state.liveActivityShortStatus)
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(LiveActivityTheme.textPrimary)
+                .shadow(color: .black.opacity(0.28), radius: 2, x: 0, y: 1)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(width: 64, alignment: .trailing)
 
             LiveActivityPauseControl(state: context.state, isCompact: true)
         }
@@ -669,7 +666,7 @@ private struct ExpandedCurrentExerciseView: View {
         case let (nil, work?):
             return work
         case (nil, nil):
-            return context.state.totalSetsSummaryDisplay ?? LiveActivityFormat.shortElapsed(context.state.elapsedSeconds)
+            return context.state.liveActivityStatusSummary
         }
     }
 }
@@ -799,11 +796,12 @@ private struct CompactTrailingView: View {
                 .frame(width: 18, alignment: .center)
                 .accessibilityLabel(statusText)
         } else {
-            LiveActivityElapsedText(
-                state: context.state,
-                font: .system(.caption2, design: .rounded, weight: .bold)
-            )
-            .frame(width: 24, alignment: .center)
+            Text(context.state.liveActivityCompactStatus)
+                .font(.system(.caption2, design: .rounded, weight: .bold))
+                .foregroundStyle(LiveActivityTheme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(width: 24, alignment: .center)
         }
     }
 }

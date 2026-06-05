@@ -156,14 +156,16 @@ final class LiveActivityManager {
 
     /// End the Live Activity
     func endActivity(showSummary: Bool = true) {
-        guard let activity = currentActivity else { return }
+        let activeActivity = currentActivity
+        let dismissalPolicy: ActivityUIDismissalPolicy = showSummary ? .after(.now + 5) : .immediate
 
         Task {
-            if showSummary {
-                // Show final state briefly before dismissing
-                await activity.end(nil, dismissalPolicy: .after(.now + 5))
-            } else {
-                await activity.end(nil, dismissalPolicy: .immediate)
+            if let activeActivity {
+                await activeActivity.end(nil, dismissalPolicy: dismissalPolicy)
+            }
+
+            for activity in Activity<TraiWorkoutAttributes>.activities where activity.id != activeActivity?.id {
+                await activity.end(nil, dismissalPolicy: dismissalPolicy)
             }
             currentActivity = nil
         }

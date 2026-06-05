@@ -60,7 +60,7 @@ struct ExerciseListView: View {
         targetMuscleGroups: [Exercise.MuscleGroup] = [],
         targetActivityCategories: [Exercise.Category] = [],
         targetActivityTypes: [String] = [],
-        title: String = "Select Item",
+        title: String = "Select Exercise",
         onSelect: @escaping (Exercise) -> Void
     ) {
         self.targetMuscleGroups = targetMuscleGroups
@@ -82,7 +82,7 @@ struct ExerciseListView: View {
         self.targetMuscleGroups = []
         self.targetActivityCategories = []
         self.targetActivityTypes = []
-        self.title = "Select Item"
+        self.title = "Select Exercise"
         self.onSelect = nil
         self._selectedExercise = selectedExercise
     }
@@ -348,10 +348,7 @@ struct ExerciseListView: View {
     private func customOptionName(for filteredExercises: [Exercise]) -> String? {
         guard filteredExercises.isEmpty else { return nil }
         let searched = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !searched.isEmpty {
-            return searched
-        }
-        return quickAddActivityTypeName
+        return searched.isEmpty ? nil : searched
     }
 
     private func bestActivityTypePriority(for exercise: Exercise, priorities: [String: Int]) -> Int {
@@ -618,7 +615,7 @@ struct ExerciseListView: View {
             }
             .sheet(isPresented: $showingAddCustom) {
                 AddCustomExerciseSheet(
-                    initialName: customExerciseName.isEmpty ? searchText : customExerciseName,
+                    initialName: customExerciseName,
                     onSave: { name, activityTypeName, activityAliases, muscleGroup, category, secondaryMuscles, targetTags, trackingFields in
                         queueCustomExerciseCreation(
                             name: name,
