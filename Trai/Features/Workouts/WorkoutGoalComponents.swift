@@ -49,6 +49,18 @@ struct WorkoutGoalInsight: Identifiable {
     }
 }
 
+extension WorkoutGoalInsight {
+    var goalCardSubtitle: String {
+        if let recurringProgress {
+            return recurringProgress.cardSubtitle
+        }
+        if goal.status == .completed {
+            return "Completed"
+        }
+        return progressText
+    }
+}
+
 struct WorkoutGoalRecurringProgress {
     let periodUnit: WorkoutGoal.PeriodUnit
     let periods: [WorkoutGoalPeriodSnapshot]
@@ -1737,19 +1749,8 @@ struct WorkoutGoalsOverviewSection: View {
 
     @ViewBuilder
     var body: some View {
-        if !canCreateGoalsWithTrai {
-            VStack(spacing: 12) {
-                overviewContent
-                    .traiCard(glow: .activity)
-
-                if !insights.isEmpty || completedGoalCount > 0 {
-                    lockedUpsellCard
-                }
-            }
-        } else {
-            overviewContent
-                .traiCard(glow: .activity)
-        }
+        overviewContent
+            .traiCard(glow: .activity)
     }
 
     private var overviewContent: some View {
@@ -1765,7 +1766,9 @@ struct WorkoutGoalsOverviewSection: View {
                 celebratedGoalCard(celebratedGoal)
             }
 
-            if insights.isEmpty && completedGoalCount == 0 {
+            if !canCreateGoalsWithTrai {
+                lockedGoalsState
+            } else if insights.isEmpty && completedGoalCount == 0 {
                 emptyStateCard
             } else {
                 if !insights.isEmpty || completedGoalCount > 0 {
@@ -1796,11 +1799,11 @@ struct WorkoutGoalsOverviewSection: View {
                     .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(canCreateGoalsWithTrai ? "Set goals with Trai" : "Unlock goal coaching")
+                    Text(canCreateGoalsWithTrai ? "Set goals with Trai" : "Goal coaching is locked")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
 
-                    Text(canCreateGoalsWithTrai ? "Turn a route, lift, or routine into something trackable." : "Trai Pro can turn training into trackable goals.")
+                    Text(canCreateGoalsWithTrai ? "Turn a route, lift, or routine into something trackable." : "Unlock Pro from the banner above to track goals and workout signals.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)
@@ -1815,12 +1818,42 @@ struct WorkoutGoalsOverviewSection: View {
         .buttonStyle(TraiPressStyle())
     }
 
-    private var lockedUpsellCard: some View {
-        ProUpsellInlineCard(
-            source: .workoutPlan,
-            actionTitle: "Unlock Trai Pro",
-            action: onUnlockPro
-        )
+    private var lockedGoalsState: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            emptyStateCard
+
+            Button(action: onUnlockPro) {
+                HStack(spacing: 12) {
+                    Image(systemName: "circle.hexagongrid.circle.fill")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(TraiColors.brandAccent)
+                        .frame(width: 34, height: 34)
+                        .background(TraiColors.brandAccent.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Get Trai Pro")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+
+                        Text("Unlock workout signals, goal tracking, and adaptive coaching.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(12)
+                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+                .contentShape(RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(TraiPressStyle())
+        }
     }
 
     private var goalsCarousel: some View {
@@ -1858,10 +1891,16 @@ struct WorkoutGoalsOverviewSection: View {
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(height: 34, alignment: .top)
+
+            Text(insight.goalCardSubtitle)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(.horizontal, 10)
-        .frame(height: 126)
+        .frame(height: 140)
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
         .contentShape(RoundedRectangle(cornerRadius: 14))
         .onTapGesture {
@@ -2687,6 +2726,14 @@ struct WorkoutGoalDetailSheet: View {
         return recurringCurrentValueText(recurringProgress, includesTitle: true)
     }
 
+    private var recurringPeriodStatusText: String? {
+        guard let recurringProgress = insight.recurringProgress else { return nil }
+        if recurringProgress.currentPeriod?.isTargetMet == true {
+            return "\(recurringProgress.currentPeriodTitle) complete"
+        }
+        return recurringProgress.currentPeriodTitle
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -2787,6 +2834,11 @@ struct WorkoutGoalDetailSheet: View {
                     HStack(spacing: 6) {
                         if goal.status == .completed {
                             goalStatusPill(goal)
+                        } else if let recurringPeriodStatusText {
+                            goalPeriodStatusPill(
+                                recurringPeriodStatusText,
+                                isComplete: insight.recurringProgress?.currentPeriod?.isTargetMet == true
+                            )
                         }
                         Text(goal.scopeSummary)
                             .font(.caption.weight(.medium))
@@ -2945,6 +2997,18 @@ struct WorkoutGoalDetailSheet: View {
                 in: Capsule()
             )
             .foregroundStyle(goal.status == .completed ? .green : Color.accentColor)
+    }
+
+    private func goalPeriodStatusPill(_ text: String, isComplete: Bool) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                (isComplete ? Color.green.opacity(0.16) : TraiColors.flame.opacity(0.14)),
+                in: Capsule()
+            )
+            .foregroundStyle(isComplete ? .green : TraiColors.flame)
     }
 
     private var sessionsSection: some View {
