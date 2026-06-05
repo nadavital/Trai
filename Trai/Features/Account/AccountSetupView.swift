@@ -53,6 +53,7 @@ enum AccountSetupContext: String, Identifiable {
 struct AccountSetupView: View {
     let context: AccountSetupContext
     var showsDismissButton = true
+    var dismissesWhenAuthenticated = true
 
     @Environment(\.dismiss) private var dismiss
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
@@ -90,7 +91,7 @@ struct AccountSetupView: View {
             }
         }
         .onChange(of: accountSessionService?.isAuthenticated ?? false) { _, isAuthenticated in
-            guard isAuthenticated else { return }
+            guard dismissesWhenAuthenticated, isAuthenticated else { return }
             dismiss()
         }
         .traiSheetBranding()

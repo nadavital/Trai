@@ -87,11 +87,17 @@ private struct ProUpsellPresenterModifier: ViewModifier {
                 proUpsellCoordinator?.unregisterPresenter(id: presenterID)
             }
             .sheet(item: sheetRequestBinding) { request in
-                ProUpsellView(source: request.source)
+                ProUpsellGateView(
+                    request: request,
+                    proUpsellCoordinator: proUpsellCoordinator
+                )
                     .traiSheetBranding()
             }
             .fullScreenCover(item: fullScreenRequestBinding) { request in
-                ProUpsellView(source: request.source)
+                ProUpsellGateView(
+                    request: request,
+                    proUpsellCoordinator: proUpsellCoordinator
+                )
                     .traiSheetBranding()
             }
     }
@@ -137,6 +143,47 @@ private struct ProUpsellPresenterModifier: ViewModifier {
     }
 }
 
+private struct ProUpsellGateView: View {
+    let request: ProUpsellRequest
+    let proUpsellCoordinator: ProUpsellCoordinator?
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+
+    private var requiresAccountSignIn: Bool {
+        accountSessionService?.isAuthenticated == false
+    }
+
+    var body: some View {
+        Group {
+            if requiresAccountSignIn {
+                AccountSetupView(
+                    context: request.source.accountSetupContext,
+                    dismissesWhenAuthenticated: false
+                )
+            } else {
+                ProUpsellView(source: request.source)
+            }
+        }
+        .task {
+            dismissIfAccessGranted()
+        }
+        .onChange(of: accountSessionService?.isAuthenticated ?? false) {
+            dismissIfAccessGranted()
+        }
+        .onChange(of: monetizationService?.canAccessAIFeatures ?? false) {
+            dismissIfAccessGranted()
+        }
+    }
+
+    private func dismissIfAccessGranted() {
+        guard monetizationService?.canAccessAIFeatures == true else { return }
+        proUpsellCoordinator?.dismiss(requestID: request.id)
+        dismiss()
+    }
+}
+
 extension View {
     func proUpsellPresenter() -> some View {
         modifier(ProUpsellPresenterModifier())
@@ -144,6 +191,15 @@ extension View {
 }
 
 extension ProUpsellSource {
+    var accountSetupContext: AccountSetupContext {
+        switch self {
+        case .settings:
+            .billing
+        case .chat, .foodAnalysis, .nutritionPlan, .workoutPlan, .workoutReview, .exerciseAnalysis, .reminders:
+            .aiFeatures
+        }
+    }
+
     var inlineTitle: String {
         offerContent.inlineTitle
     }
