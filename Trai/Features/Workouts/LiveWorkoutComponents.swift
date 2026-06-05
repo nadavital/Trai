@@ -189,7 +189,7 @@ struct TimerStat: View {
     }
 }
 
-// MARK: - Add Item Button
+// MARK: - Add Exercise Button
 
 struct AddExerciseButton: View {
     let action: () -> Void
@@ -199,7 +199,7 @@ struct AddExerciseButton: View {
             HStack {
                 Image(systemName: "plus.circle.fill")
                     .font(.title2)
-                Text("Add Item")
+                Text("Add Exercise")
                     .font(.headline)
             }
             .frame(maxWidth: .infinity)
@@ -213,10 +213,50 @@ struct AddExerciseButton: View {
 struct WorkoutBottomBar: View {
     let onAddExercise: () -> Void
     let onAskTrai: () -> Void
-    var addLabel: String = "Add Item"
+    var addLabel: String = "Add Exercise"
     var addSystemImage: String = "plus.circle.fill"
 
+    @ViewBuilder
     var body: some View {
+        if #available(iOS 26.0, *) {
+            glassBody
+        } else {
+            fallbackBody
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private var glassBody: some View {
+        GlassEffectContainer(spacing: 14) {
+            HStack(spacing: 12) {
+                tintedGlassButton(
+                    title: "Ask Trai",
+                    systemImage: "circle.hexagongrid.circle",
+                    tint: TraiColors.brandAccent,
+                    foreground: TraiColors.brandAccent,
+                    tintOpacity: 0.24,
+                    strokeOpacity: 0.32,
+                    action: onAskTrai
+                )
+
+                tintedGlassButton(
+                    title: addLabel,
+                    systemImage: addSystemImage,
+                    tint: .primary,
+                    foreground: .primary,
+                    tintOpacity: 0.10,
+                    strokeOpacity: 0.14,
+                    action: onAddExercise
+                )
+                .accessibilityIdentifier("liveWorkoutAddExerciseButton")
+            }
+        }
+        .accessibilityIdentifier("liveWorkoutBottomBar")
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
+    private var fallbackBody: some View {
         HStack(spacing: 16) {
             Button(action: onAskTrai) {
                 HStack {
@@ -225,7 +265,7 @@ struct WorkoutBottomBar: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.traiSecondary())
+            .buttonStyle(.traiSecondary(color: TraiColors.brandAccent))
 
             Button(action: onAddExercise) {
                 HStack {
@@ -234,12 +274,41 @@ struct WorkoutBottomBar: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .accessibilityLabel("Add Exercise")
             .accessibilityIdentifier("liveWorkoutAddExerciseButton")
-            .buttonStyle(.traiTertiary())
+            .buttonStyle(.traiTertiary(color: .accentColor))
         }
         .accessibilityIdentifier("liveWorkoutBottomBar")
         .padding()
         .background(.ultraThinMaterial)
+    }
+
+    @available(iOS 26.0, *)
+    private func tintedGlassButton(
+        title: String,
+        systemImage: String,
+        tint: Color,
+        foreground: Color,
+        tintOpacity: Double,
+        strokeOpacity: Double,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .labelStyle(.titleAndIcon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(foreground)
+                .frame(maxWidth: .infinity)
+                .frame(height: 40)
+                .glassEffect(
+                    .regular.tint(tint.opacity(tintOpacity)).interactive(),
+                    in: .capsule
+                )
+                .overlay {
+                    Capsule()
+                        .strokeBorder(tint.opacity(strokeOpacity), lineWidth: 1)
+                }
+        }
+        .controlSize(.regular)
+        .buttonStyle(.plain)
     }
 }

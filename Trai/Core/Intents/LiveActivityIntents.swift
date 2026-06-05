@@ -17,5 +17,7 @@ enum LiveActivityIntentKeys {
     static let addSetTimestamp = SharedStorageKeys.AppGroup.liveActivityAddSetTimestamp
     static let togglePauseTimestamp = SharedStorageKeys.AppGroup.liveActivityTogglePauseTimestamp
     static let advanceExerciseTimestamp = SharedStorageKeys.AppGroup.liveActivityAdvanceExerciseTimestamp
-    static let clearTimestamp = SharedStorageKeys.AppGroup.liveActivityClearTimestamp
+    static let addSetTimestamps = SharedStorageKeys.AppGroup.liveActivityAddSetTimestamps
+    static let togglePauseTimestamps = SharedStorageKeys.AppGroup.liveActivityTogglePauseTimestamps
+    static let advanceExerciseTimestamps = SharedStorageKeys.AppGroup.liveActivityAdvanceExerciseTimestamps
 }

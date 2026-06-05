@@ -38,63 +38,6 @@ struct OpenURLIntent: AppIntent {
     }
 }
 
-// MARK: - Live Activity Intents
-
-/// Intent for adding a set to the current strength item from Live Activity
-/// Uses App Groups to communicate with the main app
-struct AddSetIntent: LiveActivityIntent {
-    static var title: LocalizedStringResource = "Add Set"
-    static var description = IntentDescription("Add a set to the current strength item")
-    static var openAppWhenRun: Bool = true
-
-    func perform() async throws -> some IntentResult {
-        // Use App Groups UserDefaults to signal the action
-        let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName)
-        defaults?.set(Date().timeIntervalSince1970, forKey: SharedStorageKeys.AppGroup.liveActivityAddSetTimestamp)
-        return .result()
-    }
-}
-
-/// Intent for toggling workout pause state from Live Activity
-struct TogglePauseIntent: LiveActivityIntent {
-    static var title: LocalizedStringResource = "Toggle Pause"
-    static var description = IntentDescription("Pause or resume the current workout")
-    static var openAppWhenRun: Bool = true
-
-    func perform() async throws -> some IntentResult {
-        // Use App Groups UserDefaults to signal the action
-        let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName)
-        defaults?.set(Date().timeIntervalSince1970, forKey: SharedStorageKeys.AppGroup.liveActivityTogglePauseTimestamp)
-        return .result()
-    }
-}
-
-/// Intent for moving the Live Activity to the next workout item.
-struct AdvanceExerciseIntent: LiveActivityIntent {
-    static var title: LocalizedStringResource = "Next Exercise"
-    static var description = IntentDescription("Move the Live Activity to the next workout item")
-    static var openAppWhenRun: Bool = true
-
-    func perform() async throws -> some IntentResult {
-        let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName)
-        defaults?.set(Date().timeIntervalSince1970, forKey: SharedStorageKeys.AppGroup.liveActivityAdvanceExerciseTimestamp)
-        return .result()
-    }
-}
-
-/// Intent for clearing the current Live Activity without deleting the workout.
-struct ClearLiveActivityIntent: LiveActivityIntent {
-    static var title: LocalizedStringResource = "Clear Live Activity"
-    static var description = IntentDescription("Clear the workout Live Activity")
-    static var openAppWhenRun: Bool = true
-
-    func perform() async throws -> some IntentResult {
-        let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName)
-        defaults?.set(Date().timeIntervalSince1970, forKey: SharedStorageKeys.AppGroup.liveActivityClearTimestamp)
-        return .result()
-    }
-}
-
 // MARK: - Quick Food Types
 
 enum QuickFoodType: String, AppEnum, CaseIterable {

@@ -25,7 +25,7 @@ enum AccountSetupContext: String, Identifiable {
     var title: String {
         switch self {
         case .secureExistingData:
-            "Finish setting up your Trai account"
+            "Sign in to Trai"
         case .billing:
             "Sign in before subscribing"
         case .restorePurchases:
@@ -38,7 +38,7 @@ enum AccountSetupContext: String, Identifiable {
     var message: String? {
         switch self {
         case .secureExistingData:
-            nil
+            "Use Sign in with Apple to keep your plan, Pro access, AI features, and history connected."
         case .billing:
             "Connect your Trai account before starting a subscription."
         case .restorePurchases:
@@ -57,7 +57,6 @@ struct AccountSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(AppAccountService.self) private var appAccountService: AppAccountService?
-    @AppStorage("account_setup_prompt_last_dismissed_at") private var accountSetupPromptLastDismissedAt: Double = 0
 
     var body: some View {
         NavigationStack {
@@ -81,10 +80,10 @@ struct AccountSetupView: View {
             .padding(.top, 20)
             .padding(.bottom, 28)
             .toolbar {
-                if showsDismissButton {
+                if showsDismissButton && context != .secureExistingData {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Not Now", systemImage: "xmark") {
-                            handleDismiss()
+                            dismiss()
                         }
                     }
                 }
@@ -116,13 +115,6 @@ struct AccountSetupView: View {
         case .failure(let error):
             accountSessionService.handleAuthorizationFailure(error)
         }
-    }
-
-    private func handleDismiss() {
-        if context == .secureExistingData {
-            accountSetupPromptLastDismissedAt = Date().timeIntervalSince1970
-        }
-        dismiss()
     }
 
     private func switchToRecommendedBackend() {

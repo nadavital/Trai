@@ -121,7 +121,7 @@ struct CustomExercisesView: View {
                 description: Text("Exercises and activities you create will appear here")
             )
 
-            Button("Add Item", systemImage: "plus") {
+            Button("Add Exercise", systemImage: "plus") {
                 showingAddCustomExercise = true
             }
             .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: false))

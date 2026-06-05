@@ -130,7 +130,7 @@ struct LiveWorkoutDetailSheet: View {
     }
 
     private var addButtonLabel: String {
-        usesFlexibleSessionPresentation ? "Add Activity" : "Add Item"
+        usesFlexibleSessionPresentation ? "Add Activity" : "Add Exercise"
     }
 
     private var activitySuggestions: [String] {

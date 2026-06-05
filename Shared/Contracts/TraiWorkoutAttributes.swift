@@ -33,7 +33,10 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         let progressTotal: Int?
         let progressLabel: String?
         let supportsSetShortcut: Bool?
-        let supportsAdvanceShortcut: Bool?
+        let currentExerciseCompletedSets: Int?
+        let currentExerciseTotalSets: Int?
+        let currentExerciseIndex: Int?
+        let exerciseTotal: Int?
 
         init(
             elapsedSeconds: Int,
@@ -55,7 +58,10 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             progressTotal: Int? = nil,
             progressLabel: String? = nil,
             supportsSetShortcut: Bool = true,
-            supportsAdvanceShortcut: Bool? = nil
+            currentExerciseCompletedSets: Int? = nil,
+            currentExerciseTotalSets: Int? = nil,
+            currentExerciseIndex: Int? = nil,
+            exerciseTotal: Int? = nil
         ) {
             self.elapsedSeconds = elapsedSeconds
             self.currentExercise = currentExercise
@@ -76,7 +82,10 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             self.progressTotal = progressTotal
             self.progressLabel = progressLabel
             self.supportsSetShortcut = supportsSetShortcut
-            self.supportsAdvanceShortcut = supportsAdvanceShortcut
+            self.currentExerciseCompletedSets = currentExerciseCompletedSets
+            self.currentExerciseTotalSets = currentExerciseTotalSets
+            self.currentExerciseIndex = currentExerciseIndex
+            self.exerciseTotal = exerciseTotal
         }
 
         var formattedTime: String {
@@ -95,6 +104,10 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             return Double(progressCompletedValue) / Double(progressTotalValue)
         }
 
+        var hasProgressTarget: Bool {
+            progressTotalValue > 0
+        }
+
         var setsDisplay: String {
             progressDisplay
         }
@@ -108,15 +121,21 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         }
 
         var progressCountDisplay: String {
-            guard progressTotalValue > 0 else { return "Live" }
+            guard progressTotalValue > 0 else {
+                guard progressCompletedValue > 0 else { return "Live" }
+                return "\(progressCompletedValue)"
+            }
             return "\(progressCompletedValue)/\(progressTotalValue)"
         }
 
         var progressDisplay: String {
             let total = progressTotalValue
-            guard total > 0 else { return "Live workout" }
             let baseLabel = progressLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
             let label = (baseLabel?.isEmpty == false ? baseLabel : "sets") ?? "sets"
+            guard total > 0 else {
+                guard progressCompletedValue > 0 else { return "Live workout" }
+                return "\(progressCompletedValue) \(label)"
+            }
             return "\(progressCompletedValue)/\(total) \(label)"
         }
 
@@ -124,8 +143,33 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             supportsSetShortcut ?? true
         }
 
-        var canUseAdvanceShortcut: Bool {
-            supportsAdvanceShortcut ?? (nextExercise != nil)
+        var currentSetOrdinalDisplay: String? {
+            guard currentExerciseTotalSets != nil || currentExerciseCompletedSets != nil else { return nil }
+            let total = max(currentExerciseTotalSets ?? 0, 1)
+            let completed = max(0, currentExerciseCompletedSets ?? 0)
+            return "Set \(min(completed + 1, total))"
+        }
+
+        var currentSetProgressDisplay: String? {
+            guard currentExerciseTotalSets != nil || currentExerciseCompletedSets != nil else { return nil }
+            let total = max(currentExerciseTotalSets ?? 0, 1)
+            let completed = max(0, currentExerciseCompletedSets ?? 0)
+            return "Set \(min(completed + 1, total)) of \(total)"
+        }
+
+        var currentExerciseTargetSetsDisplay: String? {
+            guard let total = currentExerciseTotalSets, total > 0 else { return nil }
+            return "\(total) \(total == 1 ? "set" : "sets")"
+        }
+
+        var totalSetsSummaryDisplay: String? {
+            guard totalSets > 0 else { return nil }
+            return "\(totalSets) \(totalSets == 1 ? "set" : "sets")"
+        }
+
+        var exerciseTotalSummaryDisplay: String? {
+            guard let total = exerciseTotal, total > 0 else { return nil }
+            return "\(total) \(total == 1 ? "exercise" : "exercises")"
         }
 
         var volumeDisplay: String? {
@@ -158,6 +202,25 @@ struct TraiWorkoutAttributes: ActivityAttributes {
             }
             guard let weight = displayWeight, weight > 0 else { return nil }
             return "\(Int(weight.rounded()))\(unit) \u{00D7} \(reps)"
+        }
+
+        var currentWeightDisplay: String? {
+            let displayWeight: Double?
+            let unit: String
+            if usesMetricWeight {
+                displayWeight = currentWeightKg
+                unit = "kg"
+            } else {
+                displayWeight = currentWeightLbs ?? currentWeightKg.map { $0 * 2.20462 }
+                unit = "lbs"
+            }
+            guard let weight = displayWeight, weight > 0 else { return nil }
+            return "\(Int(weight.rounded()))\(unit)"
+        }
+
+        var currentRepsDisplay: String? {
+            guard let reps = currentReps else { return nil }
+            return "\(reps) reps"
         }
 
         var currentWorkDisplay: String? {

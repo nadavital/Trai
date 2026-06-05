@@ -30,8 +30,7 @@ final class LiveActivityManager {
     func startActivity(
         workoutName: String,
         targetMuscles: [String],
-        startedAt: Date,
-        initialState: TraiWorkoutAttributes.ContentState? = nil
+        startedAt: Date
     ) {
         // Guard: Don't start if already have an active activity
         guard currentActivity == nil else {
@@ -45,13 +44,27 @@ final class LiveActivityManager {
             return
         }
 
+        let staleActivities = Activity<TraiWorkoutAttributes>.activities
+        if let matchingActivity = staleActivities.first(where: { activity in
+            activity.attributes.workoutName == workoutName
+                && abs(activity.attributes.startedAt.timeIntervalSince(startedAt)) < 2
+        }) {
+            currentActivity = matchingActivity
+            Task {
+                for activity in staleActivities where activity.id != matchingActivity.id {
+                    await activity.end(nil, dismissalPolicy: .immediate)
+                }
+            }
+            return
+        }
+
         let attributes = TraiWorkoutAttributes(
             workoutName: workoutName,
             targetMuscles: targetMuscles,
             startedAt: startedAt
         )
 
-        let state = initialState ?? TraiWorkoutAttributes.ContentState(
+        let initialState = TraiWorkoutAttributes.ContentState(
             elapsedSeconds: 0,
             currentExercise: nil,
             completedSets: 0,
@@ -61,7 +74,7 @@ final class LiveActivityManager {
             supportsSetShortcut: false
         )
 
-        let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(60))
+        let content = ActivityContent(state: initialState, staleDate: Date().addingTimeInterval(60))
 
         do {
             currentActivity = try Activity.request(
@@ -70,6 +83,11 @@ final class LiveActivityManager {
                 pushType: nil
             )
             print("Live Activity started: \(currentActivity?.id ?? "unknown")")
+            Task {
+                for activity in staleActivities {
+                    await activity.end(nil, dismissalPolicy: .immediate)
+                }
+            }
         } catch {
             print("Failed to start Live Activity: \(error)")
         }
@@ -96,8 +114,13 @@ final class LiveActivityManager {
         progressTotal: Int? = nil,
         progressLabel: String? = nil,
         supportsSetShortcut: Bool = true,
-        supportsAdvanceShortcut: Bool? = nil
+        currentExerciseCompletedSets: Int? = nil,
+        currentExerciseTotalSets: Int? = nil,
+        currentExerciseIndex: Int? = nil,
+        exerciseTotal: Int? = nil
     ) {
+        guard let activity = currentActivity else { return }
+
         let updatedState = TraiWorkoutAttributes.ContentState(
             elapsedSeconds: elapsedSeconds,
             currentExercise: currentExercise,
@@ -118,16 +141,13 @@ final class LiveActivityManager {
             progressTotal: progressTotal,
             progressLabel: progressLabel,
             supportsSetShortcut: supportsSetShortcut,
-            supportsAdvanceShortcut: supportsAdvanceShortcut
+            currentExerciseCompletedSets: currentExerciseCompletedSets,
+            currentExerciseTotalSets: currentExerciseTotalSets,
+            currentExerciseIndex: currentExerciseIndex,
+            exerciseTotal: exerciseTotal
         )
 
-        updateActivity(state: updatedState)
-    }
-
-    func updateActivity(state: TraiWorkoutAttributes.ContentState) {
-        guard let activity = currentActivity else { return }
-
-        let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(60))
+        let content = ActivityContent(state: updatedState, staleDate: Date().addingTimeInterval(60))
 
         Task {
             await activity.update(content)
@@ -136,14 +156,16 @@ final class LiveActivityManager {
 
     /// End the Live Activity
     func endActivity(showSummary: Bool = true) {
-        guard let activity = currentActivity else { return }
+        let activeActivity = currentActivity
+        let dismissalPolicy: ActivityUIDismissalPolicy = showSummary ? .after(.now + 5) : .immediate
 
         Task {
-            if showSummary {
-                // Show final state briefly before dismissing
-                await activity.end(nil, dismissalPolicy: .after(.now + 5))
-            } else {
-                await activity.end(nil, dismissalPolicy: .immediate)
+            if let activeActivity {
+                await activeActivity.end(nil, dismissalPolicy: dismissalPolicy)
+            }
+
+            for activity in Activity<TraiWorkoutAttributes>.activities where activity.id != activeActivity?.id {
+                await activity.end(nil, dismissalPolicy: dismissalPolicy)
             }
             currentActivity = nil
         }

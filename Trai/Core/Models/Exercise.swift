@@ -516,6 +516,15 @@ extension Exercise {
         if category == .strength {
             return "Strength"
         }
+        if category == .conditioning {
+            return "Conditioning"
+        }
+        if category == .mobility {
+            return "Mobility"
+        }
+        if category == .recovery {
+            return "Recovery"
+        }
         let words = Category.normalizedActivityWords(from: exerciseName)
         if Category.activityWords(words, containAnyOf: ["boulder", "bouldering", "climb", "climbing"]) {
             return "Climbing"
@@ -690,19 +699,20 @@ extension Exercise {
         ("Sled Push", "conditioning", nil, "Sled"),
         ("Battle Ropes", "conditioning", nil, "Battle Ropes"),
         ("Kettlebell Swings", "conditioning", nil, "Kettlebell"),
+        ("Assault Bike", "conditioning", nil, "Air Bike"),
+        ("HIIT Circuit", "conditioning", nil, "Various"),
         ("Circuit Training", "conditioning", nil, "Various"),
 
         // Skill / sport practice
-        ("Bouldering", "sportPractice", nil, "Climbing Wall"),
-        ("Top Rope Climbing", "sportPractice", nil, "Climbing Wall"),
-        ("Padel Drills", "sportPractice", nil, "Padel Court"),
-        ("Tennis Drills", "sportPractice", nil, "Tennis Court"),
-        ("Basketball Shooting", "sportPractice", nil, "Basketball Court"),
-        ("Boxing Rounds", "sportPractice", nil, "Gloves / Bag"),
+        ("Sport Practice", "sportPractice", nil, "Court / Field"),
+        ("Court Session", "sportPractice", nil, "Court"),
+        ("Field Session", "sportPractice", nil, "Field"),
+        ("Skill Practice", "sportPractice", nil, "Sport Equipment"),
 
         // Mobility / recovery
-        ("Hip Mobility Flow", "mobility", nil, "Mat / Bodyweight"),
-        ("Shoulder Mobility Flow", "mobility", nil, "Band / Bodyweight"),
+        ("Mobility Flow", "mobility", nil, "Mat / Bodyweight"),
+        ("Hip Mobility", "mobility", nil, "Mat / Bodyweight"),
+        ("Shoulder Mobility", "mobility", nil, "Band / Bodyweight"),
         ("Ankle Mobility", "mobility", nil, "Bodyweight"),
         ("Breathwork", "recovery", nil, "Mat"),
         ("Easy Recovery Walk", "recovery", nil, "Outdoor / Treadmill"),
