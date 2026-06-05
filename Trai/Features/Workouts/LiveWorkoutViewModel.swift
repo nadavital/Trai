@@ -1942,8 +1942,8 @@ final class LiveWorkoutViewModel {
         stopTimer()
         // End Live Activity immediately (no summary)
         liveActivityManager.endActivity(showSummary: false)
-        modelContext?.delete(workout)
-        try? modelContext?.save()
+        guard let modelContext else { return }
+        _ = LiveWorkoutCancellation.cancelActiveWorkouts(in: modelContext, including: workout)
     }
 
     // MARK: - Private Methods
@@ -2306,5 +2306,37 @@ final class LiveWorkoutViewModel {
 
     private func updateLiveActivity() {
         liveActivityManager.updateActivity(state: liveActivityContentState())
+    }
+}
+
+@MainActor
+enum LiveWorkoutCancellation {
+    @discardableResult
+    static func cancelActiveWorkouts(
+        in modelContext: ModelContext,
+        including workout: LiveWorkout? = nil
+    ) -> Bool {
+        let activeWorkoutDescriptor = FetchDescriptor<LiveWorkout>(
+            predicate: #Predicate<LiveWorkout> { candidate in
+                candidate.completedAt == nil
+            }
+        )
+        var workoutsToDelete = (try? modelContext.fetch(activeWorkoutDescriptor)) ?? []
+        if let workout, !workoutsToDelete.contains(where: { $0.id == workout.id }) {
+            workoutsToDelete.append(workout)
+        }
+
+        for workoutToDelete in workoutsToDelete {
+            workoutToDelete.completedAt = workoutToDelete.completedAt ?? Date()
+            modelContext.delete(workoutToDelete)
+        }
+
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            return false
+        }
     }
 }

@@ -610,16 +610,17 @@ enum WorkoutGoalProgressResolver {
             )
 
             let targetValueText = goal.targetValue.map {
-                "\(Int($0.rounded())) \(goal.targetUnit.isEmpty ? "sessions" : goal.targetUnit) / \(goal.periodLabelText)"
+                formatTarget($0, unit: frequencyUnitText(for: goal))
             }
+            let periodText = frequencyPeriodText(for: goal)
 
             let progressText: String
             if let recurringProgress {
                 progressText = recurringProgress.currentPeriodText
             } else if let currentCount = frequencyProgress.currentCount {
-                progressText = "\(currentCount) of \(targetValueText ?? "target")"
+                progressText = "\(currentCount) of \(targetValueText ?? "target") this \(periodText)"
             } else {
-                progressText = "No sessions logged in this period yet"
+                progressText = "No \(frequencyUnitText(for: goal)) logged this \(periodText) yet"
             }
 
             let supportingParts = [
@@ -1115,22 +1116,42 @@ enum WorkoutGoalProgressResolver {
         }
 
         let periodStart = periodStartDate(for: goal, now: now) ?? Calendar.current.startOfDay(for: now)
+        let progressStart = max(periodStart, goal.createdAt)
         let currentCount = frequencyCount(
             for: goal,
             workouts: workouts,
             sessions: sessions,
-            lowerBound: periodStart,
+            lowerBound: progressStart,
             upperBound: nil
         )
 
         let progressFraction = min(max(Double(currentCount) / targetValue, 0), 1)
-        let periodRangeText = "Current \(goal.periodLabelText) started \(periodStart.formatted(date: .abbreviated, time: .omitted))"
+        let periodRangeText: String
+        if progressStart > periodStart {
+            periodRangeText = "Tracking this \(frequencyPeriodText(for: goal)) since \(progressStart.formatted(date: .abbreviated, time: .omitted))"
+        } else {
+            periodRangeText = "Current \(goal.periodLabelText) started \(periodStart.formatted(date: .abbreviated, time: .omitted))"
+        }
 
         return FrequencyProgressSnapshot(
             currentCount: currentCount,
             progressFraction: progressFraction,
             periodRangeText: periodRangeText
         )
+    }
+
+    private static func frequencyUnitText(for goal: WorkoutGoal) -> String {
+        let trimmedUnit = goal.targetUnit.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedUnit.isEmpty ? "sessions" : trimmedUnit
+    }
+
+    private static func frequencyPeriodText(for goal: WorkoutGoal) -> String {
+        guard let periodUnit = goal.periodUnit else { return "period" }
+        let periodCount = max(goal.periodCount ?? 1, 1)
+        if periodCount > 1 {
+            return goal.periodLabelText
+        }
+        return periodUnit.rawValue
     }
 
     private static func frequencyCount(
