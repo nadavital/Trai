@@ -1244,6 +1244,47 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(insight.progressText, "This week: 3 of 3")
     }
 
+    func testFrequencyGoalProgressStartsWhenGoalExistsInsideCurrentPeriod() {
+        let anchor = currentPeriodFixtureAnchor()
+        let goalCreatedAt = anchor
+
+        let beforeGoalWorkout = LiveWorkout(name: "Earlier Strength", workoutType: .strength)
+        beforeGoalWorkout.startedAt = goalCreatedAt.addingTimeInterval(-7_200)
+        beforeGoalWorkout.completedAt = goalCreatedAt.addingTimeInterval(-3_600)
+        addCompletedStrengthEntry(to: beforeGoalWorkout)
+
+        let afterGoalWorkout = LiveWorkout(name: "Tracked Strength", workoutType: .strength)
+        afterGoalWorkout.startedAt = goalCreatedAt.addingTimeInterval(600)
+        afterGoalWorkout.completedAt = goalCreatedAt.addingTimeInterval(1_800)
+        addCompletedStrengthEntry(to: afterGoalWorkout)
+
+        let goal = WorkoutGoal(
+            title: "Lift 3 days weekly",
+            goalKind: .frequency,
+            linkedWorkoutType: .strength,
+            targetValue: 3,
+            targetUnit: "sessions",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete three strength sessions this week."
+        )
+        goal.createdAt = goalCreatedAt
+        goal.updatedAt = goalCreatedAt
+
+        let insight = WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: [beforeGoalWorkout, afterGoalWorkout],
+            exerciseHistory: [],
+            useLbs: false
+        ).first
+
+        XCTAssertEqual(insight?.currentValueText, "1")
+        XCTAssertEqual(insight?.progressText, "1 of 3 sessions this week")
+        XCTAssertEqual(insight?.targetValueText, "3 sessions")
+        XCTAssertEqual(insight?.progressFraction ?? 0, 1.0 / 3.0, accuracy: 0.001)
+        XCTAssertTrue(insight?.supportingText?.contains("Tracking this week since") == true)
+    }
+
     func testWeeklyFrequencyGoalCompletesOnlyWhenEveryTargetDatePeriodIsHit() throws {
         let calendar = Calendar.current
         let currentWeekStart = try XCTUnwrap(calendar.dateInterval(of: .weekOfYear, for: Date())?.start)
