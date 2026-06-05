@@ -57,7 +57,6 @@ struct WorkoutsView: View {
     @State private var standardWorkoutPlanSetupBase: WorkoutPlan?
     @State private var standardWorkoutPlanAIService = AIService()
     @State private var standardWorkoutPlanSaveError: StandardWorkoutPlanSaveError?
-    @State private var goalCelebrationClearTask: Task<Void, Never>?
 
     // MARK: - Sheet States
 
@@ -344,7 +343,10 @@ struct WorkoutsView: View {
                         canCreateGoalsWithTrai: canAccessAIFeatures,
                         completedGoalCount: completedWorkoutGoals.count,
                         onCreateGoalWithTrai: startWorkoutGoalsWithTrai,
-                        onCompletedGoalsTap: { showingCompletedWorkoutGoals = true },
+                        onCompletedGoalsTap: {
+                            celebratedWorkoutGoal = nil
+                            showingCompletedWorkoutGoals = true
+                        },
                         onUnlockPro: {
                             proUpsellCoordinator?.present(source: .workoutPlan)
                         },
@@ -1057,16 +1059,6 @@ struct WorkoutsView: View {
 
     private func presentCompletedGoalCelebration(_ goal: WorkoutGoal) {
         celebratedWorkoutGoal = goal
-        goalCelebrationClearTask?.cancel()
-        goalCelebrationClearTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(6))
-            guard !Task.isCancelled else { return }
-            if celebratedWorkoutGoal?.id == goal.id {
-                withAnimation(.snappy) {
-                    celebratedWorkoutGoal = nil
-                }
-            }
-        }
     }
 
     private func startWorkoutGoalsWithTrai() {

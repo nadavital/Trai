@@ -486,23 +486,6 @@ struct DashboardView: View {
             activityCardWorkoutCount != nil
     }
 
-    /// Returns the workout name to display on the quick action button
-    /// Only shows a name when set to recommended workout and a plan exists
-    private var quickAddWorkoutName: String? {
-        guard let profile,
-              profile.defaultWorkoutActionValue == .recommendedWorkout,
-              let plan = profile.workoutPlan else {
-            return nil
-        }
-
-        if let cachedId = cachedRecommendedTemplateId,
-           let template = plan.templates.first(where: { $0.id == cachedId }) {
-            return template.name
-        }
-
-        return plan.templates.first?.name
-    }
-
     private var hasActiveLiveWorkout: Bool {
         liveWorkouts.contains { $0.completedAt == nil }
     }
@@ -856,8 +839,7 @@ struct DashboardView: View {
             QuickActionsCard(
                 onLogFood: { openFoodCameraFromDashboard(source: "quick_actions") },
                 onAddWorkout: { startWorkout() },
-                onLogWeight: { openLogWeightFromDashboard(source: "quick_actions") },
-                workoutName: quickAddWorkoutName
+                onLogWeight: { openLogWeightFromDashboard(source: "quick_actions") }
             )
             .traiEntrance(index: 0)
 

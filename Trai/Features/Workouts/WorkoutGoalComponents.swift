@@ -1762,10 +1762,6 @@ struct WorkoutGoalsOverviewSection: View {
                 }
             }
 
-            if let celebratedGoal {
-                celebratedGoalCard(celebratedGoal)
-            }
-
             if !canCreateGoalsWithTrai {
                 lockedGoalsState
             } else if insights.isEmpty && completedGoalCount == 0 {
@@ -1859,14 +1855,19 @@ struct WorkoutGoalsOverviewSection: View {
     private var goalsCarousel: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                ForEach(insights.prefix(5)) { insight in
-                    featuredGoalCard(insight)
-                        .frame(width: 150)
+                if completedGoalCount > 0, celebratedGoal != nil {
+                    completedGoalsCard(isHighlighted: true)
+                        .frame(width: 134)
                 }
 
-                if completedGoalCount > 0 {
-                    completedGoalsCard
-                        .frame(width: 150)
+                ForEach(insights.prefix(5)) { insight in
+                    featuredGoalCard(insight)
+                        .frame(width: 134)
+                }
+
+                if completedGoalCount > 0, celebratedGoal == nil {
+                    completedGoalsCard(isHighlighted: false)
+                        .frame(width: 134)
                 }
             }
             .scrollTargetLayout()
@@ -1876,31 +1877,14 @@ struct WorkoutGoalsOverviewSection: View {
     }
 
     private func featuredGoalCard(_ insight: WorkoutGoalInsight) -> some View {
-        VStack(spacing: 10) {
-            GoalProgressRing(
-                progress: insight.cardProgressFraction,
-                iconName: insight.goal.goalKind.iconName,
-                color: TraiColors.flame
-            )
-            .frame(width: 52, height: 52)
-
-            Text(insight.goal.trimmedTitle)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(height: 34, alignment: .top)
-
-            Text(insight.goalCardSubtitle)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        goalTileContent(
+            progress: insight.cardProgressFraction,
+            iconName: insight.goal.goalKind.iconName,
+            color: TraiColors.flame,
+            title: insight.goal.trimmedTitle
+        )
         .padding(.horizontal, 10)
-        .frame(height: 140)
+        .frame(height: 112)
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
         .contentShape(RoundedRectangle(cornerRadius: 14))
         .onTapGesture {
@@ -1912,28 +1896,62 @@ struct WorkoutGoalsOverviewSection: View {
         }
     }
 
-    private var completedGoalsCard: some View {
-        Button(action: onCompletedGoalsTap) {
-            VStack(spacing: 10) {
-                GoalProgressRing(
-                    progress: 1,
-                    iconName: "checkmark.seal.fill",
-                    color: .green
-                )
-                .frame(width: 52, height: 52)
+    private func goalTileContent(
+        progress: Double?,
+        iconName: String,
+        color: Color,
+        title: String
+    ) -> some View {
+        VStack(spacing: 9) {
+            GoalProgressRing(
+                progress: progress,
+                iconName: iconName,
+                color: color,
+                size: 46,
+                lineWidth: 4.5
+            )
+            .frame(maxWidth: .infinity, alignment: .center)
 
-                Text("Completed")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .frame(height: 34, alignment: .top)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 13)
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2, reservesSpace: true)
+                .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private func completedGoalsCard(isHighlighted: Bool) -> some View {
+        Button(action: onCompletedGoalsTap) {
+            goalTileContent(
+                progress: 1,
+                iconName: "checkmark.seal.fill",
+                color: .green,
+                title: "Completed Goals"
+            )
             .padding(.horizontal, 10)
-            .frame(height: 126)
+            .frame(height: 112)
             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+            .overlay {
+                if isHighlighted {
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(Color.green.opacity(0.32), lineWidth: 1)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if isHighlighted {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 10, height: 10)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(Color.white.opacity(0.9), lineWidth: 2)
+                        }
+                        .shadow(color: Color.green.opacity(0.22), radius: 4, y: 2)
+                        .padding(10)
+                }
+            }
             .contentShape(RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(TraiPressStyle())
@@ -1979,34 +1997,6 @@ struct WorkoutGoalsOverviewSection: View {
         .buttonStyle(TraiPressStyle())
     }
 
-    private func celebratedGoalCard(_ goal: WorkoutGoal) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.headline)
-                .foregroundStyle(.green)
-                .frame(width: 38, height: 38)
-                .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Goal completed")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-
-                Text(goal.trimmedTitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-
-                Text("Saved to Completed Goals.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding(12)
-        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
-    }
 }
 
 struct CompletedWorkoutGoalsSheet: View {

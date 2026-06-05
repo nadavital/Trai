@@ -508,33 +508,30 @@ struct QuickActionsCard: View {
     let onLogFood: () -> Void
     let onAddWorkout: () -> Void
     let onLogWeight: () -> Void
-    var workoutName: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: TraiSpacing.sm + TraiSpacing.xs) {
-            Text("Quick Actions")
-                .font(.traiHeadline())
-
-            HStack(spacing: TraiSpacing.sm + TraiSpacing.xs) {
-                QuickActionButton(
-                    title: "Log Food",
-                    icon: "plus.circle.fill",
-                    color: .green,
-                    action: onLogFood
-                )
-                QuickActionButton(
-                    title: "Start Workout",
-                    subtitle: workoutName,
-                    icon: "figure.run",
-                    color: .orange,
-                    action: onAddWorkout
-                )
-                QuickActionButton(
-                    title: "Log Weight",
-                    icon: "scalemass.fill",
-                    color: .blue,
-                    action: onLogWeight
-                )
+        VStack(alignment: .leading, spacing: 0) {
+            GlassEffectContainer(spacing: TraiSpacing.sm + TraiSpacing.xs) {
+                HStack(spacing: TraiSpacing.sm + TraiSpacing.xs) {
+                    QuickActionButton(
+                        title: "Log Food",
+                        icon: "plus.circle.fill",
+                        color: .green,
+                        action: onLogFood
+                    )
+                    QuickActionButton(
+                        title: "Start Workout",
+                        icon: "figure.run",
+                        color: .orange,
+                        action: onAddWorkout
+                    )
+                    QuickActionButton(
+                        title: "Log Weight",
+                        icon: "scalemass.fill",
+                        color: .blue,
+                        action: onLogWeight
+                    )
+                }
             }
         }
         .traiCard()

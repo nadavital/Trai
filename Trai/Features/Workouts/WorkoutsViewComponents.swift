@@ -347,10 +347,12 @@ struct WorkoutsQuickActionsRow: View {
     let onRecovery: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            WorkoutsQuickActionChip("PR", systemImage: "trophy.fill", color: .yellow, action: onPersonalRecords)
-            WorkoutsQuickActionChip("Exercises", systemImage: "figure.strengthtraining.traditional", color: .blue, action: onCustomExercises)
-            WorkoutsQuickActionChip("Recovery", systemImage: "waveform.path.ecg", color: .green, action: onRecovery)
+        GlassEffectContainer(spacing: 10) {
+            HStack(spacing: 10) {
+                WorkoutsQuickActionChip("PR", systemImage: "trophy.fill", color: .yellow, action: onPersonalRecords)
+                WorkoutsQuickActionChip("Exercises", systemImage: "figure.strengthtraining.traditional", color: .blue, action: onCustomExercises)
+                WorkoutsQuickActionChip("Recovery", systemImage: "waveform.path.ecg", color: .green, action: onRecovery)
+            }
         }
     }
 }
@@ -370,12 +372,25 @@ private struct WorkoutsQuickActionChip: View {
 
     var body: some View {
         Button(action: action) {
-            Label(label, systemImage: systemImage)
-                .font(.traiLabel(13))
-                .foregroundStyle(color)
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.traiLabel(13))
+                    .foregroundStyle(color)
+
+                Text(label)
+                    .font(.traiLabel(13))
+                    .foregroundStyle(.primary)
+            }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
-                .background(color.opacity(0.12), in: Capsule())
+                .glassEffect(
+                    .regular.tint(color.opacity(0.12)).interactive(),
+                    in: .capsule
+                )
+                .overlay {
+                    Capsule()
+                        .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+                }
         }
         .buttonStyle(TraiPressStyle())
     }

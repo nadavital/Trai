@@ -76,7 +76,6 @@ struct MacroRingItem: View {
 
 struct QuickActionButton: View {
     let title: String
-    var subtitle: String?
     let icon: String
     let color: Color
     let action: () -> Void
@@ -89,14 +88,8 @@ struct QuickActionButton: View {
             VStack(spacing: TraiSpacing.sm) {
                 ZStack {
                     Circle()
-                        .fill(
-                            TraiGradient.actionVibrant(
-                                color,
-                                color.opacity(0.7)
-                            )
-                        )
+                        .fill(color.opacity(0.78))
                         .frame(width: 40, height: 40)
-                        .shadow(color: color.opacity(0.3), radius: 6, y: 3)
 
                     Image(systemName: icon)
                         .font(.body)
@@ -110,20 +103,19 @@ struct QuickActionButton: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-
-                    if let subtitle, !subtitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(subtitle)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
                 }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(color.opacity(0.08))
-            .clipShape(.rect(cornerRadius: TraiRadius.medium))
+            .glassEffect(
+                .regular.tint(color.opacity(0.28)).interactive(),
+                in: .rect(cornerRadius: TraiRadius.medium)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: TraiRadius.medium, style: .continuous)
+                    .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.03), radius: 5, y: 3)
         }
         .buttonStyle(TraiPressStyle(scale: 0.93))
     }
@@ -168,12 +160,7 @@ struct ChatWithTraiCard: View {
             HStack(spacing: TraiSpacing.sm) {
                 ZStack {
                     Circle()
-                        .fill(
-                            TraiGradient.actionVibrant(
-                                .accentColor,
-                                .accentColor.opacity(0.7)
-                            )
-                        )
+                        .fill(Color.accentColor.opacity(0.78))
                         .frame(width: 30, height: 30)
 
                     Image(systemName: "circle.hexagongrid.circle")
@@ -186,6 +173,7 @@ struct ChatWithTraiCard: View {
                     HStack(spacing: 6) {
                         Text("Chat with Trai")
                             .font(.traiHeadline(14))
+                            .foregroundStyle(.primary)
 
                         if !isUnlocked {
                             Text("PRO")
@@ -200,6 +188,7 @@ struct ChatWithTraiCard: View {
                     HStack(spacing: 6) {
                         Text("Chat")
                             .font(.traiHeadline(14))
+                            .foregroundStyle(.primary)
 
                         if !isUnlocked {
                             Text("PRO")
@@ -211,15 +200,18 @@ struct ChatWithTraiCard: View {
 
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(Color.accentColor)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(
-                Capsule()
-                    .fill(Color.accentColor.opacity(0.12))
+            .glassEffect(
+                .regular.tint(Color.accentColor.opacity(0.20)).interactive(),
+                in: .capsule
             )
-            .shadow(color: Color.accentColor.opacity(0.20), radius: 6, y: 2)
+            .overlay {
+                Capsule()
+                    .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.03), radius: 5, y: 3)
         }
         .buttonStyle(TraiPressStyle(scale: 0.96))
     }
