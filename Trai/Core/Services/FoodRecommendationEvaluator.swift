@@ -50,6 +50,7 @@ struct FoodRecommendationReplayFailedCase: Sendable, Equatable {
 
 struct FoodRecommendationReplayDebugReport: Sendable, Equatable {
     let failedCases: [FoodRecommendationReplayFailedCase]
+    let missReasonCounts: [String: Int]
     let sliceMetrics: [FoodRecommendationReplaySliceMetrics]
 }
 
@@ -125,6 +126,7 @@ struct FoodRecommendationReplayRunner {
             metrics: metrics(for: cases),
             debugReport: FoodRecommendationReplayDebugReport(
                 failedCases: cases.compactMap(\.failedCase),
+                missReasonCounts: missReasonCounts(for: cases),
                 sliceMetrics: sliceMetrics(for: cases)
             )
         )
@@ -168,13 +170,20 @@ struct FoodRecommendationReplayRunner {
         let completeMealCoverage = suggestions.prefix(5).contains { isCompleteMeal($0.suggestedEntry) }
         let duplicateSuggestion = hasDuplicateSuggestions(suggestions)
         let oneOffFalsePositive = firstRank == nil && suggestions.first.map { isOneOffSuggestion($0, training: training) } == true
+        let missReason = missReason(
+            suggestions: suggestions,
+            hiddenIsCompleteMeal: hiddenIsCompleteMeal,
+            completeMealCoverage: completeMealCoverage,
+            beverageDomination: beverageDomination,
+            oneOffFalsePositive: oneOffFalsePositive
+        )
         let failedCase = firstRank == nil ? FoodRecommendationReplayFailedCase(
             targetDate: hidden.loggedAt,
             hiddenDisplayName: hidden.displayName,
             hiddenCanonicalComponents: hidden.components.map(\.canonicalName).sorted(),
             topSuggestionTitles: suggestions.prefix(5).map(\.title),
             topSuggestionCanonicalComponents: suggestions.prefix(5).map(canonicalComponents(for:)),
-            missReason: beverageDomination ? "beverageDomination" : "noCloseEquivalent"
+            missReason: missReason
         ) : nil
 
         return ReplayCaseResult(
@@ -183,6 +192,7 @@ struct FoodRecommendationReplayRunner {
             hitAt3: firstRank.map { $0 <= 3 } ?? false,
             hitAt5: firstRank.map { $0 <= 5 } ?? false,
             oneOffFalsePositive: oneOffFalsePositive,
+            hiddenIsCompleteMeal: hiddenIsCompleteMeal,
             beverageDomination: beverageDomination,
             completeMealCoverage: completeMealCoverage,
             duplicateSuggestion: duplicateSuggestion,
@@ -218,6 +228,11 @@ struct FoodRecommendationReplayRunner {
         return slices
     }
 
+    private func missReasonCounts(for cases: [ReplayCaseResult]) -> [String: Int] {
+        Dictionary(grouping: cases.compactMap(\.failedCase), by: \.missReason)
+            .mapValues(\.count)
+    }
+
     private func metrics(for cases: [ReplayCaseResult]) -> FoodRecommendationReplayMetrics {
         guard !cases.isEmpty else {
             return FoodRecommendationReplayMetrics(
@@ -237,6 +252,8 @@ struct FoodRecommendationReplayRunner {
         }
 
         let count = Double(cases.count)
+        let completeMealCases = cases.filter(\.hiddenIsCompleteMeal)
+        let completeMealCaseCount = Double(completeMealCases.count)
         let runtimes = cases.map(\.runtimeMilliseconds).sorted()
         return FoodRecommendationReplayMetrics(
             evaluatedCases: cases.count,
@@ -245,8 +262,8 @@ struct FoodRecommendationReplayRunner {
             hitAt5: rate(cases, \.hitAt5, count: count),
             meanReciprocalRank: cases.map(\.reciprocalRank).reduce(0, +) / count,
             oneOffFalsePositiveRate: rate(cases, \.oneOffFalsePositive, count: count),
-            beverageDominationRate: rate(cases, \.beverageDomination, count: count),
-            completeMealCoverageRate: rate(cases, \.completeMealCoverage, count: count),
+            beverageDominationRate: completeMealCaseCount > 0 ? rate(completeMealCases, \.beverageDomination, count: completeMealCaseCount) : 0,
+            completeMealCoverageRate: completeMealCaseCount > 0 ? rate(completeMealCases, \.completeMealCoverage, count: completeMealCaseCount) : 0,
             duplicateSuggestionRate: rate(cases, \.duplicateSuggestion, count: count),
             noSuggestionRate: rate(cases, \.noSuggestion, count: count),
             medianRuntimeMilliseconds: percentile(runtimes, percentile: 0.50),
@@ -325,6 +342,28 @@ struct FoodRecommendationReplayRunner {
         return false
     }
 
+    private func missReason(
+        suggestions: [FoodSuggestion],
+        hiddenIsCompleteMeal: Bool,
+        completeMealCoverage: Bool,
+        beverageDomination: Bool,
+        oneOffFalsePositive: Bool
+    ) -> String {
+        if suggestions.isEmpty {
+            return "noSuggestions"
+        }
+        if beverageDomination {
+            return "beverageDomination"
+        }
+        if oneOffFalsePositive {
+            return "oneOffTopSuggestion"
+        }
+        if hiddenIsCompleteMeal && !completeMealCoverage {
+            return "missingCompleteMealCoverage"
+        }
+        return "noCloseEquivalent"
+    }
+
     private func isBeverage(_ entry: SuggestedFoodEntry) -> Bool {
         let title = entry.name.lowercased()
         return entry.components.contains { $0.role == FoodComponentRole.drink.rawValue }
@@ -383,6 +422,7 @@ private struct ReplayCaseResult {
     let hitAt3: Bool
     let hitAt5: Bool
     let oneOffFalsePositive: Bool
+    let hiddenIsCompleteMeal: Bool
     let beverageDomination: Bool
     let completeMealCoverage: Bool
     let duplicateSuggestion: Bool

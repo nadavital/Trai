@@ -1,31 +1,34 @@
 import Foundation
 import NaturalLanguage
 
-struct FoodSemanticNutritionProfile {
+nonisolated struct FoodSemanticNutritionProfile {
     let calories: Double
     let proteinGrams: Double
     let carbsGrams: Double
     let fatGrams: Double
 }
 
-struct FoodSemanticServingProfile {
+nonisolated struct FoodSemanticServingProfile {
     let servingText: String?
     let quantity: Double?
     let unit: String?
 }
 
-struct FoodSemanticSatisfactionDecision: Sendable, Equatable {
+nonisolated struct FoodSemanticSatisfactionDecision: Sendable, Equatable {
     let score: Double
     let isSatisfied: Bool
     let isSemanticVariant: Bool
 }
 
-struct FoodSemanticSatisfactionScorer {
+nonisolated struct FoodSemanticSatisfactionScorer {
     private static let alreadySatisfiedThreshold = 0.62
     private static let semanticVariantSatisfiedThreshold = 0.52
     private static let semanticVariantSignalThreshold = 0.28
     private static let embeddingDistanceScale = 1.25
+    private static let sentenceEmbeddingDistanceScale = 2.0
     private static let wordEmbedding = NLEmbedding.wordEmbedding(for: .english)
+    private static let sentenceEmbedding = NLEmbedding.sentenceEmbedding(for: .english)
+    private static let textSimilarityCache = FoodSemanticTextSimilarityCache()
 
     func decision(
         exactComponentScore: Double,
@@ -122,6 +125,10 @@ struct FoodSemanticSatisfactionScorer {
         return Double(lhs.intersection(rhs).count) / Double(lhs.union(rhs).count)
     }
 
+    func identityTextSimilarity(_ lhs: String, _ rhs: String) -> Double {
+        textSemanticSimilarity(lhs, rhs)
+    }
+
     private func semanticSatisfactionScore(
         componentScore: Double,
         nameScore: Double,
@@ -141,7 +148,15 @@ struct FoodSemanticSatisfactionScorer {
     }
 
     private func textSemanticSimilarity(_ lhs: String, _ rhs: String) -> Double {
-        max(tokenSimilarity(lhs, rhs), embeddingTokenSimilarity(lhs, rhs))
+        Self.textSimilarityCache.value(lhs: lhs, rhs: rhs) {
+            uncachedTextSemanticSimilarity(lhs, rhs)
+        }
+    }
+
+    private func uncachedTextSemanticSimilarity(_ lhs: String, _ rhs: String) -> Double {
+        let lexicalSimilarity = tokenSimilarity(lhs, rhs)
+        let phraseSimilarity = lexicalSimilarity > 0.20 ? sentenceEmbeddingSimilarity(lhs, rhs) : 0
+        return max(lexicalSimilarity, phraseSimilarity, embeddingTokenSimilarity(lhs, rhs))
     }
 
     private func tokenSimilarity(_ lhs: String, _ rhs: String) -> Double {
@@ -160,6 +175,13 @@ struct FoodSemanticSatisfactionScorer {
             guard distance.isFinite else { return 0 }
             return max(0, 1 - min(distance, Self.embeddingDistanceScale) / Self.embeddingDistanceScale)
         }
+    }
+
+    private func sentenceEmbeddingSimilarity(_ lhs: String, _ rhs: String) -> Double {
+        guard let sentenceEmbedding = Self.sentenceEmbedding else { return 0 }
+        let distance = sentenceEmbedding.distance(between: lhs, and: rhs)
+        guard distance.isFinite else { return 0 }
+        return max(0, 1 - min(distance, Self.sentenceEmbeddingDistanceScale) / Self.sentenceEmbeddingDistanceScale)
     }
 
     private func symmetricBestAverage(
@@ -187,5 +209,37 @@ struct FoodSemanticSatisfactionScorer {
         let tolerance = max(absoluteTolerance, max(abs(lhs), abs(rhs)) * relativeTolerance)
         guard tolerance > 0 else { return lhs == rhs ? 1 : 0 }
         return max(0, 1 - abs(lhs - rhs) / tolerance)
+    }
+}
+
+nonisolated private final class FoodSemanticTextSimilarityCache: @unchecked Sendable {
+    private var values: [String: Double] = [:]
+    private let lock = NSLock()
+    private let maximumCount = 4096
+
+    func value(lhs: String, rhs: String, compute: () -> Double) -> Double {
+        let key = cacheKey(lhs: lhs, rhs: rhs)
+        lock.lock()
+        if let cached = values[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        let computed = compute()
+
+        lock.lock()
+        if values.count >= maximumCount {
+            values.removeAll(keepingCapacity: true)
+        }
+        values[key] = computed
+        lock.unlock()
+        return computed
+    }
+
+    private func cacheKey(lhs: String, rhs: String) -> String {
+        let left = lhs.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let right = rhs.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return left <= right ? "\(left)\u{1F}\(right)" : "\(right)\u{1F}\(left)"
     }
 }

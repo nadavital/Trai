@@ -597,6 +597,12 @@ extension WorkoutGoal {
             return matchesGeneratedPlanTemplate(workout: workout)
         }
 
+        if let linkedWorkoutType,
+           linkedWorkoutType != workout.type,
+           workout.type != .mixed {
+            return false
+        }
+
         guard hasActivityScope else {
             if let linkedWorkoutType {
                 return linkedWorkoutType == workout.type

@@ -18,6 +18,16 @@ struct WorkoutGoalInsight: Identifiable {
 
     var id: UUID { goal.id }
 
+    var cardProgressFraction: Double? {
+        if goal.status == .completed {
+            return 1
+        }
+        if let currentPeriod = recurringProgress?.currentPeriod {
+            return currentPeriod.targetFraction
+        }
+        return progressFraction
+    }
+
     init(
         goal: WorkoutGoal,
         progressText: String,
@@ -1585,7 +1595,7 @@ struct WorkoutGoalProgressCard: View {
         } label: {
             VStack(spacing: 10) {
                 GoalProgressRing(
-                    progress: insight.progressFraction,
+                    progress: insight.cardProgressFraction,
                     iconName: insight.goal.goalKind.iconName,
                     color: insight.goal.status == .completed ? .green : TraiColors.flame
                 )
@@ -1599,8 +1609,7 @@ struct WorkoutGoalProgressCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(height: 34, alignment: .top)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             .padding(.horizontal, 10)
             .frame(height: 126)
             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
@@ -1815,7 +1824,7 @@ struct WorkoutGoalsOverviewSection: View {
     private func featuredGoalCard(_ insight: WorkoutGoalInsight) -> some View {
         VStack(spacing: 10) {
             GoalProgressRing(
-                progress: insight.progressFraction,
+                progress: insight.cardProgressFraction,
                 iconName: insight.goal.goalKind.iconName,
                 color: TraiColors.flame
             )
@@ -1829,8 +1838,7 @@ struct WorkoutGoalsOverviewSection: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(height: 34, alignment: .top)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 13)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(.horizontal, 10)
         .frame(height: 126)
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))

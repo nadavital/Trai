@@ -1,31 +1,75 @@
 import Foundation
 
-struct FoodPatternRankerDiagnostics: Sendable, Equatable {
+nonisolated struct FoodPatternRankerDiagnostics: Sendable, Equatable {
     let suppressedOneOffCount: Int
     let suppressedAlreadyTodayCount: Int
     let demotedAlreadyTodayCount: Int
     let suppressedNegativeFeedbackCount: Int
     let suppressedLowConfidenceCount: Int
+    let recallFallbackCount: Int
+    let completeMealPromotionCount: Int
 }
 
-struct FoodPatternRanker {
+nonisolated struct FoodPatternRanker {
     private let normalizationService = FoodNormalizationService()
     private let semanticScorer = FoodSemanticSatisfactionScorer()
 
     func rank(_ candidates: [FoodPatternSuggestion], context: FoodPatternRecommendationContext) -> [FoodPatternSuggestion] {
-        let filtered = candidates.filter { !suppressionReasons(for: $0, context: context).isSuppressed }
-        let bestByPattern = Dictionary(grouping: filtered, by: \.pattern.id).compactMap { _, candidates in
-            candidates.max {
-                $0.score < $1.score
-            }
+        selectionDetails(for: candidates, context: context).finalSelected
+    }
+
+    private func selectionDetails(
+        for candidates: [FoodPatternSuggestion],
+        context: FoodPatternRecommendationContext
+    ) -> FoodPatternSelectionDetails {
+        let precisionEligible = candidates.filter { !suppressionReasons(for: $0, context: context).isSuppressed }
+        let sorted = bestPrecisionCandidateByPattern(precisionEligible)
+        let precisionSelected = applyDiversityPolicy(to: sorted, limit: context.limit)
+        var selected = applyCompleteMealProtection(selected: precisionSelected, candidates: sorted, limit: context.limit)
+
+        guard selected.count < context.limit else {
+            return FoodPatternSelectionDetails(precisionSelected: precisionSelected, finalSelected: selected)
         }
-        let sorted = bestByPattern.sorted {
+
+        let selectedPatternIDs = Set(selected.map(\.pattern.id))
+        let recallEligible = candidates.filter { candidate in
+            guard !selectedPatternIDs.contains(candidate.pattern.id) else { return false }
+            return isRecallEligible(candidate, context: context)
+        }
+        let recallSorted = bestRecallCandidateByPattern(recallEligible).filter { recallScore($0.features) >= 0.52 }
+        guard !recallSorted.isEmpty else {
+            return FoodPatternSelectionDetails(precisionSelected: precisionSelected, finalSelected: selected)
+        }
+
+        selected = applyDiversityPolicy(to: selected + recallSorted, limit: context.limit)
+        selected = applyCompleteMealProtection(selected: selected, candidates: sorted + recallSorted, limit: context.limit)
+        return FoodPatternSelectionDetails(precisionSelected: precisionSelected, finalSelected: selected)
+    }
+
+    private func bestPrecisionCandidateByPattern(_ candidates: [FoodPatternSuggestion]) -> [FoodPatternSuggestion] {
+        let bestByPattern = Dictionary(grouping: candidates, by: \.pattern.id).compactMap { _, candidates in
+            candidates.max { $0.score < $1.score }
+        }
+        return bestByPattern.sorted {
             if $0.score != $1.score {
                 return $0.score > $1.score
             }
             return $0.pattern.lastObservedAt > $1.pattern.lastObservedAt
         }
-        return applyDiversityPolicy(to: sorted, limit: context.limit)
+    }
+
+    private func bestRecallCandidateByPattern(_ candidates: [FoodPatternSuggestion]) -> [FoodPatternSuggestion] {
+        let bestByPattern = Dictionary(grouping: candidates, by: \.pattern.id).compactMap { _, candidates in
+            candidates.max { recallScore($0.features) < recallScore($1.features) }
+        }
+        return bestByPattern.sorted {
+            let lhsRecall = recallScore($0.features)
+            let rhsRecall = recallScore($1.features)
+            if lhsRecall != rhsRecall {
+                return lhsRecall > rhsRecall
+            }
+            return $0.pattern.lastObservedAt > $1.pattern.lastObservedAt
+        }
     }
 
     func diagnostics(
@@ -47,12 +91,20 @@ struct FoodPatternRanker {
             if reasons.lowConfidence { lowConfidence.insert(candidate.pattern.id) }
         }
 
+        let selectionDetails = selectionDetails(for: candidates, context: context)
+        let precisionSelectedIDs = Set(selectionDetails.precisionSelected.map(\.pattern.id))
+        let finalSelectedIDs = Set(selectionDetails.finalSelected.map(\.pattern.id))
+        let precisionMealIDs = Set(selectionDetails.precisionSelected.filter { isCompleteMeal($0.pattern) }.map(\.pattern.id))
+        let finalMealIDs = Set(selectionDetails.finalSelected.filter { isCompleteMeal($0.pattern) }.map(\.pattern.id))
+
         return FoodPatternRankerDiagnostics(
             suppressedOneOffCount: oneOff.count,
             suppressedAlreadyTodayCount: alreadyToday.count,
             demotedAlreadyTodayCount: demotedAlreadyToday.count,
             suppressedNegativeFeedbackCount: negative.count,
-            suppressedLowConfidenceCount: lowConfidence.count
+            suppressedLowConfidenceCount: lowConfidence.count,
+            recallFallbackCount: finalSelectedIDs.subtracting(precisionSelectedIDs).count,
+            completeMealPromotionCount: finalMealIDs.subtracting(precisionMealIDs).count
         )
     }
 
@@ -81,14 +133,31 @@ struct FoodPatternRanker {
         let rawScore =
             0.16 * features.repetition +
             0.10 * features.recency +
-            0.19 * features.timeSupport +
+            0.24 * features.timeSupport +
             0.06 * features.dayTypeSupport +
             0.15 * features.sessionSupport +
             0.12 * features.patternConfidence +
-            0.16 * features.practicalUtility +
+            0.11 * features.practicalUtility +
             0.08 * features.positiveFeedback +
             features.sourceBoost -
             features.temporalMismatchPenalty -
+            features.opportunityPenalty -
+            features.negativeFeedbackPenalty
+        return min(max(rawScore, 0), 1)
+    }
+
+    func recallScore(_ features: FoodPatternRankingFeatures) -> Double {
+        let temporalEvidence = max(features.timeSupport, features.dayTypeSupport * 0.65)
+        let rawScore =
+            0.24 * features.repetition +
+            0.16 * features.recency +
+            0.20 * temporalEvidence +
+            0.11 * features.sessionSupport +
+            0.13 * features.patternConfidence +
+            0.13 * features.practicalUtility +
+            0.06 * features.positiveFeedback +
+            features.sourceBoost -
+            min(features.temporalMismatchPenalty, 0.08) -
             features.opportunityPenalty -
             features.negativeFeedbackPenalty
         return min(max(rawScore, 0), 1)
@@ -125,56 +194,113 @@ struct FoodPatternRanker {
         )
     }
 
+    private func isRecallEligible(
+        _ suggestion: FoodPatternSuggestion,
+        context: FoodPatternRecommendationContext
+    ) -> Bool {
+        let reasons = suppressionReasons(for: suggestion, context: context)
+        guard !reasons.oneOff,
+              !reasons.alreadyToday,
+              !reasons.negativeFeedback
+        else {
+            return false
+        }
+        guard suggestion.pattern.distinctDays >= 2 || suggestion.features.positiveFeedback > 0 else {
+            return false
+        }
+        return recallScore(suggestion.features) >= 0.52
+    }
+
     private func applyDiversityPolicy(
         to sorted: [FoodPatternSuggestion],
         limit: Int
     ) -> [FoodPatternSuggestion] {
         guard limit > 0 else { return [] }
         let hasSubstantial = sorted.contains { isSubstantial($0.pattern) }
+        let bestSubstantialScore = sorted.first(where: { isSubstantial($0.pattern) })?.score
         var selected: [FoodPatternSuggestion] = []
         var deferred: [FoodPatternSuggestion] = []
-        var liquidOnlyCount = 0
         var lowSubstantialityCount = 0
+        let lowSubstantialityLimit = hasSubstantial ? max(1, limit - 1) : limit
 
         for suggestion in sorted {
-            let liquidOnly = isLiquidOnly(suggestion.pattern)
             let lowSubstantiality = isLowSubstantiality(suggestion.pattern)
 
-            if liquidOnly && liquidOnlyCount >= 1 {
+            if lowSubstantiality && lowSubstantialityCount >= lowSubstantialityLimit {
                 deferred.append(suggestion)
                 continue
             }
-            if lowSubstantiality && lowSubstantialityCount >= 2 {
-                deferred.append(suggestion)
-                continue
-            }
-            if hasSubstantial && selected.isEmpty && lowSubstantiality {
+            if hasSubstantial,
+               selected.isEmpty,
+               lowSubstantiality,
+               bestSubstantialScore.map({ $0 >= suggestion.score - 0.08 }) == true {
                 deferred.append(suggestion)
                 continue
             }
 
             selected.append(suggestion)
-            if liquidOnly { liquidOnlyCount += 1 }
             if lowSubstantiality { lowSubstantialityCount += 1 }
             if selected.count >= limit { break }
         }
 
         guard selected.count < limit else { return selected }
         for suggestion in deferred where !selected.contains(where: { $0.pattern.id == suggestion.pattern.id }) {
-            let liquidOnly = isLiquidOnly(suggestion.pattern)
             let lowSubstantiality = isLowSubstantiality(suggestion.pattern)
-            if liquidOnly && liquidOnlyCount >= 1 {
-                continue
-            }
-            if lowSubstantiality && lowSubstantialityCount >= 2 {
+            if lowSubstantiality && lowSubstantialityCount >= lowSubstantialityLimit {
                 continue
             }
             selected.append(suggestion)
-            if liquidOnly { liquidOnlyCount += 1 }
             if lowSubstantiality { lowSubstantialityCount += 1 }
             if selected.count >= limit { break }
         }
         return selected
+    }
+
+    private func applyCompleteMealProtection(
+        selected: [FoodPatternSuggestion],
+        candidates: [FoodPatternSuggestion],
+        limit: Int
+    ) -> [FoodPatternSuggestion] {
+        guard limit > 0,
+              !selected.prefix(limit).contains(where: { isCompleteMeal($0.pattern) }),
+              let protectedMeal = candidates.first(where: { candidate in
+                  isCompleteMeal(candidate.pattern)
+                      && !selected.contains(where: { $0.pattern.id == candidate.pattern.id })
+                      && isCompleteMealProtectionEligible(candidate, selected: Array(selected.prefix(limit)))
+              })
+        else {
+            return selected
+        }
+
+        var output = selected
+        if output.count < limit {
+            output.append(protectedMeal)
+            return output
+        }
+
+        guard let replacementIndex = output.lastIndex(where: { !isCompleteMeal($0.pattern) && isLowSubstantiality($0.pattern) }) else {
+            return output
+        }
+        output[replacementIndex] = protectedMeal
+        return output
+    }
+
+    private func isCompleteMealProtectionEligible(
+        _ candidate: FoodPatternSuggestion,
+        selected: [FoodPatternSuggestion]
+    ) -> Bool {
+        let hasContextualSupport = candidate.source == .continueSession
+            || candidate.features.timeSupport >= 0.18
+            || candidate.features.sessionSupport >= 0.55
+        guard hasContextualSupport else { return false }
+
+        guard !selected.isEmpty else { return true }
+        let weakestSelectedScore = selected.map(\.score).min() ?? 0
+        let allSelectedAreLowSubstantiality = selected.allSatisfy { isLowSubstantiality($0.pattern) }
+        if candidate.score >= max(0.45, weakestSelectedScore - 0.08) {
+            return true
+        }
+        return allSelectedAreLowSubstantiality && candidate.score >= 0.42
     }
 
     private func opportunityState(
@@ -300,7 +426,7 @@ struct FoodPatternRanker {
         guard specificity >= 0.55 else { return 0 }
         let support = Self.timeSupport(for: pattern, targetDate: targetDate)
         guard support < 0.18 else { return 0 }
-        return min((specificity - support) * 0.20, 0.16)
+        return min((specificity - support) * 0.34, 0.30)
     }
 
     private func patternConfidence(for pattern: FoodPattern) -> Double {
@@ -326,7 +452,7 @@ struct FoodPatternRanker {
             + 0.30 * proteinScore
             + 0.22 * structureScore
             + 0.14 * roleDiversityScore
-        return isLiquidOnly(pattern) ? min(base, 0.42) : min(max(base, 0), 1)
+        return min(max(base, 0), 1)
     }
 
     private func isSubstantial(_ pattern: FoodPattern) -> Bool {
@@ -336,6 +462,13 @@ struct FoodPatternRanker {
         return nutrition.medianCalories >= 320 && nutrition.medianProteinGrams >= 14
             || nutrition.medianProteinGrams >= 22
             || hasMultipleFoodComponents && nutrition.medianCalories >= 260
+    }
+
+    private func isCompleteMeal(_ pattern: FoodPattern) -> Bool {
+        let roles = Set(pattern.componentProfile.map(\.role))
+        return roles.contains(.protein)
+            && (roles.contains(.carb) || roles.contains(.vegetable) || roles.contains(.fruit) || roles.contains(.mixed))
+            || pattern.nutritionProfile.medianCalories >= 450 && pattern.componentProfile.count >= 2
     }
 
     private func isLowSubstantiality(_ pattern: FoodPattern) -> Bool {
@@ -371,12 +504,30 @@ struct FoodPatternRanker {
            pattern.feedbackProfile.timesDismissed == 0 {
             return 0.18
         }
-        guard pattern.feedbackProfile.timesDismissed > pattern.feedbackProfile.timesAccepted else { return 0 }
+        let ignoredPenalty = ignoredFeedbackPenalty(for: pattern, now: now)
+        guard pattern.feedbackProfile.timesDismissed > pattern.feedbackProfile.timesAccepted else { return ignoredPenalty }
         guard let lastDismissedAt = pattern.feedbackProfile.lastDismissedAt else {
-            return min(Double(pattern.feedbackProfile.timesDismissed) * 0.12, 0.5)
+            return min(Double(pattern.feedbackProfile.timesDismissed) * 0.12, 0.5) + ignoredPenalty
         }
         let hours = Double(Calendar.current.dateComponents([.hour], from: lastDismissedAt, to: now).hour ?? 999)
-        return hours < 12 ? 1.0 : min(Double(pattern.feedbackProfile.timesDismissed) * 0.12, 0.5)
+        return (hours < 12 ? 1.0 : min(Double(pattern.feedbackProfile.timesDismissed) * 0.12, 0.5)) + ignoredPenalty
+    }
+
+    private func ignoredFeedbackPenalty(for pattern: FoodPattern, now: Date) -> Double {
+        guard pattern.feedbackProfile.timesIgnored > pattern.feedbackProfile.timesAccepted + pattern.feedbackProfile.timesRefined else {
+            return 0
+        }
+        guard let lastIgnoredAt = pattern.feedbackProfile.lastIgnoredAt else {
+            return min(Double(pattern.feedbackProfile.timesIgnored) * 0.04, 0.16)
+        }
+        let hours = Double(Calendar.current.dateComponents([.hour], from: lastIgnoredAt, to: now).hour ?? 999)
+        if hours < 6 {
+            return min(Double(pattern.feedbackProfile.timesIgnored) * 0.06, 0.24)
+        }
+        if hours < 48 {
+            return min(Double(pattern.feedbackProfile.timesIgnored) * 0.04, 0.16)
+        }
+        return 0
     }
 
     static func timeSupport(for pattern: FoodPattern, targetDate: Date) -> Double {
@@ -453,7 +604,7 @@ struct FoodPatternRanker {
     }
 }
 
-private struct FoodPatternSuppressionReasons {
+nonisolated private struct FoodPatternSuppressionReasons {
     let oneOff: Bool
     let alreadyToday: Bool
     let demotedAlreadyToday: Bool
@@ -465,23 +616,28 @@ private struct FoodPatternSuppressionReasons {
     }
 }
 
-private enum FoodPatternOpportunityAvailability {
+nonisolated private struct FoodPatternSelectionDetails {
+    let precisionSelected: [FoodPatternSuggestion]
+    let finalSelected: [FoodPatternSuggestion]
+}
+
+nonisolated private enum FoodPatternOpportunityAvailability {
     case eligible
     case demote
     case suppress
 }
 
-private struct FoodPatternOpportunityState {
+nonisolated private struct FoodPatternOpportunityState {
     let availability: FoodPatternOpportunityAvailability
     let rankingPenalty: Double
 }
 
-private struct FoodPatternSameDayRepeatEvidence {
+nonisolated private struct FoodPatternSameDayRepeatEvidence {
     let repeatDayCount: Int
     let learnedSpacingMinutes: Int
 }
 
-private extension Array {
+nonisolated private extension Array {
     subscript(safe index: Int) -> Element? {
         guard indices.contains(index) else { return nil }
         return self[index]

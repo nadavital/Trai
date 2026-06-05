@@ -8,6 +8,12 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
+import OSLog
+
+private let foodCameraSuggestionLogger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "Nadav.Trai",
+    category: "FoodCameraSuggestions"
+)
 
 @MainActor
 final class FoodCameraPresentation: Identifiable {
@@ -195,6 +201,7 @@ struct FoodCameraView: View {
             return
         }
         WidgetDataProvider.shared.scheduleRefresh()
+        invalidateFoodCameraSuggestions()
         scheduleFoodMemoryResolution(for: entry.id)
         recordFoodLogBehavior(entry: entry, source: "manual_entry", modelContext: modelContext)
         FoodHealthKitMacroSync.saveIfAllowed(entry, profile: profiles.first, healthKitService: healthKitService)
@@ -229,6 +236,8 @@ private struct FoodLogCaptureStepView: View {
     @State private var foodDescription = ""
     @State private var isCapturingPhoto = false
     @State private var memorySuggestions: [FoodSuggestion] = []
+    @State private var suggestionLoadTask: Task<Void, Never>?
+    @State private var didRecordShownSuggestions = false
     @State private var hasResolvedCameraAvailability = false
 
     var body: some View {
@@ -274,6 +283,7 @@ private struct FoodLogCaptureStepView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel", systemImage: "xmark") {
+                    recordIgnoredSuggestionsIfNeeded()
                     onCancel()
                 }
                 .foregroundStyle(shouldShowNoCameraFallback ? Color.primary : .white)
@@ -289,6 +299,7 @@ private struct FoodLogCaptureStepView: View {
 
                 onDraftReady(
                     {
+                        recordShownSuggestionsIfNeeded()
                         var draft = FoodLogDraft(
                             sessionId: sessionId,
                             image: image,
@@ -303,7 +314,10 @@ private struct FoodLogCaptureStepView: View {
             }
         }
         .task {
-            loadSuggestions()
+            suggestionLoadTask?.cancel()
+            suggestionLoadTask = Task {
+                await loadSuggestions()
+            }
             guard !AppLaunchArguments.shouldForceFoodCameraPermissionFallback else {
                 hasResolvedCameraAvailability = true
                 return
@@ -324,6 +338,8 @@ private struct FoodLogCaptureStepView: View {
             }
         }
         .onDisappear {
+            suggestionLoadTask?.cancel()
+            suggestionLoadTask = nil
             cameraService.stopSession()
         }
     }
@@ -361,6 +377,7 @@ private struct FoodLogCaptureStepView: View {
             HapticManager.mediumTap()
             onDraftReady(
                 {
+                    recordShownSuggestionsIfNeeded()
                     var draft = FoodLogDraft(
                         sessionId: sessionId,
                         image: image,
@@ -378,6 +395,7 @@ private struct FoodLogCaptureStepView: View {
         guard !trimmedDescription.isEmpty else { return }
         onDraftReady(
             {
+                recordShownSuggestionsIfNeeded()
                 var draft = FoodLogDraft(
                     sessionId: sessionId,
                     image: nil,
@@ -391,6 +409,7 @@ private struct FoodLogCaptureStepView: View {
     }
 
     private func applyMemorySuggestion(_ suggestion: FoodSuggestion) {
+        recordShownSuggestionsIfNeeded()
         var draft = FoodLogDraft(
             sessionId: sessionId,
             image: nil,
@@ -400,18 +419,41 @@ private struct FoodLogCaptureStepView: View {
         draft.memorySuggestionID = suggestion.memoryID
         draft.shownSuggestionIDs = memorySuggestions.map(\.memoryID)
         draft.refinedSuggestion = suggestion.suggestedEntry
-        Task { @MainActor in
-            try? FoodSuggestionService().recordOutcome(
-                .tapped,
-                for: suggestion.memoryID,
-                modelContext: modelContext
-            )
-        }
+        recordSuggestionOutcome(.tapped, memoryIDs: [suggestion.memoryID])
         HapticManager.mediumTap()
         onDraftReady(draft)
     }
 
-    private func loadSuggestions() {
+    private func recordShownSuggestionsIfNeeded() {
+        guard !didRecordShownSuggestions else { return }
+        let shownIDs = memorySuggestions.map(\.memoryID)
+        guard !shownIDs.isEmpty else { return }
+        didRecordShownSuggestions = true
+        recordSuggestionOutcome(.shown, memoryIDs: shownIDs)
+    }
+
+    private func recordIgnoredSuggestionsIfNeeded() {
+        let ignoredIDs = memorySuggestions.map(\.memoryID)
+        guard !ignoredIDs.isEmpty else { return }
+        recordShownSuggestionsIfNeeded()
+        recordSuggestionOutcome(.ignored, memoryIDs: ignoredIDs)
+    }
+
+    private func recordSuggestionOutcome(_ outcome: FoodSuggestionOutcome, memoryIDs: [UUID]) {
+        guard let modelContainer = TraiApp.sharedModelContainer else { return }
+        Task.detached(priority: .utility) {
+            try? await FoodSuggestionService().recordOutcome(
+                outcome,
+                for: memoryIDs,
+                modelContainer: modelContainer
+            )
+        }
+    }
+
+    @MainActor
+    private func loadSuggestions() async {
+        let startedAt = LatencyProbe.timerStart()
+
         if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {
             memorySuggestions = [
                 FoodSuggestion(
@@ -469,12 +511,72 @@ private struct FoodLogCaptureStepView: View {
             sessionId: sessionId,
             modelContext: modelContext
         )
-        memorySuggestions = (try? FoodSuggestionService().cameraSuggestions(
+        guard let modelContainer = TraiApp.sharedModelContainer else {
+            memorySuggestions = []
+            foodCameraSuggestionLogger.warning("Food camera suggestions skipped: missing model container")
+            return
+        }
+
+        if let cachedSuggestions = await FoodSuggestionWarmCache.shared.cachedSuggestions(
+            limit: 3,
+            targetDate: recommendationDate,
+            sessionId: sessionId
+        ) {
+            memorySuggestions = cachedSuggestions
+            foodCameraSuggestionLogger.info("Food camera suggestion cache hit count=\(cachedSuggestions.count)")
+        } else {
+            foodCameraSuggestionLogger.info("Food camera suggestion cache miss")
+        }
+
+        let suggestions = await FoodSuggestionWarmCache.shared.suggestions(
             limit: 3,
             targetDate: recommendationDate,
             sessionId: sessionId,
-            modelContext: modelContext
-        )) ?? []
+            modelContainer: modelContainer
+        )
+        guard !Task.isCancelled else { return }
+        let duration = LatencyProbe.elapsedMilliseconds(since: startedAt)
+        if memorySuggestions != suggestions {
+            memorySuggestions = suggestions
+        }
+        if suggestions.isEmpty {
+            Task.detached(priority: .utility) {
+                await FoodLogCaptureStepView.logEmptySuggestionDiagnostics(
+                    targetDate: recommendationDate,
+                    sessionId: sessionId,
+                    durationMilliseconds: duration,
+                    modelContainer: modelContainer
+                )
+            }
+        } else {
+            foodCameraSuggestionLogger.info("Food camera suggestions ready count=\(suggestions.count) durationMs=\(duration)")
+        }
+    }
+
+    private nonisolated static func logEmptySuggestionDiagnostics(
+        targetDate: Date,
+        sessionId: UUID?,
+        durationMilliseconds: Double,
+        modelContainer: ModelContainer
+    ) async {
+        let summary = try? await FoodSuggestionService().debugCameraSuggestions(
+            limit: 3,
+            targetDate: targetDate,
+            sessionId: sessionId,
+            modelContainer: modelContainer
+        )
+        await MainActor.run {
+            foodCameraSuggestionLogger.warning(
+                """
+                Food camera suggestions empty durationMs=\(durationMilliseconds) \
+                memories=\(summary?.totalMemories ?? -1) \
+                observations=\(summary?.totalObservations ?? -1) \
+                patterns=\(summary?.patternCount ?? -1) \
+                retrieved=\(summary?.retrievedCandidateCount ?? -1) \
+                finalEligible=\(summary?.finalEligibleCount ?? -1)
+                """
+            )
+        }
     }
 }
 
@@ -695,6 +797,7 @@ private struct FoodLogReviewStepView: View {
             return
         }
         WidgetDataProvider.shared.scheduleRefresh()
+        invalidateFoodCameraSuggestions()
         scheduleFoodMemoryResolution(for: entry.id)
 
         let behaviorSource = isRefined
@@ -761,6 +864,32 @@ func resolvedFoodLogDate(targetDate: Date?, sessionId: UUID?, modelContext: Mode
 
     guard let targetDate else { return Date() }
     return combineDay(targetDate, withTimeFrom: Date())
+}
+
+@MainActor
+func prewarmFoodCameraSuggestions(sessionId: UUID? = nil, targetDate: Date? = nil, modelContext: ModelContext) {
+    guard !AppLaunchArguments.shouldUseAppStoreScreenshotSeed else { return }
+    guard let modelContainer = TraiApp.sharedModelContainer else { return }
+    let recommendationDate = resolvedFoodLogDate(
+        targetDate: targetDate,
+        sessionId: sessionId,
+        modelContext: modelContext
+    )
+
+    Task(priority: .utility) {
+        await FoodSuggestionWarmCache.shared.prewarm(
+            limit: 3,
+            targetDate: recommendationDate,
+            sessionId: sessionId,
+            modelContainer: modelContainer
+        )
+    }
+}
+
+func invalidateFoodCameraSuggestions() {
+    Task(priority: .utility) {
+        await FoodSuggestionWarmCache.shared.invalidate()
+    }
 }
 
 private func combineDay(_ day: Date, withTimeFrom timeSource: Date) -> Date {

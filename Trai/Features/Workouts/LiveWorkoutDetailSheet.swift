@@ -43,14 +43,6 @@ struct LiveWorkoutDetailSheet: View {
     @State private var originalEntryIDs: Set<UUID> = []
     @State private var presentedAccountSetupContext: AccountSetupContext?
 
-    private struct HeaderStatItem: Identifiable {
-        let id = UUID()
-        let icon: String
-        let value: String
-        let label: String
-        let color: Color
-    }
-
     private var sortedEntries: [LiveWorkoutEntry] {
         (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
     }
@@ -85,37 +77,37 @@ struct LiveWorkoutDetailSheet: View {
         entryStats.activityMetricSegments.prefix(2).compactMap(WorkoutActivityMetricDisplayStat.init(segment:))
     }
 
-    private var headerStats: [HeaderStatItem] {
-        var items: [HeaderStatItem] = []
+    private var headerStats: [WorkoutDetailHeaderStat] {
+        var items: [WorkoutDetailHeaderStat] = []
         if durationMinutes > 0 {
-            items.append(HeaderStatItem(
-                icon: "clock.fill",
+            items.append(WorkoutDetailHeaderStat(
                 value: formatDuration(Double(durationMinutes)),
                 label: "time",
+                icon: "clock.fill",
                 color: .blue
             ))
         }
         if entryCount > 0 {
-            items.append(HeaderStatItem(
-                icon: "figure.strengthtraining.traditional",
+            items.append(WorkoutDetailHeaderStat(
                 value: "\(entryCount)",
                 label: entryCount == 1 ? "exercise" : "exercises",
+                icon: "figure.strengthtraining.traditional",
                 color: .green
             ))
         }
         if totalSets > 0 {
-            items.append(HeaderStatItem(
-                icon: "square.stack.3d.up.fill",
+            items.append(WorkoutDetailHeaderStat(
                 value: "\(totalSets)",
                 label: totalSets == 1 ? "set" : "sets",
+                icon: "square.stack.3d.up.fill",
                 color: .orange
             ))
         }
         if let calories = workout.healthKitCalories {
-            items.append(HeaderStatItem(
-                icon: "flame.fill",
+            items.append(WorkoutDetailHeaderStat(
                 value: "\(Int(calories))",
                 label: "kcal",
+                icon: "flame.fill",
                 color: .red
             ))
         }
@@ -371,52 +363,13 @@ struct LiveWorkoutDetailSheet: View {
     // MARK: - Header Section (includes stats)
 
     private var headerSection: some View {
-        VStack(spacing: 16) {
-            // Icon and title
-            VStack(spacing: 8) {
-                Image(systemName: workout.type.iconName)
-                    .font(.system(size: 40))
-                    .foregroundStyle(.accent)
-
-                Text(workout.name)
-                    .font(.title2)
-                    .bold()
-
-                Text(workout.startedAt, format: .dateTime.weekday(.wide).month().day().hour().minute())
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                if usesFlexibleSessionPresentation {
-                    Text(workout.displayFocusSummary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-            }
-
-            if !headerStats.isEmpty {
-                LazyVGrid(
-                    columns: Array(
-                        repeating: GridItem(.flexible(), spacing: 8),
-                        count: min(max(headerStats.count, 1), 4)
-                    ),
-                    spacing: 8
-                ) {
-                    ForEach(headerStats) { stat in
-                        StatPill(
-                            icon: stat.icon,
-                            value: stat.value,
-                            label: stat.label,
-                            color: stat.color
-                        )
-                        .frame(maxWidth: .infinity, alignment: .center)
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(16)
-        .traiCard(cornerRadius: 16, contentPadding: 0)
+        WorkoutDetailHeaderCard(
+            icon: workout.type.iconName,
+            title: workout.name,
+            subtitle: usesFlexibleSessionPresentation ? workout.displayFocusSummary : nil,
+            date: workout.startedAt,
+            stats: headerStats
+        )
     }
 
     @ViewBuilder
@@ -798,29 +751,6 @@ struct LiveWorkoutDetailSheet: View {
             }
 
             return abs(history.performedAt.timeIntervalSince(performedAt)) <= 60
-        }
-    }
-}
-
-// MARK: - Stat Pill
-
-struct StatPill: View {
-    let icon: String
-    let value: String
-    let label: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundStyle(color)
-            Text(value)
-                .font(.subheadline)
-                .fontWeight(.medium)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 }
