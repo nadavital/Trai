@@ -316,6 +316,12 @@ struct WorkoutsView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    if !canAccessAIFeatures {
+                        WorkoutProCompactBanner {
+                            proUpsellCoordinator?.present(source: .workoutPlan)
+                        }
+                    }
+
                     WorkoutsQuickActionsRow(
                         onPersonalRecords: { showingPersonalRecords = true },
                         onCustomExercises: { showingCustomExercises = true },
@@ -332,19 +338,9 @@ struct WorkoutsView: View {
                         onEditPlan: workoutPlanEditAction
                     )
 
-                    if workoutPlan != nil, !canAccessAIFeatures {
-                        ProUpsellInlineCard(
-                            source: .workoutPlan,
-                            actionTitle: "Unlock Pro Coaching",
-                            action: {
-                                proUpsellCoordinator?.present(source: .workoutPlan)
-                            }
-                        )
-                    }
-
                     WorkoutGoalsOverviewSection(
                         insights: visibleWorkoutGoalInsights,
-                        celebratedGoal: celebratedWorkoutGoal,
+                        celebratedGoal: canAccessAIFeatures ? celebratedWorkoutGoal : nil,
                         canCreateGoalsWithTrai: canAccessAIFeatures,
                         completedGoalCount: completedWorkoutGoals.count,
                         onCreateGoalWithTrai: startWorkoutGoalsWithTrai,
@@ -550,7 +546,11 @@ struct WorkoutsView: View {
             }
             .sheet(isPresented: $showingWorkoutSheet) {
                 if let workout = pendingWorkout {
-                    LiveWorkoutView(workout: workout, template: pendingTemplate)
+                    LiveWorkoutView(
+                        workout: workout,
+                        template: pendingTemplate,
+                        onCancel: clearActiveWorkoutPresentation
+                    )
                         .traiSheetBranding()
                 }
             }
@@ -1364,6 +1364,22 @@ struct WorkoutsView: View {
         HapticManager.selectionChanged()
     }
 
+    private func clearActiveWorkoutPresentation() {
+        var workoutsToDelete = allLiveWorkouts.filter { $0.completedAt == nil }
+        if let pendingWorkout, !workoutsToDelete.contains(where: { $0.id == pendingWorkout.id }) {
+            workoutsToDelete.append(pendingWorkout)
+        }
+        for workout in workoutsToDelete {
+            workout.completedAt = workout.completedAt ?? Date()
+            modelContext.delete(workout)
+        }
+        try? modelContext.save()
+        pendingTemplate = nil
+        pendingWorkout = nil
+        showingWorkoutSheet = false
+        isStartingWorkout = false
+    }
+
     private func startCustomWorkout(
         name: String = "Custom Workout",
         type: LiveWorkout.WorkoutType = .custom,
@@ -1513,6 +1529,53 @@ struct WorkoutsView: View {
 private struct StandardWorkoutPlanSaveError: Identifiable {
     let id = UUID()
     let message: String
+}
+
+private struct WorkoutProCompactBanner: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: "circle.hexagongrid.circle.fill")
+                    .font(.system(size: 28, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(width: 32)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Get Trai Pro")
+                        .font(.caption2.weight(.heavy))
+                        .foregroundStyle(TraiColors.brandAccent)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(.white.opacity(0.92), in: .capsule)
+
+                    Text("Unlock reviews, goals, and plan tweaks.")
+                        .font(.subheadline.weight(.heavy))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.78))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(TraiColors.brandGradient, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(.white.opacity(0.20), lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(TraiPressStyle())
+        .accessibilityLabel("Unlock Trai Pro workout coaching")
+    }
 }
 
 private extension WorkoutGoalInsight {
