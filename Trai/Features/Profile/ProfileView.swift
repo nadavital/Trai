@@ -51,6 +51,8 @@ struct ProfileView: View {
     // For navigating to Trai tab with plan review
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
     @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest = false
+    @AppStorage(SharedStorageKeys.Chat.currentSessionId) var currentChatSessionIdString = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingOpenSessionId) var pendingOpenChatSessionIdString = ""
     @AppStorage("profile_cached_latest_weight_kg") private var cachedLatestWeightKg: Double = -1
     @AppStorage("profile_cached_active_memories_count") private var cachedActiveMemoriesCount = 0
     @AppStorage("profile_cached_chat_conversation_count") private var cachedChatConversationCount = 0

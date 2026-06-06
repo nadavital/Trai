@@ -14,6 +14,14 @@ extension ChatView {
     func checkSessionTimeout() {
         if !ChatView.hasStartedFreshSession {
             ChatView.hasStartedFreshSession = true
+            if let pendingSessionId = UUID(uuidString: pendingOpenSessionIdString),
+               pendingSessionId.uuidString == currentSessionIdString {
+                pendingOpenSessionIdString = ""
+                isTemporarySession = false
+                temporaryMessages = []
+                rebuildSessionMessages(preferLiveQueryData: true)
+                return
+            }
             startNewSession(silent: true)
             return
         }
@@ -52,6 +60,7 @@ extension ChatView {
 
     func switchToSession(_ sessionId: UUID) {
         currentSessionIdString = sessionId.uuidString
+        pendingOpenSessionIdString = ""
         isTemporarySession = false
         temporaryMessages = []
         HapticManager.lightTap()

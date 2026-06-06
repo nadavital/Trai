@@ -1035,7 +1035,7 @@ private func seedAppStoreScreenshotDataIfNeeded(modelContainer: ModelContainer) 
     profile.workoutPlan = screenshotWorkoutPlan()
 
     let chatSessionId = UUID(uuidString: "48D643F0-4B92-4C90-9754-8546F511C6EF") ?? UUID()
-    UserDefaults.standard.set(chatSessionId.uuidString, forKey: "currentChatSessionId")
+    UserDefaults.standard.set(chatSessionId.uuidString, forKey: SharedStorageKeys.Chat.currentSessionId)
     UserDefaults.standard.set(now.timeIntervalSince1970, forKey: "lastChatActivityDate")
 
     seedScreenshotFoodEntries(context: context, calendar: calendar, today: today)

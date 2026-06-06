@@ -83,6 +83,7 @@ struct ChatSessionRow: View {
 // MARK: - All Chat Sessions View
 
 struct AllChatSessionsView: View {
+    let onOpenSession: (UUID) -> Void
     @Environment(\.modelContext) private var modelContext
     @State private var chatMessages: [ChatMessage] = []
 
@@ -147,6 +148,8 @@ struct AllChatSessionsView: View {
                 Section {
                     ForEach(group.sessions, id: \.id) { session in
                         ChatSessionListRow(session: session) {
+                            onOpenSession(session.id)
+                        } onDelete: {
                             deleteSession(session.id)
                         }
                     }
@@ -185,6 +188,7 @@ struct AllChatSessionsView: View {
 
 struct ChatSessionListRow: View {
     let session: (id: UUID, firstMessage: String, date: Date, messageCount: Int)
+    let onOpen: () -> Void
     let onDelete: () -> Void
 
     @State private var showDeleteConfirmation = false
@@ -218,6 +222,8 @@ struct ChatSessionListRow: View {
                 }
             }
         }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onOpen)
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 showDeleteConfirmation = true

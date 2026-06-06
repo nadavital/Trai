@@ -21,6 +21,8 @@ nonisolated enum SharedStorageKeys {
     }
 
     enum Chat {
+        static let currentSessionId = "currentChatSessionId"
+        static let pendingOpenSessionId = "pendingTraiChatOpenSessionId"
         static let pendingPrompt = "pendingTraiChatPrompt"
         static let pendingLaunchLabel = "pendingTraiChatLaunchLabel"
         static let pendingFocusedFoodEntryId = "pendingTraiChatFocusedFoodEntryId"

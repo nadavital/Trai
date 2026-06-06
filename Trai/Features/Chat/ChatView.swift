@@ -87,7 +87,8 @@ struct ChatView: View {
     @State private var viewingLoggedMealId: UUID?
     @State private var viewingAppliedPlan: PlanUpdateSuggestionEntry?
     @FocusState private var isInputFocused: Bool
-    @AppStorage("currentChatSessionId") var currentSessionIdString: String = ""
+    @AppStorage(SharedStorageKeys.Chat.currentSessionId) var currentSessionIdString: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingOpenSessionId) var pendingOpenSessionIdString: String = ""
     @AppStorage("lastChatActivityDate") var lastActivityTimestamp: Double = 0
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest: Bool = false
     @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest: Bool = false
@@ -280,10 +281,6 @@ struct ChatView: View {
 
     var currentSessionMessages: [ChatMessage] {
         cachedSessionMessages
-    }
-
-    private var chatSessions: [(id: UUID, firstMessage: String, date: Date)] {
-        cachedChatSessions
     }
 
     private var isStreamingResponse: Bool {
@@ -538,14 +535,10 @@ struct ChatView: View {
                 isTemporarySession: isTemporarySession,
                 temporaryMessagesCount: temporaryMessages.count,
                 allMessagesFingerprint: allMessagesWindowFingerprint,
-                chatSessions: chatSessions,
                 onToggleTemporaryMode: {
                     toggleTemporaryMode()
                     HapticManager.lightTap()
                 },
-                onSelectSession: switchToSession,
-                onClearHistory: clearAllChats,
-                onNewChat: { startNewSession() },
                 showingCamera: $showingCamera,
                 onCameraImage: { image in selectedImage = image },
                 enlargedImage: $enlargedImage,
@@ -1156,11 +1149,7 @@ private struct ChatRootView: View {
     let isTemporarySession: Bool
     let temporaryMessagesCount: Int
     let allMessagesFingerprint: String
-    let chatSessions: [(id: UUID, firstMessage: String, date: Date)]
     let onToggleTemporaryMode: () -> Void
-    let onSelectSession: (UUID) -> Void
-    let onClearHistory: () -> Void
-    let onNewChat: () -> Void
     @Binding var showingCamera: Bool
     let onCameraImage: (UIImage) -> Void
     @Binding var enlargedImage: UIImage?
@@ -1195,7 +1184,7 @@ private struct ChatRootView: View {
             onPhotoSelected(newValue)
         }
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .primaryAction) {
                 Button {
                     onToggleTemporaryMode()
                 } label: {
@@ -1203,14 +1192,6 @@ private struct ChatRootView: View {
                         .foregroundStyle(isTemporarySession ? .orange : .secondary)
                 }
                 .help(isTemporarySession ? "Exit incognito mode" : "Start incognito chat")
-            }
-            ToolbarItem(placement: .primaryAction) {
-                ChatHistoryMenu(
-                    sessions: chatSessions,
-                    onSelectSession: onSelectSession,
-                    onClearHistory: onClearHistory,
-                    onNewChat: { onNewChat() }
-                )
             }
         }
         .onAppear(perform: onAppear)

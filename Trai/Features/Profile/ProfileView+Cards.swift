@@ -19,14 +19,6 @@ extension ProfileView {
                         .font(.headline)
                         .foregroundStyle(.primary)
 
-                    // Show the user's goal
-                    HStack(spacing: 4) {
-                        Image(systemName: profile.goal.iconName)
-                            .font(.caption2)
-                        Text(profile.goal.displayName)
-                            .font(.caption)
-                    }
-                    .foregroundStyle(.secondary)
                 }
 
                 Spacer()
@@ -385,7 +377,11 @@ extension ProfileView {
     @ViewBuilder
     func chatHistoryCard() -> some View {
         NavigationLink {
-            AllChatSessionsView()
+            AllChatSessionsView { sessionId in
+                currentChatSessionIdString = sessionId.uuidString
+                pendingOpenChatSessionIdString = sessionId.uuidString
+                onSelectTab?(.trai)
+            }
         } label: {
             HStack {
                 Image(systemName: "bubble.left.and.bubble.right.fill")
@@ -399,7 +395,7 @@ extension ProfileView {
                         .font(.headline)
                         .foregroundStyle(.primary)
 
-                    Text(conversationCount == 0 ? "No conversations yet" : "\(conversationCount) conversations")
+                    Text("View saved conversations")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
