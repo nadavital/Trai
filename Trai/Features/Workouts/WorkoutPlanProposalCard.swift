@@ -423,7 +423,7 @@ private struct CompactWorkoutDayDetailSheet: View {
                 .padding()
             }
             .navigationTitle("Workout Day")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark") {

@@ -189,7 +189,7 @@ struct WorkoutDetailSheet: View {
                 .padding()
             }
             .navigationTitle("Session Details")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .onAppear {
                 if noteDraft.isEmpty {
                     noteDraft = workout.notes ?? ""

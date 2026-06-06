@@ -41,7 +41,7 @@ struct WorkoutPlanDetailView: View {
             .padding()
         }
         .navigationTitle("Workout Plan")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
             if let editAction = onEditPlan {
                 ToolbarItem(placement: .primaryAction) {

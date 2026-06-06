@@ -176,7 +176,7 @@ struct WorkoutPlanChatFlow: View {
                 NavigationStack {
                     mainContent
                         .navigationTitle(navigationTitle)
-                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbarTitleDisplayMode(.inlineLarge)
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 if hasCancellableRefinement {

@@ -185,7 +185,7 @@ struct WorkoutGoalAISheet: View {
                 TraiChatInputBackdrop()
             }
             .navigationTitle("Set Goals with Trai")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {

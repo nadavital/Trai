@@ -604,7 +604,7 @@ struct ExerciseListView: View {
                 }
             }
             .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .searchable(text: $searchText, prompt: "Search exercises and activities")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

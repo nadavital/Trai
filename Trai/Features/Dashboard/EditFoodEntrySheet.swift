@@ -154,7 +154,7 @@ struct EditFoodEntrySheet: View {
                 .padding(.vertical, 14)
             }
             .navigationTitle("Edit Food")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

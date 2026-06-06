@@ -78,7 +78,7 @@ struct AllWorkoutsSheet: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Workout History")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark") {

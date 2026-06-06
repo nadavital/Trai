@@ -71,7 +71,7 @@ struct AddFoodView: View {
                 .padding(.vertical, 14)
             }
             .navigationTitle("Add Food")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

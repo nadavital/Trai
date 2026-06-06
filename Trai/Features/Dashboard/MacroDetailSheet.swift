@@ -100,7 +100,7 @@ struct MacroDetailSheet: View {
                 .padding()
             }
             .navigationTitle("Macro Breakdown")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark") { dismiss() }

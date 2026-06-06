@@ -73,7 +73,7 @@ struct AddCustomExerciseSheet: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("New Exercise")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {

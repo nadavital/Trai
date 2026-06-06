@@ -68,7 +68,7 @@ struct PlanChatView: View {
                 )
             }
             .navigationTitle("Adjust Your Plan")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark") {

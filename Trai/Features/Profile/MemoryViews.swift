@@ -126,7 +126,7 @@ struct AllMemoriesView: View {
             }
         }
         .navigationTitle("All Memories")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inlineLarge)
     }
 
     private func deleteMemory(_ memory: CoachMemory) {
@@ -271,7 +271,7 @@ struct MemoryDetailSheet: View {
                 .padding()
             }
             .navigationTitle("Memory")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Edit", systemImage: "pencil") {
@@ -376,7 +376,7 @@ struct MemoryEditSheet: View {
                 }
             }
             .navigationTitle("Edit Memory")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {

@@ -2042,7 +2042,7 @@ struct CompletedWorkoutGoalsSheet: View {
                 .padding()
             }
             .navigationTitle("Completed Goals")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark") {
@@ -2418,7 +2418,7 @@ private struct RecurringGoalHistorySheet: View {
             }
             .traiBackground()
             .navigationTitle("Goal History")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
@@ -2740,7 +2740,7 @@ struct WorkoutGoalDetailSheet: View {
             }
             .traiBackground()
             .navigationTitle("Goal Details")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Dismiss", systemImage: "xmark") {
@@ -3481,7 +3481,7 @@ struct AddWorkoutGoalSheet: View {
                 .padding()
             }
             .navigationTitle(editingGoal == nil ? "New Goal" : "Edit Goal")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {

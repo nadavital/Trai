@@ -222,7 +222,7 @@ struct LiveWorkoutDetailSheet: View {
                 .padding()
             }
             .navigationTitle("Workout Details")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .onAppear {
                 if originalEntryIDs.isEmpty {
                     originalEntryIDs = Set((workout.entries ?? []).map(\.id))
@@ -348,7 +348,7 @@ struct LiveWorkoutDetailSheet: View {
                     description: Text("Complete more workouts with \(exerciseName) to see your progress")
                 )
                 .navigationTitle(exerciseName)
-                .navigationBarTitleDisplayMode(.inline)
+                .toolbarTitleDisplayMode(.inlineLarge)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") {

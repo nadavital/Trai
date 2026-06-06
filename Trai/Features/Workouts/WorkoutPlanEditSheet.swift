@@ -52,7 +52,7 @@ struct WorkoutPlanEditSheet: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Edit Plan")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {
@@ -975,7 +975,7 @@ struct WorkoutDayEditorSheet: View {
                 focusedField = nil
             }
             .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark", action: onCancel)

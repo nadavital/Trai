@@ -59,7 +59,7 @@ struct DeveloperSettingsView: View {
             debugSection
         }
         .navigationTitle("Developer Settings")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inlineLarge)
         .sheet(item: $presentedAccountSetupContext) { context in
             AccountSetupView(context: context)
                 .traiSheetBranding()

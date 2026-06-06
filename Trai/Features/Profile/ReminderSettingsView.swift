@@ -33,7 +33,7 @@ struct ReminderSettingsView: View {
         content
             .traiBackground()
             .navigationTitle("Reminders")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .sheet(item: $composerSeed) { seed in
                 reminderComposer(seed)
             }

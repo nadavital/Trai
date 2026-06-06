@@ -92,7 +92,7 @@ struct SavedMemoriesSheet: View {
                 }
             }
             .navigationTitle("Saved Memories")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark") {

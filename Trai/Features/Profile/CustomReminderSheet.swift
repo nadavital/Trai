@@ -72,7 +72,7 @@ struct CustomReminderSheet: View {
                 }
             }
             .navigationTitle(isEditing ? "Edit Reminder" : "New Reminder")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") { dismiss() }

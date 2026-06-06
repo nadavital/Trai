@@ -95,7 +95,7 @@ struct ManualFoodEntrySheet: View {
                 .padding(.vertical, 14)
             }
             .navigationTitle("Manual Entry")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

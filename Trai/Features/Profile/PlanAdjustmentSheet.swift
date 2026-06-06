@@ -62,7 +62,7 @@ struct PlanAdjustmentSheet: View {
                 .ignoresSafeArea()
             )
             .navigationTitle("Adjust Plan")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {

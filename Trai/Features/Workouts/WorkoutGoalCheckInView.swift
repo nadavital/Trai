@@ -74,7 +74,7 @@ struct WorkoutGoalCheckInView: View {
             }
             .traiBackground()
             .navigationTitle("Check In")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Dismiss", systemImage: "xmark") {

@@ -279,7 +279,7 @@ private struct FoodLogCaptureStepView: View {
                 )
         }
         .navigationTitle(shouldShowNoCameraFallback ? "Log Food" : "")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel", systemImage: "xmark") {
@@ -619,7 +619,7 @@ private struct FoodLogReviewStepView: View {
             onRefine: refineFood,
             onManualEntry: onManualEntry
         )
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inlineLarge)
         .toolbarBackground(.visible, for: .navigationBar)
         .task(id: autoAnalyzeKey) {
             guard shouldAutoAnalyzeDescription else { return }

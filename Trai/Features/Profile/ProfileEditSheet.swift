@@ -63,7 +63,7 @@ struct ProfileEditSheet: View {
                 .ignoresSafeArea()
             )
             .navigationTitle("Edit Profile")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {

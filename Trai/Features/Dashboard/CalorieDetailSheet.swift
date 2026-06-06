@@ -93,7 +93,7 @@ struct CalorieDetailSheet: View {
                 .padding()
             }
             .navigationTitle("Calorie Breakdown")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark") { dismiss() }

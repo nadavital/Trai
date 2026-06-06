@@ -157,7 +157,7 @@ struct AllChatSessionsView: View {
         }
         .listStyle(.plain)
         .navigationTitle("Chat History")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inlineLarge)
         .onAppear {
             fetchMessages()
         }

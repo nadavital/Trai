@@ -106,7 +106,7 @@ struct PersonalRecordsView: View {
                 }
             }
             .navigationTitle("Personal Records")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .searchable(text: $searchText, prompt: "Search records")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -759,7 +759,7 @@ struct PRDetailSheet: View {
 
             }
             .navigationTitle(pr.exerciseName)
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
@@ -1195,7 +1195,7 @@ private struct EditHistorySheet: View {
                 }
             }
             .navigationTitle("Edit Record")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {

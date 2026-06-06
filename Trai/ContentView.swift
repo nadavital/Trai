@@ -207,7 +207,7 @@ private struct AppStoreScreenshotPlanReviewView: View {
                 .padding(.bottom, TraiSpacing.xl)
             }
             .navigationTitle("Workout Plan")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
         }
         .traiBackground(intensity: 0.45)
     }

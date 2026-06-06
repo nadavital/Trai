@@ -58,7 +58,7 @@ struct MacroTrackingSettingsSheet: View {
                 }
             }
             .navigationTitle("Macro Tracking")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {

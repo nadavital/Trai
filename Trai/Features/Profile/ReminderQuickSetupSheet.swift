@@ -159,7 +159,7 @@ struct ReminderQuickSetupSheet: View {
                 .onChange(of: suggestedReminder != nil) { _, _ in scrollToBottom(proxy) }
             }
             .navigationTitle(navigationTitle)
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close", systemImage: "xmark") {

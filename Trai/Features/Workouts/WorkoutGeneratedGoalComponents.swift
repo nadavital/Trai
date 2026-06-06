@@ -162,7 +162,7 @@ struct GeneratedWorkoutGoalDetailSheet: View {
                 }
             }
             .navigationTitle("Goal")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark") {

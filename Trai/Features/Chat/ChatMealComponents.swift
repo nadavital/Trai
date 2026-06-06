@@ -490,7 +490,7 @@ struct EditMealSuggestionSheet: View {
                 }
             }
             .navigationTitle("Edit Meal")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {

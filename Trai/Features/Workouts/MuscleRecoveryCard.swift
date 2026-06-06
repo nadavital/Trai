@@ -189,7 +189,7 @@ struct MuscleRecoveryDetailSheet: View {
                 }
             }
             .navigationTitle("Recovery Signals")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark") {

@@ -162,7 +162,7 @@ struct WorkoutSummarySheet: View {
                 .padding()
             }
             .navigationTitle("Summary")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark", action: onDismiss)
@@ -231,7 +231,7 @@ struct WorkoutSummarySheet: View {
                     description: Text("Complete more workouts with \(exerciseName) to see your progress")
                 )
                 .navigationTitle(exerciseName)
-                .navigationBarTitleDisplayMode(.inline)
+                .toolbarTitleDisplayMode(.inlineLarge)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") {

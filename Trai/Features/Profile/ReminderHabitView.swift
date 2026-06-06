@@ -111,7 +111,7 @@ struct ReminderHabitView: View {
             }
         }
         .navigationTitle(reminder.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Edit") {

@@ -437,7 +437,7 @@ struct PlanUpdateDetailSheet: View {
                 }
             }
             .navigationTitle("Plan Update")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark") {
@@ -573,7 +573,7 @@ struct EditPlanSuggestionSheet: View {
                 }
             }
             .navigationTitle("Edit Plan Update")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") {

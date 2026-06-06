@@ -46,7 +46,7 @@ struct PlanHistoryView: View {
             }
         }
         .navigationTitle("Plan History")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inlineLarge)
         .sheet(item: $selectedVersion) { version in
             NavigationStack {
                 PlanVersionDetailView(version: version)
@@ -101,7 +101,7 @@ private struct PlanVersionDetailView: View {
             }
         }
         .navigationTitle(version.displayReason)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done", systemImage: "checkmark") { dismiss() }

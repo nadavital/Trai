@@ -51,7 +51,7 @@ struct WorkoutPlanHistoryView: View {
             }
         }
         .navigationTitle("Workout History")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inlineLarge)
         .sheet(item: $selectedVersion) { version in
             NavigationStack {
                 WorkoutPlanVersionDetailView(version: version)
@@ -154,7 +154,7 @@ private struct WorkoutPlanVersionDetailView: View {
             }
         }
         .navigationTitle(version.displayReason)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done", systemImage: "checkmark") {
