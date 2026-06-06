@@ -367,6 +367,7 @@ struct WorkoutsView: View {
                 .padding()
             }
             .navigationTitle("Workouts")
+            .toolbarTitleDisplayMode(.inlineLarge)
             .refreshable {
                 await syncHealthKit()
                 markHistoryRefreshNeeded(delayMilliseconds: 80)

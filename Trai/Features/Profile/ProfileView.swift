@@ -203,6 +203,7 @@ struct ProfileView: View {
                 fetchCustomRemindersCount()
             }
             .navigationTitle("Profile")
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {

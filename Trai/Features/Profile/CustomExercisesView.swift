@@ -68,6 +68,7 @@ struct CustomExercisesView: View {
         }
         .searchable(text: $searchText, prompt: "Search exercises and activities")
         .navigationTitle("Exercise Library")
+        .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Add", systemImage: "plus") {

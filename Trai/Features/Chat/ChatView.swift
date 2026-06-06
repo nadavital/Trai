@@ -1190,6 +1190,7 @@ private struct ChatRootView: View {
             lastMessageId: lastMessageId
         )
         .navigationTitle("Trai")
+        .toolbarTitleDisplayMode(.inlineLarge)
         .onChange(of: selectedPhotoItem) { _, newValue in
             onPhotoSelected(newValue)
         }

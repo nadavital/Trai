@@ -94,6 +94,7 @@ struct WeightTrackingView: View {
                 .padding()
             }
             .navigationTitle("Weight")
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Add", systemImage: "plus") {

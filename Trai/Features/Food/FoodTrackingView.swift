@@ -75,6 +75,7 @@ struct FoodTrackingView: View {
                 .padding(.vertical, 14)
             }
             .navigationTitle("Food")
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Add Food", systemImage: "plus") {
