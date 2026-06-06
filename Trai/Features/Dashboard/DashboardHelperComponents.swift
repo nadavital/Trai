@@ -100,7 +100,7 @@ struct QuickActionButton: View {
                 VStack(spacing: 2) {
                     Text(title)
                         .font(.traiLabel())
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(color)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
@@ -173,7 +173,7 @@ struct ChatWithTraiCard: View {
                     HStack(spacing: 6) {
                         Text("Chat with Trai")
                             .font(.traiHeadline(14))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(Color.accentColor)
 
                         if !isUnlocked {
                             Text("PRO")
@@ -188,7 +188,7 @@ struct ChatWithTraiCard: View {
                     HStack(spacing: 6) {
                         Text("Chat")
                             .font(.traiHeadline(14))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(Color.accentColor)
 
                         if !isUnlocked {
                             Text("PRO")

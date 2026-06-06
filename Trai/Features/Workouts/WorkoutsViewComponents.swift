@@ -349,7 +349,7 @@ struct WorkoutsQuickActionsRow: View {
     var body: some View {
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 10) {
-                WorkoutsQuickActionChip("PR", systemImage: "trophy.fill", color: .yellow, action: onPersonalRecords)
+                WorkoutsQuickActionChip("PR", systemImage: "trophy.fill", color: TraiColors.blaze, action: onPersonalRecords)
                 WorkoutsQuickActionChip("Exercises", systemImage: "figure.strengthtraining.traditional", color: .blue, action: onCustomExercises)
                 WorkoutsQuickActionChip("Recovery", systemImage: "waveform.path.ecg", color: .green, action: onRecovery)
             }
@@ -379,7 +379,7 @@ private struct WorkoutsQuickActionChip: View {
 
                 Text(label)
                     .font(.traiLabel(13))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(color)
             }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
