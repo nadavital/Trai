@@ -50,10 +50,16 @@ enum AccountSetupContext: String, Identifiable {
 
 }
 
+enum AccountSetupLayout {
+    case bottomAnchored
+    case centered
+}
+
 struct AccountSetupView: View {
     let context: AccountSetupContext
     var showsDismissButton = true
     var dismissesWhenAuthenticated = true
+    var layout: AccountSetupLayout = .bottomAnchored
 
     @Environment(\.dismiss) private var dismiss
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
@@ -61,22 +67,7 @@ struct AccountSetupView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                AccountSetupHero(context: context)
-                    .padding(.top, 18)
-
-                Spacer(minLength: 0)
-
-                AccountSetupBottomContent(
-                    blockedReason: appAccountService?.realAccountSignInBlockedReason,
-                    backendActionTitle: backendActionTitle,
-                    lastErrorMessage: accountSessionService?.lastErrorMessage,
-                    accountSessionService: accountSessionService,
-                    onSwitchBackend: switchToRecommendedBackend,
-                    onAppleSignIn: handleAppleSignIn
-                )
-                .padding(.bottom, 18)
-            }
+            contentLayout
             .padding(.horizontal, 20)
             .padding(.top, 20)
             .padding(.bottom, 28)
@@ -95,6 +86,45 @@ struct AccountSetupView: View {
             dismiss()
         }
         .traiSheetBranding()
+    }
+
+    @ViewBuilder
+    private var contentLayout: some View {
+        switch layout {
+        case .bottomAnchored:
+            VStack(spacing: 0) {
+                AccountSetupHero(context: context)
+                    .padding(.top, 18)
+
+                Spacer(minLength: 0)
+
+                bottomContent
+                    .padding(.bottom, 18)
+            }
+        case .centered:
+            VStack(spacing: 0) {
+                Spacer(minLength: 44)
+
+                VStack(spacing: 34) {
+                    AccountSetupHero(context: context)
+                    bottomContent
+                }
+                .frame(maxWidth: 360)
+
+                Spacer(minLength: 60)
+            }
+        }
+    }
+
+    private var bottomContent: some View {
+        AccountSetupBottomContent(
+            blockedReason: appAccountService?.realAccountSignInBlockedReason,
+            backendActionTitle: backendActionTitle,
+            lastErrorMessage: accountSessionService?.lastErrorMessage,
+            accountSessionService: accountSessionService,
+            onSwitchBackend: switchToRecommendedBackend,
+            onAppleSignIn: handleAppleSignIn
+        )
     }
 
     private var backendActionTitle: String? {

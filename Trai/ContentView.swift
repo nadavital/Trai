@@ -709,7 +709,8 @@ private struct AccountRequiredGateView: View {
                 AccountSetupView(
                     context: .secureExistingData,
                     showsDismissButton: false,
-                    dismissesWhenAuthenticated: false
+                    dismissesWhenAuthenticated: false,
+                    layout: .centered
                 )
             }
         }
