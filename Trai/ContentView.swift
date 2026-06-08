@@ -36,6 +36,7 @@ struct ContentView: View {
     @AppStorage(AppLaunchArguments.onboardingCompletedCacheKey)
     private var cachedOnboardingReady = false
     @Environment(\.modelContext) private var modelContext
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @State private var didRunStartupFlow = false
     @State private var startupResolutionState: StartupResolutionState = .determining
     @StateObject private var activeWorkoutRuntimeState = ActiveWorkoutRuntimeState()
@@ -63,13 +64,34 @@ struct ContentView: View {
             || !completedProfiles.isEmpty
     }
 
+    private var isReadyForMainExperience: Bool {
+        hasCompletedOnboardingFromQuery || startupResolutionState == .ready
+    }
+
+    private var shouldRequireAccountSignIn: Bool {
+        guard isReadyForMainExperience else { return false }
+        guard let accountSessionService else { return false }
+        return !accountSessionService.isAuthenticated
+    }
+
+    private var isCheckingAccountState: Bool {
+        guard let accountSessionService else { return false }
+        return accountSessionService.authState == .authenticating
+            || accountSessionService.authState == .refreshing
+            || accountSessionService.isSyncingAccount
+    }
+
     var body: some View {
         Group {
             if AppLaunchArguments.shouldUseAppStoreScreenshotSeed,
                AppLaunchArguments.shouldShowAppStoreScreenshotPlanReview {
                 AppStoreScreenshotPlanReviewView()
-            } else if hasCompletedOnboardingFromQuery || startupResolutionState == .ready {
-                MainTabView(deepLinkDestination: $deepLinkDestination)
+            } else if isReadyForMainExperience {
+                if shouldRequireAccountSignIn {
+                    AccountRequiredGateView(isCheckingAccount: isCheckingAccountState)
+                } else {
+                    MainTabView(deepLinkDestination: $deepLinkDestination)
+                }
             } else if startupResolutionState == .determining
                         || startupResolutionState == .waitingForCloudProfile {
                 StartupReadinessView(
@@ -669,6 +691,27 @@ private struct StartupReadinessView: View {
                     .foregroundStyle(.secondary)
             }
             .padding(24)
+        }
+    }
+}
+
+private struct AccountRequiredGateView: View {
+    let isCheckingAccount: Bool
+
+    var body: some View {
+        Group {
+            if isCheckingAccount {
+                StartupReadinessView(
+                    statusText: "Checking your account...",
+                    lensState: .thinking
+                )
+            } else {
+                AccountSetupView(
+                    context: .secureExistingData,
+                    showsDismissButton: false,
+                    dismissesWhenAuthenticated: false
+                )
+            }
         }
     }
 }
