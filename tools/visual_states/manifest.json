@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "states": [
+    {
+      "id": "dashboard",
+      "title": "Dashboard",
+      "groups": ["core", "tabs", "title-sweep"],
+      "launchArguments": [
+        "UITEST_MODE",
+        "--disable-tab-prewarm",
+        "--app-store-screenshot-mode",
+        "--app-store-screenshot-tab",
+        "dashboard"
+      ],
+      "ready": { "identifier": "dashboardRootReady", "timeout": 12 },
+      "settleSeconds": 0.8
+    },
+    {
+      "id": "trai-chat",
+      "title": "Trai Chat",
+      "groups": ["core", "tabs", "title-sweep"],
+      "launchArguments": [
+        "UITEST_MODE",
+        "--disable-tab-prewarm",
+        "--app-store-screenshot-mode",
+        "--app-store-screenshot-tab",
+        "trai"
+      ],
+      "ready": { "identifier": "traiRootReady", "timeout": 12 },
+      "settleSeconds": 1.0
+    },
+    {
+      "id": "workouts",
+      "title": "Workouts",
+      "groups": ["core", "tabs", "title-sweep"],
+      "launchArguments": [
+        "UITEST_MODE",
+        "--disable-tab-prewarm",
+        "--app-store-screenshot-mode",
+        "--app-store-screenshot-tab",
+        "workouts"
+      ],
+      "ready": { "identifier": "workoutsRootReady", "timeout": 12 },
+      "settleSeconds": 1.0
+    },
+    {
+      "id": "profile",
+      "title": "Profile",
+      "groups": ["core", "tabs", "title-sweep"],
+      "launchArguments": [
+        "UITEST_MODE",
+        "--disable-tab-prewarm",
+        "--app-store-screenshot-mode",
+        "--app-store-screenshot-tab",
+        "profile"
+      ],
+      "ready": { "identifier": "profileRootReady", "timeout": 12 },
+      "settleSeconds": 1.0
+    },
+    {
+      "id": "food-camera",
+      "title": "Food Camera",
+      "groups": ["core", "food", "title-sweep"],
+      "launchArguments": [
+        "UITEST_MODE",
+        "--disable-tab-prewarm",
+        "--app-store-screenshot-mode",
+        "--ui-test-force-no-camera-food-flow",
+        "-pendingAppRoute",
+        "trai://logfood"
+      ],
+      "ready": { "identifier": "foodCameraNoCameraReady", "timeout": 12 },
+      "settleSeconds": 0.8
+    },
+    {
+      "id": "food-review",
+      "title": "Food Review",
+      "groups": ["core", "food", "title-sweep"],
+      "launchArguments": [
+        "UITEST_MODE",
+        "--disable-tab-prewarm",
+        "--app-store-screenshot-mode",
+        "--app-store-screenshot-food-review",
+        "-pendingAppRoute",
+        "trai://logfood"
+      ],
+      "ready": { "identifier": "foodCameraReviewSaveButton", "timeout": 12 },
+      "settleSeconds": 0.8
+    },
+    {
+      "id": "live-workout",
+      "title": "Live Workout",
+      "groups": ["core", "workouts", "title-sweep"],
+      "launchArguments": [
+        "UITEST_MODE",
+        "--disable-tab-prewarm",
+        "-pendingAppRoute",
+        "trai://workout",
+        "--ui-test-live-workout-preset",
+        "--seed-live-workout-perf-data"
+      ],
+      "ready": { "identifier": "liveWorkoutEndButton", "timeout": 16 },
+      "settleSeconds": 1.0
+    },
+    {
+      "id": "exercise-list",
+      "title": "Exercise List",
+      "groups": ["core", "workouts", "title-sweep"],
+      "launchArguments": [
+        "UITEST_MODE",
+        "--disable-tab-prewarm",
+        "-pendingAppRoute",
+        "trai://workout",
+        "--ui-test-live-workout-preset",
+        "--seed-live-workout-perf-data"
+      ],
+      "ready": { "identifier": "liveWorkoutEndButton", "timeout": 16 },
+      "steps": [
+        {
+          "action": "tap",
+          "target": { "label": "Add Exercise", "kind": "button" },
+          "timeout": 8
+        },
+        {
+          "action": "waitFor",
+          "target": { "identifier": "exerciseListView" },
+          "timeout": 8
+        }
+      ],
+      "settleSeconds": 0.8
+    }
+  ]
+}

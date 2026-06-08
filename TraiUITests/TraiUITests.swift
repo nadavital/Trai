@@ -818,3 +818,232 @@ final class TraiUITests: XCTestCase {
         return fallbackNavigationBar.waitForExistence(timeout: max(4, timeout / 2))
     }
 }
+
+final class VisualStateCaptureTests: XCTestCase {
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    func testCaptureVisualStates() throws {
+        let config = try VisualStateCaptureConfig.load()
+        guard config.enabled else {
+            throw XCTSkip("Run scripts/capture_visual_states.sh to capture visual states.")
+        }
+
+        let manifestPath = config.manifestPath
+        let outputPath = config.outputPath
+        let manifest = try VisualStateManifest.load(from: URL(fileURLWithPath: manifestPath))
+        let selectedStateIDs = Set(
+            config.ids
+                .split(separator: ",")
+                .map(String.init)
+                .filter { !$0.isEmpty }
+        )
+        let selectedGroups = Set(
+            config.groups
+                .split(separator: ",")
+                .map(String.init)
+                .filter { !$0.isEmpty }
+        )
+        let states = manifest.states.filter { state in
+            if !selectedStateIDs.isEmpty {
+                return selectedStateIDs.contains(state.id)
+            }
+            if !selectedGroups.isEmpty {
+                return !Set(state.groups).isDisjoint(with: selectedGroups)
+            }
+            return true
+        }
+        XCTAssertFalse(states.isEmpty, "No visual states matched the requested ids/groups")
+
+        let outputURL = URL(fileURLWithPath: outputPath, isDirectory: true)
+        try FileManager.default.createDirectory(at: outputURL, withIntermediateDirectories: true)
+
+        for state in states {
+            try capture(state: state, outputURL: outputURL)
+        }
+    }
+
+    private func capture(state: VisualState, outputURL: URL) throws {
+        let app = XCUIApplication()
+        app.launchArguments = state.launchArguments
+        app.launch()
+
+        XCTAssertTrue(
+            waitForReadiness(state.ready, in: app),
+            "State '\(state.id)' did not reach readiness: \(state.ready)"
+        )
+
+        for step in state.steps ?? [] {
+            try perform(step: step, in: app, stateID: state.id)
+        }
+
+        if let settleSeconds = state.settleSeconds, settleSeconds > 0 {
+            Thread.sleep(forTimeInterval: settleSeconds)
+        }
+
+        let screenshot = XCUIScreen.main.screenshot()
+        let screenshotURL = outputURL.appendingPathComponent("\(state.id).png")
+        try screenshot.pngRepresentation.write(to: screenshotURL, options: .atomic)
+
+        app.terminate()
+    }
+
+    private func perform(step: VisualStateStep, in app: XCUIApplication, stateID: String) throws {
+        switch step.action {
+        case .tap:
+            let target = try XCTUnwrap(step.target, "Tap step in '\(stateID)' requires a target")
+            let element = element(for: target, in: app)
+            XCTAssertTrue(
+                element.waitForExistence(timeout: step.timeout ?? 6),
+                "Tap target did not appear in '\(stateID)': \(target)"
+            )
+            element.tap()
+        case .waitFor:
+            let target = try XCTUnwrap(step.target, "waitFor step in '\(stateID)' requires a target")
+            XCTAssertTrue(
+                element(for: target, in: app).waitForExistence(timeout: step.timeout ?? 6),
+                "waitFor target did not appear in '\(stateID)': \(target)"
+            )
+        case .wait:
+            Thread.sleep(forTimeInterval: step.seconds ?? 1)
+        }
+    }
+
+    private func waitForReadiness(_ ready: VisualStateReadiness, in app: XCUIApplication) -> Bool {
+        element(for: ready.target, in: app).waitForExistence(timeout: ready.timeout)
+    }
+
+    private func element(for target: VisualStateTarget, in app: XCUIApplication) -> XCUIElement {
+        if let identifier = target.identifier {
+            return app.descendants(matching: .any)[identifier]
+        }
+        if let label = target.label {
+            switch target.kind {
+            case .button:
+                return app.buttons[label]
+            case .navigationBar:
+                return app.navigationBars[label]
+            case .text:
+                return app.staticTexts[label]
+            case .any, .none:
+                return app.descendants(matching: .any)[label]
+            }
+        }
+        return app.descendants(matching: .any).firstMatch
+    }
+}
+
+private struct VisualStateCaptureConfig: Decodable {
+    let enabled: Bool
+    let createdAt: TimeInterval
+    let manifestPath: String
+    let outputPath: String
+    let groups: String
+    let ids: String
+
+    static func load() throws -> Self {
+        let url = URL(fileURLWithPath: "/tmp/trai-visual-state-capture-config.json")
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return Self(
+                enabled: false,
+                createdAt: Date().timeIntervalSince1970,
+                manifestPath: "",
+                outputPath: "",
+                groups: "",
+                ids: ""
+            )
+        }
+
+        let data = try Data(contentsOf: url)
+        let config = try JSONDecoder().decode(Self.self, from: data)
+        guard Date().timeIntervalSince1970 - config.createdAt < 1_800 else {
+            return Self(
+                enabled: false,
+                createdAt: config.createdAt,
+                manifestPath: config.manifestPath,
+                outputPath: config.outputPath,
+                groups: config.groups,
+                ids: config.ids
+            )
+        }
+        return config
+    }
+}
+
+private struct VisualStateManifest: Decodable {
+    let states: [VisualState]
+
+    static func load(from url: URL) throws -> Self {
+        let data = try Data(contentsOf: url)
+        return try JSONDecoder().decode(Self.self, from: data)
+    }
+}
+
+private struct VisualState: Decodable {
+    let id: String
+    let title: String
+    let groups: [String]
+    let launchArguments: [String]
+    let ready: VisualStateReadiness
+    let steps: [VisualStateStep]?
+    let settleSeconds: TimeInterval?
+}
+
+private struct VisualStateReadiness: Decodable, CustomStringConvertible {
+    let identifier: String?
+    let label: String?
+    let kind: VisualStateTarget.Kind?
+    let timeout: TimeInterval
+
+    var target: VisualStateTarget {
+        VisualStateTarget(identifier: identifier, label: label, kind: kind)
+    }
+
+    var description: String {
+        [
+            identifier.map { "identifier=\($0)" },
+            label.map { "label=\($0)" },
+            kind.map { "kind=\($0.rawValue)" },
+            "timeout=\(timeout)"
+        ]
+        .compactMap { $0 }
+        .joined(separator: ", ")
+    }
+}
+
+private struct VisualStateStep: Decodable {
+    enum Action: String, Decodable {
+        case tap
+        case waitFor
+        case wait
+    }
+
+    let action: Action
+    let target: VisualStateTarget?
+    let timeout: TimeInterval?
+    let seconds: TimeInterval?
+}
+
+private struct VisualStateTarget: Decodable, CustomStringConvertible {
+    enum Kind: String, Decodable {
+        case any
+        case button
+        case navigationBar
+        case text
+    }
+
+    let identifier: String?
+    let label: String?
+    let kind: Kind?
+
+    var description: String {
+        [
+            identifier.map { "identifier=\($0)" },
+            label.map { "label=\($0)" },
+            kind.map { "kind=\($0.rawValue)" }
+        ]
+        .compactMap { $0 }
+        .joined(separator: ", ")
+    }
+}

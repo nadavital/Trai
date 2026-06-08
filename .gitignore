@@ -46,3 +46,6 @@ Backend/tmp/
 
 # Local review captures
 onboarding-redesign-walkthrough.mp4
+
+# Local visual-state captures
+artifacts/visual-states/

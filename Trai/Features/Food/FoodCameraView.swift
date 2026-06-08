@@ -281,12 +281,18 @@ private struct FoodLogCaptureStepView: View {
         .navigationTitle(shouldShowNoCameraFallback ? "Log Food" : "")
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel", systemImage: "xmark") {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
                     recordIgnoredSuggestionsIfNeeded()
                     onCancel()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.headline.weight(.semibold))
+                        .frame(width: 34, height: 34)
                 }
+                .buttonStyle(.plain)
                 .foregroundStyle(shouldShowNoCameraFallback ? Color.primary : .white)
+                .accessibilityLabel("Cancel")
             }
         }
         .toolbarBackground(shouldShowNoCameraFallback ? .visible : .hidden, for: .navigationBar)
@@ -619,7 +625,7 @@ private struct FoodLogReviewStepView: View {
             onRefine: refineFood,
             onManualEntry: onManualEntry
         )
-        .toolbarTitleDisplayMode(.inlineLarge)
+        .toolbarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
         .task(id: autoAnalyzeKey) {
             guard shouldAutoAnalyzeDescription else { return }

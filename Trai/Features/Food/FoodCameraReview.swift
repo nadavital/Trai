@@ -164,7 +164,9 @@ struct FoodCameraReviewView: View {
                     .disabled(isAnalyzing)
                 }
             }
-            .padding()
+            .padding(.horizontal, TraiSpacing.md)
+            .padding(.top, TraiSpacing.xs)
+            .padding(.bottom, TraiSpacing.md)
         }
         .traiBackground(intensity: 0.45)
         .onChange(of: refinedSuggestion) { _, newValue in

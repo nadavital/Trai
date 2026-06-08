@@ -26,74 +26,7 @@ struct FoodCameraNoCameraFallbackView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: TraiSpacing.md) {
-                statusRow
-
-                if !suggestions.isEmpty {
-                    VStack(alignment: .leading, spacing: TraiSpacing.sm) {
-                        TraiSectionHeader("Quick picks", icon: "clock.arrow.circlepath")
-
-                        FoodCameraSuggestionRail(
-                            suggestions: suggestions,
-                            onSelectSuggestion: onSelectSuggestion,
-                            onDismissKeyboard: {
-                                isDescriptionFocused = false
-                            }
-                        )
-                        .padding(.horizontal, -TraiSpacing.md)
-                    }
-                    .traiCard(cornerRadius: TraiRadius.medium)
-                }
-
-                VStack(alignment: .leading, spacing: TraiSpacing.sm) {
-                    TraiSectionHeader("Notes", icon: "text.alignleft")
-
-                    TextField("What did you eat?", text: $description, axis: .vertical)
-                        .lineLimit(3...6)
-                        .padding(12)
-                        .background(
-                            Color(.tertiarySystemBackground),
-                            in: RoundedRectangle(cornerRadius: 12)
-                        )
-                        .focused($isDescriptionFocused)
-                        .submitLabel(.done)
-                        .onSubmit(submitDescription)
-
-                    Button {
-                        submitDescription()
-                    } label: {
-                        Label("Analyze with Trai", systemImage: "circle.hexagongrid.circle")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.traiPrimary(fullWidth: true))
-                    .disabled(!canSubmitDescription)
-                }
-                .traiCard(cornerRadius: TraiRadius.medium)
-
-                VStack(alignment: .leading, spacing: TraiSpacing.sm) {
-                    TraiSectionHeader("Other ways to log", icon: "ellipsis.circle")
-
-                    HStack(spacing: TraiSpacing.sm) {
-                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                            FoodCameraCompactActionLabel(
-                                title: "Library",
-                                systemImage: "photo.on.rectangle"
-                            )
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, height: 44))
-
-                        Button(action: onManualEntry) {
-                            FoodCameraCompactActionLabel(
-                                title: "Manual",
-                                systemImage: "square.and.pencil"
-                            )
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.traiTertiary(fullWidth: true, height: 44))
-                        .accessibilityIdentifier("foodCameraManualButton")
-                    }
-                }
-                .traiCard(cornerRadius: TraiRadius.medium)
+                loggingPanel
             }
             .padding(.horizontal, TraiSpacing.md)
             .padding(.vertical, 14)
@@ -102,6 +35,21 @@ struct FoodCameraNoCameraFallbackView: View {
         .background(Color(.systemGroupedBackground))
         .traiBackground(intensity: 0.8)
         .accessibilityIdentifier("foodCameraNoCameraFallback")
+    }
+
+    private var loggingPanel: some View {
+        VStack(alignment: .leading, spacing: TraiSpacing.md) {
+            statusRow
+
+            if !suggestions.isEmpty {
+                Divider()
+                quickPicksSection
+            }
+
+            Divider()
+            notesSection
+        }
+        .traiCard(cornerRadius: TraiRadius.medium)
     }
 
     private var statusRow: some View {
@@ -131,13 +79,126 @@ struct FoodCameraNoCameraFallbackView: View {
             }
             .buttonStyle(.traiTertiary(color: .accentColor, size: .compact, width: 96, height: 36))
         }
-        .traiCard(cornerRadius: TraiRadius.medium, contentPadding: 14)
+    }
+
+    private var quickPicksSection: some View {
+        VStack(alignment: .leading, spacing: TraiSpacing.sm) {
+            TraiSectionHeader("Quick picks", icon: "clock.arrow.circlepath")
+
+            VStack(spacing: TraiSpacing.sm) {
+                ForEach(suggestions) { suggestion in
+                    FoodCameraCompactSuggestionCard(suggestion: suggestion) {
+                        isDescriptionFocused = false
+                        onSelectSuggestion(suggestion)
+                    }
+                }
+            }
+        }
+    }
+
+    private var notesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TraiSectionHeader("Describe meal", icon: "text.alignleft")
+
+            TextField("What did you eat?", text: $description, axis: .vertical)
+                .lineLimit(3...6)
+                .padding(12)
+                .background(
+                    Color(.tertiarySystemBackground),
+                    in: RoundedRectangle(cornerRadius: 12)
+                )
+                .focused($isDescriptionFocused)
+                .submitLabel(.done)
+                .onSubmit(submitDescription)
+
+            Button {
+                submitDescription()
+            } label: {
+                Label("Analyze with Trai", systemImage: "circle.hexagongrid.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.traiPrimary(fullWidth: true))
+            .disabled(!canSubmitDescription)
+
+            alternateInputRow
+                .padding(.top, 2)
+        }
+    }
+
+    private var alternateInputRow: some View {
+        HStack(spacing: TraiSpacing.sm) {
+            Text("Or")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                Label("Choose photo", systemImage: "photo.on.rectangle")
+                    .font(.traiLabel(13))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(TraiColors.brandAccent)
+
+            Text("•")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
+            Button(action: onManualEntry) {
+                Label("Manual entry", systemImage: "square.and.pencil")
+                    .font(.traiLabel(13))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(TraiColors.brandAccent)
+            .accessibilityIdentifier("foodCameraManualButton")
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
     }
  
     private func submitDescription() {
         guard canSubmitDescription else { return }
         isDescriptionFocused = false
         onSubmitDescription()
+    }
+}
+
+private struct FoodCameraCompactSuggestionCard: View {
+    let suggestion: FoodSuggestion
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: TraiSpacing.sm) {
+                Text(suggestion.emoji)
+                    .font(.title3)
+                    .frame(width: 30, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(suggestion.title)
+                        .font(.traiHeadline(14))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(suggestion.detail)
+                        .font(.traiLabel(11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: TraiSpacing.sm)
+
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(TraiColors.brandAccent)
+            }
+            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+            .padding(12)
+            .background(
+                Color(.tertiarySystemBackground),
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
