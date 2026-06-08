@@ -146,7 +146,7 @@ struct LiveWorkoutView: View {
             }
         }
         .navigationTitle(showingSummary ? "Summary" : viewModel.workoutName)
-        .toolbarTitleDisplayMode(.inlineLarge)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar { liveWorkoutToolbar }
         .onAppear(perform: handleAppear)
         .onDisappear(perform: handleDisappear)
