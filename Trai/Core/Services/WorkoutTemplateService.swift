@@ -79,12 +79,7 @@ struct WorkoutTemplateService {
             }
 
             if let template {
-                return createWorkoutFromTemplate(
-                    template,
-                    progressionStrategy: plan.progressionStrategy,
-                    modelContext: modelContext,
-                    prefillStrengthExercises: true
-                )
+                return createStartWorkout(from: template)
             }
 
             if templateID != nil {

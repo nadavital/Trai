@@ -804,8 +804,13 @@ final class LiveWorkoutViewModel {
     /// Handle "Up Next" button tap from Live Activity
     private func handleAdvanceExerciseFromLiveActivity() {
         guard let currentEntry = liveActivityCurrentEntry(),
-              let currentIndex = entries.firstIndex(where: { $0.id == currentEntry.id }),
-              entries.indices.contains(currentIndex + 1) else { return }
+              let currentIndex = entries.firstIndex(where: { $0.id == currentEntry.id }) else {
+            if addUpNextExercise() {
+                updateLiveActivity()
+                HapticManager.lightTap()
+            }
+            return
+        }
 
         if currentEntry.isStrength {
             var sets = currentEntry.sets
@@ -817,7 +822,11 @@ final class LiveWorkoutViewModel {
             currentEntry.completedAt = currentEntry.completedAt ?? Date()
         }
 
-        liveActivityFocusedEntryID = entries[currentIndex + 1].id
+        if entries.indices.contains(currentIndex + 1) {
+            liveActivityFocusedEntryID = entries[currentIndex + 1].id
+        } else {
+            addUpNextExercise()
+        }
         refreshEntriesAndMetrics()
         saveDebounced(updateLiveActivity: true)
         updateLiveActivity()
@@ -1263,9 +1272,11 @@ final class LiveWorkoutViewModel {
     }
 
     /// Add the "Up Next" suggested exercise
-    func addUpNextExercise() {
-        guard let suggestion = upNextSuggestion else { return }
+    @discardableResult
+    func addUpNextExercise() -> Bool {
+        guard let suggestion = upNextSuggestion else { return false }
         addExerciseFromSuggestion(suggestion)
+        return true
     }
 
     // MARK: - Exercise Management
@@ -1341,6 +1352,7 @@ final class LiveWorkoutViewModel {
             workout.entries = []
         }
         workout.entries?.append(entry)
+        markLiveActivityFocusedEntry(entry)
         refreshEntriesAndMetrics()
         saveImmediately()
     }
@@ -2181,20 +2193,6 @@ final class LiveWorkoutViewModel {
             startedAt: workout.startedAt
         )
         updateLiveActivity()
-
-        // Start periodic updates for elapsed time
-        startLiveActivityUpdates()
-    }
-
-    private func startLiveActivityUpdates() {
-        liveActivityUpdateTimer?.invalidate()
-        // Update every 5 seconds to avoid constant re-renders (improves typing performance)
-        // The Live Activity timer display is not critical for real-time accuracy
-        liveActivityUpdateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.updateLiveActivity()
-            }
-        }
     }
 
     private func stopLiveActivityUpdates() {
@@ -2244,7 +2242,8 @@ final class LiveWorkoutViewModel {
             self.liveActivityFocusedEntryID = nil
         }
 
-        return entries.first { !isEntryCompleteForLiveActivity($0) } ?? entries.last
+        return entries.last(where: isEntryStartedForLiveActivity)
+            ?? entries.last
     }
 
     private func liveActivityEntryForAddSet() -> LiveWorkoutEntry? {
@@ -2252,7 +2251,7 @@ final class LiveWorkoutViewModel {
             return currentEntry
         }
 
-        // If the current item is timed/general work, route "Add Set" to a real strength entry.
+        // If the current exercise is timed/general work, route "Add Set" to a real strength entry.
         return entries.first { $0.isStrength && !isEntryCompleteForLiveActivity($0) }
             ?? entries.last(where: \.isStrength)
     }
@@ -2275,14 +2274,14 @@ final class LiveWorkoutViewModel {
             let progressEntries = countableEntries.isEmpty
                 ? entries.filter { $0.isCardio || $0.isGeneralActivity }
                 : countableEntries
-            let loggedItems = progressEntries.filter { entry in
+            let loggedExercises = progressEntries.filter { entry in
                 entry.isStrength
                     ? isEntryCompleteForLiveActivity(entry)
                     : isEntryStartedForLiveActivity(entry)
             }.count
-            let label = loggedItems == 1 ? "item" : "items"
+            let label = loggedExercises == 1 ? "exercise" : "exercises"
             return LiveActivityProgressSummary(
-                completed: loggedItems,
+                completed: loggedExercises,
                 total: 0,
                 label: label,
                 supportsSetShortcut: supportsSetShortcut
@@ -2344,11 +2343,13 @@ final class LiveWorkoutViewModel {
         let totalVolumeKg = totalVolume
         let totalVolumeLbs = totalVolume * 2.20462
 
-        // Find next exercise (first after current that isn't started yet)
+        // Find the next exercise from an existing planned entry, or fall back to
+        // the same Up Next recommendation shown in the workout view.
         let currentIndex = entries.firstIndex { $0.id == currentEntry?.id } ?? -1
         let nextExercise = entries.dropFirst(currentIndex + 1)
             .first { !isEntryStartedForLiveActivity($0) }?
             .exerciseName
+            ?? upNextSuggestion?.exerciseName
 
         liveActivityManager.updateActivity(
             elapsedSeconds: Int(elapsedTime),

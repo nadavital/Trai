@@ -264,7 +264,9 @@ struct SetRow: View {
     @State private var showNotesField = false
     @State private var isUpdatingFromUnitChange = false
     @State private var showWeightJumpConfirmation = false
+    @State private var showRepsJumpConfirmation = false
     @State private var pendingWeight: CleanWeight?
+    @State private var pendingReps: Int?
     @State private var currentDisplayUnit: WeightUnit = .kg
     @FocusState private var isWeightFocused: Bool
     @FocusState private var isRepsFocused: Bool
@@ -281,6 +283,8 @@ struct SetRow: View {
     // Weight jump detection thresholds
     private let percentageThreshold: Double = 0.5  // 50% increase
     private let absoluteThresholdKg: Double = 25.0  // 25kg / ~55lbs absolute jump
+    private let repsPercentageThreshold: Double = 2.0  // 3x increase
+    private let repsAbsoluteThreshold: Int = 20
 
     private var defaultDisplayUnit: WeightUnit {
         WeightUnit(usesMetric: usesMetricWeight)
@@ -491,6 +495,26 @@ struct SetRow: View {
                 Text("This is a significant increase from \(previousDisplay) to \(weight.formatted(unit: currentDisplayUnit, showUnit: true)). Is this correct?")
             }
         }
+        .confirmationDialog(
+            "Large Reps Increase",
+            isPresented: $showRepsJumpConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Use \(pendingReps ?? 0) reps") {
+                if let reps = pendingReps {
+                    onUpdateReps(reps)
+                }
+                pendingReps = nil
+            }
+            Button("Cancel", role: .cancel) {
+                repsText = set.reps > 0 ? "\(set.reps)" : ""
+                pendingReps = nil
+            }
+        } message: {
+            if let reps = pendingReps {
+                Text("This is a significant increase from \(set.reps) to \(reps) reps. Is this correct?")
+            }
+        }
     }
 
     /// Commit weight value to parent (called after debounce or on focus loss)
@@ -535,8 +559,22 @@ struct SetRow: View {
     /// Commit reps value to parent (called after debounce or on focus loss)
     private func commitReps(_ value: String) {
         if let reps = Int(value) {
-            onUpdateReps(reps)
+            if isLargeRepsJump(newReps: reps) {
+                pendingReps = reps
+                showRepsJumpConfirmation = true
+            } else {
+                onUpdateReps(reps)
+            }
         }
+    }
+
+    private func isLargeRepsJump(newReps: Int) -> Bool {
+        let referenceReps = set.reps
+        guard referenceReps > 0, newReps > referenceReps else { return false }
+
+        let absoluteJump = newReps - referenceReps
+        let percentageJump = Double(absoluteJump) / Double(referenceReps)
+        return percentageJump >= repsPercentageThreshold && absoluteJump >= repsAbsoluteThreshold
     }
 
     /// Format weight to show whole numbers cleanly (80 not 80.0)

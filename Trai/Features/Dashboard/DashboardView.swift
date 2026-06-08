@@ -1825,12 +1825,7 @@ struct DashboardView: View {
     }
 
     private func startWorkoutFromTemplate(_ template: WorkoutPlan.WorkoutTemplate) {
-        let workout = workoutTemplateService.createWorkoutFromTemplate(
-            template,
-            progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
-            modelContext: modelContext,
-            prefillStrengthExercises: true
-        )
+        let workout = workoutTemplateService.createStartWorkout(from: template)
         _ = workoutTemplateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,
@@ -1893,12 +1888,7 @@ struct DashboardView: View {
             return
         }
 
-        let workout = workoutTemplateService.createWorkoutFromTemplate(
-            template,
-            progressionStrategy: plan.progressionStrategy,
-            modelContext: modelContext,
-            prefillStrengthExercises: true
-        )
+        let workout = workoutTemplateService.createStartWorkout(from: template)
         _ = workoutTemplateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,

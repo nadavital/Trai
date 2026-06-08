@@ -806,7 +806,7 @@ extension ChatView {
             return
         }
         guard !workout.exercises.isEmpty else {
-            message.errorMessage = "This workout needs at least one trackable item before it can be started. Ask Trai to regenerate it."
+            message.errorMessage = "This workout needs at least one trackable exercise before it can be started. Ask Trai to regenerate it."
             HapticManager.error()
             return
         }
@@ -828,94 +828,23 @@ extension ChatView {
             return
         }
         // Map target muscle groups
+        let strengthFocuses = workout.resolvedStrengthFocuses
+        let activityFocuses = workout.resolvedActivityFocuses
         let targetMuscles = workoutType.supportsMuscleTargets
-            ? LiveWorkout.MuscleGroup.fromTargetStrings(workout.targetMuscleGroups)
+            ? LiveWorkout.MuscleGroup.fromTargetStrings(strengthFocuses)
             : []
-        let focusAreas = workoutType.supportsMuscleTargets ? [] : workout.targetMuscleGroups
-        let semanticFocus = workout.resolvedActivityFocuses
+        let focusAreas = workoutType.supportsMuscleTargets ? activityFocuses : strengthFocuses + activityFocuses
 
-        // Create the LiveWorkout
+        // Create the LiveWorkout with targets only. The live workout surface owns
+        // adding the current exercise from recommendations so the active entry
+        // does not get stuck behind a prefilled plan list.
         let liveWorkout = LiveWorkout(
             name: workout.name,
             workoutType: workoutType,
             targetMuscleGroups: targetMuscles,
-            focusAreas: semanticFocus.isEmpty ? focusAreas : semanticFocus
+            focusAreas: focusAreas.dedupedByGoalKey()
         )
         liveWorkout.sourcePlanTemplateID = workout.sourcePlanTemplateID
-
-        var entries: [LiveWorkoutEntry] = []
-        entries.reserveCapacity(workout.exercises.count)
-        for (index, exercise) in workout.exercises.enumerated() {
-            guard let category = exercise.strictCategory else { continue }
-            let entry = LiveWorkoutEntry(
-                exerciseName: exercise.name,
-                orderIndex: index,
-                exerciseType: category.rawValue
-            )
-            entry.activityTypeName = exercise.resolvedActivityName(category: category)
-            entry.activityKind = category.liveWorkoutActivityKind
-            entry.activityRole = exercise.resolvedActivityRole
-            entry.targetTags = exercise.resolvedTargetTags(category: category)
-            entry.trackingFields = exercise.resolvedTrackingFields(category: category)
-            if category == .strength,
-               let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !notes.isEmpty {
-                entry.notes = notes
-            }
-            if category == .strength {
-                entry.sourcePlanBlockID = exercise.sourcePlanBlockID
-            }
-
-            if category == .strength {
-                let setDefaults = WorkoutTemplateService().suggestedSetDefaults(
-                    exerciseName: exercise.name,
-                    requestedReps: exercise.reps,
-                    requestedWeightKg: exercise.weightKg,
-                    progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
-                    modelContext: modelContext
-                )
-                let setCount = max(exercise.sets, 1)
-                for _ in 0..<setCount {
-                    entry.addSet(LiveWorkoutEntry.SetData(
-                        reps: setDefaults.reps,
-                        weight: setDefaults.weight,
-                        completed: false,
-                        isWarmup: false
-                    ))
-                }
-            } else {
-                entry.sourcePlanBlockID = exercise.sourcePlanBlockID ?? exercise.id
-                entry.plannedDurationSeconds = exercise.durationMinutes.map { max(0, $0) * 60 }
-                if let distanceMeters = exercise.distanceMeters, distanceMeters > 0 {
-                    entry.plannedTarget = String(format: "%.0f m", distanceMeters)
-                }
-                if let notes = exercise.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
-                    entry.plannedTarget = [entry.plannedTarget, notes]
-                        .compactMap { value in
-                            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                            return trimmed.isEmpty ? nil : trimmed
-                        }
-                        .joined(separator: " • ")
-                }
-                entry.plannedActivitySegments = exercise.activitySegments
-                if entry.plannedActivitySegments.isEmpty, entry.plannedDurationSeconds != nil || entry.plannedTarget != nil {
-                    entry.plannedActivitySegments = [
-                        LiveWorkoutEntry.ActivitySegment(
-                            durationSeconds: entry.plannedDurationSeconds,
-                            distanceMeters: exercise.distanceMeters,
-                            notes: entry.plannedTarget ?? ""
-                        )
-                    ]
-                }
-            }
-            entries.append(entry)
-        }
-        guard !entries.isEmpty else {
-            message.errorMessage = "This workout needs at least one trackable item before it can be started. Ask Trai to regenerate it."
-            HapticManager.error()
-            return
-        }
-        liveWorkout.entries = entries
 
         // Save to database
         modelContext.insert(liveWorkout)
@@ -1104,6 +1033,15 @@ private extension SuggestedWorkoutEntry.SuggestedExercise {
 }
 
 private extension SuggestedWorkoutEntry {
+    var resolvedStrengthFocuses: [String] {
+        let derived = exercises
+            .filter(\.isStrengthStartItem)
+            .flatMap { exercise in
+                exercise.targetTags ?? []
+            }
+        return (targetMuscleGroups + derived).dedupedByGoalKey()
+    }
+
     var resolvedActivityFocuses: [String] {
         let explicit = activityFocuses ?? []
         let derived = exercises

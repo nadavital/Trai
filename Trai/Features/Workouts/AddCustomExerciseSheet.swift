@@ -229,7 +229,7 @@ struct AddCustomExerciseSheet: View {
             if isAnalyzing {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Analyzing item...")
+                    Text("Analyzing exercise...")
                         .font(.traiHeadline(15))
                         .foregroundStyle(.secondary)
                     Spacer()

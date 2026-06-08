@@ -464,7 +464,7 @@ struct LiveWorkoutView: View {
 
                         workoutTargetSelector
 
-                        // Planned and ad hoc workout items share the same logging surface.
+                        // Planned and ad hoc workout entries share the same logging surface.
                         ForEach(entries, id: \.id) { entry in
                             workoutEntryCard(entry)
                         }
@@ -500,9 +500,9 @@ struct LiveWorkoutView: View {
 
                         if entries.isEmpty && upNext == nil && availableSuggestions.isEmpty {
                             ContentUnavailableView(
-                                "No Items Yet",
+                                "No Exercises Yet",
                                 systemImage: "figure.mixed.cardio",
-                                description: Text("Add what you want to track in this session.")
+                                description: Text("Add an exercise or activity to track in this session.")
                             )
                             .padding(.top, 4)
                         }

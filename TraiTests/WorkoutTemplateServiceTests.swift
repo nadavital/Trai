@@ -580,11 +580,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.type, .mixed)
         XCTAssertEqual(workout.muscleGroups, [.chest, .back, .shoulders])
         XCTAssertEqual(workout.focusAreas, ["Upper", "Mobility", "Mobility Flow", "Shoulder Prep"])
-        XCTAssertEqual(workout.entries?.map(\.exerciseName), ["Bench Press", "Shoulder Prep"])
-        XCTAssertEqual(workout.entries?.map(\.activityKind), [.strength, .mobility])
-        XCTAssertEqual(workout.entries?.map(\.isPlannedActivityGuidance), [false, true])
-        XCTAssertEqual(workout.entries?.first?.sourcePlanBlockID, profile.workoutPlan?.templates.first?.blocks.first?.id)
-        XCTAssertEqual(workout.entries?.last?.sourcePlanBlockID, profile.workoutPlan?.templates.first?.blocks.last?.id)
+        XCTAssertTrue(workout.entries?.isEmpty ?? true)
         XCTAssertEqual(workout.sourcePlanTemplateID, profile.workoutPlan?.templates.first?.id)
     }
 

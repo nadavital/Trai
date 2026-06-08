@@ -9,10 +9,10 @@ import ActivityKit
 import AppIntents
 import Foundation
 
-/// Intent for adding a set to the current strength item from Live Activity.
+/// Intent for adding a set to the current strength exercise from Live Activity.
 struct AddSetIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Add Set"
-    static var description = IntentDescription("Add a set to the current strength item")
+    static var description = IntentDescription("Add a set to the current strength exercise")
     static var openAppWhenRun: Bool = false
 
     func perform() async throws -> some IntentResult {

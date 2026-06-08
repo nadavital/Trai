@@ -492,7 +492,7 @@ struct ExerciseListView: View {
                     if exercises.isEmpty {
                         Section {
                             ContentUnavailableView(
-                                "No Items Yet",
+                                "No Exercises Yet",
                                 systemImage: "dumbbell.fill",
                                 description: Text("Trai is preparing your exercise and activity library.")
                             )
@@ -665,7 +665,7 @@ struct ExerciseListView: View {
                     photoAnalysisError = nil
                 }
             } message: {
-                Text(photoAnalysisError ?? "Unable to identify the item. Try taking a clearer photo.")
+                Text(photoAnalysisError ?? "Unable to identify the exercise. Try taking a clearer photo.")
             }
             .sheet(isPresented: $showingEquipmentResult) {
                 if let analysis = equipmentAnalysis {
@@ -702,7 +702,7 @@ struct ExerciseListView: View {
                             ProgressView()
                                 .scaleEffect(1.5)
                                 .tint(.white)
-                            Text("Analyzing item...")
+                            Text("Analyzing exercise...")
                                 .font(.headline)
                                 .foregroundStyle(.white)
                             Text("Identifying tracking and setup details")
@@ -795,7 +795,7 @@ struct ExerciseListView: View {
             pendingEquipmentResultPresentation = false
             equipmentResultPresentationTask?.cancel()
             photoAnalysisError = error.aiUserFacingMessage(
-                fallback: "Couldn't identify the item. Make sure the movement, equipment, or label is clearly visible and try again."
+                fallback: "Couldn't identify the exercise. Make sure the movement, equipment, or label is clearly visible and try again."
             )
         }
     }
