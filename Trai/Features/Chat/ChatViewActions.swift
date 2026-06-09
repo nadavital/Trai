@@ -1467,6 +1467,23 @@ extension ChatView {
     func checkForPendingStartupActions() {
         guard currentMessageTask == nil, !isLoading else { return }
 
+        if let pendingAttachment = TraiChatContextAttachment(storageValue: pendingChatContextAttachment) {
+            startNewSession(silent: true)
+            if let focusedEntryId = UUID(uuidString: pendingFocusedFoodEntryId),
+               let focusedEntry = focusedFoodEntry(with: focusedEntryId) {
+                focusedFoodEntryContext = focusedEntry.focusedChatContext
+            }
+            withAnimation(.snappy) {
+                contextAttachment = pendingAttachment
+            }
+            pendingChatContextAttachment = ""
+            pendingChatLaunchLabel = ""
+            pendingFocusedFoodEntryId = ""
+            pendingChatActionKind = ""
+            isInputFocused = true
+            return
+        }
+
         let trimmedPrompt = pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedPrompt.isEmpty {
             let trimmedLaunchLabel = pendingChatLaunchLabel.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1486,6 +1503,7 @@ extension ChatView {
             pendingChatLaunchLabel = ""
             pendingFocusedFoodEntryId = ""
             pendingChatActionKind = ""
+            pendingChatContextAttachment = ""
             return
         }
 

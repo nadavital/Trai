@@ -33,6 +33,7 @@ struct WorkoutsView: View {
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
+    @Environment(\.presentLiveWorkout) private var presentLiveWorkout
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
     @AppStorage("pendingWorkoutPlanSetupRequest") private var pendingWorkoutPlanSetupRequest = false
@@ -69,11 +70,8 @@ struct WorkoutsView: View {
     @State private var showingWorkoutGoalDetail: WorkoutGoal?
     @State private var showingCompletedWorkoutGoals = false
     @State private var showingWorkoutGoalAISetup = false
-    @State private var showingWorkoutSheet = false
     @State private var showingPersonalRecords = false
     @State private var showingCustomExercises = false
-    @State private var pendingWorkout: LiveWorkout?
-    @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
     @State private var isStartingWorkout = false
     @State private var lastOpenTrackedAt: Date?
     @State private var historyRefreshTask: Task<Void, Never>?
@@ -546,23 +544,6 @@ struct WorkoutsView: View {
                     }
                 }
                 .traiSheetBranding()
-            }
-            .sheet(isPresented: $showingWorkoutSheet) {
-                if let workout = pendingWorkout {
-                    LiveWorkoutView(
-                        workout: workout,
-                        template: pendingTemplate,
-                        onCancel: clearActiveWorkoutPresentation
-                    )
-                        .traiSheetBranding()
-                }
-            }
-            .onChange(of: showingWorkoutSheet) { _, isShowing in
-                if !isShowing {
-                    pendingTemplate = nil
-                    pendingWorkout = nil
-                    isStartingWorkout = false
-                }
             }
         }
         .proUpsellPresenter()
@@ -1329,9 +1310,7 @@ struct WorkoutsView: View {
         guard !isStartingWorkout else { return }
 
         if let activeWorkout {
-            pendingTemplate = nil
-            pendingWorkout = activeWorkout
-            showingWorkoutSheet = true
+            presentLiveWorkout(workout: activeWorkout)
             HapticManager.selectionChanged()
             return
         }
@@ -1340,17 +1319,14 @@ struct WorkoutsView: View {
         let workout = templateService.createStartWorkout(from: template)
 
         // Preserve the source template context and open the workout sheet
-        pendingTemplate = template
-        pendingWorkout = workout
-        showingWorkoutSheet = true
+        presentLiveWorkout(workout: workout, template: template)
+        isStartingWorkout = false
         HapticManager.selectionChanged()
     }
 
     private func openLiveWorkout(_ workout: LiveWorkout) {
         if workout.isInProgress {
-            pendingTemplate = nil
-            pendingWorkout = workout
-            showingWorkoutSheet = true
+            presentLiveWorkout(workout: workout)
         } else {
             showingLiveWorkoutDetail = workout
         }
@@ -1358,18 +1334,12 @@ struct WorkoutsView: View {
     }
 
     private func clearActiveWorkoutPresentation() {
-        var workoutsToDelete = allLiveWorkouts.filter { $0.completedAt == nil }
-        if let pendingWorkout, !workoutsToDelete.contains(where: { $0.id == pendingWorkout.id }) {
-            workoutsToDelete.append(pendingWorkout)
-        }
+        let workoutsToDelete = allLiveWorkouts.filter { $0.completedAt == nil }
         for workout in workoutsToDelete {
             workout.completedAt = workout.completedAt ?? Date()
             modelContext.delete(workout)
         }
         try? modelContext.save()
-        pendingTemplate = nil
-        pendingWorkout = nil
-        showingWorkoutSheet = false
         isStartingWorkout = false
     }
 
@@ -1382,9 +1352,7 @@ struct WorkoutsView: View {
         guard !isStartingWorkout else { return }
 
         if let activeWorkout {
-            pendingTemplate = nil
-            pendingWorkout = activeWorkout
-            showingWorkoutSheet = true
+            presentLiveWorkout(workout: activeWorkout)
             HapticManager.selectionChanged()
             return
         }
@@ -1403,9 +1371,8 @@ struct WorkoutsView: View {
         )
 
         // Open the workout sheet
-        pendingTemplate = nil
-        pendingWorkout = workout
-        showingWorkoutSheet = true
+        presentLiveWorkout(workout: workout)
+        isStartingWorkout = false
         HapticManager.selectionChanged()
     }
 

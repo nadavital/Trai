@@ -27,6 +27,7 @@ struct LiveWorkoutDetailSheet: View {
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingActionKind) private var pendingChatActionKind: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingContextAttachment) private var pendingChatContextAttachment: String = ""
     @Query(sort: \ExerciseHistory.performedAt, order: .reverse)
     private var allExerciseHistory: [ExerciseHistory]
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
@@ -597,7 +598,8 @@ struct LiveWorkoutDetailSheet: View {
             HapticManager.lightTap()
             return
         }
-        guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              TraiChatContextAttachment(storageValue: pendingChatContextAttachment) == nil else {
             dismiss()
             DispatchQueue.main.async {
                 appTabSelection.wrappedValue = .trai
@@ -606,8 +608,9 @@ struct LiveWorkoutDetailSheet: View {
             return
         }
 
-        pendingChatPrompt = workout.traiReviewPrompt
+        pendingChatPrompt = ""
         pendingChatLaunchLabel = "Reviewing your latest workout..."
+        pendingChatContextAttachment = workout.traiChatContextAttachment.storageValue
         pendingChatActionKind = ""
         BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: "engagement.review_completed_workout_with_trai",

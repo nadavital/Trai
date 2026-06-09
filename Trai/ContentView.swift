@@ -291,16 +291,14 @@ struct MainTabView: View {
         )
     }
 
-    // Capture the workout when opening sheet to avoid nil issues when workout completes
-    @State private var presentedWorkout: LiveWorkout?
-    @State private var workoutIDToFinishOnPresentation: UUID?
+    // Capture the workout when opening the sheet to avoid nil issues when workout completes.
+    @State private var liveWorkoutPresentation: LiveWorkoutPresentation?
     @State private var showingEndConfirmation = false
     @State private var showingReminders = false
 
     // App Intent / Deep link triggered states
     @State private var foodCameraPresentation: FoodCameraPresentation?
     @State private var showingLogWeight = false
-    @State private var intentTriggeredWorkout: LiveWorkout?
     @State private var workoutTemplateService = WorkoutTemplateService()
 
     private var activeWorkout: LiveWorkout? {
@@ -322,7 +320,7 @@ struct MainTabView: View {
                 .tabViewBottomAccessory {
                     WorkoutBanner(
                         workout: workout,
-                        onTap: { presentedWorkout = workout },
+                        onTap: { presentLiveWorkout(workout) },
                         onEnd: { showingEndConfirmation = true }
                     )
                 }
@@ -351,10 +349,17 @@ struct MainTabView: View {
                 showingReminders = true
                 showRemindersFromNotification.wrappedValue = false
             }
-            .sheet(item: $presentedWorkout) { workout in
+            .environment(
+                \.presentLiveWorkout,
+                LiveWorkoutPresentationAction { workout, template in
+                    presentLiveWorkout(workout, template: template)
+                }
+            )
+            .sheet(item: $liveWorkoutPresentation) { presentation in
                 LiveWorkoutView(
-                    workout: workout,
-                    finishOnPresentation: workoutIDToFinishOnPresentation == workout.id,
+                    workout: presentation.workout,
+                    template: presentation.template,
+                    finishOnPresentation: presentation.finishOnPresentation,
                     onCancel: clearActiveWorkoutPresentation
                 )
                     .traiSheetBranding()
@@ -366,8 +371,10 @@ struct MainTabView: View {
             ) {
                 Button("End Workout", role: .destructive) {
                     if let workout = activeWorkout {
-                        workoutIDToFinishOnPresentation = workout.id
-                        presentedWorkout = workout
+                        liveWorkoutPresentation = LiveWorkoutPresentation(
+                            workout: workout,
+                            finishOnPresentation: true
+                        )
                     }
                 }
                 Button("Cancel", role: .cancel) {}
@@ -380,10 +387,6 @@ struct MainTabView: View {
             }
             .sheet(isPresented: $showingLogWeight) {
                 LogWeightSheet()
-                    .traiSheetBranding()
-            }
-            .sheet(item: $intentTriggeredWorkout) { workout in
-                LiveWorkoutView(workout: workout, onCancel: clearActiveWorkoutPresentation)
                     .traiSheetBranding()
             }
             .onAppear {
@@ -575,9 +578,14 @@ struct MainTabView: View {
 
     private func clearActiveWorkoutPresentation() {
         LiveWorkoutCancellation.cancelActiveWorkouts(in: modelContext, including: activeWorkout)
-        presentedWorkout = nil
-        intentTriggeredWorkout = nil
-        workoutIDToFinishOnPresentation = nil
+        liveWorkoutPresentation = nil
+    }
+
+    private func presentLiveWorkout(
+        _ workout: LiveWorkout,
+        template: WorkoutPlan.WorkoutTemplate? = nil
+    ) {
+        liveWorkoutPresentation = LiveWorkoutPresentation(workout: workout, template: template)
     }
 
     // MARK: - App Intent Handling
@@ -591,7 +599,9 @@ struct MainTabView: View {
         // Guard: Don't start a new workout if one is already active
         guard activeWorkout == nil else {
             // Show the existing workout instead
-            presentedWorkout = activeWorkout
+            if let activeWorkout {
+                presentLiveWorkout(activeWorkout)
+            }
             return
         }
 
@@ -634,7 +644,7 @@ struct MainTabView: View {
 
         // Switch to workouts tab and present the workout
         selectTab(.workouts)
-        intentTriggeredWorkout = workout
+        presentLiveWorkout(workout)
     }
 
     private func applyLiveWorkoutUITestPresetIfNeeded(to workout: LiveWorkout) {

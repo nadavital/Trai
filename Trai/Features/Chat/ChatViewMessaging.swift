@@ -41,6 +41,7 @@ extension ChatView {
         isTemporarySession = false
         temporaryMessages = []
         focusedFoodEntryContext = nil
+        contextAttachment = nil
         isPreparingFirstMessageTransition = false
         rebuildSessionMessages(preferLiveQueryData: true)
         if !silent {
@@ -147,12 +148,14 @@ extension ChatView {
 
         let hasText = !text.trimmingCharacters(in: .whitespaces).isEmpty
         let capturedImage = selectedImage
+        let capturedContextAttachment = contextAttachment
         let hasImage = capturedImage != nil
 
         guard hasText || hasImage else { return false }
 
         selectedImage = nil
         selectedPhotoItem = nil
+        contextAttachment = nil
         let pendingNutritionPlanSuggestionForContext = currentPendingNutritionPlanSuggestionForContext()
         let pendingWorkoutPlanSuggestionForContext = currentPendingWorkoutPlanSuggestionForContext()
 
@@ -161,6 +164,7 @@ extension ChatView {
             sendMessageAfterFirstFrameTransition(
                 text,
                 capturedImage: capturedImage,
+                capturedContextAttachment: capturedContextAttachment,
                 pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
                 pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext
             )
@@ -174,6 +178,7 @@ extension ChatView {
         sendMessageAfterFirstFrameTransition(
             text,
             capturedImage: capturedImage,
+            capturedContextAttachment: capturedContextAttachment,
             pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
             pendingWorkoutPlanSuggestionForContext: pendingWorkoutPlanSuggestionForContext
         )
@@ -183,6 +188,7 @@ extension ChatView {
     private func sendMessageAfterFirstFrameTransition(
         _ text: String,
         capturedImage: UIImage?,
+        capturedContextAttachment: TraiChatContextAttachment?,
         pendingNutritionPlanSuggestionForContext: PlanUpdateSuggestionEntry?,
         pendingWorkoutPlanSuggestionForContext: WorkoutPlanSuggestionEntry?
     ) {
@@ -218,7 +224,7 @@ extension ChatView {
         currentMessageRequestID = requestID
         currentMessageTask = Task {
             await performSendMessage(
-                text: text,
+                text: requestText(visibleText: text, contextAttachment: capturedContextAttachment),
                 capturedImage: capturedImage,
                 previousMessages: previousMessages,
                 pendingNutritionPlanSuggestionForContext: pendingNutritionPlanSuggestionForContext,
@@ -227,6 +233,15 @@ extension ChatView {
                 requestID: requestID
             )
         }
+    }
+
+    private func requestText(
+        visibleText: String,
+        contextAttachment: TraiChatContextAttachment?
+    ) -> String {
+        let trimmedText = visibleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let contextAttachment else { return trimmedText }
+        return "\(contextAttachment.requestContextPrefix)\n\(trimmedText)"
     }
 
     @discardableResult

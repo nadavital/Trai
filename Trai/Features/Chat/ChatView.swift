@@ -49,6 +49,7 @@ struct ChatView: View {
 
     /// Optional workout context for mid-workout chat
     var workoutContext: AIService.WorkoutContext?
+    private let initialContextAttachment: TraiChatContextAttachment?
 
     @Query var allMessages: [ChatMessage]
 
@@ -86,7 +87,7 @@ struct ChatView: View {
     @State private var editingPlanSuggestion: (message: ChatMessage, plan: PlanUpdateSuggestionEntry)?
     @State private var viewingLoggedMealId: UUID?
     @State private var viewingAppliedPlan: PlanUpdateSuggestionEntry?
-    @FocusState private var isInputFocused: Bool
+    @FocusState var isInputFocused: Bool
     @AppStorage(SharedStorageKeys.Chat.currentSessionId) var currentSessionIdString: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingOpenSessionId) var pendingOpenSessionIdString: String = ""
     @AppStorage("lastChatActivityDate") var lastActivityTimestamp: Double = 0
@@ -96,11 +97,14 @@ struct ChatView: View {
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) var pendingChatLaunchLabel: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingFocusedFoodEntryId) var pendingFocusedFoodEntryId: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingActionKind) var pendingChatActionKind: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingContextAttachment) var pendingChatContextAttachment: String = ""
     @AppStorage(TraiCoachTone.storageKey) var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
     @State var isTemporarySession = false
     @State var temporaryMessages: [ChatMessage] = []
     @State var processingMealSuggestionKeys: Set<MealSuggestionKey> = []
     @State var focusedFoodEntryContext: AIService.FocusedFoodEntryContext?
+    @State var contextAttachment: TraiChatContextAttachment?
+    @State private var didApplyInitialContextAttachment = false
     @State var isPreparingFirstMessageTransition = false
 
     // Plan assessment
@@ -161,8 +165,13 @@ struct ChatView: View {
         accountSessionService?.isAuthenticated != true
     }
 
-    init(workoutContext: AIService.WorkoutContext? = nil) {
+    init(
+        workoutContext: AIService.WorkoutContext? = nil,
+        initialContextAttachment: TraiChatContextAttachment? = nil
+    ) {
         self.workoutContext = workoutContext
+        self.initialContextAttachment = initialContextAttachment
+        _contextAttachment = State(initialValue: initialContextAttachment)
 
         let now = Date()
         let calendar = Calendar.current
@@ -398,6 +407,7 @@ struct ChatView: View {
         pendingPlanReviewRequest
             || pendingWorkoutPlanReviewRequest
             || !pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || TraiChatContextAttachment(storageValue: pendingChatContextAttachment) != nil
     }
 
     private var isChatTabActive: Bool {
@@ -562,31 +572,27 @@ struct ChatView: View {
     }
 
     private func openLoggedMealWithTrai(
-        prompt: String,
+        attachment: TraiChatContextAttachment,
         focusedContext: AIService.FocusedFoodEntryContext
     ) {
-        let launchLabel = "Opening this meal with Trai..."
         guard !isLoading, currentMessageTask == nil else {
-            queuePendingLoggedMealPrompt(prompt, launchLabel: launchLabel, focusedEntryId: focusedContext.entryId)
+            queuePendingLoggedMealAttachment(attachment, focusedEntryId: focusedContext.entryId)
             HapticManager.selectionChanged()
             return
         }
         startNewSession(silent: true)
         focusedFoodEntryContext = focusedContext
-        guard sendAppInitiatedPrompt(
-            prompt,
-            launchLabel: launchLabel
-        ) else {
-            queuePendingLoggedMealPrompt(prompt, launchLabel: launchLabel, focusedEntryId: focusedContext.entryId)
-            return
+        withAnimation(.snappy) {
+            contextAttachment = attachment
         }
+        isInputFocused = true
         HapticManager.selectionChanged()
     }
 
-    private func queuePendingLoggedMealPrompt(_ prompt: String, launchLabel: String, focusedEntryId: UUID) {
-        guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        pendingChatPrompt = prompt
-        pendingChatLaunchLabel = launchLabel
+    private func queuePendingLoggedMealAttachment(_ attachment: TraiChatContextAttachment, focusedEntryId: UUID) {
+        guard TraiChatContextAttachment(storageValue: pendingChatContextAttachment) == nil else { return }
+        pendingChatContextAttachment = attachment.storageValue
+        pendingChatLaunchLabel = "Opening this meal with Trai..."
         pendingFocusedFoodEntryId = focusedEntryId.uuidString
         pendingChatActionKind = ""
     }
@@ -705,6 +711,7 @@ struct ChatView: View {
             ChatInputBar(
                 selectedImage: $selectedImage,
                 selectedPhotoItem: $selectedPhotoItem,
+                contextAttachment: $contextAttachment,
                 isLoading: isLoading,
                 isInputDisabled: hasPendingStartupActions,
                 onSend: { text in sendMessage(text) },
@@ -945,6 +952,10 @@ struct ChatView: View {
         tabActivationPolicy.activate()
         isChatTabVisible = true
         refreshSessionForActivation(previewLimit: Self.initialSessionPreviewMessageLimit)
+        applyInitialContextAttachmentIfNeeded()
+        if hasPendingStartupActions {
+            checkForPendingStartupActions()
+        }
         scheduleFullMessageHistoryHydrationIfNeeded()
 
         let shouldScheduleActivationWork = shouldRunFullActivationWork
@@ -978,6 +989,13 @@ struct ChatView: View {
     private func refreshSessionForActivation(previewLimit: Int? = nil) {
         checkSessionTimeout()
         rebuildSessionMessages(previewLimit: previewLimit)
+    }
+
+    private func applyInitialContextAttachmentIfNeeded() {
+        guard !didApplyInitialContextAttachment else { return }
+        didApplyInitialContextAttachment = true
+        guard contextAttachment == nil, let initialContextAttachment else { return }
+        contextAttachment = initialContextAttachment
     }
 
     private func scheduleFullMessageHistoryHydrationIfNeeded() {
@@ -1166,7 +1184,7 @@ private struct ChatRootView: View {
     let onAcceptPlan: (PlanUpdateSuggestionEntry, ChatMessage) -> Void
     let viewingFoodEntry: FoodEntry?
     @Binding var viewingLoggedMealId: UUID?
-    let onAskTraiAboutLoggedMeal: (String, AIService.FocusedFoodEntryContext) -> Void
+    let onAskTraiAboutLoggedMeal: (TraiChatContextAttachment, AIService.FocusedFoodEntryContext) -> Void
     @Binding var viewingAppliedPlan: PlanUpdateSuggestionEntry?
 
     var body: some View {

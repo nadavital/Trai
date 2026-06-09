@@ -724,16 +724,19 @@ struct ExerciseListView: View {
             .onChange(of: showingAddCustom) { _, isShowing in
                 guard !isShowing, let pendingCustomExerciseCreation else { return }
                 self.pendingCustomExerciseCreation = nil
-                addCustomExercise(
-                    name: pendingCustomExerciseCreation.name,
-                    activityTypeName: pendingCustomExerciseCreation.activityTypeName,
-                    activityAliases: pendingCustomExerciseCreation.activityAliases,
-                    muscleGroup: pendingCustomExerciseCreation.muscleGroup,
-                    category: pendingCustomExerciseCreation.category,
-                    secondaryMuscles: pendingCustomExerciseCreation.secondaryMuscles,
-                    targetTags: pendingCustomExerciseCreation.targetTags,
-                    trackingFields: pendingCustomExerciseCreation.trackingFields
-                )
+                Task { @MainActor in
+                    await Task.yield()
+                    addCustomExercise(
+                        name: pendingCustomExerciseCreation.name,
+                        activityTypeName: pendingCustomExerciseCreation.activityTypeName,
+                        activityAliases: pendingCustomExerciseCreation.activityAliases,
+                        muscleGroup: pendingCustomExerciseCreation.muscleGroup,
+                        category: pendingCustomExerciseCreation.category,
+                        secondaryMuscles: pendingCustomExerciseCreation.secondaryMuscles,
+                        targetTags: pendingCustomExerciseCreation.targetTags,
+                        trackingFields: pendingCustomExerciseCreation.trackingFields
+                    )
+                }
             }
             .onDisappear {
                 listMaintenanceTask?.cancel()

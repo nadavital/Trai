@@ -278,7 +278,10 @@ struct LiveWorkoutView: View {
 
     private func chatSheet() -> some View {
         NavigationStack {
-            ChatView(workoutContext: buildWorkoutContext())
+            ChatView(
+                workoutContext: buildWorkoutContext(),
+                initialContextAttachment: viewModel.workout.traiChatContextAttachment
+            )
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done", systemImage: "checkmark") {

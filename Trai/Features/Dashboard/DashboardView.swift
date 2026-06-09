@@ -49,6 +49,7 @@ struct DashboardView: View {
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
+    @Environment(\.presentLiveWorkout) private var presentLiveWorkout
     @State private var recoveryService = MuscleRecoveryService.shared
     @State private var workoutTemplateService = WorkoutTemplateService()
 
@@ -90,10 +91,6 @@ struct DashboardView: View {
     @AppStorage("dashboardActivationChecklistDismissed")
     private var hasDismissedActivationChecklist = false
 
-    // Workout sheet state
-    @State private var showingWorkoutSheet = false
-    @State private var pendingWorkout: LiveWorkout?
-    @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
     @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest = false
     @AppStorage("pendingWorkoutPlanSetupRequest") private var pendingWorkoutPlanSetupRequest = false
@@ -682,17 +679,6 @@ struct DashboardView: View {
             .sheet(isPresented: $showingWeightTracking) {
                 WeightTrackingView()
                     .traiSheetBranding()
-            }
-            .sheet(isPresented: $showingWorkoutSheet) {
-                if let workout = pendingWorkout {
-                    LiveWorkoutView(workout: workout, template: pendingTemplate)
-                        .traiSheetBranding()
-                }
-            }
-            .onChange(of: showingWorkoutSheet) { _, isShowing in
-                if !isShowing {
-                    pendingTemplate = nil
-                }
             }
             .sheet(isPresented: $showingCalorieDetail) {
                 CalorieDetailSheet(
@@ -1839,9 +1825,7 @@ struct DashboardView: View {
             ]
         )
 
-        pendingTemplate = template
-        pendingWorkout = workout
-        showingWorkoutSheet = true
+        presentLiveWorkout(workout: workout, template: template)
         HapticManager.selectionChanged()
     }
 
@@ -1857,8 +1841,7 @@ struct DashboardView: View {
             metadata: ["type": "custom"]
         )
 
-        pendingWorkout = workout
-        showingWorkoutSheet = true
+        presentLiveWorkout(workout: workout)
         HapticManager.selectionChanged()
     }
 
@@ -1902,9 +1885,7 @@ struct DashboardView: View {
             ]
         )
 
-        pendingTemplate = template
-        pendingWorkout = workout
-        showingWorkoutSheet = true
+        presentLiveWorkout(workout: workout, template: template)
         HapticManager.selectionChanged()
     }
 

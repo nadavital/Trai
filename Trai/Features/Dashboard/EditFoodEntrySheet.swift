@@ -20,10 +20,11 @@ struct EditFoodEntrySheet: View {
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingFocusedFoodEntryId) private var pendingFocusedFoodEntryId: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingActionKind) private var pendingChatActionKind: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingContextAttachment) private var pendingChatContextAttachment: String = ""
     @Query private var profiles: [UserProfile]
     @State private var presentedAccountSetupContext: AccountSetupContext?
 
-    let onAskTrai: ((String, AIService.FocusedFoodEntryContext) -> Void)?
+    let onAskTrai: ((TraiChatContextAttachment, AIService.FocusedFoodEntryContext) -> Void)?
 
     @State private var name: String
     @State private var caloriesText: String
@@ -45,7 +46,7 @@ struct EditFoodEntrySheet: View {
         MacroType.displayOrder.filter { enabledMacros.contains($0) }
     }
 
-    init(entry: FoodEntry, onAskTrai: ((String, AIService.FocusedFoodEntryContext) -> Void)? = nil) {
+    init(entry: FoodEntry, onAskTrai: ((TraiChatContextAttachment, AIService.FocusedFoodEntryContext) -> Void)? = nil) {
         self.entry = entry
         self.onAskTrai = onAskTrai
         _name = State(initialValue: entry.name)
@@ -318,14 +319,15 @@ struct EditFoodEntrySheet: View {
             return
         }
 
-        let prompt = entry.traiMealReviewPrompt
+        let attachment = entry.traiChatContextAttachment
         if let onAskTrai {
             dismiss()
             DispatchQueue.main.async {
-                onAskTrai(prompt, entry.focusedChatContext)
+                onAskTrai(attachment, entry.focusedChatContext)
             }
         } else {
-            guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  TraiChatContextAttachment(storageValue: pendingChatContextAttachment) == nil else {
                 dismiss()
                 DispatchQueue.main.async {
                     appTabSelection.wrappedValue = .trai
@@ -333,8 +335,9 @@ struct EditFoodEntrySheet: View {
                 HapticManager.selectionChanged()
                 return
             }
-            pendingChatPrompt = prompt
+            pendingChatPrompt = ""
             pendingChatLaunchLabel = "Opening this meal with Trai..."
+            pendingChatContextAttachment = attachment.storageValue
             pendingFocusedFoodEntryId = entry.id.uuidString
             pendingChatActionKind = ""
             dismiss()

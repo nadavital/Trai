@@ -59,16 +59,16 @@ extension View {
     func chatViewFoodEntrySheet(
         viewingEntry: FoodEntry?,
         viewingLoggedMealId: Binding<UUID?>,
-        onAskTrai: @escaping (String, AIService.FocusedFoodEntryContext) -> Void
+        onAskTrai: @escaping (TraiChatContextAttachment, AIService.FocusedFoodEntryContext) -> Void
     ) -> some View {
         self.sheet(isPresented: Binding(
             get: { viewingEntry != nil },
             set: { if !$0 { viewingLoggedMealId.wrappedValue = nil } }
         )) {
             if let entry = viewingEntry {
-                EditFoodEntrySheet(entry: entry) { prompt, focusedContext in
+                EditFoodEntrySheet(entry: entry) { attachment, focusedContext in
                     viewingLoggedMealId.wrappedValue = nil
-                    onAskTrai(prompt, focusedContext)
+                    onAskTrai(attachment, focusedContext)
                 }
                     .traiSheetBranding()
             }

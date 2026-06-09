@@ -286,11 +286,11 @@ private struct StartWorkoutCreatePlanCard: View {
                     .foregroundStyle(Color.accentColor)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Create your workout plan")
+                    Text("Build your workout plan")
                         .font(.traiHeadline(16))
                         .foregroundStyle(.primary)
 
-                    Text("Set up a week you can start now, then unlock Trai Pro when you want coaching and adjustments over time.")
+                    Text("Set your training days and focus areas so planned sessions are ready when you open Workouts.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)

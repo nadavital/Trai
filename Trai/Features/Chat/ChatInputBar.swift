@@ -11,6 +11,7 @@ import PhotosUI
 struct ChatInputBar: View {
     @Binding var selectedImage: UIImage?
     @Binding var selectedPhotoItem: PhotosPickerItem?
+    @Binding var contextAttachment: TraiChatContextAttachment?
     let isLoading: Bool
     var isInputDisabled: Bool = false
     let onSend: (String) -> Bool
@@ -120,6 +121,14 @@ struct ChatInputBar: View {
                         .accessibilityLabel("Remove attached image")
 
                         Spacer()
+                    }
+                }
+
+                if let contextAttachment {
+                    TraiChatContextAttachmentCard(attachment: contextAttachment) {
+                        withAnimation(.snappy) {
+                            self.contextAttachment = nil
+                        }
                     }
                 }
 
