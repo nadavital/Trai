@@ -50,8 +50,10 @@ struct ExerciseListView: View {
     @State private var usageSummaryCache: UsageSummary = .empty
     @State private var usageSummaryFingerprint: UsageSummaryFingerprint?
     @State private var listMaintenanceTask: Task<Void, Never>?
+    @State private var isListContentReady = false
     @State private var pendingCustomExerciseCreation: PendingCustomExerciseCreation?
     @State private var presentedAccountSetupContext: AccountSetupContext?
+    @State private var persistenceError: ExerciseListPersistenceError?
 
     // MARK: - Initializers
 
@@ -481,126 +483,12 @@ struct ExerciseListView: View {
     // MARK: - Body
 
     var body: some View {
-        let listData = makeListData()
-
         NavigationStack {
             VStack(spacing: 0) {
-                // Filter chips
-                filterSection(muscleGroups: muscleGroupsForFilterChips)
-
-                List {
-                    if exercises.isEmpty {
-                        Section {
-                            ContentUnavailableView(
-                                "No Exercises Yet",
-                                systemImage: "dumbbell.fill",
-                                description: Text("Trai is preparing your exercise and activity library.")
-                            )
-                        }
-                    } else {
-                        // Create custom exercise option (always available at top)
-                        Section {
-                            Button {
-                                customExerciseName = ""
-                                showingAddCustom = true
-                            } label: {
-                                HStack {
-                                    Image(systemName: "plus.circle.fill")
-                                        .foregroundStyle(.accent)
-                                    Text("Create Exercise or Activity")
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
-                                }
-                            }
-                            .foregroundStyle(.primary)
-
-                            Button {
-                                if requiresAuthenticatedAccountForExerciseAI {
-                                    presentedAccountSetupContext = .aiFeatures
-                                } else if canAccessExerciseAI {
-                                    showingCamera = true
-                                } else {
-                                    proUpsellCoordinator?.present(source: .exerciseAnalysis)
-                                }
-                            } label: {
-                                HStack {
-                                    Image(systemName: "camera.fill")
-                                        .foregroundStyle(.accent)
-                                    Text("Identify from Photo")
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
-                                }
-                            }
-                            .foregroundStyle(.primary)
-                            .disabled(isAnalyzingPhoto)
-                        }
-
-                        // Option to add searched exercise directly
-                        if let customOptionName = listData.customOptionName {
-                            Section {
-                                Button {
-                                    customExerciseName = customOptionName
-                                    showingAddCustom = true
-                                } label: {
-                                    HStack {
-                                        Image(systemName: "plus.circle")
-                                            .foregroundStyle(.accent)
-                                        Text("Add \"\(customOptionName)\"")
-                                        Spacer()
-                                    }
-                                }
-                                .foregroundStyle(.primary)
-                            } header: {
-                                Text("Not in list?")
-                            }
-                        }
-
-                        // Recent exercises section
-                        if searchText.isEmpty,
-                           selectedCategory == nil,
-                           selectedMuscleGroup == nil,
-                           selectedActivityTypeFilter == nil,
-                           !listData.recentExercises.isEmpty {
-                            Section {
-                                ForEach(listData.recentExercises) { exercise in
-                                    exerciseRow(exercise)
-                                }
-                            } header: {
-                                Label("Recently Used", systemImage: "clock.arrow.circlepath")
-                            }
-                        }
-
-                        // Exercises by muscle group (primary grouping)
-                        ForEach(listData.sortedMuscleGroups) { muscleGroup in
-                            if let muscleExercises = listData.exercisesByMuscleGroup[muscleGroup], !muscleExercises.isEmpty {
-                                Section {
-                                    ForEach(muscleExercises) { exercise in
-                                        exerciseRow(exercise)
-                                    }
-                                } header: {
-                                    Label(muscleGroup.displayName, systemImage: muscleGroup.iconName)
-                                }
-                            }
-                        }
-
-                        // Show exercises without muscle group (cardio, etc.)
-                        if !listData.noMuscleGroupExercises.isEmpty {
-                            Section {
-                                ForEach(listData.noMuscleGroupExercises) { exercise in
-                                    exerciseRow(exercise)
-                                }
-                            } header: {
-                                Label(
-                                    selectedActivityTypeFilter ?? selectedCategory?.displayName ?? "Activities",
-                                    systemImage: selectedCategory?.iconName ?? "figure.mixed.cardio"
-                                )
-                            }
-                        }
-                    }
+                if isListContentReady {
+                    loadedExerciseListContent
+                } else {
+                    exerciseListLoadingView
                 }
             }
             .navigationTitle(title)
@@ -692,6 +580,13 @@ struct ExerciseListView: View {
                 AccountSetupView(context: context)
                     .traiSheetBranding()
             }
+            .alert(item: $persistenceError) { error in
+                Alert(
+                    title: Text(error.title),
+                    message: Text(error.message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
             .overlay {
                 // Photo analysis loading overlay
                 if isAnalyzingPhoto {
@@ -715,6 +610,7 @@ struct ExerciseListView: View {
                 }
             }
             .onAppear {
+                activateListContent()
                 scheduleDeferredListMaintenance()
             }
             .onChange(of: showingCamera) { _, isShowing in
@@ -745,6 +641,149 @@ struct ExerciseListView: View {
             .accessibilityIdentifier("exerciseListView")
         }
         .traiSheetBranding()
+    }
+
+    @ViewBuilder
+    private var loadedExerciseListContent: some View {
+        let listData = makeListData()
+
+        // Filter chips
+        filterSection(muscleGroups: muscleGroupsForFilterChips)
+
+        List {
+            if exercises.isEmpty {
+                Section {
+                    ContentUnavailableView(
+                        "No Exercises Yet",
+                        systemImage: "dumbbell.fill",
+                        description: Text("Trai is preparing your exercise and activity library.")
+                    )
+                }
+            } else {
+                // Create custom exercise option (always available at top)
+                Section {
+                    Button {
+                        customExerciseName = ""
+                        showingAddCustom = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundStyle(.accent)
+                            Text("Create Exercise or Activity")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .foregroundStyle(.primary)
+
+                    Button {
+                        if requiresAuthenticatedAccountForExerciseAI {
+                            presentedAccountSetupContext = .aiFeatures
+                        } else if canAccessExerciseAI {
+                            showingCamera = true
+                        } else {
+                            proUpsellCoordinator?.present(source: .exerciseAnalysis)
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "camera.fill")
+                                .foregroundStyle(.accent)
+                            Text("Identify from Photo")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .foregroundStyle(.primary)
+                    .disabled(isAnalyzingPhoto)
+                }
+
+                // Option to add searched exercise directly
+                if let customOptionName = listData.customOptionName {
+                    Section {
+                        Button {
+                            customExerciseName = customOptionName
+                            showingAddCustom = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "plus.circle")
+                                    .foregroundStyle(.accent)
+                                Text("Add \"\(customOptionName)\"")
+                                Spacer()
+                            }
+                        }
+                        .foregroundStyle(.primary)
+                    } header: {
+                        Text("Not in list?")
+                    }
+                }
+
+                // Recent exercises section
+                if searchText.isEmpty,
+                   selectedCategory == nil,
+                   selectedMuscleGroup == nil,
+                   selectedActivityTypeFilter == nil,
+                   !listData.recentExercises.isEmpty {
+                    Section {
+                        ForEach(listData.recentExercises) { exercise in
+                            exerciseRow(exercise)
+                        }
+                    } header: {
+                        Label("Recently Used", systemImage: "clock.arrow.circlepath")
+                    }
+                }
+
+                // Exercises by muscle group (primary grouping)
+                ForEach(listData.sortedMuscleGroups) { muscleGroup in
+                    if let muscleExercises = listData.exercisesByMuscleGroup[muscleGroup], !muscleExercises.isEmpty {
+                        Section {
+                            ForEach(muscleExercises) { exercise in
+                                exerciseRow(exercise)
+                            }
+                        } header: {
+                            Label(muscleGroup.displayName, systemImage: muscleGroup.iconName)
+                        }
+                    }
+                }
+
+                // Show exercises without muscle group (cardio, etc.)
+                if !listData.noMuscleGroupExercises.isEmpty {
+                    Section {
+                        ForEach(listData.noMuscleGroupExercises) { exercise in
+                            exerciseRow(exercise)
+                        }
+                    } header: {
+                        Label(
+                            selectedActivityTypeFilter ?? selectedCategory?.displayName ?? "Activities",
+                            systemImage: selectedCategory?.iconName ?? "figure.mixed.cardio"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var exerciseListLoadingView: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text("Loading exercises")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemGroupedBackground))
+    }
+
+    private func activateListContent() {
+        guard !isListContentReady else { return }
+        Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            isListContentReady = true
+        }
     }
 
     // MARK: - Photo Analysis
@@ -1067,7 +1106,7 @@ struct ExerciseListView: View {
             if !activityAliases.isEmpty {
                 existing.activityAliases = activityAliases
             }
-            try? modelContext.save()
+            guard saveExerciseChange(title: "Exercise Not Updated") else { return }
             selectExercise(existing)
             return
         }
@@ -1088,13 +1127,34 @@ struct ExerciseListView: View {
             exercise.secondaryMuscles = secondary.joined(separator: ",")
         }
         modelContext.insert(exercise)
-        try? modelContext.save()
+        guard saveExerciseChange(title: "Exercise Not Created") else { return }
 
         selectExercise(exercise)
+    }
+
+    private func saveExerciseChange(title: String) -> Bool {
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            persistenceError = ExerciseListPersistenceError(
+                title: title,
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return false
+        }
     }
 }
 
 // MARK: - Filter Chip
+
+private struct ExerciseListPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
 
 struct FilterChip: View {
     let label: String

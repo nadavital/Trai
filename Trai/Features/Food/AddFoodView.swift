@@ -188,7 +188,7 @@ struct AddFoodView: View {
                     if isAnalyzing {
                         ProgressView()
                     } else {
-                        Image(systemName: "circle.hexagongrid.circle")
+                        TraiLensSymbolIcon(size: 16, variant: .nodes, color: .white)
                     }
                     Text(isAnalyzing ? "Analyzing..." : "Analyze with Trai")
                 }

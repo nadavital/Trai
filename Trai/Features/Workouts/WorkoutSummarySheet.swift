@@ -17,6 +17,20 @@ private struct IdentifiableExerciseName: Identifiable {
     var name: String { id }
 }
 
+private enum WorkoutSummaryPresentation: Identifiable {
+    case exercisePR(IdentifiableExerciseName)
+    case goalDetail(WorkoutGoal)
+
+    var id: String {
+        switch self {
+        case .exercisePR(let exercise):
+            return "exercisePR-\(exercise.id)"
+        case .goalDetail(let goal):
+            return "goalDetail-\(goal.id.uuidString)"
+        }
+    }
+}
+
 struct WorkoutSummarySheet: View {
     @Bindable var workout: LiveWorkout
     var achievedPRs: [String: LiveWorkoutViewModel.PRValue] = [:]
@@ -29,11 +43,30 @@ struct WorkoutSummarySheet: View {
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Query(sort: \LiveWorkout.startedAt, order: .reverse) private var allLiveWorkouts: [LiveWorkout]
     @Query(sort: \WorkoutSession.loggedAt, order: .reverse) private var allWorkoutSessions: [WorkoutSession]
-    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
+    @Query(
+        filter: #Predicate<WorkoutGoal> { $0.statusRaw == "active" },
+        sort: \WorkoutGoal.updatedAt,
+        order: .reverse
+    )
+    private var workoutGoals: [WorkoutGoal]
     @State private var showConfetti = false
     @State private var showCelebration = false
-    @State private var selectedExercise: IdentifiableExerciseName?
-    @State private var selectedGoal: WorkoutGoal?
+    @State private var activePresentation: WorkoutSummaryPresentation?
+    @State private var persistenceError: WorkoutSummaryPersistenceError?
+
+    init(
+        workout: LiveWorkout,
+        achievedPRs: [String: LiveWorkoutViewModel.PRValue] = [:],
+        onDismiss: @escaping () -> Void
+    ) {
+        self.workout = workout
+        self.achievedPRs = achievedPRs
+        self.onDismiss = onDismiss
+
+        var profileDescriptor = FetchDescriptor<UserProfile>()
+        profileDescriptor.fetchLimit = 1
+        _profiles = Query(profileDescriptor)
+    }
 
     /// Whether to use metric (kg) based on user profile
     private var usesMetric: Bool {
@@ -113,7 +146,7 @@ struct WorkoutSummarySheet: View {
                             showsAddGoal: false,
                             onAddGoal: {},
                             onToggleCompletion: toggleGoalCompletion,
-                            onGoalTap: { selectedGoal = $0 }
+                            onGoalTap: { activePresentation = .goalDetail($0) }
                         )
                     }
 
@@ -149,7 +182,7 @@ struct WorkoutSummarySheet: View {
                             ForEach(loggedEntries) { entry in
                                 if entry.isStrength {
                                     ExerciseSummaryRow(entry: entry, usesMetric: usesMetric) {
-                                        selectedExercise = IdentifiableExerciseName(id: entry.exerciseName)
+                                        activePresentation = .exercisePR(IdentifiableExerciseName(id: entry.exerciseName))
                                     }
                                 } else {
                                     ActivitySummaryRow(entry: entry, usesMetric: usesMetric)
@@ -176,20 +209,15 @@ struct WorkoutSummarySheet: View {
                 try? await Task.sleep(for: .milliseconds(300))
                 showCelebration = true
             }
-            .sheet(item: $selectedExercise) { exercise in
-                exercisePRSheet(for: exercise.name)
-                    .traiSheetBranding()
+            .sheet(item: $activePresentation) { presentation in
+                presentationContent(presentation)
             }
-            .sheet(item: $selectedGoal) { goal in
-                WorkoutGoalDetailSheet(
-                    goal: goal,
-                    workouts: allLiveWorkouts,
-                    sessions: goalProgressSessions,
-                    exerciseHistory: allExerciseHistory,
-                    useLbs: !usesMetric,
-                    onToggleCompletion: toggleGoalCompletion
+            .alert(item: $persistenceError) { error in
+                Alert(
+                    title: Text(error.title),
+                    message: Text(error.message),
+                    dismissButton: .default(Text("OK"))
                 )
-                .traiSheetBranding()
             }
         }
         .overlay {
@@ -202,6 +230,25 @@ struct WorkoutSummarySheet: View {
         }
         .traiSheetBranding()
         .traiBackground()
+    }
+
+    @ViewBuilder
+    private func presentationContent(_ presentation: WorkoutSummaryPresentation) -> some View {
+        switch presentation {
+        case .exercisePR(let exercise):
+            exercisePRSheet(for: exercise.name)
+                .traiSheetBranding()
+        case .goalDetail(let goal):
+            WorkoutGoalDetailSheet(
+                goal: goal,
+                workouts: allLiveWorkouts,
+                sessions: goalProgressSessions,
+                exerciseHistory: allExerciseHistory,
+                useLbs: !usesMetric,
+                onToggleCompletion: toggleGoalCompletion
+            )
+            .traiSheetBranding()
+        }
     }
 
     /// Build the PR detail sheet for a given exercise name
@@ -235,7 +282,7 @@ struct WorkoutSummarySheet: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") {
-                            selectedExercise = nil
+                            activePresentation = nil
                         }
                     }
                 }
@@ -249,8 +296,23 @@ struct WorkoutSummarySheet: View {
         } else {
             goal.markCompleted()
         }
-        try? modelContext.save()
+        guard saveSummaryChange(title: "Workout Goal Not Updated") else { return }
         HapticManager.selectionChanged()
+    }
+
+    private func saveSummaryChange(title: String) -> Bool {
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            persistenceError = WorkoutSummaryPersistenceError(
+                title: title,
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return false
+        }
     }
 }
 
@@ -268,10 +330,30 @@ struct WorkoutSummaryContent: View {
     private var allExerciseHistory: [ExerciseHistory]
     @Query(sort: \LiveWorkout.startedAt, order: .reverse) private var allLiveWorkouts: [LiveWorkout]
     @Query(sort: \WorkoutSession.loggedAt, order: .reverse) private var allWorkoutSessions: [WorkoutSession]
-    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
+    @Query(
+        filter: #Predicate<WorkoutGoal> { $0.statusRaw == "active" },
+        sort: \WorkoutGoal.updatedAt,
+        order: .reverse
+    )
+    private var workoutGoals: [WorkoutGoal]
     @State private var showConfetti = false
     @State private var showCelebration = false
     @State private var selectedGoal: WorkoutGoal?
+    @State private var persistenceError: WorkoutSummaryPersistenceError?
+
+    init(
+        workout: LiveWorkout,
+        achievedPRs: [String: LiveWorkoutViewModel.PRValue] = [:],
+        onDismiss: @escaping () -> Void
+    ) {
+        self.workout = workout
+        self.achievedPRs = achievedPRs
+        self.onDismiss = onDismiss
+
+        var profileDescriptor = FetchDescriptor<UserProfile>()
+        profileDescriptor.fetchLimit = 1
+        _profiles = Query(profileDescriptor)
+    }
 
     /// Whether to use metric (kg) based on user profile
     private var usesMetric: Bool {
@@ -417,6 +499,13 @@ struct WorkoutSummaryContent: View {
             )
             .traiSheetBranding()
         }
+        .alert(item: $persistenceError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
 
     private func toggleGoalCompletion(_ goal: WorkoutGoal) {
@@ -425,12 +514,33 @@ struct WorkoutSummaryContent: View {
         } else {
             goal.markCompleted()
         }
-        try? modelContext.save()
+        guard saveSummaryChange(title: "Workout Goal Not Updated") else { return }
         HapticManager.selectionChanged()
+    }
+
+    private func saveSummaryChange(title: String) -> Bool {
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            persistenceError = WorkoutSummaryPersistenceError(
+                title: title,
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return false
+        }
     }
 }
 
 // MARK: - PR Row
+
+private struct WorkoutSummaryPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
 
 struct PRRow: View {
     let prValue: LiveWorkoutViewModel.PRValue

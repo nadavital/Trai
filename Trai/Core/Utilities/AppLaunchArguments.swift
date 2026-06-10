@@ -30,6 +30,7 @@ enum AppLaunchArguments {
     static let disableTabPrewarm = "--disable-tab-prewarm"
     static let disableHeavyTabDeferral = "--disable-heavy-tab-deferral"
     static let enableLatencyProbe = "--enable-latency-probe"
+    static let traiLensLab = "--trai-lens-lab"
     static let useInMemoryStore = "--use-in-memory-store"
     static let usePersistentStore = "--use-persistent-store"
     static let runFoodRecommendationReplayEvaluation = "--run-food-recommendation-replay-evaluation"
@@ -162,6 +163,10 @@ enum AppLaunchArguments {
 
     static var shouldEnableLatencyProbe: Bool {
         ProcessInfo.processInfo.arguments.contains(enableLatencyProbe)
+    }
+
+    static var shouldShowTraiLensLab: Bool {
+        ProcessInfo.processInfo.arguments.contains(traiLensLab)
     }
 
     #if DEBUG

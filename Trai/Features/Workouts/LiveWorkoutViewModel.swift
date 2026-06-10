@@ -545,7 +545,7 @@ final class LiveWorkoutViewModel {
 
     // MARK: - Setup
 
-    func setup(with modelContext: ModelContext, healthKitService: HealthKitService? = nil) {
+    func setup(with modelContext: ModelContext, healthKitService: HealthKitService? = nil) -> Error? {
         self.modelContext = modelContext
         self.healthKitService = healthKitService
         usesMetricWeightPreference = getUserUsesMetricWeight()
@@ -553,7 +553,7 @@ final class LiveWorkoutViewModel {
         seedScreenshotWatchDataIfNeeded()
         guard !isSetupActive else {
             refreshEntriesAndMetrics()
-            return
+            return nil
         }
         isSetupActive = true
         configurePersistenceCoordinatorIfNeeded()
@@ -562,7 +562,13 @@ final class LiveWorkoutViewModel {
         // Insert workout if not already persisted
         if workout.modelContext == nil {
             modelContext.insert(workout)
-            try? modelContext.save()
+            do {
+                try modelContext.save()
+            } catch {
+                modelContext.rollback()
+                isSetupActive = false
+                return error
+            }
             BehaviorTracker(modelContext: modelContext).record(
                 actionKey: BehaviorActionKey.startWorkout,
                 domain: .workout,
@@ -588,6 +594,7 @@ final class LiveWorkoutViewModel {
         
         // Set up Live Activity intent observers
         setupLiveActivityObservers()
+        return nil
     }
     
     private func setupLiveActivityObservers() {
@@ -1889,14 +1896,14 @@ final class LiveWorkoutViewModel {
 
     // MARK: - Workout Completion
 
-    func finishWorkout() {
-        guard !isFinishingWorkout else { return }
-        guard workout.completedAt == nil else { return }
+    @discardableResult
+    func finishWorkout() -> Error? {
+        guard !isFinishingWorkout else { return nil }
+        guard workout.completedAt == nil else { return nil }
 
         isFinishingWorkout = true
         defer { isFinishingWorkout = false }
 
-        stopTimer()
         workout.completedAt = Date()
 
         for entry in entries {
@@ -1909,7 +1916,32 @@ final class LiveWorkoutViewModel {
         refreshEntriesAndMetrics()
 
         // Create ExerciseHistory entries for each exercise
+        achievedPRs = [:]
         createExerciseHistoryEntries()
+
+        if let modelContext {
+            BehaviorTracker(modelContext: modelContext).record(
+                actionKey: BehaviorActionKey.completeWorkout,
+                domain: .workout,
+                surface: .workouts,
+                outcome: .completed,
+                relatedEntityId: workout.id,
+                metadata: [
+                    "workout_name": workout.name,
+                    "workout_type": workout.workoutType
+                ],
+                saveImmediately: false
+            )
+        }
+
+        if let error = saveImmediately(updateLiveActivity: false, trigger: .finishWorkout) {
+            modelContext?.rollback()
+            achievedPRs = [:]
+            refreshEntriesAndMetrics()
+            return error
+        }
+
+        stopTimer()
 
         // Try to merge with overlapping Apple Watch workout
         Task {
@@ -1928,23 +1960,7 @@ final class LiveWorkoutViewModel {
             userInfo: ["workoutId": workout.id]
         )
         WidgetDataProvider.shared.scheduleRefresh()
-
-        if let modelContext {
-            BehaviorTracker(modelContext: modelContext).record(
-                actionKey: BehaviorActionKey.completeWorkout,
-                domain: .workout,
-                surface: .workouts,
-                outcome: .completed,
-                relatedEntityId: workout.id,
-                metadata: [
-                    "workout_name": workout.name,
-                    "workout_type": workout.workoutType
-                ],
-                saveImmediately: false
-            )
-        }
-
-        saveImmediately(updateLiveActivity: false, trigger: .finishWorkout)
+        return nil
     }
 
     /// Get user's preferred default rep count from their profile
@@ -2147,21 +2163,29 @@ final class LiveWorkoutViewModel {
     }
 
     func save() {
-        saveImmediately()
+        _ = saveImmediately()
     }
 
+    @discardableResult
     private func saveImmediately(
         updateLiveActivity: Bool = true,
         trigger: LiveWorkoutPersistenceCoordinator.FlushTrigger = .manual
-    ) {
+    ) -> Error? {
+        let saveError: Error?
         if let persistenceCoordinator {
-            persistenceCoordinator.flushNow(trigger: trigger)
+            saveError = persistenceCoordinator.flushNow(trigger: trigger)
         } else {
-            try? modelContext?.save()
+            do {
+                try modelContext?.save()
+                saveError = nil
+            } catch {
+                saveError = error
+            }
         }
         if updateLiveActivity {
             scheduleLiveActivityUpdate()
         }
+        return saveError
     }
 
     private func saveDebounced(updateLiveActivity: Bool = true) {

@@ -80,6 +80,7 @@ struct DashboardView: View {
     @State private var entryToEdit: FoodEntry?
     @State private var reminderComposerSeed: ReminderComposerSeed?
     @State private var activationChecklistHealthError: String?
+    @State private var persistenceError: DashboardPersistenceError?
     @AppStorage("dashboardActivationChecklistHasLoggedFood")
     private var cachedActivationHasLoggedFood = false
     @AppStorage("dashboardActivationChecklistHasWorkoutPlan")
@@ -91,8 +92,6 @@ struct DashboardView: View {
     @AppStorage("dashboardActivationChecklistDismissed")
     private var hasDismissedActivationChecklist = false
 
-    @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
-    @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest = false
     @AppStorage("pendingWorkoutPlanSetupRequest") private var pendingWorkoutPlanSetupRequest = false
     private static let dashboardHistoryWindowDays = 100
     private static let dashboardFastFoodWindowDays = 2
@@ -748,6 +747,13 @@ struct DashboardView: View {
             .sheet(item: $entryToEdit) { entry in
                 EditFoodEntrySheet(entry: entry)
                     .traiSheetBranding()
+            }
+            .alert(item: $persistenceError) { error in
+                Alert(
+                    title: Text(error.title),
+                    message: Text(error.message),
+                    dismissButton: .default(Text("OK"))
+                )
             }
             .overlay(alignment: .topLeading) {
                 Text("ready")
@@ -1680,6 +1686,17 @@ struct DashboardView: View {
     private func deleteFoodEntry(_ entry: FoodEntry) {
         entry.imageData = nil
         modelContext.delete(entry)
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            persistenceError = DashboardPersistenceError(
+                title: "Food Not Deleted",
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return
+        }
         HapticManager.success()
     }
 
@@ -2112,6 +2129,12 @@ private struct ActivationChecklistProgressView: View {
         .accessibilityValue("\(completedCount) of \(totalCount) complete")
         .animation(.easeInOut(duration: 0.25), value: completedCount)
     }
+}
+
+private struct DashboardPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }
 
 #Preview {

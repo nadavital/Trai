@@ -1589,6 +1589,10 @@ struct WorkoutGoalProgressCard: View {
     let onToggleCompletion: (WorkoutGoal) -> Void
     var onGoalTap: ((WorkoutGoal) -> Void)? = nil
 
+    private var activeInsights: [WorkoutGoalInsight] {
+        insights.filter { $0.goal.isActive }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if showsAddGoal {
@@ -1600,14 +1604,14 @@ struct WorkoutGoalProgressCard: View {
                 TraiSectionHeader("Working Toward", icon: "scope")
             }
 
-            if insights.isEmpty {
+            if activeInsights.isEmpty {
                 Text("Add a goal for this workout type or a specific activity to see progress here.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
-                        ForEach(insights.prefix(5)) { insight in
+                        ForEach(activeInsights.prefix(5)) { insight in
                             compactGoalCard(insight)
                                 .frame(width: 154)
                         }
@@ -1703,20 +1707,17 @@ struct WorkoutTraiReviewCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: "circle.hexagongrid.circle")
-                    .font(.headline)
-                    .foregroundStyle(TraiColors.brandAccent)
-                    .frame(width: 38, height: 38)
-                    .background(TraiColors.brandAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+            HStack(spacing: TraiSpacing.sm) {
+                TraiLensSymbolIcon(size: 30, variant: .enclosedFilled, color: Color.accentColor)
+                    .frame(width: 30, height: 30)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
+                        .font(.traiHeadline(14))
+                        .foregroundStyle(Color.accentColor)
 
                     Text(subtitle)
-                        .font(.caption)
+                        .font(.traiLabel(12))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -1726,13 +1727,22 @@ struct WorkoutTraiReviewCard: View {
 
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.accentColor.opacity(0.58))
             }
-            .padding(14)
-            .contentShape(RoundedRectangle(cornerRadius: 16))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .glassEffect(
+                .regular.tint(Color.accentColor.opacity(0.20)).interactive(),
+                in: .capsule
+            )
+            .overlay {
+                Capsule()
+                    .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.03), radius: 5, y: 3)
         }
-        .buttonStyle(TraiPressStyle())
-        .traiCard(cornerRadius: 16, contentPadding: 0)
+        .buttonStyle(TraiPressStyle(scale: 0.96))
     }
 }
 
@@ -1820,9 +1830,7 @@ struct WorkoutGoalsOverviewSection: View {
 
             Button(action: onUnlockPro) {
                 HStack(spacing: 12) {
-                    Image(systemName: "circle.hexagongrid.circle.fill")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(TraiColors.brandAccent)
+                    TraiLensSymbolIcon(size: 20, variant: .enclosedFilled, color: TraiColors.brandAccent)
                         .frame(width: 34, height: 34)
                         .background(TraiColors.brandAccent.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
 
@@ -2631,7 +2639,36 @@ private struct ActivityItem: Identifiable {
     let session: WorkoutSession?
 }
 
+private struct WorkoutGoalDetailPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
 struct WorkoutGoalDetailSheet: View {
+    private enum Presentation: Identifiable {
+        case workout(LiveWorkout)
+        case session(WorkoutSession)
+        case checkIn
+        case editGoal
+        case goalHistory
+
+        var id: String {
+            switch self {
+            case .workout(let workout):
+                return "workout-\(workout.id.uuidString)"
+            case .session(let session):
+                return "session-\(session.id.uuidString)"
+            case .checkIn:
+                return "checkIn"
+            case .editGoal:
+                return "editGoal"
+            case .goalHistory:
+                return "goalHistory"
+            }
+        }
+    }
+
     @Bindable var goal: WorkoutGoal
     let workouts: [LiveWorkout]
     let sessions: [WorkoutSession]
@@ -2643,12 +2680,9 @@ struct WorkoutGoalDetailSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
-    @State private var selectedWorkout: LiveWorkout?
-    @State private var selectedSession: WorkoutSession?
-    @State private var showingCheckIn = false
-    @State private var showingEditGoal = false
-    @State private var showingGoalHistory = false
+    @State private var activePresentation: Presentation?
     @State private var showDeleteConfirmation = false
+    @State private var persistenceError: WorkoutGoalDetailPersistenceError?
 
     private var insight: WorkoutGoalInsight {
         WorkoutGoalProgressResolver.insights(
@@ -2751,7 +2785,7 @@ struct WorkoutGoalDetailSheet: View {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button("Edit Goal", systemImage: "pencil") {
-                            showingEditGoal = true
+                            activePresentation = .editGoal
                         }
                         Button("Delete Goal", systemImage: "trash", role: .destructive) {
                             showDeleteConfirmation = true
@@ -2761,39 +2795,8 @@ struct WorkoutGoalDetailSheet: View {
                     }
                 }
             }
-            .sheet(item: $selectedWorkout) { workout in
-                LiveWorkoutDetailSheet(workout: workout, useLbs: useLbs)
-                    .traiSheetBranding()
-            }
-            .sheet(item: $selectedSession) { session in
-                WorkoutDetailSheet(workout: session)
-                    .traiSheetBranding()
-            }
-            .sheet(isPresented: $showingCheckIn) {
-                WorkoutGoalCheckInView(
-                    goal: goal,
-                    insight: insight,
-                    workouts: workouts,
-                    sessions: sessions
-                )
-                .traiSheetBranding()
-            }
-            .sheet(isPresented: $showingEditGoal) {
-                AddWorkoutGoalSheet(
-                    editGoal: goal,
-                    activitySuggestions: [],
-                    prefersMetricWeight: !useLbs
-                )
-                .traiSheetBranding()
-            }
-            .sheet(isPresented: $showingGoalHistory) {
-                if let recurringProgress = insight.recurringProgress {
-                    RecurringGoalHistorySheet(
-                        goal: goal,
-                        progress: recurringProgress,
-                        color: goalAccentColor
-                    )
-                }
+            .sheet(item: $activePresentation) { presentation in
+                presentationContent(presentation)
             }
             .confirmationDialog("Delete Goal", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
@@ -2803,6 +2806,10 @@ struct WorkoutGoalDetailSheet: View {
                         dismiss()
                     } catch {
                         modelContext.rollback()
+                        persistenceError = WorkoutGoalDetailPersistenceError(
+                            title: "Goal Not Deleted",
+                            message: error.localizedDescription
+                        )
                         HapticManager.error()
                     }
                 }
@@ -2811,8 +2818,50 @@ struct WorkoutGoalDetailSheet: View {
                 Text("This will permanently delete \"\(goal.trimmedTitle)\" and all its progress.")
             }
         }
+        .alert(item: $persistenceError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
         .traiSheetBranding()
         .proUpsellPresenter()
+    }
+
+    @ViewBuilder
+    private func presentationContent(_ presentation: Presentation) -> some View {
+        switch presentation {
+        case .workout(let workout):
+            LiveWorkoutDetailSheet(workout: workout, useLbs: useLbs)
+                .traiSheetBranding()
+        case .session(let session):
+            WorkoutDetailSheet(workout: session)
+                .traiSheetBranding()
+        case .checkIn:
+            WorkoutGoalCheckInView(
+                goal: goal,
+                insight: insight,
+                workouts: workouts,
+                sessions: sessions
+            )
+            .traiSheetBranding()
+        case .editGoal:
+            AddWorkoutGoalSheet(
+                editGoal: goal,
+                activitySuggestions: [],
+                prefersMetricWeight: !useLbs
+            )
+            .traiSheetBranding()
+        case .goalHistory:
+            if let recurringProgress = insight.recurringProgress {
+                RecurringGoalHistorySheet(
+                    goal: goal,
+                    progress: recurringProgress,
+                    color: goalAccentColor
+                )
+            }
+        }
     }
 
     private var detailHeader: some View {
@@ -2892,7 +2941,7 @@ struct WorkoutGoalDetailSheet: View {
                     progress: recurringProgress,
                     color: goalAccentColor,
                     onShowHistory: recurringProgress.hasExtendedHistory ? {
-                        showingGoalHistory = true
+                        activePresentation = .goalHistory
                     } : nil
                 )
             } else if let progressFraction = insight.progressFraction {
@@ -2966,12 +3015,18 @@ struct WorkoutGoalDetailSheet: View {
                 .buttonStyle(.traiSecondary(color: goalAccentColor, fullWidth: true))
             }
 
-            Button("Check in with Trai", systemImage: "circle.hexagongrid.circle") {
+            Button {
                 if monetizationService?.canAccessAIFeatures ?? true {
-                    showingCheckIn = true
+                    activePresentation = .checkIn
                 } else {
                     proUpsellCoordinator?.present(source: .workoutPlan)
                 }
+            } label: {
+                HStack {
+                    TraiLensSymbolIcon(size: 16, variant: .nodes, color: TraiColors.brandAccent)
+                    Text("Check in with Trai")
+                }
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.traiSecondary(color: TraiColors.brandAccent, fullWidth: true))
         }
@@ -3022,13 +3077,13 @@ struct WorkoutGoalDetailSheet: View {
                             if let workout = item.workout {
                                 CompactLiveWorkoutRow(
                                     workout: workout,
-                                    onTap: { selectedWorkout = workout }
+                                    onTap: { activePresentation = .workout(workout) }
                                 )
                                 .frame(width: 150)
                             } else if let session = item.session {
                                 CompactWorkoutSessionRow(
                                     workout: session,
-                                    onTap: { selectedSession = session }
+                                    onTap: { activePresentation = .session(session) }
                                 )
                                 .frame(width: 150)
                             }

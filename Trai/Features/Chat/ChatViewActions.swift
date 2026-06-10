@@ -254,7 +254,7 @@ extension ChatView {
             try modelContext.save()
         } catch {
             modelContext.rollback()
-            message.errorMessage = "We couldn’t save this workout plan update. Please try again."
+            message.errorMessage = "We couldn’t update this meal suggestion. Please try again."
             HapticManager.error()
             return
         }
@@ -304,7 +304,7 @@ extension ChatView {
 
         guard retiredAnySuggestion else { return false }
 
-        try? modelContext.save()
+        guard saveChatChange(title: "Chat Suggestion Not Updated") else { return false }
         rebuildSessionMessages(preferLiveQueryData: true)
         return true
     }
@@ -374,7 +374,7 @@ extension ChatView {
         }
 
         if retiredAnySuggestion {
-            try? modelContext.save()
+            guard saveChatChange(title: "Chat Suggestion Not Updated") else { return }
             rebuildSessionMessages(preferLiveQueryData: true)
         }
     }
@@ -386,10 +386,10 @@ extension ChatView {
               !ChatSuggestionFreshness.isStale(
                 messageTimestamp: message.timestamp,
                 currentPlanUpdatedAt: profile.aiPlanGeneratedAt
-              ) else {
+        ) else {
             message.suggestedPlanDismissed = true
             message.errorMessage = "This nutrition plan update is no longer current. Use the latest plan card instead."
-            try? modelContext.save()
+            _ = saveChatChange(title: "Chat Suggestion Not Updated")
             HapticManager.error()
             return
         }
@@ -417,11 +417,7 @@ extension ChatView {
             profile.dailySugarGoal = sugar
         }
         if let goalString = plan.goal {
-            // Convert goal string to GoalType (handles various formats)
-            let normalizedGoal = goalString.lowercased().replacing("_", with: "")
-            if let goalType = UserProfile.GoalType.allCases.first(where: {
-                $0.rawValue.lowercased() == normalizedGoal
-            }) {
+            if let goalType = UserProfile.GoalType.matching(planGoalString: goalString) {
                 profile.goal = goalType
             }
         }
@@ -506,6 +502,28 @@ extension ChatView {
     }
 }
 
+private extension UserProfile.GoalType {
+    static func matching(planGoalString value: String) -> UserProfile.GoalType? {
+        let normalizedValue = value.goalTypeNormalizedKey
+        guard !normalizedValue.isEmpty else { return nil }
+
+        if normalizedValue == "bodyrecomposition" || normalizedValue == "recomp" {
+            return .recomposition
+        }
+
+        return allCases.first { goal in
+            goal.rawValue.goalTypeNormalizedKey == normalizedValue
+                || goal.displayName.goalTypeNormalizedKey == normalizedValue
+        }
+    }
+}
+
+private extension String {
+    var goalTypeNormalizedKey: String {
+        lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+}
+
 // MARK: - Workout Plan Suggestion Actions
 
 extension ChatView {
@@ -516,10 +534,10 @@ extension ChatView {
               !ChatSuggestionFreshness.isStale(
                 messageTimestamp: message.timestamp,
                 currentPlanUpdatedAt: profile.workoutPlanGeneratedAt
-              ) else {
+        ) else {
             message.suggestedWorkoutPlanDismissed = true
             message.errorMessage = "This workout plan update is no longer current. Use the latest plan card instead."
-            try? modelContext.save()
+            _ = saveChatChange(title: "Chat Suggestion Not Updated")
             HapticManager.error()
             return
         }
@@ -569,8 +587,9 @@ extension ChatView {
             relatedEntityId: message.id,
             saveImmediately: false
         )
-        try? modelContext.save()
+        let didSaveCardState = saveChatChange(title: "Workout Plan Card Not Updated")
         WidgetDataProvider.shared.scheduleRefresh()
+        guard didSaveCardState else { return }
 
         HapticManager.success()
     }
@@ -710,7 +729,7 @@ extension ChatView {
         ) else {
             message.suggestedWorkoutLogDismissed = true
             message.errorMessage = "This planned workout log is no longer current. Ask Trai to log the latest plan session instead."
-            try? modelContext.save()
+            _ = saveChatChange(title: "Chat Suggestion Not Updated")
             HapticManager.error()
             return
         }
@@ -801,7 +820,7 @@ extension ChatView {
         ) else {
             message.suggestedWorkoutDismissed = true
             message.errorMessage = "This planned workout is no longer current. Ask Trai to start the latest plan session instead."
-            try? modelContext.save()
+            _ = saveChatChange(title: "Chat Suggestion Not Updated")
             HapticManager.error()
             return
         }
@@ -1443,7 +1462,7 @@ extension ChatView {
             ],
             saveImmediately: false
         )
-        try? modelContext.save()
+        _ = saveChatChange(title: "Plan Review Not Saved")
     }
 
     /// Handle when user taps "Later" or dismiss on recommendation card
@@ -1476,10 +1495,7 @@ extension ChatView {
             withAnimation(.snappy) {
                 contextAttachment = pendingAttachment
             }
-            pendingChatContextAttachment = ""
-            pendingChatLaunchLabel = ""
-            pendingFocusedFoodEntryId = ""
-            pendingChatActionKind = ""
+            clearPendingTraiChatLaunchRequest()
             isInputFocused = true
             return
         }
@@ -1499,11 +1515,7 @@ extension ChatView {
                 launchLabel: trimmedLaunchLabel.isEmpty ? "Reviewing with Trai..." : trimmedLaunchLabel,
                 markNutritionPlanReviewedIfNoUpdate: shouldMarkNutritionReview
             ) else { return }
-            pendingChatPrompt = ""
-            pendingChatLaunchLabel = ""
-            pendingFocusedFoodEntryId = ""
-            pendingChatActionKind = ""
-            pendingChatContextAttachment = ""
+            clearPendingTraiChatLaunchRequest()
             return
         }
 
@@ -1525,6 +1537,15 @@ extension ChatView {
             launchLabel: "Reviewing your workout plan..."
         ) else { return }
         pendingWorkoutPlanReviewRequest = false
+    }
+
+    private func clearPendingTraiChatLaunchRequest() {
+        PendingTraiChatLaunchRequest.clear()
+        pendingChatPrompt = ""
+        pendingChatLaunchLabel = ""
+        pendingFocusedFoodEntryId = ""
+        pendingChatActionKind = ""
+        pendingChatContextAttachment = ""
     }
 
     private func focusedFoodEntry(with id: UUID) -> FoodEntry? {

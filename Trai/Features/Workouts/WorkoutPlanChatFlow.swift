@@ -15,8 +15,9 @@ struct WorkoutPlanChatFlow: View {
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
 
     @Query private var profiles: [UserProfile]
-    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
+    @Query private var workoutGoals: [WorkoutGoal]
     private var userProfile: UserProfile? { profiles.first }
+    private static let workoutGoalFetchLimit = 80
 
     // MARK: - Mode Configuration
 
@@ -52,6 +53,43 @@ struct WorkoutPlanChatFlow: View {
 
     /// Called when user skips (onboarding mode only)
     var onSkip: (() -> Void)?
+
+    init(
+        isOnboarding: Bool = false,
+        embedded: Bool = false,
+        currentPlanToEdit: WorkoutPlan? = nil,
+        existingPlanIntroMessage: String = "Here's your current plan. Tell me what you'd like to change and I'll revise it without making you start over.",
+        existingPlanAcceptTitle: String = "Save Plan",
+        generatedPlanGoals: [WorkoutGoal] = [],
+        showsGeneratedOnboardingHeader: Bool = false,
+        initialRefinementPrompt: String? = nil,
+        onComplete: ((WorkoutPlan) -> Void)? = nil,
+        onCompleteWithGoals: ((WorkoutPlan, [WorkoutGoal]) -> Void)? = nil,
+        onSkip: (() -> Void)? = nil
+    ) {
+        self.isOnboarding = isOnboarding
+        self.embedded = embedded
+        self.currentPlanToEdit = currentPlanToEdit
+        self.existingPlanIntroMessage = existingPlanIntroMessage
+        self.existingPlanAcceptTitle = existingPlanAcceptTitle
+        self.generatedPlanGoals = generatedPlanGoals
+        self.showsGeneratedOnboardingHeader = showsGeneratedOnboardingHeader
+        self.initialRefinementPrompt = initialRefinementPrompt
+        self.onComplete = onComplete
+        self.onCompleteWithGoals = onCompleteWithGoals
+        self.onSkip = onSkip
+
+        var profileDescriptor = FetchDescriptor<UserProfile>()
+        profileDescriptor.fetchLimit = 1
+        _profiles = Query(profileDescriptor)
+
+        var workoutGoalDescriptor = FetchDescriptor<WorkoutGoal>(
+            predicate: #Predicate<WorkoutGoal> { $0.statusRaw != "paused" },
+            sortBy: [SortDescriptor(\WorkoutGoal.updatedAt, order: .reverse)]
+        )
+        workoutGoalDescriptor.fetchLimit = Self.workoutGoalFetchLimit
+        _workoutGoals = Query(workoutGoalDescriptor)
+    }
 
     // MARK: - State
 

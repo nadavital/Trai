@@ -16,20 +16,36 @@ struct WorkoutDetailSheet: View {
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
-    @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
-    @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
-    @AppStorage(SharedStorageKeys.Chat.pendingActionKind) private var pendingChatActionKind: String = ""
-    @AppStorage(SharedStorageKeys.Chat.pendingContextAttachment) private var pendingChatContextAttachment: String = ""
-    @Query(sort: \ExerciseHistory.performedAt, order: .reverse) private var allExerciseHistory: [ExerciseHistory]
+    @Query private var allExerciseHistory: [ExerciseHistory]
     @Query private var profiles: [UserProfile]
     @State private var isEditingNotes = false
     @State private var noteDraft = ""
     @State private var presentedAccountSetupContext: AccountSetupContext?
+    @State private var persistenceError: WorkoutDetailPersistenceError?
 
     private struct DetailItem: Identifiable {
         let id = UUID()
         let label: String
         let value: String
+    }
+
+    init(workout: WorkoutSession) {
+        self.workout = workout
+
+        let exerciseName = workout.displayName
+        let loggedAt = workout.loggedAt
+        var exerciseHistoryDescriptor = FetchDescriptor<ExerciseHistory>(
+            predicate: #Predicate<ExerciseHistory> { history in
+                history.exerciseName == exerciseName && history.performedAt < loggedAt
+            },
+            sortBy: [SortDescriptor(\ExerciseHistory.performedAt, order: .reverse)]
+        )
+        exerciseHistoryDescriptor.fetchLimit = 80
+        _allExerciseHistory = Query(exerciseHistoryDescriptor)
+
+        var profileDescriptor = FetchDescriptor<UserProfile>()
+        profileDescriptor.fetchLimit = 1
+        _profiles = Query(profileDescriptor)
     }
 
     private var usesMetricExerciseWeight: Bool {
@@ -208,6 +224,13 @@ struct WorkoutDetailSheet: View {
         .sheet(item: $presentedAccountSetupContext) { context in
             AccountSetupView(context: context)
         }
+        .alert(item: $persistenceError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
 
     // MARK: - Header Section
@@ -275,10 +298,7 @@ struct WorkoutDetailSheet: View {
     private var prHighlights: [PRHighlight] {
         guard workout.isStrengthTraining else { return [] }
 
-        let exerciseName = workout.displayName
-        let previousEntries = allExerciseHistory.filter {
-            $0.exerciseName == exerciseName && $0.performedAt < workout.loggedAt
-        }
+        let previousEntries = allExerciseHistory
         guard !previousEntries.isEmpty else { return [] }
 
         var highlights: [PRHighlight] = []
@@ -454,7 +474,17 @@ struct WorkoutDetailSheet: View {
     private func saveNotes() {
         let trimmed = noteDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         workout.notes = trimmed.isEmpty ? nil : trimmed
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            persistenceError = WorkoutDetailPersistenceError(
+                title: "Notes Not Saved",
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return
+        }
         isEditingNotes = false
         HapticManager.selectionChanged()
     }
@@ -470,8 +500,7 @@ struct WorkoutDetailSheet: View {
             HapticManager.lightTap()
             return
         }
-        guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              TraiChatContextAttachment(storageValue: pendingChatContextAttachment) == nil else {
+        guard !PendingTraiChatLaunchRequest.hasValidPendingTraiChatPayload() else {
             dismiss()
             DispatchQueue.main.async {
                 appTabSelection.wrappedValue = .trai
@@ -480,10 +509,10 @@ struct WorkoutDetailSheet: View {
             return
         }
 
-        pendingChatPrompt = ""
-        pendingChatLaunchLabel = "Reviewing your latest session..."
-        pendingChatContextAttachment = workout.traiChatContextAttachment.storageValue
-        pendingChatActionKind = ""
+        PendingTraiChatLaunchRequest(
+            launchLabel: "Reviewing your latest session...",
+            contextAttachmentStorageValue: workout.traiChatContextAttachment.storageValue
+        ).write()
         BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: "engagement.review_workout_session_with_trai",
             domain: .engagement,
@@ -504,6 +533,12 @@ struct WorkoutDetailSheet: View {
 }
 
 // MARK: - Detail Row
+
+private struct WorkoutDetailPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
 
 struct DetailRow: View {
     let label: String

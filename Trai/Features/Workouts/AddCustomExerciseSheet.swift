@@ -264,7 +264,10 @@ struct AddCustomExerciseSheet: View {
                 Button {
                     Task { await analyzeExercise() }
                 } label: {
-                    Label("Analyze with Trai", systemImage: "circle.hexagongrid.circle")
+                    HStack {
+                        TraiLensSymbolIcon(size: 16, variant: .nodes, color: TraiColors.brandAccent)
+                        Text("Analyze with Trai")
+                    }
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.traiSecondary(color: TraiColors.brandAccent, fullWidth: true))

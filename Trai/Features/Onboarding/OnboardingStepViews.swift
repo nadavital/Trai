@@ -92,7 +92,7 @@ struct WelcomeStepView: View {
 
     private var heroSection: some View {
         VStack(spacing: 16) {
-            TraiLensView(size: 112, state: .idle, palette: .energy, breathes: false)
+            TraiLensView(size: 112, state: .idle, palette: .energy)
                 .opacity(heroVisible ? 1 : 0)
                 .scaleEffect(heroVisible ? 1 : 0.86)
 
@@ -226,7 +226,7 @@ struct OnboardingTraiHeader: View {
     let title: String
     var lensSize: CGFloat = 54
     var lensState: TraiLensState = .idle
-    var lensBreathes = false
+    var lensBreathes = true
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {

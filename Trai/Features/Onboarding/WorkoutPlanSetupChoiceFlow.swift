@@ -18,6 +18,7 @@ struct WorkoutPlanSetupChoiceFlow: View {
     let canAccessAIFeatures: Bool
     let onComplete: (WorkoutPlan, [WorkoutGoal], WorkoutPlanSetupMode, OnboardingWorkoutPlanDraft) -> Void
     let onBack: () -> Void
+    let onSkip: () -> Void
 
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
@@ -43,7 +44,8 @@ struct WorkoutPlanSetupChoiceFlow: View {
             onComplete: { plan, goals in
                 onComplete(plan, goals, activeMode, draft)
             },
-            onBack: onBack
+            onBack: onBack,
+            onSkip: onSkip
         )
         .fullScreenCover(isPresented: $showingProFork, onDismiss: resolveProFork) {
             ProUpsellView(
@@ -68,7 +70,10 @@ struct WorkoutPlanSetupChoiceFlow: View {
     }
 
     private var canUseAIGeneration: Bool {
-        currentAIAccess && accountSessionService?.isAuthenticated == true
+        if AppLaunchArguments.shouldRunOnboardingFlowUITest {
+            return true
+        }
+        return currentAIAccess && accountSessionService?.isAuthenticated == true
     }
 
     private var workoutPlanForkModules: [ProUpsellModule] {
@@ -152,6 +157,7 @@ struct WorkoutPlanSetupChoiceFlow: View {
         aiService: AIService(),
         canAccessAIFeatures: false,
         onComplete: { _, _, _, _ in },
-        onBack: {}
+        onBack: {},
+        onSkip: {}
     )
 }

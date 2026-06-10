@@ -17,9 +17,11 @@ struct LiveWorkoutPresentation: Identifiable {
         workout: LiveWorkout,
         template: WorkoutPlan.WorkoutTemplate? = nil,
         finishOnPresentation: Bool = false,
-        id: UUID = UUID()
+        id: UUID? = nil
     ) {
-        self.id = id
+        // Regular opens must keep the workout id stable across SwiftData insertion/query refreshes.
+        // Finish requests intentionally get a fresh id so tapping End can force a new presentation.
+        self.id = id ?? (finishOnPresentation ? UUID() : workout.id)
         self.workout = workout
         self.template = template
         self.finishOnPresentation = finishOnPresentation

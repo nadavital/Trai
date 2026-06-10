@@ -48,9 +48,6 @@ struct ProfileView: View {
     @State var presentedAccountSetupContext: AccountSetupContext?
     @State private var workoutPlanSaveError: WorkoutPlanSaveError?
 
-    // For navigating to Trai tab with plan review
-    @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
-    @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest = false
     @AppStorage(SharedStorageKeys.Chat.currentSessionId) var currentChatSessionIdString = ""
     @AppStorage(SharedStorageKeys.Chat.pendingOpenSessionId) var pendingOpenChatSessionIdString = ""
     @AppStorage("profile_cached_latest_weight_kg") private var cachedLatestWeightKg: Double = -1
@@ -240,7 +237,8 @@ struct ProfileView: View {
                     aiService: standardWorkoutPlanAIService,
                     canAccessAIFeatures: canAccessAIFeatures,
                     onComplete: saveStandardWorkoutPlan,
-                    onBack: { showPlanSetupSheet = false }
+                    onBack: { showPlanSetupSheet = false },
+                    onSkip: { showPlanSetupSheet = false }
                 )
                     .traiSheetBranding()
             }
@@ -713,8 +711,7 @@ struct ProfileView: View {
 
     private func profileFreeBadge() -> some View {
         HStack(spacing: 7) {
-            Image(systemName: "circle.hexagongrid.circle")
-                .font(.caption.weight(.semibold))
+            TraiLensSymbolIcon(size: 13, variant: .enclosed, color: TraiColors.brandAccent)
 
             Text("Free Plan")
                 .font(.caption)
@@ -735,8 +732,7 @@ struct ProfileView: View {
 
     private func profileProBadge() -> some View {
         HStack(spacing: 7) {
-            Image(systemName: "circle.hexagongrid.circle.fill")
-                .font(.caption.weight(.bold))
+            TraiLensSymbolIcon(size: 13, variant: .enclosedFilled, color: .white)
 
             Text("Trai Pro")
                 .font(.caption)

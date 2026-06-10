@@ -43,3 +43,23 @@ nonisolated enum SharedStorageKeys {
 nonisolated enum PendingTraiChatActionKind: String {
     case nutritionPlanReview
 }
+
+nonisolated struct PendingTraiChatLaunchRequest {
+    var prompt: String = ""
+    var launchLabel: String = ""
+    var focusedFoodEntryId: UUID?
+    var actionKind: PendingTraiChatActionKind?
+    var contextAttachmentStorageValue: String = ""
+
+    func write(to defaults: UserDefaults = .standard) {
+        defaults.set(prompt, forKey: SharedStorageKeys.Chat.pendingPrompt)
+        defaults.set(launchLabel, forKey: SharedStorageKeys.Chat.pendingLaunchLabel)
+        defaults.set(focusedFoodEntryId?.uuidString ?? "", forKey: SharedStorageKeys.Chat.pendingFocusedFoodEntryId)
+        defaults.set(actionKind?.rawValue ?? "", forKey: SharedStorageKeys.Chat.pendingActionKind)
+        defaults.set(contextAttachmentStorageValue, forKey: SharedStorageKeys.Chat.pendingContextAttachment)
+    }
+
+    static func clear(in defaults: UserDefaults = .standard) {
+        Self().write(to: defaults)
+    }
+}

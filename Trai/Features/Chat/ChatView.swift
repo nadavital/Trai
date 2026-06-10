@@ -106,6 +106,7 @@ struct ChatView: View {
     @State var contextAttachment: TraiChatContextAttachment?
     @State private var didApplyInitialContextAttachment = false
     @State var isPreparingFirstMessageTransition = false
+    @State private var persistenceError: ChatPersistenceError?
 
     // Plan assessment
     @State var planAssessmentService = PlanAssessmentService()
@@ -590,11 +591,12 @@ struct ChatView: View {
     }
 
     private func queuePendingLoggedMealAttachment(_ attachment: TraiChatContextAttachment, focusedEntryId: UUID) {
-        guard TraiChatContextAttachment(storageValue: pendingChatContextAttachment) == nil else { return }
-        pendingChatContextAttachment = attachment.storageValue
-        pendingChatLaunchLabel = "Opening this meal with Trai..."
-        pendingFocusedFoodEntryId = focusedEntryId.uuidString
-        pendingChatActionKind = ""
+        guard !PendingTraiChatLaunchRequest.hasValidPendingTraiChatPayload() else { return }
+        PendingTraiChatLaunchRequest(
+            launchLabel: "Opening this meal with Trai...",
+            focusedFoodEntryId: focusedEntryId,
+            contextAttachmentStorageValue: attachment.storageValue
+        ).write()
     }
 
     func mealSuggestionKey(for meal: SuggestedFoodEntry, in message: ChatMessage) -> MealSuggestionKey {
@@ -667,6 +669,13 @@ struct ChatView: View {
                 .accessibilityLabel(chatLatencyProbeLabel)
                 .accessibilityIdentifier("traiLatencyProbe")
         }
+        .alert(item: $persistenceError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
 
     private var chatLatencyProbeLabel: String {
@@ -686,6 +695,10 @@ struct ChatView: View {
             counts: counts
         )
         LatencyProbe.append(entry: entry, to: &latencyProbeEntries)
+    }
+
+    func showPersistenceError(title: String, message: String) {
+        persistenceError = ChatPersistenceError(title: title, message: message)
     }
 
     private var isInputFocusedBinding: Binding<Bool> {
@@ -1258,6 +1271,12 @@ private struct ChatRootView: View {
         }
         .traiSheetBranding()
     }
+}
+
+private struct ChatPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }
 
 private struct ChatContentSection: View {

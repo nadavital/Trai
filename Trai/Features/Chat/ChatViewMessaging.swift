@@ -78,8 +78,20 @@ extension ChatView {
             message.imageData = nil
             modelContext.delete(message)
         }
-        try? modelContext.save()
+        guard saveChatChange(title: "Chats Not Cleared") else { return }
         startNewSession()
+    }
+
+    func saveChatChange(title: String) -> Bool {
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            showPersistenceError(title: title, message: error.localizedDescription)
+            HapticManager.error()
+            return false
+        }
     }
 }
 
@@ -483,7 +495,7 @@ extension ChatView {
         }
 
         // Explicit save to ensure SwiftData persists changes after function calls
-        try? modelContext.save()
+        _ = saveChatChange(title: "Chat Response Not Saved")
     }
 
     func buildFitnessContext() -> FitnessContext {

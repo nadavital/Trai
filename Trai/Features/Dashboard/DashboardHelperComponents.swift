@@ -158,16 +158,8 @@ struct ChatWithTraiCard: View {
             action()
         } label: {
             HStack(spacing: TraiSpacing.sm) {
-                ZStack {
-                    Circle()
-                        .fill(Color.accentColor.opacity(0.78))
-                        .frame(width: 30, height: 30)
-
-                    Image(systemName: "circle.hexagongrid.circle")
-                        .font(.caption)
-                        .bold()
-                        .foregroundStyle(.white)
-                }
+                TraiLensSymbolIcon(size: 30, variant: .enclosedFilled, color: Color.accentColor)
+                    .frame(width: 30, height: 30)
 
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 6) {

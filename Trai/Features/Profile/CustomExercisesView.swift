@@ -17,6 +17,7 @@ struct CustomExercisesView: View {
     @State private var showingDeleteConfirmation = false
     @State private var exerciseToDelete: Exercise?
     @State private var showingAddCustomExercise = false
+    @State private var persistenceError: CustomExercisesPersistenceError?
 
     private var filteredExercises: [Exercise] {
         if searchText.isEmpty {
@@ -112,6 +113,13 @@ struct CustomExercisesView: View {
                 Text("Are you sure you want to delete \"\(exercise.name)\"? This cannot be undone.")
             }
         }
+        .alert(item: $persistenceError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
 
     private var emptyState: some View {
@@ -140,7 +148,7 @@ struct CustomExercisesView: View {
 
     private func deleteExercise(_ exercise: Exercise) {
         modelContext.delete(exercise)
-        try? modelContext.save()
+        guard saveCustomExerciseChange(title: "Exercise Not Deleted") else { return }
         exerciseToDelete = nil
         HapticManager.lightTap()
         // Refresh the list
@@ -200,7 +208,7 @@ struct CustomExercisesView: View {
             if !activityAliases.isEmpty {
                 existing.activityAliases = activityAliases
             }
-            try? modelContext.save()
+            guard saveCustomExerciseChange(title: "Exercise Not Updated") else { return }
             fetchCustomExercises()
             HapticManager.success()
             return
@@ -220,9 +228,24 @@ struct CustomExercisesView: View {
             exercise.secondaryMuscles = secondaryMuscles.joined(separator: ",")
         }
         modelContext.insert(exercise)
-        try? modelContext.save()
+        guard saveCustomExerciseChange(title: "Exercise Not Created") else { return }
         fetchCustomExercises()
         HapticManager.success()
+    }
+
+    private func saveCustomExerciseChange(title: String) -> Bool {
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            persistenceError = CustomExercisesPersistenceError(
+                title: title,
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return false
+        }
     }
 
     private func existingExercise(named name: String) -> Exercise? {
@@ -346,6 +369,12 @@ struct CustomExercisesView: View {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first { !$0.isEmpty }
     }
+}
+
+private struct CustomExercisesPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }
 
 // MARK: - Exercise Library Cards

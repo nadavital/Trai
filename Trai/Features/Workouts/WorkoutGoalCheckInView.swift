@@ -26,6 +26,7 @@ struct WorkoutGoalCheckInView: View {
     @State private var inputText = ""
     @State private var isLoading = false
     @State private var aiService = AIService()
+    @State private var persistenceError: WorkoutGoalCheckInPersistenceError?
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
@@ -92,6 +93,13 @@ struct WorkoutGoalCheckInView: View {
                     }
                 }
             }
+        }
+        .alert(item: $persistenceError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
         .onAppear {
             goal.markCheckedIn()
@@ -188,10 +196,26 @@ struct WorkoutGoalCheckInView: View {
         let existingNotes = goal.trimmedNotes
         goal.notes = existingNotes.isEmpty ? checkInEntry : "\(existingNotes)\n\n\(checkInEntry)"
         goal.updatedAt = Date()
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            persistenceError = WorkoutGoalCheckInPersistenceError(
+                title: "Check-In Not Saved",
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return
+        }
         HapticManager.success()
         dismiss()
     }
+}
+
+private struct WorkoutGoalCheckInPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }
 
 private struct CheckInBubble: View {
