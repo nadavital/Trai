@@ -544,8 +544,12 @@ struct ChatView: View {
                 },
                 currentSessionIdString: currentSessionIdString,
                 isTemporarySession: isTemporarySession,
+                hasVisibleMessages: !currentSessionMessages.isEmpty,
                 temporaryMessagesCount: temporaryMessages.count,
                 allMessagesFingerprint: allMessagesWindowFingerprint,
+                onStartNewChat: {
+                    startNewSession()
+                },
                 onToggleTemporaryMode: {
                     toggleTemporaryMode()
                     HapticManager.lightTap()
@@ -1178,8 +1182,10 @@ private struct ChatRootView: View {
     let onAllMessagesChange: () -> Void
     let currentSessionIdString: String
     let isTemporarySession: Bool
+    let hasVisibleMessages: Bool
     let temporaryMessagesCount: Int
     let allMessagesFingerprint: String
+    let onStartNewChat: () -> Void
     let onToggleTemporaryMode: () -> Void
     @Binding var showingCamera: Bool
     let onCameraImage: (UIImage) -> Void
@@ -1216,13 +1222,24 @@ private struct ChatRootView: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    onToggleTemporaryMode()
-                } label: {
-                    Image(systemName: isTemporarySession ? "text.bubble.badge.clock.fill" : "text.bubble.badge.clock")
-                        .foregroundStyle(isTemporarySession ? .orange : .secondary)
+                if hasVisibleMessages {
+                    Button {
+                        onStartNewChat()
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                    }
+                    .help("Start new chat")
+                    .accessibilityLabel("New Chat")
+                } else {
+                    Button {
+                        onToggleTemporaryMode()
+                    } label: {
+                        Image(systemName: isTemporarySession ? "text.bubble.badge.clock.fill" : "text.bubble.badge.clock")
+                            .foregroundStyle(isTemporarySession ? .orange : .secondary)
+                    }
+                    .help(isTemporarySession ? "Exit incognito mode" : "Start incognito chat")
+                    .accessibilityLabel(isTemporarySession ? "Exit Incognito" : "Start Incognito Chat")
                 }
-                .help(isTemporarySession ? "Exit incognito mode" : "Start incognito chat")
             }
         }
         .onAppear(perform: onAppear)
