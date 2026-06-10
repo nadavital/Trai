@@ -317,18 +317,16 @@ struct MainTabView: View {
 
     @ViewBuilder
     private var tabScene: some View {
-        if let workout = activeWorkout {
-            baseTabScene
-                .tabViewBottomAccessory {
+        baseTabScene
+            .tabViewBottomAccessory {
+                if let workout = activeWorkout {
                     WorkoutBanner(
                         workout: workout,
                         onTap: { presentLiveWorkout(workout) },
                         onEnd: { showingEndConfirmation = true }
                     )
                 }
-        } else {
-            baseTabScene
-        }
+            }
     }
 
     private var baseTabScene: some View {

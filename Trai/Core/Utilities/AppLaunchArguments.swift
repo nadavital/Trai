@@ -18,6 +18,7 @@ enum AppLaunchArguments {
     static let seedLiveWorkoutPerfData = "--seed-live-workout-perf-data"
     static let seedGoalPreviewData = "--goal-preview-seed"
     static let uiTestLiveWorkoutPreset = "--ui-test-live-workout-preset"
+    static let uiTestAutoStartWorkout = "--ui-test-auto-start-workout"
     static let mockFoodAIResponses = "--ui-test-mock-food-ai"
     static let forceFoodCameraPermissionFallback = "--ui-test-force-no-camera-food-flow"
     static let appStoreScreenshotMode = "--app-store-screenshot-mode"
@@ -95,6 +96,10 @@ enum AppLaunchArguments {
 
     static var shouldUseLiveWorkoutUITestPreset: Bool {
         ProcessInfo.processInfo.arguments.contains(uiTestLiveWorkoutPreset)
+    }
+
+    static var shouldAutoStartWorkoutForUITest: Bool {
+        ProcessInfo.processInfo.arguments.contains(uiTestAutoStartWorkout)
     }
 
     static var shouldUseMockFoodAIResponses: Bool {

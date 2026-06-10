@@ -116,6 +116,7 @@ struct WorkoutsView: View {
     @State private var pendingRecoveryRefreshShouldForce = true
     @State private var hasExecutedInitialHeavyRefresh = false
     @State private var isWorkoutsTabVisible = false
+    @State private var didAutoStartWorkoutForUITest = false
     @State private var latencyProbeEntries: [String] = []
     @State private var tabActivationPolicy = TabActivationPolicy(minimumDwellMilliseconds: 0)
     private static let workoutHistoryWindowDays = 120
@@ -536,6 +537,7 @@ struct WorkoutsView: View {
                 scheduleCloudKitHistoryReconciliationIfNeeded()
                 consumePendingWorkoutPlanSetupRequest()
                 autoCompleteEligibleGoalsIfNeeded()
+                autoStartWorkoutForUITestIfNeeded()
             }
             .onChange(of: pendingWorkoutPlanSetupRequest) { _, _ in
                 consumePendingWorkoutPlanSetupRequest()
@@ -1364,6 +1366,27 @@ struct WorkoutsView: View {
             outcome: .opened,
             metadata: ["source": "workouts_tab"]
         )
+    }
+
+    private func autoStartWorkoutForUITestIfNeeded() {
+        #if DEBUG
+        guard AppLaunchArguments.shouldAutoStartWorkoutForUITest else { return }
+        guard !didAutoStartWorkoutForUITest else { return }
+        guard activeWorkout == nil else { return }
+        didAutoStartWorkoutForUITest = true
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard activeWorkout == nil else { return }
+            if let recommendedTemplate = workoutPlan?.templates.first(where: { $0.id == recommendedTemplateId }) {
+                startWorkoutFromTemplate(recommendedTemplate)
+            } else if let firstTemplate = workoutPlan?.templates.first {
+                startWorkoutFromTemplate(firstTemplate)
+            } else {
+                startCustomWorkout()
+            }
+        }
+        #endif
     }
 
     private func startWorkoutFromTemplate(_ template: WorkoutPlan.WorkoutTemplate) {
