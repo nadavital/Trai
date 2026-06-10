@@ -513,31 +513,6 @@ public struct TraiLensSymbolIcon: View {
     }
 }
 
-// MARK: - Adaptive Wrapper
-
-/// Smart wrapper that chooses an animated or static mark based on size.
-public struct AdaptiveTraiLens: View {
-    let size: CGFloat
-    let state: TraiLensState
-    let palette: TraiLensPalette
-
-    private let animationThreshold: CGFloat = 50
-
-    public init(size: CGFloat, state: TraiLensState = .idle, palette: TraiLensPalette = .energy) {
-        self.size = size
-        self.state = state
-        self.palette = palette
-    }
-
-    public var body: some View {
-        if size < animationThreshold {
-            TraiLensIcon(size: size, palette: palette)
-        } else {
-            TraiLensView(size: size, state: state, palette: palette)
-        }
-    }
-}
-
 // MARK: - Preview
 
 #Preview("Trai Identity Mark") {
