@@ -239,6 +239,7 @@ struct LiveWorkoutView: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityIdentifier("liveWorkoutCancelButton")
             }
 
             ToolbarItem(placement: .confirmationAction) {

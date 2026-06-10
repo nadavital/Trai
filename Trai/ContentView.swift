@@ -317,16 +317,30 @@ struct MainTabView: View {
 
     @ViewBuilder
     private var tabScene: some View {
-        baseTabScene
-            .tabViewBottomAccessory {
-                if let workout = activeWorkout {
-                    WorkoutBanner(
-                        workout: workout,
-                        onTap: { presentLiveWorkout(workout) },
-                        onEnd: { showingEndConfirmation = true }
-                    )
+        if #available(iOS 26.1, *) {
+            baseTabScene
+                .tabViewBottomAccessory(isEnabled: activeWorkout != nil) {
+                    liveWorkoutBottomAccessory
                 }
-            }
+        } else if activeWorkout != nil {
+            baseTabScene
+                .tabViewBottomAccessory {
+                    liveWorkoutBottomAccessory
+                }
+        } else {
+            baseTabScene
+        }
+    }
+
+    @ViewBuilder
+    private var liveWorkoutBottomAccessory: some View {
+        if let workout = activeWorkout {
+            WorkoutBanner(
+                workout: workout,
+                onTap: { presentLiveWorkout(workout) },
+                onEnd: { showingEndConfirmation = true }
+            )
+        }
     }
 
     private var baseTabScene: some View {

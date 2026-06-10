@@ -75,10 +75,62 @@ final class TraiUITests: XCTestCase {
     }
 
     func testPendingWorkoutRoutePresentsLiveWorkout() {
-        let app = makeApp(extraArguments: ["-pendingAppRoute", "trai://workout"])
+        let app = makeApp(extraArguments: [
+            "--ui-test-authenticated-free-plan",
+            "-pendingAppRoute", "trai://workout"
+        ])
         app.launch()
 
         XCTAssertTrue(app.buttons["liveWorkoutEndButton"].waitForExistence(timeout: 8))
+    }
+
+    func testLiveWorkoutBottomAccessoryClearsAfterEndingMinimizedWorkout() {
+        let app = makeApp(extraArguments: [
+            "--ui-test-authenticated-free-plan",
+            "-pendingAppRoute", "trai://workout",
+            "--ui-test-live-workout-preset"
+        ])
+        app.launch()
+
+        XCTAssertTrue(waitForLiveWorkoutScreen(in: app, timeout: 12))
+        minimizeLiveWorkoutAndAssertBanner(in: app)
+
+        let banner = app.otherElements["activeWorkoutBanner"]
+        banner.tap()
+        XCTAssertTrue(app.buttons["liveWorkoutEndButton"].waitForExistence(timeout: 8))
+        app.buttons["liveWorkoutEndButton"].tap()
+        app.buttons["End Workout"].tap()
+
+        XCTAssertTrue(app.navigationBars["Summary"].waitForExistence(timeout: 8))
+        app.buttons["Done"].tap()
+
+        XCTAssertTrue(
+            waitForNonExistence(app.otherElements["activeWorkoutBanner"], timeout: 6),
+            "Ending the workout should remove the tab view bottom accessory instead of leaving an empty accessory host."
+        )
+    }
+
+    func testLiveWorkoutBottomAccessoryClearsAfterCancellingMinimizedWorkout() {
+        let app = makeApp(extraArguments: [
+            "--ui-test-authenticated-free-plan",
+            "-pendingAppRoute", "trai://workout",
+            "--ui-test-live-workout-preset"
+        ])
+        app.launch()
+
+        XCTAssertTrue(waitForLiveWorkoutScreen(in: app, timeout: 12))
+        minimizeLiveWorkoutAndAssertBanner(in: app)
+
+        let banner = app.otherElements["activeWorkoutBanner"]
+        banner.tap()
+        XCTAssertTrue(app.buttons["liveWorkoutCancelButton"].waitForExistence(timeout: 8))
+        app.buttons["liveWorkoutCancelButton"].tap()
+        app.buttons["Cancel Workout"].tap()
+
+        XCTAssertTrue(
+            waitForNonExistence(app.otherElements["activeWorkoutBanner"], timeout: 6),
+            "Cancelling the workout should remove the tab view bottom accessory instead of leaving an empty accessory host."
+        )
     }
 
     func testDashboardPastDateHidesUnavailableHistoricalActivityMetrics() {
@@ -796,13 +848,30 @@ final class TraiUITests: XCTestCase {
         _ = XCTWaiter.wait(for: [expectation], timeout: timeout)
     }
 
+    private func minimizeLiveWorkoutAndAssertBanner(in app: XCUIApplication) {
+        app.navigationBars.firstMatch.swipeDown()
+        let banner = app.otherElements["activeWorkoutBanner"]
+        XCTAssertTrue(
+            banner.waitForExistence(timeout: 8),
+            "Expected the active workout bottom accessory after minimizing the live workout sheet."
+        )
+    }
+
     @discardableResult
     private func waitForLiveWorkoutScreen(
         in app: XCUIApplication,
         timeout: TimeInterval
     ) -> Bool {
+        if app.buttons["liveWorkoutEndButton"].waitForExistence(timeout: timeout) {
+            return true
+        }
+
+        if app.descendants(matching: .any)["liveWorkoutView"].waitForExistence(timeout: max(4, timeout / 2)) {
+            return true
+        }
+
         let primaryNavigationBar = app.navigationBars["Custom Workout"]
-        if primaryNavigationBar.waitForExistence(timeout: timeout) {
+        if primaryNavigationBar.waitForExistence(timeout: max(4, timeout / 2)) {
             return true
         }
 
