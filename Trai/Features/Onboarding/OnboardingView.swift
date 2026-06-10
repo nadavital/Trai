@@ -173,6 +173,9 @@ struct OnboardingView: View {
                         withAnimation(.smooth(duration: 0.4)) {
                             showingWorkoutSetup = false
                         }
+                    },
+                    onSkip: {
+                        completeOnboarding()
                     }
                 )
                 .transition(.asymmetric(

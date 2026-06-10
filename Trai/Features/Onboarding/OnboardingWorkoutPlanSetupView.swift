@@ -1081,6 +1081,7 @@ struct OnboardingWorkoutPlanSetupView: View {
     var onProForkRequired: (() -> Void)?
     let onComplete: (WorkoutPlan, [WorkoutGoal]) -> Void
     let onBack: () -> Void
+    let onSkip: () -> Void
 
     @State private var isGenerating = false
     @State private var generationNote: String?
@@ -1209,7 +1210,7 @@ struct OnboardingWorkoutPlanSetupView: View {
                 title: headerTitle,
                 lensSize: isGenerating ? 68 : 52,
                 lensState: headerLensState,
-                lensBreathes: isGenerating
+                lensBreathes: true
             )
         }
     }
@@ -1273,9 +1274,18 @@ struct OnboardingWorkoutPlanSetupView: View {
             }
 
             Spacer()
+
+            Button {
+                skipForNow()
+            } label: {
+                Text("Skip")
+                    .font(.traiLabel(14))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(isGenerating || hasQueuedProPlanGeneration)
         }
-        .frame(height: currentStep == .focus ? 0 : 24)
-        .opacity(currentStep == .focus ? 0 : 1)
+        .frame(height: 24)
     }
 
     private var stepProgress: some View {
@@ -2357,7 +2367,8 @@ struct OnboardingWorkoutPlanSetupView: View {
     }
 
     private func shouldGenerateDynamicProPersonalizationQuestion(afterAnswerCount answerCount: Int) -> Bool {
-        answerCount >= proPersonalizationQuestions.count &&
+        guard !AppLaunchArguments.shouldRunOnboardingFlowUITest else { return false }
+        return answerCount >= proPersonalizationQuestions.count &&
             answerCount < proPersonalizationTargetQuestionCount &&
             dynamicProPersonalizationQuestions.count < maxDynamicProPersonalizationQuestionCount
     }
@@ -3454,6 +3465,12 @@ struct OnboardingWorkoutPlanSetupView: View {
         }
     }
 
+    private func skipForNow() {
+        cancelPlanGeneration(clearReview: true)
+        HapticManager.lightTap()
+        onSkip()
+    }
+
     private func generatePlan() {
         guard draft.canGenerate, !isGenerating else { return }
 
@@ -3475,6 +3492,20 @@ struct OnboardingWorkoutPlanSetupView: View {
         let request = planDraft.buildRequest(context: context)
 
         generationTask = Task { @MainActor in
+            if AppLaunchArguments.shouldRunOnboardingFlowUITest {
+                try? await Task.sleep(for: .milliseconds(450))
+                guard generationRequestID == requestID, !Task.isCancelled else { return }
+                generatedPlanForReview = planDraft.buildManualPlan(context: context)
+                generatedPlanGoalsForReview = []
+                generatedPlanUsedFallback = false
+                generationTask = nil
+                generationRequestID = nil
+                isGenerating = false
+                generationStartedAt = nil
+                HapticManager.success()
+                return
+            }
+
             guard usesAI else {
                 guard generationRequestID == requestID, !Task.isCancelled else { return }
                 let plan = planDraft.buildManualPlan(context: context)
@@ -3642,6 +3673,7 @@ private extension Array where Element: Hashable {
         existingWorkoutGoals: [],
         aiService: AIService(),
         onComplete: { _, _ in },
-        onBack: {}
+        onBack: {},
+        onSkip: {}
     )
 }

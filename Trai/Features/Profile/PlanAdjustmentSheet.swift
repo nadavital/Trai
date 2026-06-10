@@ -13,9 +13,6 @@ struct PlanAdjustmentSheet: View {
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
-    @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
-    @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
-    @AppStorage(SharedStorageKeys.Chat.pendingActionKind) private var pendingChatActionKind: String = ""
 
     @State private var goalType: UserProfile.GoalType
     @State private var calories: Int
@@ -140,7 +137,7 @@ struct PlanAdjustmentSheet: View {
             presentedAccountSetupContext = .aiFeatures
             return
         }
-        guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !PendingTraiChatLaunchRequest.hasValidPendingTraiChatPayload() else {
             dismiss()
             DispatchQueue.main.async {
                 appTabSelection.wrappedValue = .trai
@@ -148,9 +145,11 @@ struct PlanAdjustmentSheet: View {
             HapticManager.selectionChanged()
             return
         }
-        pendingChatPrompt = aiCoachPrompt
-        pendingChatLaunchLabel = "Reviewing your nutrition plan..."
-        pendingChatActionKind = PendingTraiChatActionKind.nutritionPlanReview.rawValue
+        PendingTraiChatLaunchRequest(
+            prompt: aiCoachPrompt,
+            launchLabel: "Reviewing your nutrition plan...",
+            actionKind: .nutritionPlanReview
+        ).write()
         dismiss()
         DispatchQueue.main.async {
             appTabSelection.wrappedValue = .trai

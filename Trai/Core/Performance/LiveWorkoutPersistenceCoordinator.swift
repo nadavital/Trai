@@ -67,10 +67,11 @@ final class LiveWorkoutPersistenceCoordinator {
         )
     }
 
-    func flushNow(trigger _: FlushTrigger) {
+    @discardableResult
+    func flushNow(trigger _: FlushTrigger) -> Error? {
         pendingSaveWorkItem?.cancel()
         pendingSaveWorkItem = nil
-        performSave()
+        return performSave()
     }
 
     func cancelPending() {
@@ -91,14 +92,19 @@ final class LiveWorkoutPersistenceCoordinator {
         return min(coalesceSeconds, remaining)
     }
 
-    private func performSave() {
+    @discardableResult
+    private func performSave() -> Error? {
         do {
             try saveHandler()
         } catch {
             // Keep app interactions responsive; save failures can retry on the next flush.
+            firstPendingSaveAt = nil
+            lastSaveAt = Date()
+            return error
         }
         firstPendingSaveAt = nil
         lastSaveAt = Date()
+        return nil
     }
 
     private func durationToSeconds(_ duration: Duration) -> Double {

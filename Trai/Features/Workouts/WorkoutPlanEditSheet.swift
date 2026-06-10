@@ -15,8 +15,9 @@ struct WorkoutPlanEditSheet: View {
     @AppStorage("pendingWorkoutPlanSetupRequest") private var pendingWorkoutPlanSetupRequest = false
 
     @Query private var profiles: [UserProfile]
-    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
+    @Query private var workoutGoals: [WorkoutGoal]
     private var userProfile: UserProfile? { profiles.first }
+    private static let workoutGoalFetchLimit = 80
 
     let currentPlan: WorkoutPlan
 
@@ -34,6 +35,17 @@ struct WorkoutPlanEditSheet: View {
     init(currentPlan: WorkoutPlan) {
         self.currentPlan = currentPlan
         self._editedPlan = State(initialValue: currentPlan)
+
+        var profileDescriptor = FetchDescriptor<UserProfile>()
+        profileDescriptor.fetchLimit = 1
+        _profiles = Query(profileDescriptor)
+
+        var workoutGoalDescriptor = FetchDescriptor<WorkoutGoal>(
+            predicate: #Predicate<WorkoutGoal> { $0.statusRaw != "paused" },
+            sortBy: [SortDescriptor(\WorkoutGoal.updatedAt, order: .reverse)]
+        )
+        workoutGoalDescriptor.fetchLimit = Self.workoutGoalFetchLimit
+        _workoutGoals = Query(workoutGoalDescriptor)
     }
 
     private var orderedTemplates: [WorkoutPlan.WorkoutTemplate] {

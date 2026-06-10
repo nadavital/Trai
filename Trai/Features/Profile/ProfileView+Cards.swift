@@ -83,7 +83,13 @@ extension ProfileView {
                         if accountSessionService?.isAuthenticated == false {
                             presentedAccountSetupContext = .aiFeatures
                         } else {
-                            pendingPlanReviewRequest = true
+                            if !PendingTraiChatLaunchRequest.hasValidPendingTraiChatPayload() {
+                                PendingTraiChatLaunchRequest(
+                                    prompt: "Can you review my nutrition plan and check if any updates are needed based on my progress?",
+                                    launchLabel: "Reviewing your nutrition plan...",
+                                    actionKind: .nutritionPlanReview
+                                ).write()
+                            }
                             onSelectTab?(.trai)
                         }
                     } else {
@@ -232,7 +238,12 @@ extension ProfileView {
                             if accountSessionService?.isAuthenticated == false {
                                 presentedAccountSetupContext = .aiFeatures
                             } else {
-                                pendingWorkoutPlanReviewRequest = true
+                                if !PendingTraiChatLaunchRequest.hasValidPendingTraiChatPayload() {
+                                    PendingTraiChatLaunchRequest(
+                                        prompt: "Can you review my workout split and suggest any updates based on my recovery and recent workouts?",
+                                        launchLabel: "Reviewing your workout plan..."
+                                    ).write()
+                                }
                                 onSelectTab?(.trai)
                             }
                         } else {
@@ -285,9 +296,7 @@ extension ProfileView {
                     showPlanSetupSheet = true
                 } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: "circle.hexagongrid.circle")
-                            .font(.title2)
-                            .foregroundStyle(Color.accentColor)
+                        TraiLensIcon(size: 26)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Create Personalized Plan")
@@ -344,9 +353,7 @@ extension ProfileView {
             AllMemoriesView()
         } label: {
             HStack {
-                Image(systemName: "circle.hexagongrid.circle")
-                    .font(.title2)
-                    .foregroundStyle(.red)
+                TraiLensIcon(size: 28)
                     .frame(width: 40, height: 40)
                     .background(Color.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
 
@@ -505,7 +512,7 @@ extension ProfileView {
     private func aiActionButtonLabel(isUnlocked: Bool, unlockedTitle: String) -> some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 6) {
-                Image(systemName: "circle.hexagongrid.circle")
+                TraiLensSymbolIcon(size: 14, variant: .enclosedFilled, color: Color.accentColor)
                 Text(unlockedTitle)
                 if !isUnlocked {
                     Text("PRO")
@@ -519,7 +526,7 @@ extension ProfileView {
             .frame(maxWidth: .infinity)
 
             HStack(spacing: 6) {
-                Image(systemName: "circle.hexagongrid.circle")
+                TraiLensSymbolIcon(size: 14, variant: .enclosedFilled, color: Color.accentColor)
                 Text("Review")
                 if !isUnlocked {
                     Text("PRO")

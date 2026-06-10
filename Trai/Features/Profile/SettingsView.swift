@@ -375,7 +375,8 @@ struct SettingsView: View {
                 aiService: standardWorkoutPlanAIService,
                 canAccessAIFeatures: monetizationService?.canAccessAIFeatures ?? true,
                 onComplete: saveStandardWorkoutPlan,
-                onBack: { showWorkoutPlanSetup = false }
+                onBack: { showWorkoutPlanSetup = false },
+                onSkip: { showWorkoutPlanSetup = false }
             )
                 .traiSheetBranding()
         }

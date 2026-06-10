@@ -23,6 +23,13 @@ struct PersonalRecordsView: View {
     @State private var exerciseToDelete: ExercisePR?
     @State private var showingDeleteConfirmation = false
     @State private var selectedSort: PRSortOption = .recentActivity
+    @State private var persistenceError: PersonalRecordsPersistenceError?
+
+    init() {
+        var profileDescriptor = FetchDescriptor<UserProfile>()
+        profileDescriptor.fetchLimit = 1
+        _profiles = Query(profileDescriptor)
+    }
 
     /// Whether to use metric (kg) or imperial (lbs) for weight display
     private var useLbs: Bool {
@@ -150,12 +157,20 @@ struct PersonalRecordsView: View {
                 presenting: exerciseToDelete
             ) { pr in
                 Button("Delete All \(pr.exerciseName) Records", role: .destructive) {
-                    deleteAllRecords(for: pr.exerciseName)
-                    selectedExercise = nil
+                    if deleteAllRecords(for: pr.exerciseName) {
+                        selectedExercise = nil
+                    }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: { pr in
                 Text("This will permanently delete all \(pr.totalSessions) workout records for \(pr.exerciseName). This cannot be undone.")
+            }
+            .alert(item: $persistenceError) { error in
+                Alert(
+                    title: Text(error.title),
+                    message: Text(error.message),
+                    dismissButton: .default(Text("OK"))
+                )
             }
         }
     }
@@ -268,13 +283,29 @@ struct PersonalRecordsView: View {
 
     // MARK: - Actions
 
-    private func deleteAllRecords(for exerciseName: String) {
+    private func deleteAllRecords(for exerciseName: String) -> Bool {
         let historyToDelete = historyByExerciseName[exerciseName] ?? []
         for history in historyToDelete {
             modelContext.delete(history)
         }
-        try? modelContext.save()
+        guard savePersonalRecordsChange(title: "Records Not Deleted") else { return false }
         HapticManager.success()
+        return true
+    }
+
+    private func savePersonalRecordsChange(title: String) -> Bool {
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            persistenceError = PersonalRecordsPersistenceError(
+                title: title,
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return false
+        }
     }
 
     private func sortPRs(_ prs: [ExercisePR]) -> [ExercisePR] {
@@ -679,6 +710,7 @@ struct PRDetailSheet: View {
     @State private var showingDeleteConfirmation = false
     @State private var historyToDelete: ExerciseHistory?
     @State private var showingFullHistory = false
+    @State private var persistenceError: PersonalRecordsPersistenceError?
 
     private var displayedHistory: [ExerciseHistory] {
         if showingFullHistory {
@@ -793,14 +825,36 @@ struct PRDetailSheet: View {
             } message: { entry in
                 Text("Delete record from \(entry.performedAt.formatted(date: .abbreviated, time: .omitted))?")
             }
+            .alert(item: $persistenceError) { error in
+                Alert(
+                    title: Text(error.title),
+                    message: Text(error.message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
         }
         .traiSheetBranding()
     }
 
     private func deleteHistory(_ history: ExerciseHistory) {
         modelContext.delete(history)
-        try? modelContext.save()
+        guard savePersonalRecordDetailChange(title: "Record Not Deleted") else { return }
         HapticManager.success()
+    }
+
+    private func savePersonalRecordDetailChange(title: String) -> Bool {
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            persistenceError = PersonalRecordsPersistenceError(
+                title: title,
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return false
+        }
     }
 }
 
@@ -1117,6 +1171,7 @@ private struct EditHistorySheet: View {
     @State private var weightDisplay: Double  // Weight in display units (kg or lbs)
     @State private var reps: Int
     @State private var date: Date
+    @State private var persistenceError: PersonalRecordsPersistenceError?
 
     private var weightUnit: String { useLbs ? "lbs" : "kg" }
 
@@ -1205,18 +1260,26 @@ private struct EditHistorySheet: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", systemImage: "checkmark") {
-                        saveChanges()
-                        dismiss()
+                        if saveChanges() {
+                            dismiss()
+                        }
                     }
                     .labelStyle(.iconOnly)
                     .disabled(weightDisplay <= 0 || reps <= 0)
                 }
             }
         }
+        .alert(item: $persistenceError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
         .traiSheetBranding()
     }
 
-    private func saveChanges() {
+    private func saveChanges() -> Bool {
         // Round weight to nearest 0.5 kg
         history.bestSetWeightKg = (weightKg * 2).rounded() / 2
         history.bestSetWeightLbs = WeightUtility.round(
@@ -1244,9 +1307,26 @@ private struct EditHistorySheet: View {
             reps: reps
         )
 
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            persistenceError = PersonalRecordsPersistenceError(
+                title: "Record Not Saved",
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return false
+        }
         HapticManager.success()
+        return true
     }
+}
+
+private struct PersonalRecordsPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }
 
 // MARK: - Preview

@@ -102,11 +102,11 @@ struct TraiChatContextAttachmentCard: View {
             .glassEffect(
                 .regular
                     .tint(attachment.accent.color.opacity(0.14)),
-                in: .rect(cornerRadius: TraiRadius.small)
+                in: .capsule
             )
             .overlay {
-                RoundedRectangle(cornerRadius: TraiRadius.small)
-                    .stroke(attachment.accent.color.opacity(0.18), lineWidth: 1)
+                Capsule()
+                    .strokeBorder(attachment.accent.color.opacity(0.18), lineWidth: 1)
             }
     }
 
@@ -145,7 +145,7 @@ struct TraiChatContextAttachmentCard: View {
             .frame(width: 34, height: 34)
             .background(
                 attachment.accent.color.opacity(0.16),
-                in: .rect(cornerRadius: 9)
+                in: Circle()
             )
     }
 }
@@ -179,6 +179,15 @@ extension TraiChatContextAttachment {
             return nil
         }
         self = attachment
+    }
+}
+
+extension PendingTraiChatLaunchRequest {
+    static func hasValidPendingTraiChatPayload(in defaults: UserDefaults = .standard) -> Bool {
+        let prompt = defaults.string(forKey: SharedStorageKeys.Chat.pendingPrompt) ?? ""
+        let contextAttachment = defaults.string(forKey: SharedStorageKeys.Chat.pendingContextAttachment) ?? ""
+        return !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || TraiChatContextAttachment(storageValue: contextAttachment) != nil
     }
 }
 

@@ -16,6 +16,32 @@ private struct IdentifiableExercise: Identifiable {
 }
 
 struct LiveWorkoutDetailSheet: View {
+    private enum Presentation: Identifiable {
+        case exercisePR(IdentifiableExercise)
+        case exercisePicker
+        case generalActivity
+        case goalSetup
+        case goalDetail(WorkoutGoal)
+        case accountSetup(AccountSetupContext)
+
+        var id: String {
+            switch self {
+            case .exercisePR(let exercise):
+                return "exercisePR-\(exercise.id)"
+            case .exercisePicker:
+                return "exercisePicker"
+            case .generalActivity:
+                return "generalActivity"
+            case .goalSetup:
+                return "goalSetup"
+            case .goalDetail(let goal):
+                return "goalDetail-\(goal.id.uuidString)"
+            case .accountSetup(let context):
+                return "accountSetup-\(context.id)"
+            }
+        }
+    }
+
     @Bindable var workout: LiveWorkout
     var useLbs: Bool = false
     @Environment(\.dismiss) private var dismiss
@@ -24,25 +50,31 @@ struct LiveWorkoutDetailSheet: View {
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
-    @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
-    @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
-    @AppStorage(SharedStorageKeys.Chat.pendingActionKind) private var pendingChatActionKind: String = ""
-    @AppStorage(SharedStorageKeys.Chat.pendingContextAttachment) private var pendingChatContextAttachment: String = ""
     @Query(sort: \ExerciseHistory.performedAt, order: .reverse)
     private var allExerciseHistory: [ExerciseHistory]
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Query(sort: \LiveWorkout.startedAt, order: .reverse) private var allLiveWorkouts: [LiveWorkout]
     @Query(sort: \WorkoutSession.loggedAt, order: .reverse) private var allWorkoutSessions: [WorkoutSession]
-    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
+    @Query(
+        filter: #Predicate<WorkoutGoal> { $0.statusRaw == "active" },
+        sort: \WorkoutGoal.updatedAt,
+        order: .reverse
+    )
+    private var workoutGoals: [WorkoutGoal]
     @Query private var profiles: [UserProfile]
     @State private var isEditing = false
-    @State private var selectedExercise: IdentifiableExercise?
-    @State private var showingExercisePicker = false
-    @State private var showingGeneralActivitySheet = false
-    @State private var showingGoalSheet = false
-    @State private var selectedGoal: WorkoutGoal?
+    @State private var activePresentation: Presentation?
     @State private var originalEntryIDs: Set<UUID> = []
-    @State private var presentedAccountSetupContext: AccountSetupContext?
+    @State private var persistenceError: LiveWorkoutDetailPersistenceError?
+
+    init(workout: LiveWorkout, useLbs: Bool = false) {
+        self.workout = workout
+        self.useLbs = useLbs
+
+        var profileDescriptor = FetchDescriptor<UserProfile>()
+        profileDescriptor.fetchLimit = 1
+        _profiles = Query(profileDescriptor)
+    }
 
     private var sortedEntries: [LiveWorkoutEntry] {
         (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
@@ -241,13 +273,7 @@ struct LiveWorkoutDetailSheet: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save", systemImage: "checkmark") {
-                            syncExerciseHistory()
-                            try? modelContext.save()
-                            originalEntryIDs = Set((workout.entries ?? []).map(\.id))
-                            HapticManager.success()
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isEditing = false
-                            }
+                            saveWorkoutEdits()
                         }
                         .labelStyle(.iconOnly)
                         .tint(.accentColor)
@@ -269,56 +295,66 @@ struct LiveWorkoutDetailSheet: View {
                     }
                 }
             }
-            .sheet(item: $selectedExercise) { exercise in
-                exercisePRSheet(for: exercise.name)
-                    .traiSheetBranding()
-            }
-            .sheet(isPresented: $showingExercisePicker) {
-                ExerciseListView(
-                    targetMuscleGroups: targetExerciseMuscleGroups,
-                    targetActivityCategories: targetActivityCategories,
-                    targetActivityTypes: targetActivityTypeNames
-                ) { exercise in
-                    addExercise(exercise)
-                }
-            }
-            .sheet(isPresented: $showingGeneralActivitySheet) {
-                AddGeneralActivitySheet(title: "Add Activity") { name, notes, durationSeconds, kind, role in
-                    addGeneralActivity(name: name, notes: notes, durationSeconds: durationSeconds, kind: kind, role: role)
-                }
-            }
-            .sheet(isPresented: $showingGoalSheet) {
-                AddWorkoutGoalSheet(
-                    workoutType: workout.type,
-                    activitySuggestions: activitySuggestions,
-                    prefersMetricWeight: !useLbs
-                ) { goal in
-                    modelContext.insert(goal)
-                    do {
-                        try modelContext.save()
-                        return true
-                    } catch {
-                        modelContext.rollback()
-                        return false
-                    }
-                }
-            }
-            .sheet(item: $selectedGoal) { goal in
-                WorkoutGoalDetailSheet(
-                    goal: goal,
-                    workouts: allLiveWorkouts,
-                    sessions: goalProgressSessions,
-                    exerciseHistory: allExerciseHistory,
-                    useLbs: useLbs,
-                    onToggleCompletion: toggleGoalCompletion
-                )
-                .traiSheetBranding()
+            .sheet(item: $activePresentation) { presentation in
+                presentationContent(presentation)
             }
         }
-        .sheet(item: $presentedAccountSetupContext) { context in
-            AccountSetupView(context: context)
+        .alert(item: $persistenceError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
         .traiSheetBranding()
+    }
+
+    @ViewBuilder
+    private func presentationContent(_ presentation: Presentation) -> some View {
+        switch presentation {
+        case .exercisePR(let exercise):
+            exercisePRSheet(for: exercise.name)
+                .traiSheetBranding()
+        case .exercisePicker:
+            ExerciseListView(
+                targetMuscleGroups: targetExerciseMuscleGroups,
+                targetActivityCategories: targetActivityCategories,
+                targetActivityTypes: targetActivityTypeNames
+            ) { exercise in
+                addExercise(exercise)
+            }
+        case .generalActivity:
+            AddGeneralActivitySheet(title: "Add Activity") { name, notes, durationSeconds, kind, role in
+                addGeneralActivity(name: name, notes: notes, durationSeconds: durationSeconds, kind: kind, role: role)
+            }
+        case .goalSetup:
+            AddWorkoutGoalSheet(
+                workoutType: workout.type,
+                activitySuggestions: activitySuggestions,
+                prefersMetricWeight: !useLbs
+            ) { goal in
+                modelContext.insert(goal)
+                do {
+                    try modelContext.save()
+                    return true
+                } catch {
+                    modelContext.rollback()
+                    return false
+                }
+            }
+        case .goalDetail(let goal):
+            WorkoutGoalDetailSheet(
+                goal: goal,
+                workouts: allLiveWorkouts,
+                sessions: goalProgressSessions,
+                exerciseHistory: allExerciseHistory,
+                useLbs: useLbs,
+                onToggleCompletion: toggleGoalCompletion
+            )
+            .traiSheetBranding()
+        case .accountSetup(let context):
+            AccountSetupView(context: context)
+        }
     }
 
     /// Build the PR detail sheet for a given exercise name
@@ -353,7 +389,7 @@ struct LiveWorkoutDetailSheet: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") {
-                            selectedExercise = nil
+                            activePresentation = nil
                         }
                     }
                 }
@@ -417,7 +453,7 @@ struct LiveWorkoutDetailSheet: View {
                             useLbs: useLbs,
                             isEditing: isEditing,
                             onTap: {
-                                selectedExercise = IdentifiableExercise(id: entry.exerciseName)
+                                activePresentation = .exercisePR(IdentifiableExercise(id: entry.exerciseName))
                             },
                             onAddSet: {
                                 addSet(to: entry)
@@ -441,9 +477,9 @@ struct LiveWorkoutDetailSheet: View {
     private var editActionsSection: some View {
         Button {
             if usesFlexibleSessionPresentation {
-                showingGeneralActivitySheet = true
+                activePresentation = .generalActivity
             } else {
-                showingExercisePicker = true
+                activePresentation = .exercisePicker
             }
         } label: {
             Label(addButtonLabel, systemImage: "plus.circle.fill")
@@ -472,9 +508,9 @@ struct LiveWorkoutDetailSheet: View {
     private var workoutGoalsSection: some View {
         WorkoutGoalProgressCard(
             insights: goalInsights,
-            onAddGoal: { showingGoalSheet = true },
+            onAddGoal: { activePresentation = .goalSetup },
             onToggleCompletion: toggleGoalCompletion,
-            onGoalTap: { selectedGoal = $0 }
+            onGoalTap: { activePresentation = .goalDetail($0) }
         )
     }
 
@@ -594,12 +630,11 @@ struct LiveWorkoutDetailSheet: View {
             return
         }
         guard accountSessionService?.isAuthenticated != false else {
-            presentedAccountSetupContext = .aiFeatures
+            activePresentation = .accountSetup(.aiFeatures)
             HapticManager.lightTap()
             return
         }
-        guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              TraiChatContextAttachment(storageValue: pendingChatContextAttachment) == nil else {
+        guard !PendingTraiChatLaunchRequest.hasValidPendingTraiChatPayload() else {
             dismiss()
             DispatchQueue.main.async {
                 appTabSelection.wrappedValue = .trai
@@ -608,10 +643,10 @@ struct LiveWorkoutDetailSheet: View {
             return
         }
 
-        pendingChatPrompt = ""
-        pendingChatLaunchLabel = "Reviewing your latest workout..."
-        pendingChatContextAttachment = workout.traiChatContextAttachment.storageValue
-        pendingChatActionKind = ""
+        PendingTraiChatLaunchRequest(
+            launchLabel: "Reviewing your latest workout...",
+            contextAttachmentStorageValue: workout.traiChatContextAttachment.storageValue
+        ).write()
         BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: "engagement.review_completed_workout_with_trai",
             domain: .engagement,
@@ -702,8 +737,33 @@ struct LiveWorkoutDetailSheet: View {
         } else {
             goal.markCompleted()
         }
-        try? modelContext.save()
+        guard saveDetailChange(title: "Workout Goal Not Updated") else { return }
         HapticManager.selectionChanged()
+    }
+
+    private func saveWorkoutEdits() {
+        syncExerciseHistory()
+        guard saveDetailChange(title: "Workout Not Saved") else { return }
+        originalEntryIDs = Set((workout.entries ?? []).map(\.id))
+        HapticManager.success()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isEditing = false
+        }
+    }
+
+    private func saveDetailChange(title: String) -> Bool {
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            persistenceError = LiveWorkoutDetailPersistenceError(
+                title: title,
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return false
+        }
     }
 
     /// Sync ExerciseHistory entries when workout is edited
@@ -759,6 +819,12 @@ struct LiveWorkoutDetailSheet: View {
 }
 
 // MARK: - Live Workout Exercise Card
+
+private struct LiveWorkoutDetailPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
 
 struct LiveWorkoutExerciseCard: View {
     @Bindable var entry: LiveWorkoutEntry

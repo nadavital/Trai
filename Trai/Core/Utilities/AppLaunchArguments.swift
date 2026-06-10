@@ -18,6 +18,7 @@ enum AppLaunchArguments {
     static let seedLiveWorkoutPerfData = "--seed-live-workout-perf-data"
     static let seedGoalPreviewData = "--goal-preview-seed"
     static let uiTestLiveWorkoutPreset = "--ui-test-live-workout-preset"
+    static let uiTestAutoStartWorkout = "--ui-test-auto-start-workout"
     static let mockFoodAIResponses = "--ui-test-mock-food-ai"
     static let forceFoodCameraPermissionFallback = "--ui-test-force-no-camera-food-flow"
     static let appStoreScreenshotMode = "--app-store-screenshot-mode"
@@ -30,6 +31,7 @@ enum AppLaunchArguments {
     static let disableTabPrewarm = "--disable-tab-prewarm"
     static let disableHeavyTabDeferral = "--disable-heavy-tab-deferral"
     static let enableLatencyProbe = "--enable-latency-probe"
+    static let traiLensLab = "--trai-lens-lab"
     static let useInMemoryStore = "--use-in-memory-store"
     static let usePersistentStore = "--use-persistent-store"
     static let runFoodRecommendationReplayEvaluation = "--run-food-recommendation-replay-evaluation"
@@ -94,6 +96,10 @@ enum AppLaunchArguments {
 
     static var shouldUseLiveWorkoutUITestPreset: Bool {
         ProcessInfo.processInfo.arguments.contains(uiTestLiveWorkoutPreset)
+    }
+
+    static var shouldAutoStartWorkoutForUITest: Bool {
+        ProcessInfo.processInfo.arguments.contains(uiTestAutoStartWorkout)
     }
 
     static var shouldUseMockFoodAIResponses: Bool {
@@ -162,6 +168,10 @@ enum AppLaunchArguments {
 
     static var shouldEnableLatencyProbe: Bool {
         ProcessInfo.processInfo.arguments.contains(enableLatencyProbe)
+    }
+
+    static var shouldShowTraiLensLab: Bool {
+        ProcessInfo.processInfo.arguments.contains(traiLensLab)
     }
 
     #if DEBUG

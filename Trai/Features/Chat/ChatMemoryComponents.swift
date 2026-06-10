@@ -15,6 +15,7 @@ struct MemorySavedBadge: View {
     @Environment(\.modelContext) private var modelContext
     @State private var showMemories = false
     @State private var singleMemory: CoachMemory?
+    @State private var persistenceError: ChatMemoryPersistenceError?
 
     private var displayText: String {
         if memories.count == 1 {
@@ -32,8 +33,7 @@ struct MemorySavedBadge: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "circle.hexagongrid.circle")
-                    .font(.caption)
+                TraiLensSymbolIcon(size: 13, variant: .nodes, color: .secondary)
                 Text(displayText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -52,12 +52,22 @@ struct MemorySavedBadge: View {
         .sheet(item: $singleMemory) { memory in
             MemoryDetailSheet(memory: memory, onDelete: {
                 memory.isActive = false
-                try? modelContext.save()
+                guard saveMemoryChange(title: "Memory Not Removed") else {
+                    memory.isActive = true
+                    return
+                }
                 singleMemory = nil
                 HapticManager.lightTap()
             })
             .presentationDetents([.medium])
             .traiSheetBranding()
+        }
+        .alert(item: $persistenceError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 
@@ -70,6 +80,22 @@ struct MemorySavedBadge: View {
         let allMemories = (try? modelContext.fetch(descriptor)) ?? []
         singleMemory = allMemories.first { $0.content == content }
     }
+
+    private func saveMemoryChange(title: String) -> Bool {
+        do {
+            try modelContext.save()
+            NotificationCenter.default.post(name: .coachMemoriesChanged, object: nil)
+            return true
+        } catch {
+            modelContext.rollback()
+            persistenceError = ChatMemoryPersistenceError(
+                title: title,
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return false
+        }
+    }
 }
 
 // MARK: - Saved Memories Sheet
@@ -79,6 +105,7 @@ struct SavedMemoriesSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var memories: [CoachMemory] = []
+    @State private var persistenceError: ChatMemoryPersistenceError?
 
     var body: some View {
         NavigationStack {
@@ -105,6 +132,13 @@ struct SavedMemoriesSheet: View {
                 fetchMemories()
             }
         }
+        .alert(item: $persistenceError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
         .traiSheetBranding()
     }
 
@@ -126,7 +160,18 @@ struct SavedMemoriesSheet: View {
         } catch {
             modelContext.rollback()
             memory.isActive = true
+            persistenceError = ChatMemoryPersistenceError(
+                title: "Memory Not Removed",
+                message: error.localizedDescription
+            )
+            HapticManager.error()
         }
         fetchMemories()
     }
+}
+
+private struct ChatMemoryPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }

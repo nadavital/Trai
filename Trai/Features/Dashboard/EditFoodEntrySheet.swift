@@ -16,13 +16,9 @@ struct EditFoodEntrySheet: View {
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
-    @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
-    @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
-    @AppStorage(SharedStorageKeys.Chat.pendingFocusedFoodEntryId) private var pendingFocusedFoodEntryId: String = ""
-    @AppStorage(SharedStorageKeys.Chat.pendingActionKind) private var pendingChatActionKind: String = ""
-    @AppStorage(SharedStorageKeys.Chat.pendingContextAttachment) private var pendingChatContextAttachment: String = ""
     @Query private var profiles: [UserProfile]
     @State private var presentedAccountSetupContext: AccountSetupContext?
+    @State private var persistenceError: EditFoodEntryPersistenceError?
 
     let onAskTrai: ((TraiChatContextAttachment, AIService.FocusedFoodEntryContext) -> Void)?
 
@@ -177,6 +173,13 @@ struct EditFoodEntrySheet: View {
         .sheet(item: $presentedAccountSetupContext) { context in
             AccountSetupView(context: context)
         }
+        .alert(item: $persistenceError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
         .traiSheetBranding()
     }
 
@@ -186,16 +189,19 @@ struct EditFoodEntrySheet: View {
 
     private var askTraiCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                    .font(.headline)
-                    .foregroundStyle(.accent)
-                    .frame(width: 34, height: 34)
-                    .background(Color.accentColor.opacity(0.14), in: Circle())
+            HStack(spacing: TraiSpacing.sm) {
+                ZStack {
+                    Circle()
+                        .fill(Color.accentColor.opacity(0.78))
+                        .frame(width: 30, height: 30)
+
+                    TraiLensSymbolIcon(size: 15, variant: .nodes, color: .white)
+                }
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Ask Trai")
-                        .font(.traiHeadline())
+                        .font(.traiHeadline(14))
+                        .foregroundStyle(Color.accentColor)
                     Text(entry.name)
                         .font(.traiLabel(12))
                         .foregroundStyle(.secondary)
@@ -216,7 +222,17 @@ struct EditFoodEntrySheet: View {
             }
             .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.14))
         }
-        .traiCard(cornerRadius: 16)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .glassEffect(
+            .regular.tint(Color.accentColor.opacity(0.20)).interactive(),
+            in: .rect(cornerRadius: 24)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 24)
+                .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.03), radius: 5, y: 3)
     }
 
     private func sectionTitle(_ title: String, icon: String) -> some View {
@@ -279,7 +295,17 @@ struct EditFoodEntrySheet: View {
             )
         }
 
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            persistenceError = EditFoodEntryPersistenceError(
+                title: "Food Not Saved",
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return
+        }
         if !editedFields.isEmpty {
             scheduleFoodMemoryResolution(for: entry.id)
         }
@@ -326,8 +352,7 @@ struct EditFoodEntrySheet: View {
                 onAskTrai(attachment, entry.focusedChatContext)
             }
         } else {
-            guard pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  TraiChatContextAttachment(storageValue: pendingChatContextAttachment) == nil else {
+            guard !PendingTraiChatLaunchRequest.hasValidPendingTraiChatPayload() else {
                 dismiss()
                 DispatchQueue.main.async {
                     appTabSelection.wrappedValue = .trai
@@ -335,11 +360,11 @@ struct EditFoodEntrySheet: View {
                 HapticManager.selectionChanged()
                 return
             }
-            pendingChatPrompt = ""
-            pendingChatLaunchLabel = "Opening this meal with Trai..."
-            pendingChatContextAttachment = attachment.storageValue
-            pendingFocusedFoodEntryId = entry.id.uuidString
-            pendingChatActionKind = ""
+            PendingTraiChatLaunchRequest(
+                launchLabel: "Opening this meal with Trai...",
+                focusedFoodEntryId: entry.id,
+                contextAttachmentStorageValue: attachment.storageValue
+            ).write()
             dismiss()
             DispatchQueue.main.async {
                 appTabSelection.wrappedValue = .trai
@@ -350,6 +375,12 @@ struct EditFoodEntrySheet: View {
 }
 
 // MARK: - Macro Input Row
+
+private struct EditFoodEntryPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
 
 private struct MacroInputRow: View {
     let label: String

@@ -83,7 +83,9 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if AppLaunchArguments.shouldUseAppStoreScreenshotSeed,
+            if AppLaunchArguments.shouldShowTraiLensLab {
+                TraiLensLabView()
+            } else if AppLaunchArguments.shouldUseAppStoreScreenshotSeed,
                AppLaunchArguments.shouldShowAppStoreScreenshotPlanReview {
                 AppStoreScreenshotPlanReviewView()
             } else if isReadyForMainExperience {
@@ -315,17 +317,29 @@ struct MainTabView: View {
 
     @ViewBuilder
     private var tabScene: some View {
-        if let workout = activeWorkout {
+        if #available(iOS 26.1, *) {
+            baseTabScene
+                .tabViewBottomAccessory(isEnabled: activeWorkout != nil) {
+                    liveWorkoutBottomAccessory
+                }
+        } else if activeWorkout != nil {
             baseTabScene
                 .tabViewBottomAccessory {
-                    WorkoutBanner(
-                        workout: workout,
-                        onTap: { presentLiveWorkout(workout) },
-                        onEnd: { showingEndConfirmation = true }
-                    )
+                    liveWorkoutBottomAccessory
                 }
         } else {
             baseTabScene
+        }
+    }
+
+    @ViewBuilder
+    private var liveWorkoutBottomAccessory: some View {
+        if let workout = activeWorkout {
+            WorkoutBanner(
+                workout: workout,
+                onTap: { presentLiveWorkout(workout) },
+                onEnd: { showingEndConfirmation = true }
+            )
         }
     }
 
@@ -360,7 +374,7 @@ struct MainTabView: View {
                     workout: presentation.workout,
                     template: presentation.template,
                     finishOnPresentation: presentation.finishOnPresentation,
-                    onCancel: clearActiveWorkoutPresentation
+                    onCancelled: clearLiveWorkoutPresentation
                 )
                     .traiSheetBranding()
             }
@@ -576,8 +590,7 @@ struct MainTabView: View {
         selectedTabState = tab
     }
 
-    private func clearActiveWorkoutPresentation() {
-        LiveWorkoutCancellation.cancelActiveWorkouts(in: modelContext, including: activeWorkout)
+    private func clearLiveWorkoutPresentation() {
         liveWorkoutPresentation = nil
     }
 
@@ -585,6 +598,10 @@ struct MainTabView: View {
         _ workout: LiveWorkout,
         template: WorkoutPlan.WorkoutTemplate? = nil
     ) {
+        if liveWorkoutPresentation?.id == workout.id,
+           liveWorkoutPresentation?.finishOnPresentation == false {
+            return
+        }
         liveWorkoutPresentation = LiveWorkoutPresentation(workout: workout, template: template)
     }
 

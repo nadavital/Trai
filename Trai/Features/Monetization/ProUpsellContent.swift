@@ -149,8 +149,7 @@ struct TraiProGradientBackground: View {
 struct TraiProWordmark: View {
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "circle.hexagongrid.circle.fill")
-                .font(.system(size: 28, weight: .heavy))
+            TraiLensSymbolIcon(size: 28, variant: .enclosedFilled, color: .white)
 
             Text("Trai Pro")
                 .font(.traiBold(36))

@@ -10,6 +10,37 @@ import SwiftUI
 import SwiftData
 
 struct LiveWorkoutView: View {
+    private enum LiveWorkoutSheet: Identifiable {
+        case exerciseList
+        case exerciseReplacement(LiveWorkoutEntry)
+        case chat
+
+        var id: String {
+            switch self {
+            case .exerciseList:
+                return "exerciseList"
+            case .exerciseReplacement(let entry):
+                return "exerciseReplacement-\(entry.id.uuidString)"
+            case .chat:
+                return "chat"
+            }
+        }
+    }
+
+    private enum LiveWorkoutAlert: Identifiable {
+        case liveActivityDisabled
+        case persistenceFailure(title: String, message: String)
+
+        var id: String {
+            switch self {
+            case .liveActivityDisabled:
+                return "liveActivityDisabled"
+            case .persistenceFailure(let title, let message):
+                return "persistenceFailure-\(title)-\(message)"
+            }
+        }
+    }
+
     // MARK: - Properties
 
     @State private var viewModel: LiveWorkoutViewModel
@@ -18,8 +49,10 @@ struct LiveWorkoutView: View {
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
     @Query private var profiles: [UserProfile]
-    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
-    @Query(sort: \Exercise.name) private var exerciseLibrary: [Exercise]
+    @Query private var workoutGoals: [WorkoutGoal]
+    @Query private var activityTypeExercises: [Exercise]
+    private static let activeWorkoutGoalFetchLimit = 24
+    private static let activityTypeExerciseFetchLimit = 80
 
     private var usesMetricExerciseWeight: Bool {
         profiles.first?.usesMetricExerciseWeight ?? true
@@ -51,9 +84,8 @@ struct LiveWorkoutView: View {
 
     private var activityTypeTargets: [MuscleGroupSelector.ActivityTypeTarget] {
         var seen: Set<String> = []
-        return exerciseLibrary.compactMap { exercise in
-            guard exercise.exerciseCategory != .strength,
-                  exercise.isCustom else { return nil }
+        return activityTypeExercises.compactMap { exercise in
+            guard exercise.exerciseCategory != .strength else { return nil }
             let title = exercise.activityTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !title.isEmpty else { return nil }
             let key = title.goalNormalizedKey
@@ -76,37 +108,19 @@ struct LiveWorkoutView: View {
         )
     }
 
-    private var activitySuggestions: [String] {
-        Array(
-            Set(
-                viewModel.entries
-                    .filter { !$0.isPlannedActivityGuidance }
-                    .map(\.exerciseName)
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-            )
-        )
-        .sorted()
-    }
-
     // Heart rate update timer
     @State private var heartRateTimer: Timer?
 
-    // Sheet states
-    @State private var showingExerciseList = false
+    // Presentation state
+    @State private var activeSheet: LiveWorkoutSheet?
     @State private var showingCancelConfirmation = false
     @State private var showingEndConfirmation = false
     @State private var showingSummary = false
-    @State private var showingChat = false
-    @State private var showingExerciseReplacement = false
-    @State private var entryToReplace: LiveWorkoutEntry?
-    @State private var showingLiveActivityDisabledAlert = false
-    @State private var showingGeneralActivitySheet = false
-    @State private var showingGoalSheet = false
+    @State private var activeAlert: LiveWorkoutAlert?
     @State private var didApplyPresentationFinishRequest = false
     @State private var shouldDismissAfterCancelConfirmation = false
     @State private var focusedSetID: UUID?
-    private let onCancel: (() -> Void)?
+    private let onCancelled: (() -> Void)?
 
     // MARK: - Initialization
 
@@ -114,11 +128,29 @@ struct LiveWorkoutView: View {
         workout: LiveWorkout,
         template: WorkoutPlan.WorkoutTemplate? = nil,
         finishOnPresentation: Bool = false,
-        onCancel: (() -> Void)? = nil
+        onCancelled: (() -> Void)? = nil
     ) {
         self._viewModel = State(initialValue: LiveWorkoutViewModel(workout: workout, template: template))
         self.finishOnPresentation = finishOnPresentation
-        self.onCancel = onCancel
+        self.onCancelled = onCancelled
+
+        var profileDescriptor = FetchDescriptor<UserProfile>()
+        profileDescriptor.fetchLimit = 1
+        _profiles = Query(profileDescriptor)
+
+        var workoutGoalDescriptor = FetchDescriptor<WorkoutGoal>(
+            predicate: #Predicate<WorkoutGoal> { $0.statusRaw == "active" },
+            sortBy: [SortDescriptor(\WorkoutGoal.updatedAt, order: .reverse)]
+        )
+        workoutGoalDescriptor.fetchLimit = Self.activeWorkoutGoalFetchLimit
+        _workoutGoals = Query(workoutGoalDescriptor)
+
+        var activityTypeExerciseDescriptor = FetchDescriptor<Exercise>(
+            predicate: #Predicate<Exercise> { $0.isCustom && $0.category != "strength" },
+            sortBy: [SortDescriptor(\Exercise.name)]
+        )
+        activityTypeExerciseDescriptor.fetchLimit = Self.activityTypeExerciseFetchLimit
+        _activityTypeExercises = Query(activityTypeExerciseDescriptor)
     }
 
     // MARK: - Body
@@ -127,6 +159,7 @@ struct LiveWorkoutView: View {
         NavigationStack {
             navigationContent
         }
+        .sheet(item: $activeSheet, content: liveWorkoutSheet)
         .tint(Color("AccentColor"))
         .accentColor(Color("AccentColor"))
         .traiBackground()
@@ -150,11 +183,6 @@ struct LiveWorkoutView: View {
         .toolbar { liveWorkoutToolbar }
         .onAppear(perform: handleAppear)
         .onDisappear(perform: handleDisappear)
-        .sheet(isPresented: $showingExerciseList, content: exerciseListSheet)
-        .sheet(isPresented: $showingExerciseReplacement, content: exerciseReplacementSheet)
-        .sheet(isPresented: $showingChat, content: chatSheet)
-        .sheet(isPresented: $showingGeneralActivitySheet, content: generalActivitySheet)
-        .sheet(isPresented: $showingGoalSheet, content: goalSheet)
         .confirmationDialog("Cancel Workout", isPresented: $showingCancelConfirmation, titleVisibility: .visible) {
             Button("Cancel Workout", role: .destructive, action: cancelWorkout)
             Button("Continue Workout", role: .cancel) {}
@@ -169,11 +197,22 @@ struct LiveWorkoutView: View {
         } message: {
             Text("Are you ready to finish this workout?")
         }
-        .alert("Live Activity Disabled", isPresented: $showingLiveActivityDisabledAlert) {
-            Button("Open Settings", action: openAppSettings)
-            Button("Not Now", role: .cancel) {}
-        } message: {
-            Text("Enable Live Activities in Settings to see workout progress on your Lock Screen and Dynamic Island.")
+        .alert(item: $activeAlert) { alert in
+            switch alert {
+            case .liveActivityDisabled:
+                Alert(
+                    title: Text("Live Activity Disabled"),
+                    message: Text("Enable Live Activities in Settings to see workout progress on your Lock Screen and Dynamic Island."),
+                    primaryButton: .default(Text("Open Settings"), action: openAppSettings),
+                    secondaryButton: .cancel(Text("Not Now"))
+                )
+            case .persistenceFailure(let title, let message):
+                Alert(
+                    title: Text(title),
+                    message: Text(message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
         }
     }
 
@@ -200,6 +239,7 @@ struct LiveWorkoutView: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityIdentifier("liveWorkoutCancelButton")
             }
 
             ToolbarItem(placement: .confirmationAction) {
@@ -216,12 +256,18 @@ struct LiveWorkoutView: View {
 
     private func handleAppear() {
         activeWorkoutRuntimeState.beginLiveWorkoutPresentation()
-        viewModel.setup(with: modelContext, healthKitService: healthKitService)
+        if let error = viewModel.setup(with: modelContext, healthKitService: healthKitService) {
+            activeAlert = .persistenceFailure(
+                title: "Workout Not Started",
+                message: error.localizedDescription
+            )
+            return
+        }
         startHeartRateUpdates()
         applyPresentationFinishRequestIfNeeded()
 
         if !AppLaunchArguments.isUITesting && !ActivityAuthorizationInfo().areActivitiesEnabled {
-            showingLiveActivityDisabledAlert = true
+            activeAlert = .liveActivityDisabled
         }
     }
 
@@ -232,7 +278,7 @@ struct LiveWorkoutView: View {
 
     private func cancelWorkout() {
         viewModel.cancelWorkout(using: modelContext)
-        onCancel?()
+        onCancelled?()
         shouldDismissAfterCancelConfirmation = true
         showingCancelConfirmation = false
     }
@@ -251,73 +297,42 @@ struct LiveWorkoutView: View {
         UIApplication.shared.open(url)
     }
 
-    private func exerciseListSheet() -> some View {
-        ExerciseListView(
-            targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup },
-            targetActivityCategories: viewModel.targetActivityCategories,
-            targetActivityTypes: viewModel.targetActivityTypes,
-            title: viewModel.usesFocusedCardioWorkspace ? "Select Activity" : "Select Exercise"
-        ) { exercise in
-            viewModel.addExercise(exercise)
-        }
-    }
-
-    private func exerciseReplacementSheet() -> some View {
-        ExerciseListView(
-            targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup },
-            targetActivityCategories: viewModel.targetActivityCategories,
-            targetActivityTypes: viewModel.targetActivityTypes,
-            title: "Replace Exercise"
-        ) { exercise in
-            if let entry = entryToReplace {
-                viewModel.replaceExercise(entry, with: exercise)
+    @ViewBuilder
+    private func liveWorkoutSheet(_ sheet: LiveWorkoutSheet) -> some View {
+        switch sheet {
+        case .exerciseList:
+            ExerciseListView(
+                targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup },
+                targetActivityCategories: viewModel.targetActivityCategories,
+                targetActivityTypes: viewModel.targetActivityTypes,
+                title: viewModel.usesFocusedCardioWorkspace ? "Select Activity" : "Select Exercise"
+            ) { exercise in
+                viewModel.addExercise(exercise)
             }
-            entryToReplace = nil
-        }
-    }
-
-    private func chatSheet() -> some View {
-        NavigationStack {
-            ChatView(
-                workoutContext: buildWorkoutContext(),
-                initialContextAttachment: viewModel.workout.traiChatContextAttachment
-            )
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done", systemImage: "checkmark") {
-                            showingChat = false
+        case .exerciseReplacement(let entry):
+            ExerciseListView(
+                targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup },
+                targetActivityCategories: viewModel.targetActivityCategories,
+                targetActivityTypes: viewModel.targetActivityTypes,
+                title: "Replace Exercise"
+            ) { exercise in
+                viewModel.replaceExercise(entry, with: exercise)
+                activeSheet = nil
+            }
+        case .chat:
+            NavigationStack {
+                ChatView(
+                    workoutContext: buildWorkoutContext(),
+                    initialContextAttachment: viewModel.workout.traiChatContextAttachment
+                )
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done", systemImage: "checkmark") {
+                                activeSheet = nil
+                            }
+                            .labelStyle(.iconOnly)
                         }
-                        .labelStyle(.iconOnly)
                     }
-                }
-        }
-    }
-
-    private func generalActivitySheet() -> some View {
-        AddGeneralActivitySheet(title: "Add Activity") { name, notes, durationSeconds, kind, role in
-            viewModel.addGeneralActivity(
-                name: name,
-                notes: notes,
-                durationSeconds: durationSeconds,
-                kind: kind,
-                role: role
-            )
-        }
-    }
-
-    private func goalSheet() -> some View {
-        AddWorkoutGoalSheet(
-            workoutType: viewModel.workout.type,
-            activitySuggestions: activitySuggestions,
-            prefersMetricWeight: usesMetricExerciseWeight
-        ) { goal in
-            modelContext.insert(goal)
-            do {
-                try modelContext.save()
-                return true
-            } catch {
-                modelContext.rollback()
-                return false
             }
         }
     }
@@ -337,7 +352,14 @@ struct LiveWorkoutView: View {
         guard !viewModel.isFinishingWorkout else { return }
 
         if !viewModel.isWorkoutFinished {
-            viewModel.finishWorkout()
+            if let error = viewModel.finishWorkout() {
+                activeAlert = .persistenceFailure(
+                    title: "Workout Not Finished",
+                    message: error.localizedDescription
+                )
+                HapticManager.error()
+                return
+            }
         }
 
         withAnimation {
@@ -422,8 +444,8 @@ struct LiveWorkoutView: View {
             }
 
             WorkoutBottomBar(
-                onAddExercise: { showingExerciseList = true },
-                onAskTrai: { showingChat = true },
+                onAddExercise: { activeSheet = .exerciseList },
+                onAskTrai: { activeSheet = .chat },
                 addLabel: "Add Exercise",
                 addSystemImage: "plus.circle.fill"
             )
@@ -528,8 +550,8 @@ struct LiveWorkoutView: View {
 
             // Bottom bar
             WorkoutBottomBar(
-                onAddExercise: { showingExerciseList = true },
-                onAskTrai: { showingChat = true },
+                onAddExercise: { activeSheet = .exerciseList },
+                onAskTrai: { activeSheet = .chat },
                 addLabel: viewModel.usesFocusedCardioWorkspace ? "Add Interval" : "Add Exercise",
                 addSystemImage: "plus.circle.fill"
             )
@@ -560,8 +582,7 @@ struct LiveWorkoutView: View {
                 onToggleWarmup: { setIndex in viewModel.toggleWarmup(at: setIndex, in: entry) },
                 onDeleteExercise: { removeEntry(entry) },
                 onChangeExercise: {
-                    entryToReplace = entry
-                    showingExerciseReplacement = true
+                    activeSheet = .exerciseReplacement(entry)
                 },
                 setRowScrollID: setRowScrollID,
                 onFocusedSetChange: { focusedSetID = $0 }
@@ -824,8 +845,23 @@ struct LiveWorkoutView: View {
         } else {
             goal.markCompleted()
         }
-        try? modelContext.save()
+        guard saveLiveWorkoutChange(title: "Workout Goal Not Updated") else { return }
         HapticManager.selectionChanged()
+    }
+
+    private func saveLiveWorkoutChange(title: String) -> Bool {
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            activeAlert = .persistenceFailure(
+                title: title,
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return false
+        }
     }
 
 }

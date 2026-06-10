@@ -14,8 +14,7 @@ struct LogWeightSheet: View {
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
 
     @Query private var profiles: [UserProfile]
-    @Query(sort: \WeightEntry.loggedAt, order: .reverse)
-    private var recentEntries: [WeightEntry]
+    @Query private var recentEntries: [WeightEntry]
 
     @State private var weightText = ""
     @State private var bodyFatText = ""
@@ -23,7 +22,20 @@ struct LogWeightSheet: View {
     @State private var notes = ""
     @State private var logDate = Date()
     @State private var hasInitialized = false
+    @State private var persistenceError: LogWeightPersistenceError?
     @FocusState private var isWeightFocused: Bool
+
+    init() {
+        var profileDescriptor = FetchDescriptor<UserProfile>()
+        profileDescriptor.fetchLimit = 1
+        _profiles = Query(profileDescriptor)
+
+        var weightDescriptor = FetchDescriptor<WeightEntry>(
+            sortBy: [SortDescriptor(\WeightEntry.loggedAt, order: .reverse)]
+        )
+        weightDescriptor.fetchLimit = 3
+        _recentEntries = Query(weightDescriptor)
+    }
 
     private var profile: UserProfile? { profiles.first }
 
@@ -149,6 +161,13 @@ struct LogWeightSheet: View {
                 isWeightFocused = true
             }
         }
+        .alert(item: $persistenceError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
         .traiBackground()
     }
 
@@ -192,15 +211,28 @@ struct LogWeightSheet: View {
         )
 
         // Update profile's current weight
+        let shouldSyncToHealthKit = profile?.syncWeightToHealthKit == true
         if let profile {
             profile.currentWeightKg = weightKg
+        }
 
-            // Sync to Apple Health if enabled
-            if profile.syncWeightToHealthKit {
-                Task {
-                    guard let healthKitService else { return }
-                    try? await healthKitService.saveWeightAuthorized(weightKg, date: logDate)
-                }
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            persistenceError = LogWeightPersistenceError(
+                title: "Weight Not Saved",
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return
+        }
+
+        // Sync to Apple Health after the local save succeeds.
+        if shouldSyncToHealthKit {
+            Task {
+                guard let healthKitService else { return }
+                try? await healthKitService.saveWeightAuthorized(weightKg, date: logDate)
             }
         }
 
@@ -210,6 +242,12 @@ struct LogWeightSheet: View {
 }
 
 // MARK: - Recent Weight Row
+
+private struct LogWeightPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
 
 private struct RecentWeightRow: View {
     let entry: WeightEntry

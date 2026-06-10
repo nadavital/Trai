@@ -106,6 +106,7 @@ struct ChatView: View {
     @State var contextAttachment: TraiChatContextAttachment?
     @State private var didApplyInitialContextAttachment = false
     @State var isPreparingFirstMessageTransition = false
+    @State private var persistenceError: ChatPersistenceError?
 
     // Plan assessment
     @State var planAssessmentService = PlanAssessmentService()
@@ -543,8 +544,12 @@ struct ChatView: View {
                 },
                 currentSessionIdString: currentSessionIdString,
                 isTemporarySession: isTemporarySession,
+                hasVisibleMessages: !currentSessionMessages.isEmpty,
                 temporaryMessagesCount: temporaryMessages.count,
                 allMessagesFingerprint: allMessagesWindowFingerprint,
+                onStartNewChat: {
+                    startNewSession()
+                },
                 onToggleTemporaryMode: {
                     toggleTemporaryMode()
                     HapticManager.lightTap()
@@ -590,11 +595,12 @@ struct ChatView: View {
     }
 
     private func queuePendingLoggedMealAttachment(_ attachment: TraiChatContextAttachment, focusedEntryId: UUID) {
-        guard TraiChatContextAttachment(storageValue: pendingChatContextAttachment) == nil else { return }
-        pendingChatContextAttachment = attachment.storageValue
-        pendingChatLaunchLabel = "Opening this meal with Trai..."
-        pendingFocusedFoodEntryId = focusedEntryId.uuidString
-        pendingChatActionKind = ""
+        guard !PendingTraiChatLaunchRequest.hasValidPendingTraiChatPayload() else { return }
+        PendingTraiChatLaunchRequest(
+            launchLabel: "Opening this meal with Trai...",
+            focusedFoodEntryId: focusedEntryId,
+            contextAttachmentStorageValue: attachment.storageValue
+        ).write()
     }
 
     func mealSuggestionKey(for meal: SuggestedFoodEntry, in message: ChatMessage) -> MealSuggestionKey {
@@ -667,6 +673,13 @@ struct ChatView: View {
                 .accessibilityLabel(chatLatencyProbeLabel)
                 .accessibilityIdentifier("traiLatencyProbe")
         }
+        .alert(item: $persistenceError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
 
     private var chatLatencyProbeLabel: String {
@@ -686,6 +699,10 @@ struct ChatView: View {
             counts: counts
         )
         LatencyProbe.append(entry: entry, to: &latencyProbeEntries)
+    }
+
+    func showPersistenceError(title: String, message: String) {
+        persistenceError = ChatPersistenceError(title: title, message: message)
     }
 
     private var isInputFocusedBinding: Binding<Bool> {
@@ -1165,8 +1182,10 @@ private struct ChatRootView: View {
     let onAllMessagesChange: () -> Void
     let currentSessionIdString: String
     let isTemporarySession: Bool
+    let hasVisibleMessages: Bool
     let temporaryMessagesCount: Int
     let allMessagesFingerprint: String
+    let onStartNewChat: () -> Void
     let onToggleTemporaryMode: () -> Void
     @Binding var showingCamera: Bool
     let onCameraImage: (UIImage) -> Void
@@ -1203,13 +1222,24 @@ private struct ChatRootView: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    onToggleTemporaryMode()
-                } label: {
-                    Image(systemName: isTemporarySession ? "text.bubble.badge.clock.fill" : "text.bubble.badge.clock")
-                        .foregroundStyle(isTemporarySession ? .orange : .secondary)
+                if hasVisibleMessages {
+                    Button {
+                        onStartNewChat()
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                    }
+                    .help("Start new chat")
+                    .accessibilityLabel("New Chat")
+                } else {
+                    Button {
+                        onToggleTemporaryMode()
+                    } label: {
+                        Image(systemName: isTemporarySession ? "text.bubble.badge.clock.fill" : "text.bubble.badge.clock")
+                            .foregroundStyle(isTemporarySession ? .orange : .secondary)
+                    }
+                    .help(isTemporarySession ? "Exit incognito mode" : "Start incognito chat")
+                    .accessibilityLabel(isTemporarySession ? "Exit Incognito" : "Start Incognito Chat")
                 }
-                .help(isTemporarySession ? "Exit incognito mode" : "Start incognito chat")
             }
         }
         .onAppear(perform: onAppear)
@@ -1258,6 +1288,12 @@ private struct ChatRootView: View {
         }
         .traiSheetBranding()
     }
+}
+
+private struct ChatPersistenceError: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }
 
 private struct ChatContentSection: View {

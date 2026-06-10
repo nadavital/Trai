@@ -4,33 +4,6 @@
     {
       "layers" : [
         {
-          "fill" : {
-            "automatic-gradient" : "srgb:0.85098,0.25098,0.20000,1.00000"
-          },
-          "image-name" : "solid-circle-png-thumb16 2.png",
-          "name" : "Bubble",
-          "opacity" : 0.1,
-          "position" : {
-            "scale" : 1.5,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
-        }
-      ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
-      }
-    },
-    {
-      "layers" : [
-        {
           "fill-specializations" : [
             {
               "value" : {
@@ -207,6 +180,33 @@
           0
         ]
       },
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "layers" : [
+        {
+          "fill" : {
+            "automatic-gradient" : "srgb:0.85098,0.25098,0.20000,1.00000"
+          },
+          "image-name" : "solid-circle-png-thumb16 2.png",
+          "name" : "Bubble",
+          "opacity" : 0.1,
+          "position" : {
+            "scale" : 1.5,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5

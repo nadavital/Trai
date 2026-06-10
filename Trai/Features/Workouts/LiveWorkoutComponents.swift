@@ -260,7 +260,7 @@ struct WorkoutBottomBar: View {
         HStack(spacing: 16) {
             Button(action: onAskTrai) {
                 HStack {
-                    Image(systemName: "circle.hexagongrid.circle")
+                    TraiLensSymbolIcon(size: 16, variant: .nodes, color: TraiColors.brandAccent)
                     Text("Ask Trai")
                 }
                 .frame(maxWidth: .infinity)
