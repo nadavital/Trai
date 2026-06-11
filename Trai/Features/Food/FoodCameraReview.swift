@@ -57,43 +57,19 @@ struct FoodCameraReviewView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                // Captured image or text-only indicator
-                if let image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 240)
-                        .clipShape(.rect(cornerRadius: 16))
-                } else {
-                    VStack(spacing: 16) {
-                        Image(systemName: headerSystemImage)
-                            .font(.system(size: 50))
-                            .foregroundStyle(.tint)
+            VStack(spacing: TraiSpacing.md) {
+                FoodReviewInputCard(
+                    image: image,
+                    title: headerTitle,
+                    systemImage: headerSystemImage,
+                    inputSource: inputSource
+                )
 
-                        Text(headerTitle)
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(height: 150)
-                    .frame(maxWidth: .infinity)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(.rect(cornerRadius: 16))
-                }
-
-                // Notes input
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(descriptionLabel)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    TextField("Add notes, extra items, portions...", text: $description, axis: .vertical)
-                        .lineLimit(2...4)
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(.rect(cornerRadius: 12))
-                        .disabled(isTextOnly && analysisResult != nil && inputSource != .memorySuggestion)
-                }
+                FoodReviewNotesCard(
+                    label: descriptionLabel,
+                    text: $description,
+                    isDisabled: isAnalyzing || (isTextOnly && analysisResult != nil && inputSource != .memorySuggestion)
+                )
 
                 // Analysis section
                 if let suggestion = currentSuggestion {
@@ -145,23 +121,15 @@ struct FoodCameraReviewView: View {
                     }
                 }
 
-                // Initial analyze button
+                // Initial analyze control
                 if currentSuggestion == nil && errorMessage == nil {
-                    Button(action: onAnalyze) {
-                        if isAnalyzing {
-                            HStack {
-                                ProgressView()
-                                    .tint(.white)
-                                Text("Analyzing...")
-                            }
-                            .frame(maxWidth: .infinity)
-                        } else {
-                            Label("Analyze with Trai", systemImage: "circle.hexagongrid.circle")
-                                .frame(maxWidth: .infinity)
-                        }
+                    if isAnalyzing {
+                        FoodAnalysisLoadingCard(inputSource: inputSource)
+                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    } else {
+                        FoodAnalyzeButton(action: onAnalyze)
+                            .transition(.opacity)
                     }
-                    .buttonStyle(.traiPrimary())
-                    .disabled(isAnalyzing)
                 }
             }
             .padding(.horizontal, TraiSpacing.md)
@@ -169,6 +137,7 @@ struct FoodCameraReviewView: View {
             .padding(.bottom, TraiSpacing.md)
         }
         .traiBackground(intensity: 0.45)
+        .animation(TraiAnimation.standard, value: isAnalyzing)
         .onChange(of: refinedSuggestion) { _, newValue in
             guard newValue != nil, isRefining else { return }
 
@@ -218,6 +187,166 @@ struct FoodCameraReviewView: View {
         let correction = refinementText.trimmingCharacters(in: .whitespacesAndNewlines)
         refinementText = ""
         onRefine(correction)
+    }
+}
+
+// MARK: - Food Review Input
+
+private struct FoodReviewInputCard: View {
+    let image: UIImage?
+    let title: String
+    let systemImage: String
+    let inputSource: FoodLogInputSource
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: TraiSpacing.sm) {
+            TraiSectionHeader("Food", icon: sectionIcon)
+
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 220)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(.rect(cornerRadius: 14, style: .continuous))
+                    .accessibilityLabel("Food photo")
+            } else {
+                HStack(spacing: TraiSpacing.md) {
+                    ZStack {
+                        Circle()
+                            .fill(TraiGradient.cardSurface(TraiColors.brandAccent))
+                            .frame(width: 54, height: 54)
+
+                        Image(systemName: systemImage)
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundStyle(TraiColors.brandAccent)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(title)
+                            .font(.traiHeadline(16))
+
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(
+                    Color(.tertiarySystemBackground),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                )
+            }
+        }
+        .traiCard(tint: TraiColors.brandAccent)
+    }
+
+    private var sectionIcon: String {
+        switch inputSource {
+        case .camera:
+            return "camera.fill"
+        case .photo:
+            return "photo.fill"
+        case .description:
+            return "text.bubble.fill"
+        case .memorySuggestion:
+            return "sparkles.rectangle.stack.fill"
+        case .manual:
+            return "square.and.pencil"
+        }
+    }
+
+    private var subtitle: String {
+        switch inputSource {
+        case .memorySuggestion:
+            return "Matched from a saved food memory."
+        case .description:
+            return "Trai will estimate from your description."
+        case .manual:
+            return "Ready for manual details."
+        case .camera, .photo:
+            return "Trai will estimate from the image and notes."
+        }
+    }
+}
+
+private struct FoodReviewNotesCard: View {
+    let label: String
+    @Binding var text: String
+    let isDisabled: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: TraiSpacing.sm) {
+            TraiSectionHeader(label, icon: "text.alignleft")
+
+            TextField("Add notes, extra items, portions...", text: $text, axis: .vertical)
+                .lineLimit(2...4)
+                .padding(12)
+                .background(
+                    Color(.tertiarySystemBackground),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+                .disabled(isDisabled)
+                .opacity(isDisabled ? 0.72 : 1)
+        }
+        .traiCard()
+    }
+}
+
+private struct FoodAnalyzeButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: TraiSpacing.sm) {
+                TraiLensSymbolIcon(size: 17, variant: .enclosed, color: .white)
+                Text("Analyze with Trai")
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.traiPrimary())
+    }
+}
+
+private struct FoodAnalysisLoadingCard: View {
+    let inputSource: FoodLogInputSource
+
+    var body: some View {
+        VStack(spacing: TraiSpacing.md) {
+            TraiLensView(size: 64, state: .thinking, palette: .energy)
+                .accessibilityHidden(true)
+
+            VStack(spacing: 4) {
+                Text("Trai is analyzing")
+                    .font(.traiHeadline(17))
+
+                Text(statusText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, TraiSpacing.sm)
+        .traiCard(tint: TraiColors.brandAccent)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Trai is analyzing food")
+    }
+
+    private var statusText: String {
+        switch inputSource {
+        case .camera, .photo:
+            return "Reading the food, notes, and portion cues."
+        case .description:
+            return "Estimating nutrition from your description."
+        case .memorySuggestion:
+            return "Checking this remembered food."
+        case .manual:
+            return "Preparing the food estimate."
+        }
     }
 }
 
