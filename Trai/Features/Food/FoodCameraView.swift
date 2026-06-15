@@ -335,10 +335,6 @@ private struct FoodLogCaptureStepView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             guard !AppLaunchArguments.isUITesting else { return }
             Task { @MainActor in
-                if cameraService.isAuthorized {
-                    hasResolvedCameraAvailability = true
-                    return
-                }
                 await cameraService.requestPermission()
                 hasResolvedCameraAvailability = true
             }
