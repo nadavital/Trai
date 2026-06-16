@@ -49,6 +49,7 @@ final class CameraService: NSObject {
     private let photoOutput = AVCapturePhotoOutput()
     private var previewLayer: AVCaptureVideoPreviewLayer?
     private var photoContinuation: CheckedContinuation<UIImage?, Never>?
+    private var stopSessionTask: Task<Void, Never>?
     private var isConfigured = false
 
     var isAuthorized = false
@@ -101,13 +102,18 @@ final class CameraService: NSObject {
     }
 
     func stopSession() {
+        guard stopSessionTask == nil else {
+            isSessionReady = false
+            return
+        }
+
         guard captureSession.isRunning else {
             isSessionReady = false
             return
         }
 
         let session = captureSession
-        Task.detached(priority: .utility) {
+        stopSessionTask = Task.detached(priority: .utility) {
             session.stopRunning()
         }
 
@@ -116,6 +122,11 @@ final class CameraService: NSObject {
 
     @discardableResult
     private func startSessionIfNeeded() async -> Bool {
+        if let stopSessionTask {
+            await stopSessionTask.value
+            self.stopSessionTask = nil
+        }
+
         guard configureSessionIfNeeded() else {
             isSessionReady = false
             return false
