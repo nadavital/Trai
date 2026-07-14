@@ -10,6 +10,8 @@ struct DeveloperSettingsView: View {
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
 
     @State private var presentedAccountSetupContext: AccountSetupContext?
+    @AppStorage("trai.foundationModelsQuickCoachEnabled")
+    private var foundationModelsQuickCoachEnabled = true
 
     private var hasCurrentPaidSubscription: Bool {
         guard let billingService else { return false }
@@ -84,6 +86,16 @@ struct DeveloperSettingsView: View {
         }
 
         DeveloperFoodMemorySection()
+
+        if #available(iOS 27.0, *) {
+            Section {
+                Toggle("On-Device Siri Coach Fallback", isOn: $foundationModelsQuickCoachEnabled)
+            } header: {
+                Text("iOS 27")
+            } footer: {
+                Text("Uses Apple's on-device Foundation Model for short Ask Trai answers when the primary AI service is unavailable.")
+            }
+        }
 #endif
     }
 

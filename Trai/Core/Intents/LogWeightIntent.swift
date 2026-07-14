@@ -12,6 +12,10 @@ import SwiftData
 struct LogWeightIntent: AppIntent {
     static var title: LocalizedStringResource = "Log Weight"
     static var description = IntentDescription("Record your current weight")
+    static var supportedModes: IntentModes { .background }
+
+    @available(iOS 27.0, *)
+    static var allowedExecutionTargets: ExecutionTargets { .main }
 
     @Parameter(title: "Weight", description: "Your weight (use your preferred unit)")
     var weight: Double

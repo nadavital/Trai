@@ -16,8 +16,11 @@ struct StartWorkoutIntent: AppIntent {
     @Parameter(title: "Workout", default: nil)
     var workout: WorkoutNameEntity?
 
-    /// This intent opens the app UI
-    static var openAppWhenRun: Bool = true
+    /// Workout setup always continues in Trai's foreground UI.
+    static var supportedModes: IntentModes { .foreground(.immediate) }
+
+    @available(iOS 27.0, *)
+    static var allowedExecutionTargets: ExecutionTargets { .main }
 
     static var parameterSummary: some ParameterSummary {
         Summary("Start \(\.$workout) workout")
@@ -66,7 +69,7 @@ struct WorkoutNameEntity: AppEntity {
 }
 
 /// Query for workout names from user's workout plan
-struct WorkoutNameQuery: EntityQuery {
+struct WorkoutNameQuery: EntityStringQuery {
     @MainActor
     func entities(for identifiers: [String]) async throws -> [WorkoutNameEntity] {
         guard let container = TraiApp.sharedModelContainer else { return [] }
@@ -91,6 +94,17 @@ struct WorkoutNameQuery: EntityQuery {
               let plan = profile.workoutPlan else { return [] }
 
         return plan.templates.map { WorkoutNameEntity(id: $0.id.uuidString, name: $0.name) }
+    }
+
+    @MainActor
+    func entities(matching string: String) async throws -> [WorkoutNameEntity] {
+        let candidates = try await suggestedEntities()
+        let query = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return candidates }
+
+        return candidates.filter {
+            $0.name.localizedStandardContains(query)
+        }
     }
 
     @MainActor

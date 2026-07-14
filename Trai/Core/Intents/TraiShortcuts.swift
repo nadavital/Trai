@@ -64,5 +64,16 @@ struct TraiShortcuts: AppShortcutsProvider {
             shortTitle: "Start Workout",
             systemImageName: "figure.run"
         )
+
+        AppShortcut(
+            intent: GetDailySummaryIntent(),
+            phrases: [
+                "Get my daily summary from \(.applicationName)",
+                "How am I doing in \(.applicationName)",
+                "Show my progress in \(.applicationName)"
+            ],
+            shortTitle: "Daily Summary",
+            systemImageName: "chart.bar.fill"
+        )
     }
 }

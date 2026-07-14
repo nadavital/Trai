@@ -12,8 +12,11 @@ struct LogFoodCameraIntent: AppIntent {
     static var title: LocalizedStringResource = "Scan Food Photo"
     static var description = IntentDescription("Open camera to log food by taking a photo")
 
-    /// This intent opens the app UI
-    static var openAppWhenRun: Bool = true
+    /// Camera capture always continues in Trai's foreground UI.
+    static var supportedModes: IntentModes { .foreground(.immediate) }
+
+    @available(iOS 27.0, *)
+    static var allowedExecutionTargets: ExecutionTargets { .main }
 
     @MainActor
     func perform() async throws -> some IntentResult {

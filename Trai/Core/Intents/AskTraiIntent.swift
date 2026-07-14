@@ -12,6 +12,10 @@ import SwiftData
 struct AskTraiIntent: AppIntent {
     static var title: LocalizedStringResource = "Ask Trai"
     static var description = IntentDescription("Ask Trai, your fitness and nutrition coach, a question")
+    static var supportedModes: IntentModes { .background }
+
+    @available(iOS 27.0, *)
+    static var allowedExecutionTargets: ExecutionTargets { .main }
 
     @Parameter(title: "Question")
     var question: String
@@ -69,6 +73,17 @@ struct AskTraiIntent: AppIntent {
             let shortResponse = response.prefix(500)
             return .result(dialog: "\(shortResponse)")
         } catch {
+            if let onDeviceResponse = try? await OnDeviceCoachService.answer(
+                question: question,
+                userContext: buildUserContext(
+                    profile: profile,
+                    todayFood: todayFood,
+                    hasWorkoutToday: hasWorkoutToday
+                )
+            ), !onDeviceResponse.isEmpty {
+                return .result(dialog: IntentDialog(stringLiteral: String(onDeviceResponse.prefix(500))))
+            }
+
             return .result(dialog: IntentDialog(stringLiteral: error.aiUserFacingMessage(
                 fallback: "Sorry, I couldn't process that question. Please try again."
             )))

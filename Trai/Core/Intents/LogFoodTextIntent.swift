@@ -12,6 +12,10 @@ import SwiftData
 struct LogFoodTextIntent: AppIntent {
     static var title: LocalizedStringResource = "Log Food"
     static var description = IntentDescription("Log food by describing what you ate")
+    static var supportedModes: IntentModes { .background }
+
+    @available(iOS 27.0, *)
+    static var allowedExecutionTargets: ExecutionTargets { .main }
 
     @Parameter(title: "Food Description")
     var food: String
