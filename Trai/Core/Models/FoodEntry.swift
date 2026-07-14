@@ -60,7 +60,7 @@ final class FoodEntry {
             }
 
             let key = imageStorageKey ?? localImageKey
-            LocalImageStore.shared.storeData(data, for: key)
+            guard LocalImageStore.shared.storeData(data, for: key) else { return }
             imageStorageKey = key
             legacyImageData = nil
         }
@@ -296,10 +296,14 @@ extension FoodEntry {
     func migrateLegacyImageToLocalStoreIfNeeded() -> Bool {
         guard let legacyImageData, !legacyImageData.isEmpty else { return false }
         let key = imageStorageKey ?? localImageKey
-        LocalImageStore.shared.storeData(legacyImageData, for: key)
+        guard LocalImageStore.shared.storeData(legacyImageData, for: key) else { return false }
         imageStorageKey = key
         self.legacyImageData = nil
         return true
+    }
+
+    var hasPendingLegacyImageMigration: Bool {
+        legacyImageData?.isEmpty == false
     }
 
     /// Display emoji with fallback to fork and knife

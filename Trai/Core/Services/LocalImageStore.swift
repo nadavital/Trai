@@ -35,11 +35,17 @@ final class LocalImageStore {
         return data
     }
 
-    func storeData(_ data: Data, for key: String) {
-        guard !data.isEmpty else { return }
+    @discardableResult
+    func storeData(_ data: Data, for key: String) -> Bool {
+        guard !data.isEmpty else { return false }
         let fileURL = url(for: key)
-        cache.setObject(data as NSData, forKey: key as NSString)
-        try? data.write(to: fileURL, options: [.atomic])
+        do {
+            try data.write(to: fileURL, options: [.atomic])
+            cache.setObject(data as NSData, forKey: key as NSString)
+            return true
+        } catch {
+            return false
+        }
     }
 
     func removeData(for key: String) {

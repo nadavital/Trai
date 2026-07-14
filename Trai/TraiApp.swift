@@ -1901,6 +1901,14 @@ private func migrateLegacyCloudImagesAndBackfillFoodEmoji(modelContainer: ModelC
         }
     }
 
+    // A failed file write must leave the CloudKit-backed blob intact and keep
+    // the migration eligible for retry on a later launch.
+    guard !foodEntries.contains(where: \.hasPendingLegacyImageMigration),
+          !chatMessages.contains(where: \.hasPendingLegacyImageMigration) else {
+        context.rollback()
+        return
+    }
+
     if migratedFoodImages > 0 || backfilledFoodEmoji > 0 || migratedChatImages > 0 {
         do {
             try context.save()
