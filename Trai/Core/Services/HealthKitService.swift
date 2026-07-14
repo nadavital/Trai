@@ -20,8 +20,21 @@ final class HealthKitService {
         let exerciseMinutes: Int
     }
 
+    struct HeartRateZoneSummary: Sendable, Equatable {
+        let index: Int
+        let minimumBPM: Double?
+        let maximumBPM: Double?
+
+        func contains(_ beatsPerMinute: Double) -> Bool {
+            let clearsMinimum = minimumBPM.map { beatsPerMinute >= $0 } ?? true
+            let clearsMaximum = maximumBPM.map { beatsPerMinute < $0 } ?? true
+            return clearsMinimum && clearsMaximum
+        }
+    }
+
     var isAuthorized = false
     var authorizationError: String?
+    private(set) var preferredHeartRateZones: [HeartRateZoneSummary] = []
 
     // Heart rate streaming
     var currentHeartRate: Double?
@@ -77,11 +90,36 @@ final class HealthKitService {
             try await healthStore.requestAuthorization(toShare: writeTypes, read: readTypes)
             isAuthorized = true
             authorizationError = nil
+            if #available(iOS 27.0, *) {
+                try? await refreshPreferredHeartRateZones()
+            }
         } catch {
             isAuthorized = false
             authorizationError = error.localizedDescription
             throw error
         }
+    }
+
+    @available(iOS 27.0, *)
+    func refreshPreferredHeartRateZones() async throws {
+        guard let heartRateType = HKObjectType.quantityType(forIdentifier: .heartRate),
+              let configuration = try await healthStore.preferredWorkoutZoneConfiguration(for: heartRateType) else {
+            preferredHeartRateZones = []
+            return
+        }
+
+        let beatsPerMinute = HKUnit.count().unitDivided(by: .minute())
+        preferredHeartRateZones = configuration.zones.map { zone in
+            HeartRateZoneSummary(
+                index: zone.index,
+                minimumBPM: zone.minimum?.doubleValue(for: beatsPerMinute),
+                maximumBPM: zone.maximum?.doubleValue(for: beatsPerMinute)
+            )
+        }
+    }
+
+    func preferredHeartRateZone(for beatsPerMinute: Double) -> HeartRateZoneSummary? {
+        preferredHeartRateZones.first { $0.contains(beatsPerMinute) }
     }
 
     func ensureAuthorization() async throws {
@@ -323,9 +361,11 @@ final class HealthKitService {
 
         try await builder.endCollection(at: endDate)
 
-        let workout = try await builder.finishWorkout()
+        guard let workout = try await builder.finishWorkout() else {
+            throw HealthKitError.workoutFinalizationFailed
+        }
 
-        return workout!
+        return workout
     }
 
     /// Save a LiveWorkout to HealthKit

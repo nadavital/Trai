@@ -2008,11 +2008,13 @@ final class LiveWorkoutViewModel {
     @discardableResult
     func cancelWorkout(using modelContext: ModelContext) -> Bool {
         self.modelContext = modelContext
-        stopTimer()
-        // End Live Activity immediately (no summary)
-        liveActivityManager.endActivity(showSummary: false)
+        guard LiveWorkoutCancellation.cancelActiveWorkouts(in: modelContext, including: workout) else {
+            return false
+        }
 
-        return LiveWorkoutCancellation.cancelActiveWorkouts(in: modelContext, including: workout)
+        stopTimer()
+        liveActivityManager.endActivity(showSummary: false)
+        return true
     }
 
     // MARK: - Private Methods

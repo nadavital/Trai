@@ -117,7 +117,9 @@ struct TraiWidgetsLiveActivity: Widget {
             }
             .widgetURL(AppRoute.workout(templateID: nil, templateName: nil).url)
         }
-        .supplementalActivityFamilies([.small])
+        // The medium supplemental family is used by the wider/landscape Live
+        // Activity presentation on supported iPhones.
+        .supplementalActivityFamilies([.small, .medium])
     }
 }
 

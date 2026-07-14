@@ -77,4 +77,29 @@ final class PendingFoodLogTests: XCTestCase {
 
         XCTAssertEqual(PendingFoodLogQueue.load(from: defaults), [log])
     }
+
+    func testConcurrentAppendsDoNotLosePendingLogs() throws {
+        let suiteName = "PendingFoodLogTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Could not create isolated defaults")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let logs = (0..<40).map { index in
+            PendingFoodLog(
+                name: "Food \(index)",
+                calories: 100 + index,
+                protein: index,
+                loggedAt: Date(timeIntervalSince1970: Double(index)),
+                mealType: "snack"
+            )
+        }
+
+        DispatchQueue.concurrentPerform(iterations: logs.count) { index in
+            try? PendingFoodLogQueue.append(logs[index], to: defaults)
+        }
+
+        XCTAssertEqual(Set(PendingFoodLogQueue.load(from: defaults).map(\.id)), Set(logs.map(\.id)))
+    }
 }

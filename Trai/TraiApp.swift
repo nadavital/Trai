@@ -21,6 +21,7 @@ struct TraiApp: App {
     let isUITesting: Bool
     let isRunningTests: Bool
     let modelContainer: ModelContainer
+    let modelContainerLaunchError: String?
     @State private var notificationService: NotificationService
     @State private var healthKitService: HealthKitService
     @State private var appAccountService: AppAccountService
@@ -57,6 +58,28 @@ struct TraiApp: App {
     private let brandAccent = Color("AccentColor")
     private static let swiftDataStoreFilename = "default.store"
     private static let reminderBackgroundRefreshTaskIdentifier = "Nadav.Trai.reminder-refresh"
+    private static let appSchema = Schema([
+        UserProfile.self,
+        FoodEntry.self,
+        Exercise.self,
+        WorkoutSession.self,
+        WeightEntry.self,
+        ChatMessage.self,
+        LiveWorkout.self,
+        LiveWorkoutEntry.self,
+        ExerciseHistory.self,
+        CoachMemory.self,
+        CoachSignal.self,
+        NutritionPlanVersion.self,
+        WorkoutPlanVersion.self,
+        WorkoutGoal.self,
+        CustomReminder.self,
+        ReminderCompletion.self,
+        SuggestionUsage.self,
+        BehaviorEvent.self,
+        FoodMemory.self,
+        FoodSuggestionFeedback.self
+    ])
 
     init() {
         let isUITesting = AppLaunchArguments.isUITesting
@@ -122,28 +145,7 @@ struct TraiApp: App {
             Self.primeSharedStoreDirectoryIfNeeded(usesInMemoryStore: shouldUseInMemoryStore)
             Self.migrateLegacyStoreToSharedContainerIfNeeded(usesInMemoryStore: shouldUseInMemoryStore)
 
-            let schema = Schema([
-                UserProfile.self,
-                FoodEntry.self,
-                Exercise.self,
-                WorkoutSession.self,
-                WeightEntry.self,
-                ChatMessage.self,
-                LiveWorkout.self,
-                LiveWorkoutEntry.self,
-                ExerciseHistory.self,
-                CoachMemory.self,
-                CoachSignal.self,
-                NutritionPlanVersion.self,
-                WorkoutPlanVersion.self,
-                WorkoutGoal.self,
-                CustomReminder.self,
-                ReminderCompletion.self,
-                SuggestionUsage.self,
-                BehaviorEvent.self,
-                FoodMemory.self,
-                FoodSuggestionFeedback.self
-            ])
+            let schema = Self.appSchema
 
             let modelConfiguration: ModelConfiguration
             if shouldUseInMemoryStore {
@@ -173,6 +175,7 @@ struct TraiApp: App {
                 for: schema,
                 configurations: [modelConfiguration]
             )
+            modelContainerLaunchError = nil
 
             notificationService.ensureNotificationSetup()
             let delegate = NotificationDelegate(
@@ -185,6 +188,10 @@ struct TraiApp: App {
             let container = modelContainer
             Task { @MainActor in
                 TraiApp.sharedModelContainer = container
+
+                if #available(iOS 27.0, *) {
+                    TraiMetricReporter.shared.start()
+                }
 
                 if isUITesting && !AppLaunchArguments.shouldRunOnboardingFlowUITest {
                     seedUITestProfileIfNeeded(modelContainer: container)
@@ -209,7 +216,20 @@ struct TraiApp: App {
                 }
             }
         } catch {
-            fatalError("Failed to create ModelContainer: \(error)")
+            modelContainerLaunchError = error.localizedDescription
+            let recoveryConfiguration = ModelConfiguration(
+                schema: Self.appSchema,
+                isStoredInMemoryOnly: true,
+                cloudKitDatabase: .none
+            )
+            do {
+                modelContainer = try ModelContainer(
+                    for: Self.appSchema,
+                    configurations: [recoveryConfiguration]
+                )
+            } catch {
+                preconditionFailure("Failed to create recovery ModelContainer: \(error)")
+            }
         }
     }
 
@@ -272,7 +292,10 @@ struct TraiApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if isRunningTests {
+            if let modelContainerLaunchError {
+                ModelStoreRecoveryView(errorDescription: modelContainerLaunchError)
+                    .tint(brandAccent)
+            } else if isRunningTests {
                 ContentView(deepLinkDestination: $deepLinkDestination)
                     .tint(brandAccent)
                     .accentColor(brandAccent)
@@ -335,6 +358,7 @@ struct TraiApp: App {
             } else if newPhase == .active {
                 billingService.refreshLocalState()
                 monetizationService.refreshStateIfNeeded()
+                processPendingWidgetFoodLogs()
                 scheduleForegroundHealthKitSyncIfEligible()
                 scheduleReminderScheduleRefreshIfNeeded()
                 scheduleReminderBackgroundRefresh()
@@ -644,15 +668,12 @@ struct TraiApp: App {
                     workout.loggedAt >= syncStart && workout.healthKitWorkoutID != nil
                 }
             )
-            let existingWorkouts = (try? context.fetch(workoutDescriptor)) ?? []
+            let existingWorkouts = try context.fetch(workoutDescriptor)
             let existingIDs = Set(existingWorkouts.compactMap { $0.healthKitWorkoutID })
             let newWorkouts = healthKitWorkouts.filter { !existingIDs.contains($0.healthKitWorkoutID ?? "") }
 
             for workout in newWorkouts {
                 context.insert(workout)
-            }
-            if !newWorkouts.isEmpty {
-                try? context.save()
             }
 
             let mergeSearchStart = Calendar.current.date(
@@ -667,7 +688,7 @@ struct TraiApp: App {
                     workout.startedAt >= mergeSearchStart
                 }
             )
-            let completedLiveWorkouts = (try? context.fetch(liveDescriptor)) ?? []
+            let completedLiveWorkouts = try context.fetch(liveDescriptor)
 
             var didMerge = false
             for workout in completedLiveWorkouts {
@@ -683,8 +704,13 @@ struct TraiApp: App {
                 }
             }
 
-            if didMerge {
-                try? context.save()
+            if !newWorkouts.isEmpty || didMerge {
+                do {
+                    try context.save()
+                } catch {
+                    context.rollback()
+                    throw error
+                }
             }
 
             lastHealthKitWorkoutSyncDate = now
@@ -733,10 +759,14 @@ struct TraiApp: App {
             "Library/Application Support",
             isDirectory: true
         )
-        try? fileManager.createDirectory(
-            at: sharedAppSupportURL,
-            withIntermediateDirectories: true
-        )
+        do {
+            try fileManager.createDirectory(
+                at: sharedAppSupportURL,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            return
+        }
 
         guard let legacyFiles = try? fileManager.contentsOfDirectory(
             at: appSupportURL,
@@ -755,11 +785,72 @@ struct TraiApp: App {
             return
         }
 
-        for sourceURL in legacyStoreFiles {
-            let destinationURL = sharedAppSupportURL.appendingPathComponent(sourceURL.lastPathComponent)
-            guard !fileManager.fileExists(atPath: destinationURL.path) else { continue }
-            try? fileManager.copyItem(at: sourceURL, to: destinationURL)
+        let stagingURL = sharedAppSupportURL.appendingPathComponent(
+            ".trai-store-migration-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        var installedURLs: [URL] = []
+
+        do {
+            try fileManager.createDirectory(at: stagingURL, withIntermediateDirectories: false)
+            defer { try? fileManager.removeItem(at: stagingURL) }
+
+            for sourceURL in legacyStoreFiles {
+                let stagedURL = stagingURL.appendingPathComponent(sourceURL.lastPathComponent)
+                try fileManager.copyItem(at: sourceURL, to: stagedURL)
+
+                guard let sourceSize = try sourceURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+                      let stagedSize = try stagedURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+                      sourceSize == stagedSize else {
+                    throw CocoaError(.fileReadCorruptFile)
+                }
+            }
+
+            // Install SQLite sidecars first and the primary store last. The
+            // primary file remains the durable marker that migration completed.
+            let orderedFiles = legacyStoreFiles.sorted {
+                ($0.lastPathComponent == swiftDataStoreFilename ? 1 : 0)
+                    < ($1.lastPathComponent == swiftDataStoreFilename ? 1 : 0)
+            }
+            for sourceURL in orderedFiles {
+                let destinationURL = sharedAppSupportURL.appendingPathComponent(sourceURL.lastPathComponent)
+                if fileManager.fileExists(atPath: destinationURL.path) {
+                    try fileManager.removeItem(at: destinationURL)
+                }
+                try fileManager.moveItem(
+                    at: stagingURL.appendingPathComponent(sourceURL.lastPathComponent),
+                    to: destinationURL
+                )
+                installedURLs.append(destinationURL)
+            }
+        } catch {
+            // A failed attempt must not leave sidecars that can poison a retry.
+            if !fileManager.fileExists(atPath: sharedStoreURL.path) {
+                for installedURL in installedURLs {
+                    try? fileManager.removeItem(at: installedURL)
+                }
+            }
         }
+    }
+}
+
+private struct ModelStoreRecoveryView: View {
+    let errorDescription: String
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Trai Couldn't Open Your Data", systemImage: "externaldrive.badge.exclamationmark")
+        } description: {
+            Text("Your data has not been reset or replaced. Close Trai and try again. If this keeps happening, contact support with the diagnostic below.")
+        } actions: {
+            ShareLink(
+                item: "Trai storage launch error: \(errorDescription)",
+                subject: Text("Trai storage diagnostic")
+            ) {
+                Label("Share Diagnostic", systemImage: "square.and.arrow.up")
+            }
+        }
+        .padding()
     }
 }
 

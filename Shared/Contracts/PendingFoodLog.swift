@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Darwin
 
 struct PendingFoodLog: Codable, Equatable, Identifiable {
     let id: UUID
@@ -90,7 +91,15 @@ struct PendingFoodLog: Codable, Equatable, Identifiable {
 }
 
 enum PendingFoodLogQueue {
+    private static let processLock = NSLock()
+
     static func load(from defaults: UserDefaults) -> [PendingFoodLog] {
+        withMutationLock(defaults: defaults) {
+            loadUnlocked(from: defaults)
+        }
+    }
+
+    private static func loadUnlocked(from defaults: UserDefaults) -> [PendingFoodLog] {
         guard let data = defaults.data(forKey: SharedStorageKeys.AppGroup.pendingFoodLogs),
               let logs = try? JSONDecoder().decode([PendingFoodLog].self, from: data) else {
             return []
@@ -99,28 +108,68 @@ enum PendingFoodLogQueue {
     }
 
     static func append(_ log: PendingFoodLog, to defaults: UserDefaults) throws {
-        var logs = load(from: defaults)
-        guard !logs.contains(where: { $0.id == log.id }) else { return }
-        logs.append(log)
-        try save(logs, to: defaults)
+        try withMutationLock(defaults: defaults) {
+            var logs = loadUnlocked(from: defaults)
+            guard !logs.contains(where: { $0.id == log.id }) else { return }
+            logs.append(log)
+            try saveUnlocked(logs, to: defaults)
+        }
     }
 
     static func remove(ids: Set<UUID>, from defaults: UserDefaults) throws {
         guard !ids.isEmpty else { return }
 
-        let logs = load(from: defaults)
-        let remainingLogs = logs.filter { !ids.contains($0.id) }
+        try withMutationLock(defaults: defaults) {
+            let logs = loadUnlocked(from: defaults)
+            let remainingLogs = logs.filter { !ids.contains($0.id) }
 
-        guard !remainingLogs.isEmpty else {
-            defaults.removeObject(forKey: SharedStorageKeys.AppGroup.pendingFoodLogs)
-            return
+            guard !remainingLogs.isEmpty else {
+                defaults.removeObject(forKey: SharedStorageKeys.AppGroup.pendingFoodLogs)
+                defaults.synchronize()
+                return
+            }
+
+            try saveUnlocked(remainingLogs, to: defaults)
         }
-
-        try save(remainingLogs, to: defaults)
     }
 
     static func save(_ logs: [PendingFoodLog], to defaults: UserDefaults) throws {
+        try withMutationLock(defaults: defaults) {
+            try saveUnlocked(logs, to: defaults)
+        }
+    }
+
+    private static func saveUnlocked(_ logs: [PendingFoodLog], to defaults: UserDefaults) throws {
         let data = try JSONEncoder().encode(logs)
         defaults.set(data, forKey: SharedStorageKeys.AppGroup.pendingFoodLogs)
+        defaults.synchronize()
+    }
+
+    private static func withMutationLock<T>(
+        defaults: UserDefaults,
+        _ operation: () throws -> T
+    ) rethrows -> T {
+        processLock.lock()
+        defer { processLock.unlock() }
+
+        guard let containerURL = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: SharedStorageKeys.AppGroup.suiteName
+        ) else {
+            return try operation()
+        }
+
+        let lockURL = containerURL.appendingPathComponent("pending-food-log-queue.lock")
+        let descriptor = open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        guard descriptor >= 0 else {
+            return try operation()
+        }
+        defer { close(descriptor) }
+
+        guard flock(descriptor, LOCK_EX) == 0 else {
+            return try operation()
+        }
+        defer { flock(descriptor, LOCK_UN) }
+        defaults.synchronize()
+        return try operation()
     }
 }

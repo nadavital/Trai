@@ -277,7 +277,14 @@ struct LiveWorkoutView: View {
     }
 
     private func cancelWorkout() {
-        viewModel.cancelWorkout(using: modelContext)
+        guard viewModel.cancelWorkout(using: modelContext) else {
+            showingCancelConfirmation = false
+            activeAlert = .persistenceFailure(
+                title: "Workout Not Cancelled",
+                message: "Trai couldn't safely save this change. Your workout is still active. Please try again."
+            )
+            return
+        }
         onCancelled?()
         shouldDismissAfterCancelConfirmation = true
         showingCancelConfirmation = false

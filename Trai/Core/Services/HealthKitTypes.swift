@@ -13,6 +13,7 @@ import HealthKit
 enum HealthKitError: LocalizedError {
     case notAvailable
     case notAuthorized
+    case workoutFinalizationFailed
 
     var errorDescription: String? {
         switch self {
@@ -20,6 +21,8 @@ enum HealthKitError: LocalizedError {
             return "HealthKit is not available on this device"
         case .notAuthorized:
             return "HealthKit access has not been authorized"
+        case .workoutFinalizationFailed:
+            return "HealthKit could not finalize the workout"
         }
     }
 }

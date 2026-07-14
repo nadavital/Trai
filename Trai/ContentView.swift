@@ -395,7 +395,9 @@ struct MainTabView: View {
             } message: {
                 Text("Are you sure you want to end this workout?")
             }
-            .fullScreenCover(item: $foodCameraPresentation) { presentation in
+            .fullScreenCover(item: $foodCameraPresentation, onDismiss: {
+                handleRoute(deepLinkDestination)
+            }) { presentation in
                 FoodCameraView(sessionId: presentation.sessionId, targetDate: presentation.targetDate)
                     .traiSheetBranding()
             }
@@ -548,19 +550,21 @@ struct MainTabView: View {
     private func handleRoute(_ destination: AppRoute?) {
         guard let destination else { return }
 
-        // Reset the deep link after handling
-        Task { @MainActor in
-            deepLinkDestination = nil
-        }
-
         switch destination {
         case .logFood:
-            guard foodCameraPresentation == nil else { return }
+            guard foodCameraPresentation == nil else {
+                deepLinkDestination = destination
+                return
+            }
             prewarmFoodCameraSuggestions(modelContext: modelContext)
             Task { @MainActor in
                 await Task.yield()
-                guard foodCameraPresentation == nil else { return }
+                guard foodCameraPresentation == nil else {
+                    deepLinkDestination = destination
+                    return
+                }
                 foodCameraPresentation = FoodCameraPresentation()
+                deepLinkDestination = nil
             }
             BehaviorTracker(modelContext: modelContext).recordDeferred(
                 actionKey: BehaviorActionKey.logFood,
@@ -571,6 +575,7 @@ struct MainTabView: View {
             )
         case .logWeight:
             showingLogWeight = true
+            deepLinkDestination = nil
             BehaviorTracker(modelContext: modelContext).recordDeferred(
                 actionKey: BehaviorActionKey.logWeight,
                 domain: .body,
@@ -580,8 +585,10 @@ struct MainTabView: View {
             )
         case .workout(let templateID, let templateName):
             startWorkoutFromIntent(templateID: templateID, name: templateName)
+            deepLinkDestination = nil
         case .chat:
             selectTab(.trai)
+            deepLinkDestination = nil
         }
     }
 
