@@ -39,6 +39,7 @@ enum OnboardingGradient {
 
 struct AnimatedGradientBackground: View {
     @State private var animateGradient = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         LinearGradient(
@@ -52,6 +53,7 @@ struct AnimatedGradientBackground: View {
         )
         .ignoresSafeArea()
         .onAppear {
+            guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 5).repeatForever(autoreverses: true)) {
                 animateGradient.toggle()
             }
@@ -367,6 +369,7 @@ struct AnimatedIcon: View {
     let systemName: String
     let size: CGFloat
     @State private var isAnimating = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Image(systemName: systemName)
@@ -375,6 +378,7 @@ struct AnimatedIcon: View {
             .foregroundStyle(.tint)
             .scaleEffect(isAnimating ? 1.05 : 1)
             .onAppear {
+                guard !reduceMotion else { return }
                 withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
                     isAnimating = true
                 }
@@ -387,6 +391,7 @@ struct AnimatedIcon: View {
 struct OnboardingProgressDots: View {
     let currentStep: Int
     let totalSteps: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 8) {
@@ -394,7 +399,7 @@ struct OnboardingProgressDots: View {
                 Capsule()
                     .fill(step <= currentStep ? Color.accentColor : Color.gray.opacity(0.3))
                     .frame(width: step == currentStep ? 24 : 8, height: 8)
-                    .animation(.spring(response: 0.4), value: currentStep)
+                    .animation(reduceMotion ? nil : .spring(response: 0.4), value: currentStep)
             }
         }
     }
@@ -405,6 +410,7 @@ struct OnboardingProgressDots: View {
 struct FloatingElement: View {
     let delay: Double
     @State private var offset: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Circle()
@@ -413,6 +419,7 @@ struct FloatingElement: View {
             .blur(radius: 30)
             .offset(y: offset)
             .onAppear {
+                guard !reduceMotion else { return }
                 withAnimation(
                     .easeInOut(duration: 3)
                     .repeatForever(autoreverses: true)

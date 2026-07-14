@@ -25,20 +25,58 @@ struct WorkoutTimerHeader: View {
     var heartRate: Double?
     var calories: Double?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         VStack(spacing: 16) {
             // Timer (centered)
             TimelineView(.periodic(from: .now, by: 1.0)) { context in
                 let elapsed = calculateElapsed(at: context.date)
                 Text(formatTime(elapsed))
-                    .font(.system(size: 48, weight: .light, design: .monospaced))
+                    .font(.traiHero(48).weight(.light).monospaced())
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .contentTransition(.numericText())
+                    .minimumScaleFactor(0.85)
+                    .contentTransition(reduceMotion ? .identity : .numericText())
             }
 
-            HStack(spacing: 10) {
+            ViewThatFits(in: .horizontal) {
+                timerActions(axis: .horizontal)
+                timerActions(axis: .vertical)
+            }
+
+            if showsWatchSyncButton,
+               let watchConnectionHint,
+               !watchConnectionHint.isEmpty {
+                Label(watchConnectionHint, systemImage: "applewatch")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // Stats row - volume and optional watch data
+            let hasWatchData = heartRate != nil || (calories ?? 0) > 0
+            if totalVolume > 0 || hasWatchData {
+                ViewThatFits(in: .horizontal) {
+                    timerStats(axis: .horizontal)
+                    timerStats(axis: .vertical)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(.rect(cornerRadius: 16))
+    }
+
+    @ViewBuilder
+    private func timerActions(axis: Axis) -> some View {
+        let layout = axis == .horizontal
+            ? AnyLayout(HStackLayout(spacing: 10))
+            : AnyLayout(VStackLayout(spacing: 10))
+
+        layout {
                 // Pill-shaped pause/resume button
                 Button(action: onTogglePause) {
                     HStack(spacing: 6) {
@@ -49,7 +87,7 @@ struct WorkoutTimerHeader: View {
                     .fontWeight(.medium)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
-                    .frame(minWidth: 112)
+                    .frame(minWidth: 112, maxWidth: axis == .vertical ? .infinity : nil, minHeight: 44)
                     .background(Color.accentColor.opacity(0.15))
                     .foregroundStyle(Color.accentColor)
                     .clipShape(.capsule)
@@ -71,7 +109,7 @@ struct WorkoutTimerHeader: View {
                         .fontWeight(.medium)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 10)
-                        .frame(minWidth: 112)
+                        .frame(minWidth: 112, maxWidth: axis == .vertical ? .infinity : nil, minHeight: 44)
                         .background(Color.accentColor.opacity(0.15))
                         .foregroundStyle(Color.accentColor)
                         .clipShape(.capsule)
@@ -80,21 +118,15 @@ struct WorkoutTimerHeader: View {
                     .disabled(isWatchSyncing)
                 }
             }
+    }
 
-            if showsWatchSyncButton,
-               let watchConnectionHint,
-               !watchConnectionHint.isEmpty {
-                Label(watchConnectionHint, systemImage: "applewatch")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+    @ViewBuilder
+    private func timerStats(axis: Axis) -> some View {
+        let layout = axis == .horizontal
+            ? AnyLayout(HStackLayout(spacing: 24))
+            : AnyLayout(VStackLayout(spacing: 12))
 
-            // Stats row - volume and optional watch data
-            let hasWatchData = heartRate != nil || (calories ?? 0) > 0
-            if totalVolume > 0 || hasWatchData {
-                HStack(spacing: 24) {
+        layout {
                     if totalVolume > 0 {
                         TimerStat(
                             value: formatVolume(totalVolume),
@@ -120,12 +152,6 @@ struct WorkoutTimerHeader: View {
                         )
                     }
                 }
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
     }
 
     private func calculateElapsed(at date: Date) -> TimeInterval {

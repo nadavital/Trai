@@ -161,18 +161,19 @@ struct TraiProWordmark: View {
 
 struct TraiProValueList: View {
     let modules: [ProUpsellModule]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10)
-    ]
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: 10),
+            count: dynamicTypeSize.isAccessibilitySize ? 1 : 2
+        )
+    }
 
     var body: some View {
-        GlassEffectContainer(spacing: 10) {
-            LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(modules) { module in
-                    TraiProModuleTile(module: module)
-                }
+        LazyVGrid(columns: columns, spacing: 10) {
+            ForEach(modules) { module in
+                TraiProModuleTile(module: module)
             }
         }
     }
@@ -180,6 +181,7 @@ struct TraiProValueList: View {
 
 struct TraiProModuleTile: View {
     let module: ProUpsellModule
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -193,20 +195,22 @@ struct TraiProModuleTile: View {
                 Text(module.title)
                     .font(.subheadline.weight(.heavy))
                     .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.86)
-                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .bottomLeading)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .frame(maxWidth: .infinity, alignment: .bottomLeading)
 
                 Text(module.subtitle)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.68))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.86)
-                    .frame(maxWidth: .infinity, minHeight: 32, alignment: .topLeading)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 138, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: dynamicTypeSize.isAccessibilitySize ? 0 : 138, alignment: .topLeading)
         .padding(14)
-        .glassEffect(.clear.tint(.black.opacity(0.18)), in: .rect(cornerRadius: 18))
+        .background(.black.opacity(0.18), in: .rect(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+        }
     }
 }

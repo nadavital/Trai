@@ -194,36 +194,39 @@ struct ChatSessionListRow: View {
     @State private var showDeleteConfirmation = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "bubble.left.fill")
-                .font(.caption)
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 24, height: 24)
-                .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
+        Button(action: onOpen) {
+            HStack(spacing: 12) {
+                Image(systemName: "bubble.left.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 24, height: 24)
+                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(sessionTitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(sessionTitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
 
-                HStack(spacing: 6) {
-                    Text(session.date, format: .dateTime.month().day())
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Text(session.date, format: .dateTime.month().day())
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
 
-                    Text("•")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        Text("•")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
 
-                    Text("\(session.messageCount) messages")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        Text("\(session.messageCount) messages")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(.rect)
         }
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onOpen)
+        .buttonStyle(.plain)
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 showDeleteConfirmation = true

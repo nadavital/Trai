@@ -79,13 +79,17 @@ struct QuickActionButton: View {
     let icon: String
     let color: Color
     let action: () -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Button {
             HapticManager.lightTap()
             action()
         } label: {
-            VStack(spacing: TraiSpacing.sm) {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(HStackLayout(spacing: TraiSpacing.md))
+                : AnyLayout(VStackLayout(spacing: TraiSpacing.sm))
+            layout {
                 ZStack {
                     Circle()
                         .fill(color.opacity(0.78))
@@ -97,23 +101,25 @@ struct QuickActionButton: View {
                         .foregroundStyle(.white)
                 }
 
-                VStack(spacing: 2) {
-                    Text(title)
-                        .font(.traiLabel())
+                Text(title)
+                    .font(.traiLabel())
+                    .foregroundStyle(color)
+                    .multilineTextAlignment(.leading)
+
+                if dynamicTypeSize.isAccessibilitySize {
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
                         .foregroundStyle(color)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
                 }
             }
             .frame(maxWidth: .infinity)
+            .frame(minHeight: 44)
+            .padding(.horizontal, dynamicTypeSize.isAccessibilitySize ? 14 : 8)
             .padding(.vertical, 14)
-            .glassEffect(
-                .regular.tint(color.opacity(0.28)).interactive(),
-                in: .rect(cornerRadius: TraiRadius.medium)
-            )
+            .background(color.opacity(0.12), in: .rect(cornerRadius: TraiRadius.medium))
             .overlay {
                 RoundedRectangle(cornerRadius: TraiRadius.medium, style: .continuous)
-                    .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+                    .strokeBorder(color.opacity(0.22), lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.03), radius: 5, y: 3)
         }

@@ -32,6 +32,12 @@ enum TraiAnimation {
     static let standard: Animation = .spring(response: 0.35, dampingFraction: 0.75)
     static let bouncy: Animation = .spring(response: 0.4, dampingFraction: 0.6)
     static let slow: Animation = .spring(response: 0.55, dampingFraction: 0.8)
+
+    /// Resolves a shared animation against the user's motion preference.
+    /// Passing `nil` makes state changes immediate while preserving view identity.
+    static func resolved(_ animation: Animation, reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : animation
+    }
 }
 
 // MARK: - Gradients
@@ -92,22 +98,57 @@ enum TraiGradient {
 extension Font {
     /// Bold rounded display font for hero metrics
     static func traiHero(_ size: CGFloat = 36) -> Font {
-        .system(size: size, weight: .heavy, design: .rounded)
+        .system(traiTextStyle(for: size, role: .hero), design: .rounded, weight: .heavy)
     }
 
     /// Bold rounded font for card titles and numbers
     static func traiBold(_ size: CGFloat = 20) -> Font {
-        .system(size: size, weight: .bold, design: .rounded)
+        .system(traiTextStyle(for: size, role: .bold), design: .rounded, weight: .bold)
     }
 
     /// Semibold rounded font for section headers
     static func traiHeadline(_ size: CGFloat = 17) -> Font {
-        .system(size: size, weight: .semibold, design: .rounded)
+        .system(traiTextStyle(for: size, role: .headline), design: .rounded, weight: .semibold)
     }
 
     /// Medium rounded font for labels
     static func traiLabel(_ size: CGFloat = 13) -> Font {
-        .system(size: size, weight: .medium, design: .rounded)
+        .system(traiTextStyle(for: size, role: .label), design: .rounded, weight: .medium)
+    }
+
+    private enum TraiTypographyRole {
+        case hero
+        case bold
+        case headline
+        case label
+    }
+
+    /// Keeps the existing point-size API source-compatible while mapping each
+    /// role to a semantic text style that participates in Dynamic Type.
+    private static func traiTextStyle(for size: CGFloat, role: TraiTypographyRole) -> TextStyle {
+        switch role {
+        case .hero:
+            if size >= 34 { return .largeTitle }
+            if size >= 27 { return .title }
+            if size >= 22 { return .title2 }
+            return .title3
+        case .bold:
+            if size >= 30 { return .largeTitle }
+            if size >= 25 { return .title }
+            if size >= 21 { return .title2 }
+            if size >= 18 { return .title3 }
+            return .headline
+        case .headline:
+            if size >= 19 { return .title3 }
+            if size >= 16 { return .headline }
+            if size >= 14 { return .subheadline }
+            return .footnote
+        case .label:
+            if size >= 15 { return .body }
+            if size >= 14 { return .subheadline }
+            if size >= 12 { return .footnote }
+            return .caption2
+        }
     }
 }
 
@@ -117,6 +158,7 @@ extension Font {
 struct TraiGradientButtonStyle: ButtonStyle {
     let gradient: LinearGradient
     var cornerRadius: CGFloat = TraiRadius.medium
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -132,7 +174,7 @@ struct TraiGradientButtonStyle: ButtonStyle {
                 y: configuration.isPressed ? 1 : 4
             )
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(TraiAnimation.quick, value: configuration.isPressed)
+            .animation(TraiAnimation.resolved(TraiAnimation.quick, reduceMotion: reduceMotion), value: configuration.isPressed)
     }
 }
 
@@ -141,11 +183,12 @@ struct TraiGradientButtonStyle: ButtonStyle {
 /// Subtle press-scale animation for interactive cards and buttons
 struct TraiPressStyle: ButtonStyle {
     var scale: CGFloat = 0.97
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1)
-            .animation(TraiAnimation.quick, value: configuration.isPressed)
+            .animation(TraiAnimation.resolved(TraiAnimation.quick, reduceMotion: reduceMotion), value: configuration.isPressed)
     }
 }
 
@@ -157,6 +200,8 @@ struct TraiCardBackground: ViewModifier {
     var cornerRadius: CGFloat = TraiRadius.medium
     var contentPadding: CGFloat = TraiSpacing.md
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
         content
@@ -164,7 +209,7 @@ struct TraiCardBackground: ViewModifier {
             .background(
                 ZStack {
                     RoundedRectangle(cornerRadius: cornerRadius)
-                        .fill(.ultraThinMaterial)
+                        .fill(cardFill)
 
                     if let glow {
                         TraiCardGlowBackground(glow: glow)
@@ -180,7 +225,20 @@ struct TraiCardBackground: ViewModifier {
                     radius: shadowRadius,
                     y: shadowY
                 )
+                .overlay {
+                    if colorSchemeContrast == .increased {
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .strokeBorder(Color.primary.opacity(0.28), lineWidth: 1)
+                    }
+                }
             )
+    }
+
+    private var cardFill: AnyShapeStyle {
+        if reduceTransparency {
+            return AnyShapeStyle(Color(.secondarySystemBackground))
+        }
+        return AnyShapeStyle(.ultraThinMaterial)
     }
 
     private var shadowColor: Color {

@@ -54,14 +54,15 @@ struct TraiAnimatedNumber: View {
     let value: Int
     var font: Font = .traiBold(28)
     var color: Color? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Text("\(value)")
             .font(font)
             .monospacedDigit()
-            .contentTransition(.numericText(value: Double(value)))
+            .contentTransition(reduceMotion ? .identity : .numericText(value: Double(value)))
             .foregroundStyle(color ?? .primary)
-            .animation(TraiAnimation.standard, value: value)
+            .animation(TraiAnimation.resolved(TraiAnimation.standard, reduceMotion: reduceMotion), value: value)
     }
 }
 
@@ -71,14 +72,15 @@ struct TraiAnimatedDecimal: View {
     var fractionLength: Int = 1
     var font: Font = .traiBold(28)
     var color: Color? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Text(value, format: .number.precision(.fractionLength(fractionLength)))
             .font(font)
             .monospacedDigit()
-            .contentTransition(.numericText(value: value))
+            .contentTransition(reduceMotion ? .identity : .numericText(value: value))
             .foregroundStyle(color ?? .primary)
-            .animation(TraiAnimation.standard, value: value)
+            .animation(TraiAnimation.resolved(TraiAnimation.standard, reduceMotion: reduceMotion), value: value)
     }
 }
 
@@ -107,6 +109,7 @@ struct TraiCelebrationRipple: View {
 
     @State private var ringScale: CGFloat = 0.8
     @State private var ringOpacity: Double = 0.6
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Circle()
@@ -115,6 +118,10 @@ struct TraiCelebrationRipple: View {
             .opacity(ringOpacity)
             .onChange(of: isActive) { _, active in
                 guard active else { return }
+                guard !reduceMotion else {
+                    HapticManager.success()
+                    return
+                }
                 ringScale = 0.8
                 ringOpacity = 0.6
                 withAnimation(.easeOut(duration: 0.6)) {
@@ -131,6 +138,7 @@ struct TraiCelebrationRipple: View {
 /// Animated gradient sweep for loading skeletons.
 struct TraiShimmer: ViewModifier {
     @State private var phase: CGFloat = -1
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
@@ -148,6 +156,10 @@ struct TraiShimmer: ViewModifier {
                 .mask(content)
             )
             .onAppear {
+                guard !reduceMotion else {
+                    phase = 0
+                    return
+                }
                 withAnimation(
                     .linear(duration: 1.5)
                     .repeatForever(autoreverses: false)

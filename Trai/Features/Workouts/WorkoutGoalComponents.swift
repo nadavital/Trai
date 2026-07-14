@@ -1885,23 +1885,21 @@ struct WorkoutGoalsOverviewSection: View {
     }
 
     private func featuredGoalCard(_ insight: WorkoutGoalInsight) -> some View {
-        goalTileContent(
-            progress: insight.cardProgressFraction,
-            iconName: insight.goal.goalKind.iconName,
-            color: TraiColors.flame,
-            title: insight.goal.trimmedTitle
-        )
-        .padding(.horizontal, 10)
-        .frame(height: 112)
-        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
-        .contentShape(RoundedRectangle(cornerRadius: 14))
-        .onTapGesture {
+        Button {
             onGoalTap(insight.goal)
+        } label: {
+            goalTileContent(
+                progress: insight.cardProgressFraction,
+                iconName: insight.goal.goalKind.iconName,
+                color: TraiColors.flame,
+                title: insight.goal.trimmedTitle
+            )
+            .padding(.horizontal, 10)
+            .frame(height: 112)
+            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
         }
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction {
-            onGoalTap(insight.goal)
-        }
+        .buttonStyle(TraiPressStyle())
     }
 
     private func goalTileContent(

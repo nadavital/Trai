@@ -141,6 +141,7 @@ struct FoodCameraSuggestionRail: View {
     let onDismissKeyboard: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Namespace private var glassNamespace
 
     private var suggestionIDs: [UUID] {
@@ -183,7 +184,7 @@ struct FoodCameraSuggestionRail: View {
                 onDismissKeyboard()
             }
         )
-        .frame(height: 116, alignment: .topLeading)
+        .frame(minHeight: dynamicTypeSize.isAccessibilitySize ? 164 : 116, alignment: .topLeading)
         .animation(
             reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0.10),
             value: suggestionIDs
@@ -200,6 +201,7 @@ private struct FoodCameraDescriptionBar: View {
     let onSubmitDescription: () -> Void
 
     @State private var inputBarHeight: CGFloat = 52
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var inputCornerRadius: CGFloat {
         min(inputBarHeight / 2, 26)
@@ -225,7 +227,7 @@ private struct FoodCameraDescriptionBar: View {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                 }
                 .glassEffect(.regular.tint(canSubmitDescription ? .accent : .gray).interactive(), in: .circle)
                 .opacity(canSubmitDescription ? 1 : 0.5)
@@ -247,7 +249,7 @@ private struct FoodCameraDescriptionBar: View {
             } action: { _, newHeight in
                 inputBarHeight = newHeight
             }
-            .animation(.snappy(duration: 0.18), value: inputCornerRadius)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: inputCornerRadius)
         }
     }
 
@@ -328,6 +330,7 @@ struct FoodCameraSuggestionChip: View {
     let action: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var hasAppeared = false
 
     var body: some View {
@@ -356,12 +359,16 @@ struct FoodCameraSuggestionChip: View {
                 Text(suggestion.detail)
                     .font(.traiLabel(11))
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                     .padding(.top, 2)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .frame(width: 220, height: 108, alignment: .topLeading)
+            .frame(width: dynamicTypeSize.isAccessibilitySize ? 280 : 220)
+            .frame(
+                minHeight: dynamicTypeSize.isAccessibilitySize ? 156 : 108,
+                alignment: .topLeading
+            )
             .glassEffect(
                 .regular.interactive(),
                 in: .rect(cornerRadius: 22)

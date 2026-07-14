@@ -39,11 +39,7 @@ enum TraiButtonSize {
     }
 
     var minimumHeight: CGFloat {
-        switch self {
-        case .compact: 32
-        case .regular: 40
-        case .large: 46
-        }
+        44
     }
 }
 
@@ -58,6 +54,7 @@ struct TraiPrimaryButtonStyle: ButtonStyle {
     var height: CGFloat? = nil
     var foregroundColor: Color = .white
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         let maxWidth: CGFloat? = (fullWidth && width == nil) ? .infinity : nil
@@ -67,13 +64,10 @@ struct TraiPrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(foregroundColor)
             .padding(.horizontal, size.horizontalPadding)
             .padding(.vertical, size.verticalPadding)
-            .frame(
-                width: width,
-                height: height
-            )
+            .frame(width: width)
             .frame(
                 maxWidth: maxWidth,
-                minHeight: height == nil ? size.minimumHeight : nil
+                minHeight: max(height ?? size.minimumHeight, 44)
             )
             .background(color)
             .clipShape(.capsule)
@@ -84,8 +78,9 @@ struct TraiPrimaryButtonStyle: ButtonStyle {
             )
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .opacity(isEnabled ? 1 : 0.55)
-            .animation(TraiAnimation.quick, value: configuration.isPressed)
-            .animation(TraiAnimation.quick, value: isEnabled)
+            .contentShape(.capsule)
+            .animation(TraiAnimation.resolved(TraiAnimation.quick, reduceMotion: reduceMotion), value: configuration.isPressed)
+            .animation(TraiAnimation.resolved(TraiAnimation.quick, reduceMotion: reduceMotion), value: isEnabled)
     }
 }
 
@@ -100,6 +95,7 @@ struct TraiSecondaryButtonStyle: ButtonStyle {
     var height: CGFloat? = nil
     var fillOpacity: Double = 0.14
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         let maxWidth: CGFloat? = (fullWidth && width == nil) ? .infinity : nil
@@ -112,20 +108,18 @@ struct TraiSecondaryButtonStyle: ButtonStyle {
             .foregroundStyle(color)
             .padding(.horizontal, size.horizontalPadding)
             .padding(.vertical, size.verticalPadding)
-            .frame(
-                width: width,
-                height: height
-            )
+            .frame(width: width)
             .frame(
                 maxWidth: maxWidth,
-                minHeight: height == nil ? size.minimumHeight : nil
+                minHeight: max(height ?? size.minimumHeight, 44)
             )
             .background(color.opacity(resolvedOpacity))
             .clipShape(.capsule)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .opacity(isEnabled ? 1 : 0.55)
-            .animation(TraiAnimation.quick, value: configuration.isPressed)
-            .animation(TraiAnimation.quick, value: isEnabled)
+            .contentShape(.capsule)
+            .animation(TraiAnimation.resolved(TraiAnimation.quick, reduceMotion: reduceMotion), value: configuration.isPressed)
+            .animation(TraiAnimation.resolved(TraiAnimation.quick, reduceMotion: reduceMotion), value: isEnabled)
     }
 }
 
@@ -140,6 +134,7 @@ struct TraiTertiaryButtonStyle: ButtonStyle {
     var height: CGFloat? = nil
     var backgroundColor: Color = Color(.tertiarySystemFill)
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         let maxWidth: CGFloat? = (fullWidth && width == nil) ? .infinity : nil
@@ -149,13 +144,10 @@ struct TraiTertiaryButtonStyle: ButtonStyle {
             .foregroundStyle(color)
             .padding(.horizontal, size.horizontalPadding)
             .padding(.vertical, size.verticalPadding)
-            .frame(
-                width: width,
-                height: height
-            )
+            .frame(width: width)
             .frame(
                 maxWidth: maxWidth,
-                minHeight: height == nil ? size.minimumHeight : nil
+                minHeight: max(height ?? size.minimumHeight, 44)
             )
             .background(
                 backgroundColor.opacity(configuration.isPressed ? 0.85 : 1.0),
@@ -163,8 +155,9 @@ struct TraiTertiaryButtonStyle: ButtonStyle {
             )
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .opacity(isEnabled ? 1 : 0.55)
-            .animation(TraiAnimation.quick, value: configuration.isPressed)
-            .animation(TraiAnimation.quick, value: isEnabled)
+            .contentShape(.capsule)
+            .animation(TraiAnimation.resolved(TraiAnimation.quick, reduceMotion: reduceMotion), value: configuration.isPressed)
+            .animation(TraiAnimation.resolved(TraiAnimation.quick, reduceMotion: reduceMotion), value: isEnabled)
     }
 }
 

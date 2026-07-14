@@ -508,33 +508,28 @@ struct QuickActionsCard: View {
     let onLogFood: () -> Void
     let onAddWorkout: () -> Void
     let onLogWeight: () -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            GlassEffectContainer(spacing: TraiSpacing.sm + TraiSpacing.xs) {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: TraiSpacing.sm) {
+                    quickActions
+                }
+            } else {
                 HStack(spacing: TraiSpacing.sm + TraiSpacing.xs) {
-                    QuickActionButton(
-                        title: "Log Food",
-                        icon: "plus.circle.fill",
-                        color: .green,
-                        action: onLogFood
-                    )
-                    QuickActionButton(
-                        title: "Start Workout",
-                        icon: "figure.run",
-                        color: .orange,
-                        action: onAddWorkout
-                    )
-                    QuickActionButton(
-                        title: "Log Weight",
-                        icon: "scalemass.fill",
-                        color: .blue,
-                        action: onLogWeight
-                    )
+                    quickActions
                 }
             }
         }
         .traiCard()
+    }
+
+    @ViewBuilder
+    private var quickActions: some View {
+        QuickActionButton(title: "Log Food", icon: "plus.circle.fill", color: .green, action: onLogFood)
+        QuickActionButton(title: "Start Workout", icon: "figure.run", color: .orange, action: onAddWorkout)
+        QuickActionButton(title: "Log Weight", icon: "scalemass.fill", color: .blue, action: onLogWeight)
     }
 }
 

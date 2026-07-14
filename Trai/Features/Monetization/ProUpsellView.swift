@@ -33,6 +33,7 @@ struct ProUpsellView: View {
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(BillingService.self) private var billingService: BillingService?
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var hasRequestedProducts = false
     @State private var presentedAccountSetupContext: AccountSetupContext?
@@ -143,13 +144,13 @@ struct ProUpsellView: View {
                         .font(.traiBold(28))
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
-                        .lineLimit(2)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
 
                     Text(resolvedTagline)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.82))
                         .multilineTextAlignment(.center)
-                        .lineLimit(2)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 }
             }
         }
@@ -158,16 +159,14 @@ struct ProUpsellView: View {
 
     private var purchaseSection: some View {
         VStack(spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(product.priceDisplay)
-                    .font(.traiBold(30))
-                    .foregroundStyle(.white)
-
-                Text(product.billingPeriodLabel)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.74))
-
-                Spacer(minLength: 0)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline) {
+                    priceLabel
+                    Spacer(minLength: 0)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    priceLabel
+                }
             }
 
             Button(action: handlePurchase) {
@@ -175,9 +174,9 @@ struct ProUpsellView: View {
                     .font(.headline.weight(.bold))
                     .foregroundStyle(TraiColors.brandAccent)
                     .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
                     .padding(.vertical, 15)
                     .background(.white.opacity(0.92), in: .capsule)
-                    .glassEffect(.clear.tint(.white.opacity(0.20)).interactive(), in: .capsule)
             }
             .buttonStyle(.plain)
             .disabled(isPurchaseDisabled)
@@ -188,9 +187,9 @@ struct ProUpsellView: View {
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
+                        .frame(minHeight: 44)
                         .padding(.vertical, 13)
                         .background(.white.opacity(0.16), in: .capsule)
-                        .glassEffect(.clear.tint(.white.opacity(0.10)).interactive(), in: .capsule)
                 }
                 .buttonStyle(.plain)
             }
@@ -199,7 +198,7 @@ struct ProUpsellView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.72))
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let errorMessage = billingService?.storeKitUpsellMessage {
@@ -207,14 +206,36 @@ struct ProUpsellView: View {
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.72))
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
+    private var priceLabel: some View {
+        Group {
+            Text(product.priceDisplay)
+                .font(.traiBold(30))
+                .foregroundStyle(.white)
+
+            Text(product.billingPeriodLabel)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.74))
+        }
+    }
+
     private var legalRow: some View {
-        HStack(spacing: 12) {
+        ViewThatFits(in: .horizontal) {
+            legalActions(axis: .horizontal)
+            legalActions(axis: .vertical)
+        }
+    }
+
+    private func legalActions(axis: Axis) -> some View {
+        let layout = axis == .horizontal
+            ? AnyLayout(HStackLayout(spacing: 12))
+            : AnyLayout(VStackLayout(spacing: 12))
+        return layout {
             Button(action: handleRestore) {
                 Text("Restore")
                     .font(.caption.weight(.semibold))
@@ -222,7 +243,7 @@ struct ProUpsellView: View {
             .buttonStyle(.plain)
             .disabled(billingService?.isRestoringPurchases == true)
 
-            Spacer()
+            if axis == .horizontal { Spacer() }
 
             Link("Terms", destination: LegalURL.termsOfUse)
             Link("Privacy", destination: LegalURL.privacyPolicy)

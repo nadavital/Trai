@@ -10,6 +10,7 @@ import SwiftData
 
 struct OnboardingView: View {
     @Environment(\.modelContext) var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AccountSessionService.self) var accountSessionService: AccountSessionService?
     @Environment(HealthKitService.self) var healthKitService: HealthKitService?
     @Environment(MonetizationService.self) var monetizationService: MonetizationService?
@@ -165,12 +166,12 @@ struct OnboardingView: View {
                         workoutPlanDraft = draft
                         generatedWorkoutPlan = plan
                         generatedWorkoutGoals = goals
-                        withAnimation(.smooth(duration: 0.4)) {
+                        withAnimation(reduceMotion ? nil : .smooth(duration: 0.4)) {
                             showingWorkoutSetup = false
                         }
                     },
                     onBack: {
-                        withAnimation(.smooth(duration: 0.4)) {
+                        withAnimation(reduceMotion ? nil : .smooth(duration: 0.4)) {
                             showingWorkoutSetup = false
                         }
                     },
@@ -214,7 +215,7 @@ struct OnboardingView: View {
                 }
             }
         }
-        .animation(.smooth(duration: 0.4), value: showingWorkoutSetup)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.4), value: showingWorkoutSetup)
         .onAppear {
             restoreDraftIfNeeded()
         }
@@ -264,7 +265,7 @@ struct OnboardingView: View {
                 Button {
                     HapticManager.lightTap()
                     navigationDirection = .backward
-                    withAnimation(.smooth(duration: 0.4)) {
+                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.4)) {
                         currentStep -= 1
                     }
                 } label: {
@@ -275,12 +276,14 @@ struct OnboardingView: View {
                             .font(.traiLabel(14))
                     }
                     .foregroundStyle(.secondary)
+                    .frame(minHeight: 44)
+                    .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
             }
             Spacer()
         }
-        .frame(height: 32)
+        .frame(minHeight: 44)
     }
 
     // MARK: - Step Content
@@ -344,7 +347,7 @@ struct OnboardingView: View {
                     hasWorkoutPlan: generatedWorkoutPlan != nil,
                     workoutPlan: generatedWorkoutPlan,
                     onCreatePlan: {
-                        withAnimation(.smooth(duration: 0.4)) {
+                        withAnimation(reduceMotion ? nil : .smooth(duration: 0.4)) {
                             showingWorkoutSetup = true
                         }
                     },
@@ -358,30 +361,42 @@ struct OnboardingView: View {
             insertion: .move(edge: navigationDirection == .forward ? .trailing : .leading).combined(with: .opacity),
             removal: .move(edge: navigationDirection == .forward ? .leading : .trailing).combined(with: .opacity)
         ))
-        .animation(.smooth(duration: 0.4), value: currentStep)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.4), value: currentStep)
     }
 
     // MARK: - Progress Indicator
 
     private var progressIndicator: some View {
-        HStack(spacing: 8) {
-            ForEach(onboardingSteps.indices, id: \.self) { step in
-                if step == currentStep {
-                    Capsule()
-                        .fill(Color.accentColor)
-                        .frame(width: 28, height: 6)
-                } else if step < currentStep {
-                    Capsule()
-                        .fill(Color.accentColor.opacity(0.5))
-                        .frame(width: 14, height: 6)
-                } else {
-                    Capsule()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 14, height: 6)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                ForEach(onboardingSteps.indices, id: \.self) { step in
+                    if step == currentStep {
+                        Capsule()
+                            .fill(Color.accentColor)
+                            .frame(width: 28, height: 6)
+                    } else if step < currentStep {
+                        Capsule()
+                            .fill(Color.accentColor.opacity(0.5))
+                            .frame(width: 14, height: 6)
+                    } else {
+                        Capsule()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 14, height: 6)
+                    }
                 }
             }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Step \(currentStep + 1) of \(totalSteps)")
+                    .font(.traiLabel())
+                    .foregroundStyle(.secondary)
+                ProgressView(value: Double(currentStep + 1), total: Double(totalSteps))
+                    .tint(.accentColor)
+            }
         }
-        .animation(.spring(response: 0.4), value: currentStep)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Onboarding progress")
+        .accessibilityValue("Step \(currentStep + 1) of \(totalSteps)")
     }
 
     // MARK: - Floating Navigation Section
@@ -410,7 +425,7 @@ struct OnboardingView: View {
         .buttonStyle(.traiPrimary(color: canProceed ? .accentColor : .gray, size: .large, fullWidth: true))
         .accessibilityIdentifier("onboardingPrimaryButton")
         .disabled(!canProceed)
-        .animation(.easeInOut(duration: 0.2), value: canProceed)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: canProceed)
         .padding(.horizontal, 24)
         .padding(.bottom, 8)
     }
