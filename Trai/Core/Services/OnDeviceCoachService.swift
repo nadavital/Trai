@@ -15,7 +15,7 @@ enum OnDeviceCoachService {
     private static let enabledKey = "trai.foundationModelsQuickCoachEnabled"
 
     static var isEnabled: Bool {
-        (UserDefaults.standard.object(forKey: enabledKey) as? Bool) ?? true
+        (UserDefaults.standard.object(forKey: enabledKey) as? Bool) ?? false
     }
 
     static func answer(question: String, userContext: String) async throws -> String? {

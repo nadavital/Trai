@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 // MARK: - Spacing
 
@@ -98,57 +99,35 @@ enum TraiGradient {
 extension Font {
     /// Bold rounded display font for hero metrics
     static func traiHero(_ size: CGFloat = 36) -> Font {
-        .system(traiTextStyle(for: size, role: .hero), design: .rounded, weight: .heavy)
+        traiScaledRoundedFont(size: size, weight: .heavy, relativeTo: .largeTitle)
     }
 
     /// Bold rounded font for card titles and numbers
     static func traiBold(_ size: CGFloat = 20) -> Font {
-        .system(traiTextStyle(for: size, role: .bold), design: .rounded, weight: .bold)
+        traiScaledRoundedFont(size: size, weight: .bold, relativeTo: .headline)
     }
 
     /// Semibold rounded font for section headers
     static func traiHeadline(_ size: CGFloat = 17) -> Font {
-        .system(traiTextStyle(for: size, role: .headline), design: .rounded, weight: .semibold)
+        traiScaledRoundedFont(size: size, weight: .semibold, relativeTo: .headline)
     }
 
     /// Medium rounded font for labels
     static func traiLabel(_ size: CGFloat = 13) -> Font {
-        .system(traiTextStyle(for: size, role: .label), design: .rounded, weight: .medium)
+        traiScaledRoundedFont(size: size, weight: .medium, relativeTo: .caption1)
     }
 
-    private enum TraiTypographyRole {
-        case hero
-        case bold
-        case headline
-        case label
-    }
-
-    /// Keeps the existing point-size API source-compatible while mapping each
-    /// role to a semantic text style that participates in Dynamic Type.
-    private static func traiTextStyle(for size: CGFloat, role: TraiTypographyRole) -> TextStyle {
-        switch role {
-        case .hero:
-            if size >= 34 { return .largeTitle }
-            if size >= 27 { return .title }
-            if size >= 22 { return .title2 }
-            return .title3
-        case .bold:
-            if size >= 30 { return .largeTitle }
-            if size >= 25 { return .title }
-            if size >= 21 { return .title2 }
-            if size >= 18 { return .title3 }
-            return .headline
-        case .headline:
-            if size >= 19 { return .title3 }
-            if size >= 16 { return .headline }
-            if size >= 14 { return .subheadline }
-            return .footnote
-        case .label:
-            if size >= 15 { return .body }
-            if size >= 14 { return .subheadline }
-            if size >= 12 { return .footnote }
-            return .caption2
-        }
+    /// Retains the supplied visual hierarchy at the default content size while
+    /// scaling through UIKit's semantic Dynamic Type metrics.
+    private static func traiScaledRoundedFont(
+        size: CGFloat,
+        weight: UIFont.Weight,
+        relativeTo textStyle: UIFont.TextStyle
+    ) -> Font {
+        let baseDescriptor = UIFont.systemFont(ofSize: size, weight: weight).fontDescriptor
+        let roundedDescriptor = baseDescriptor.withDesign(.rounded) ?? baseDescriptor
+        let baseFont = UIFont(descriptor: roundedDescriptor, size: size)
+        return Font(UIFontMetrics(forTextStyle: textStyle).scaledFont(for: baseFont))
     }
 }
 

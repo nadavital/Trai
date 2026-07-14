@@ -11,7 +11,7 @@ struct DeveloperSettingsView: View {
 
     @State private var presentedAccountSetupContext: AccountSetupContext?
     @AppStorage("trai.foundationModelsQuickCoachEnabled")
-    private var foundationModelsQuickCoachEnabled = true
+    private var foundationModelsQuickCoachEnabled = false
 
     private var hasCurrentPaidSubscription: Bool {
         guard let billingService else { return false }

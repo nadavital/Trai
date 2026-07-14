@@ -58,13 +58,14 @@ struct TraiPrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         let maxWidth: CGFloat? = (fullWidth && width == nil) ? .infinity : nil
+        let resolvedWidth = width.map { max($0, 44) }
 
         configuration.label
             .font(size.font)
             .foregroundStyle(foregroundColor)
             .padding(.horizontal, size.horizontalPadding)
             .padding(.vertical, size.verticalPadding)
-            .frame(width: width)
+            .frame(width: resolvedWidth)
             .frame(
                 maxWidth: maxWidth,
                 minHeight: max(height ?? size.minimumHeight, 44)
@@ -99,6 +100,7 @@ struct TraiSecondaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         let maxWidth: CGFloat? = (fullWidth && width == nil) ? .infinity : nil
+        let resolvedWidth = width.map { max($0, 44) }
         let resolvedOpacity = configuration.isPressed
             ? min(fillOpacity + 0.07, 0.30)
             : fillOpacity
@@ -108,7 +110,7 @@ struct TraiSecondaryButtonStyle: ButtonStyle {
             .foregroundStyle(color)
             .padding(.horizontal, size.horizontalPadding)
             .padding(.vertical, size.verticalPadding)
-            .frame(width: width)
+            .frame(width: resolvedWidth)
             .frame(
                 maxWidth: maxWidth,
                 minHeight: max(height ?? size.minimumHeight, 44)
@@ -138,13 +140,14 @@ struct TraiTertiaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         let maxWidth: CGFloat? = (fullWidth && width == nil) ? .infinity : nil
+        let resolvedWidth = width.map { max($0, 44) }
 
         configuration.label
             .font(size.font)
             .foregroundStyle(color)
             .padding(.horizontal, size.horizontalPadding)
             .padding(.vertical, size.verticalPadding)
-            .frame(width: width)
+            .frame(width: resolvedWidth)
             .frame(
                 maxWidth: maxWidth,
                 minHeight: max(height ?? size.minimumHeight, 44)

@@ -91,7 +91,8 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
 
     /// Check if the reminder in this notification has already been completed today
     private func isReminderCompletedToday(userInfo: [AnyHashable: Any], categoryIdentifier: String) async -> Bool {
-        let context = modelContainer.mainContext
+        let context = ModelContext(modelContainer)
+        context.autosaveEnabled = false
         let startOfDay = Calendar.current.startOfDay(for: Date())
 
         // Determine the reminder ID based on notification type
@@ -133,7 +134,8 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         userInfo: [AnyHashable: Any],
         categoryIdentifier: String
     ) async -> Bool {
-        let context = modelContainer.mainContext
+        let context = ModelContext(modelContainer)
+        context.autosaveEnabled = false
 
         // Try to get reminder ID from userInfo
         if let reminderIdString = userInfo["reminderId"] as? String,

@@ -342,7 +342,7 @@ struct TraiApp: App {
         }
         .modelContainer(modelContainer)
         .onChange(of: scenePhase) { _, newPhase in
-            guard !isRunningTests else { return }
+            guard !isRunningTests, modelContainerLaunchError == nil else { return }
 
             if newPhase == .active {
                 FoodMemoryBackgroundService.shared.resumeProcessing(modelContainer: modelContainer)
@@ -451,6 +451,7 @@ struct TraiApp: App {
 
     @MainActor
     private func handleReminderBackgroundRefresh() async {
+        guard modelContainerLaunchError == nil else { return }
         await refreshReminderSchedulesIfNeeded(force: true)
         scheduleReminderBackgroundRefresh()
     }
@@ -651,7 +652,8 @@ struct TraiApp: App {
         }
 
         do {
-            let context = modelContainer.mainContext
+            let context = ModelContext(modelContainer)
+            context.autosaveEnabled = false
             let lookbackDays = effectiveLastSync == nil
                 ? initialHealthKitSyncLookbackDays
                 : incrementalHealthKitSyncLookbackDays
@@ -860,6 +862,7 @@ extension TraiApp {
     /// Process any pending food logs from widget quick actions
     @MainActor
     func processPendingWidgetFoodLogs() {
+        guard modelContainerLaunchError == nil else { return }
         guard let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName) else {
             return
         }
@@ -867,7 +870,8 @@ extension TraiApp {
         let pendingLogs = PendingFoodLogQueue.load(from: defaults)
         guard !pendingLogs.isEmpty else { return }
 
-        let context = modelContainer.mainContext
+        let context = ModelContext(modelContainer)
+        context.autosaveEnabled = false
         var alreadyPersistedIDs = Set<UUID>()
         var stagedIDs = Set<UUID>()
         var seenIDs = Set<UUID>()
@@ -1764,7 +1768,8 @@ private func purgeLiveWorkoutPerformanceSeedDataIfPresent(modelContainer: ModelC
 /// Fix existing completed workouts that have sets with data but not marked as completed
 @MainActor
 private func migrateExistingWorkoutSets(modelContainer: ModelContainer) async {
-    let context = modelContainer.mainContext
+    let context = ModelContext(modelContainer)
+    context.autosaveEnabled = false
     let migrationKey = "workout_sets_completion_migration_v1"
 
     // Check if migration already ran
@@ -1777,12 +1782,17 @@ private func migrateExistingWorkoutSets(modelContainer: ModelContainer) async {
         predicate: #Predicate { $0.completedAt != nil }
     )
 
-    guard let workouts = try? context.fetch(descriptor) else { return }
+    let workouts: [LiveWorkout]
+    var existingHistories: [ExerciseHistory]
+    do {
+        workouts = try context.fetch(descriptor)
+        existingHistories = try context.fetch(FetchDescriptor<ExerciseHistory>())
+    } catch {
+        return
+    }
 
     var fixedCount = 0
     var insertedHistoryCount = 0
-    let historyDescriptor = FetchDescriptor<ExerciseHistory>()
-    var existingHistories = (try? context.fetch(historyDescriptor)) ?? []
 
     for (index, workout) in workouts.enumerated() {
         guard let entries = workout.entries else { continue }
@@ -1827,8 +1837,13 @@ private func migrateExistingWorkoutSets(modelContainer: ModelContainer) async {
         }
     }
 
-    if fixedCount > 0 || insertedHistoryCount > 0 {
-        try? context.save()
+    do {
+        if fixedCount > 0 || insertedHistoryCount > 0 {
+            try context.save()
+        }
+    } catch {
+        context.rollback()
+        return
     }
 
     if fixedCount > 0 {
@@ -1845,7 +1860,8 @@ private func migrateExistingWorkoutSets(modelContainer: ModelContainer) async {
 /// Move legacy CloudKit-backed image blobs to local-only file storage and backfill food emojis.
 @MainActor
 private func migrateLegacyCloudImagesAndBackfillFoodEmoji(modelContainer: ModelContainer) async {
-    let context = modelContainer.mainContext
+    let context = ModelContext(modelContainer)
+    context.autosaveEnabled = false
     let migrationKey = "local_image_storage_migration_v1"
 
     if UserDefaults.standard.bool(forKey: migrationKey) {
@@ -1857,38 +1873,41 @@ private func migrateLegacyCloudImagesAndBackfillFoodEmoji(modelContainer: ModelC
     var migratedChatImages = 0
 
     let foodDescriptor = FetchDescriptor<FoodEntry>()
-    if let foodEntries = try? context.fetch(foodDescriptor) {
-        for (index, entry) in foodEntries.enumerated() {
-            if entry.migrateLegacyImageToLocalStoreIfNeeded() {
-                migratedFoodImages += 1
-            }
+    guard let foodEntries = try? context.fetch(foodDescriptor) else { return }
+    for (index, entry) in foodEntries.enumerated() {
+        if entry.migrateLegacyImageToLocalStoreIfNeeded() {
+            migratedFoodImages += 1
+        }
 
-            let previousEmoji = entry.emoji
-            entry.ensureDisplayMetadata()
-            if previousEmoji != entry.emoji {
-                backfilledFoodEmoji += 1
-            }
+        let previousEmoji = entry.emoji
+        entry.ensureDisplayMetadata()
+        if previousEmoji != entry.emoji {
+            backfilledFoodEmoji += 1
+        }
 
-            if index.isMultiple(of: 40) {
-                await Task.yield()
-            }
+        if index.isMultiple(of: 40) {
+            await Task.yield()
         }
     }
 
     let chatDescriptor = FetchDescriptor<ChatMessage>()
-    if let chatMessages = try? context.fetch(chatDescriptor) {
-        for (index, message) in chatMessages.enumerated() {
-            if message.migrateLegacyImageToLocalStoreIfNeeded() {
-                migratedChatImages += 1
-            }
-            if index.isMultiple(of: 80) {
-                await Task.yield()
-            }
+    guard let chatMessages = try? context.fetch(chatDescriptor) else { return }
+    for (index, message) in chatMessages.enumerated() {
+        if message.migrateLegacyImageToLocalStoreIfNeeded() {
+            migratedChatImages += 1
+        }
+        if index.isMultiple(of: 80) {
+            await Task.yield()
         }
     }
 
     if migratedFoodImages > 0 || backfilledFoodEmoji > 0 || migratedChatImages > 0 {
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            return
+        }
     }
 
     if migratedFoodImages > 0 {

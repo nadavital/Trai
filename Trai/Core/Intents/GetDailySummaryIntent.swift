@@ -37,9 +37,17 @@ struct GetDailySummaryIntent: AppIntent {
         let workoutDescriptor = FetchDescriptor<LiveWorkout>(
             predicate: #Predicate { $0.startedAt >= startOfDay && $0.startedAt < endOfDay }
         )
-        let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first
-        let foodEntries = (try? context.fetch(foodDescriptor)) ?? []
-        let workouts = (try? context.fetch(workoutDescriptor)) ?? []
+        let profile: UserProfile?
+        let foodEntries: [FoodEntry]
+        let workouts: [LiveWorkout]
+        do {
+            profile = try context.fetch(FetchDescriptor<UserProfile>()).first
+            foodEntries = try context.fetch(foodDescriptor)
+            workouts = try context.fetch(workoutDescriptor)
+        } catch {
+            let message = "Trai couldn't read your daily summary right now. Please try again."
+            return .result(value: message, dialog: IntentDialog(stringLiteral: message))
+        }
 
         let calories = foodEntries.reduce(0) { $0 + $1.calories }
         let protein = foodEntries.reduce(0.0) { $0 + $1.proteinGrams }
