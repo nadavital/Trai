@@ -10,8 +10,8 @@ import SwiftData
 
 /// Intent for starting a workout (opens app to workout view)
 struct StartWorkoutIntent: AppIntent {
-    static var title: LocalizedStringResource = "Start Workout"
-    static var description = IntentDescription("Start a new workout session")
+    static let title: LocalizedStringResource = "Start Workout"
+    static let description = IntentDescription("Start a new workout session")
 
     @Parameter(title: "Workout", default: nil)
     var workout: WorkoutNameEntity?
@@ -57,8 +57,8 @@ struct StartWorkoutIntent: AppIntent {
 
 /// Entity for workout template names (enables Siri to suggest workouts)
 struct WorkoutNameEntity: AppEntity {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Workout"
-    static var defaultQuery = WorkoutNameQuery()
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Workout"
+    static let defaultQuery = WorkoutNameQuery()
 
     var id: String
     var name: String

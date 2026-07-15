@@ -11,7 +11,7 @@ import SwiftData
 /// A return-only workout snapshot. It deliberately does not conform to
 /// `IndexedEntity`, so workout details never enter Spotlight's index.
 struct CompletedWorkoutSummaryEntity: TransientAppEntity {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Completed Workout Summary"
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Completed Workout Summary"
 
     @Property(title: "Workout Name")
     var workoutName: String
@@ -61,8 +61,8 @@ struct CompletedWorkoutSummaryEntity: TransientAppEntity {
 }
 
 struct GetLatestWorkoutSummaryIntent: AppIntent {
-    static var title: LocalizedStringResource = "Get Latest Workout Summary"
-    static var description = IntentDescription(
+    static let title: LocalizedStringResource = "Get Latest Workout Summary"
+    static let description = IntentDescription(
         "Get a summary of your most recently completed workout in Trai"
     )
     static var supportedModes: IntentModes { .background }

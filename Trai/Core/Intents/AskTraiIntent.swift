@@ -10,8 +10,8 @@ import SwiftData
 
 /// Intent for asking Trai AI coach questions
 struct AskTraiIntent: AppIntent {
-    static var title: LocalizedStringResource = "Ask Trai"
-    static var description = IntentDescription("Ask Trai, your fitness and nutrition coach, a question")
+    static let title: LocalizedStringResource = "Ask Trai"
+    static let description = IntentDescription("Ask Trai, your fitness and nutrition coach, a question")
     static var supportedModes: IntentModes { .background }
 
     @available(iOS 27.0, *)

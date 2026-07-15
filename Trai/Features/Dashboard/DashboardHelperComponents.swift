@@ -220,6 +220,7 @@ struct ChatWithTraiCard: View {
 struct DateNavigationBar: View {
     @Binding var selectedDate: Date
     let isToday: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private let calendar = Calendar.current
 
@@ -238,60 +239,85 @@ struct DateNavigationBar: View {
     }
 
     var body: some View {
-        HStack {
-            Button {
-                withAnimation {
-                    selectedDate = calendar.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
-                }
-                HapticManager.lightTap()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.title3)
-                    .foregroundStyle(.primary)
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityIdentifier("dashboardDatePreviousButton")
-
-            Spacer()
-
-            VStack(spacing: 2) {
-                Text(dateText)
-                    .font(.headline)
-                    .accessibilityIdentifier("dashboardDateLabel")
-
-                if !isToday {
-                    Button {
-                        withAnimation {
-                            selectedDate = Date()
-                        }
-                        HapticManager.lightTap()
-                    } label: {
-                        Text("Jump to Today")
-                            .font(.caption)
-                            .foregroundStyle(.accent)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: TraiSpacing.xs) {
+                    dateLabel
+                    HStack {
+                        previousButton
+                        Spacer()
+                        nextButton
                     }
-                    .accessibilityIdentifier("dashboardJumpToTodayButton")
+                }
+            } else {
+                HStack {
+                    previousButton
+                    Spacer()
+                    dateLabel
+                    Spacer()
+                    nextButton
                 }
             }
-
-            Spacer()
-
-            Button {
-                withAnimation {
-                    selectedDate = calendar.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
-                }
-                HapticManager.lightTap()
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.title3)
-                    .foregroundStyle(isToday ? .tertiary : .primary)
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityIdentifier("dashboardDateNextButton")
-            .disabled(isToday)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 8)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var previousButton: some View {
+        Button {
+            withAnimation {
+                selectedDate = calendar.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
+            }
+            HapticManager.lightTap()
+        } label: {
+            Image(systemName: "chevron.left")
+                .font(.title3)
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("Previous day")
+        .accessibilityIdentifier("dashboardDatePreviousButton")
+    }
+
+    private var dateLabel: some View {
+        VStack(spacing: 2) {
+            Text(dateText)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("dashboardDateLabel")
+
+            if !isToday {
+                Button {
+                    withAnimation {
+                        selectedDate = Date()
+                    }
+                    HapticManager.lightTap()
+                } label: {
+                    Text("Jump to Today")
+                        .font(.caption)
+                        .foregroundStyle(.accent)
+                }
+                .accessibilityIdentifier("dashboardJumpToTodayButton")
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var nextButton: some View {
+        Button {
+            withAnimation {
+                selectedDate = calendar.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
+            }
+            HapticManager.lightTap()
+        } label: {
+            Image(systemName: "chevron.right")
+                .font(.title3)
+                .foregroundStyle(isToday ? .tertiary : .primary)
+                .frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("Next day")
+        .accessibilityIdentifier("dashboardDateNextButton")
+        .disabled(isToday)
     }
 }

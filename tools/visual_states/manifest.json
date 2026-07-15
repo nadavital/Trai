@@ -4,13 +4,61 @@
     {
       "id": "dashboard",
       "title": "Dashboard",
-      "groups": ["core", "tabs", "title-sweep"],
+      "groups": ["core", "tabs", "title-sweep", "dashboard-matrix"],
       "launchArguments": [
         "UITEST_MODE",
         "--disable-tab-prewarm",
         "--app-store-screenshot-mode",
         "--app-store-screenshot-tab",
         "dashboard"
+      ],
+      "ready": { "identifier": "dashboardRootReady", "timeout": 12 },
+      "settleSeconds": 0.8
+    },
+    {
+      "id": "dashboard-dark",
+      "title": "Dashboard - Dark",
+      "groups": ["dashboard-matrix"],
+      "launchArguments": [
+        "UITEST_MODE",
+        "--disable-tab-prewarm",
+        "--app-store-screenshot-mode",
+        "--app-store-screenshot-tab",
+        "dashboard",
+        "--ui-test-dark-appearance"
+      ],
+      "ready": { "identifier": "dashboardRootReady", "timeout": 12 },
+      "settleSeconds": 0.8
+    },
+    {
+      "id": "dashboard-ax3",
+      "title": "Dashboard - Accessibility XXXL",
+      "groups": ["dashboard-matrix"],
+      "launchArguments": [
+        "UITEST_MODE",
+        "--disable-tab-prewarm",
+        "--app-store-screenshot-mode",
+        "--app-store-screenshot-tab",
+        "dashboard",
+        "-UIPreferredContentSizeCategoryName",
+        "UICTContentSizeCategoryAccessibilityXXXL"
+      ],
+      "ready": { "identifier": "dashboardRootReady", "timeout": 12 },
+      "settleSeconds": 0.8
+    },
+    {
+      "id": "dashboard-ax3-dark",
+      "title": "Dashboard - Accessibility XXXL Dark",
+      "groups": ["dashboard-matrix"],
+      "launchArguments": [
+        "UITEST_MODE",
+        "--disable-tab-prewarm",
+        "--app-store-screenshot-mode",
+        "--app-store-screenshot-tab",
+        "dashboard",
+        "-UIPreferredContentSizeCategoryName",
+        "UICTContentSizeCategoryAccessibilityXXXL",
+        "--ui-test-dark-appearance"
       ],
       "ready": { "identifier": "dashboardRootReady", "timeout": 12 },
       "settleSeconds": 0.8

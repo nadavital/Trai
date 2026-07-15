@@ -9,8 +9,8 @@ import AppIntents
 
 /// Intent for opening the app to the food camera for photo-based logging
 struct LogFoodCameraIntent: AppIntent {
-    static var title: LocalizedStringResource = "Scan Food Photo"
-    static var description = IntentDescription("Open camera to log food by taking a photo")
+    static let title: LocalizedStringResource = "Scan Food Photo"
+    static let description = IntentDescription("Open camera to log food by taking a photo")
 
     /// Camera capture always continues in Trai's foreground UI.
     static var supportedModes: IntentModes { .foreground(.immediate) }

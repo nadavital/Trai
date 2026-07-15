@@ -27,6 +27,7 @@ enum AppLaunchArguments {
     static let appStoreScreenshotPlanReview = "--app-store-screenshot-plan-review"
     static let appStoreScreenshotWatchConnected = "--app-store-screenshot-watch-connected"
     static let appStoreScreenshotChatScenario = "--app-store-screenshot-chat-scenario"
+    static let uiTestDarkAppearance = "--ui-test-dark-appearance"
     #if DEBUG
     static let appIntentsTestingSeed = "--app-intents-testing-seed"
     #endif
@@ -45,6 +46,10 @@ enum AppLaunchArguments {
 
     static var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains(uiTestMode)
+    }
+
+    static var shouldUseDarkAppearanceForUITest: Bool {
+        isUITesting && ProcessInfo.processInfo.arguments.contains(uiTestDarkAppearance)
     }
 
     static var shouldRunOnboardingFlowUITest: Bool {

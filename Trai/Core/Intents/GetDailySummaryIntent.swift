@@ -9,8 +9,8 @@ import AppIntents
 import SwiftData
 
 struct GetDailySummaryIntent: AppIntent {
-    static var title: LocalizedStringResource = "Get Daily Summary"
-    static var description = IntentDescription(
+    static let title: LocalizedStringResource = "Get Daily Summary"
+    static let description = IntentDescription(
         "Get today's logged nutrition and workout progress from Trai"
     )
     static var supportedModes: IntentModes { .background }

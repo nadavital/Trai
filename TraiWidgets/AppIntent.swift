@@ -13,10 +13,10 @@ import WidgetKit
 
 /// Intent to open a specific URL in the app
 struct OpenURLIntent: AppIntent {
-    static var title: LocalizedStringResource = "Open Trai"
-    static var description = IntentDescription("Opens a specific section of Trai")
+    static let title: LocalizedStringResource = "Open Trai"
+    static let description = IntentDescription("Opens a specific section of Trai")
 
-    static var openAppWhenRun: Bool = true
+    static let openAppWhenRun: Bool = true
 
     @Parameter(title: "URL")
     var url: URL
@@ -45,9 +45,9 @@ enum QuickFoodType: String, AppEnum, CaseIterable {
     case coffee = "coffee"
     case snack = "snack"
 
-    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Food Type")
+    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Food Type")
 
-    static var caseDisplayRepresentations: [QuickFoodType: DisplayRepresentation] = [
+    static let caseDisplayRepresentations: [QuickFoodType: DisplayRepresentation] = [
         .water: DisplayRepresentation(title: "Glass of Water", image: .init(systemName: "drop.fill")),
         .coffee: DisplayRepresentation(title: "Coffee", image: .init(systemName: "cup.and.saucer.fill")),
         .snack: DisplayRepresentation(title: "Quick Snack", image: .init(systemName: "carrot.fill")),
@@ -89,8 +89,8 @@ enum QuickFoodType: String, AppEnum, CaseIterable {
 
 /// Intent for logging quick food items directly from widgets
 struct LogQuickFoodIntent: AppIntent {
-    static var title: LocalizedStringResource = "Log Quick Food"
-    static var description = IntentDescription("Quickly log water, coffee, or a snack")
+    static let title: LocalizedStringResource = "Log Quick Food"
+    static let description = IntentDescription("Quickly log water, coffee, or a snack")
 
     @Parameter(title: "Food Type")
     var foodType: QuickFoodType
@@ -131,8 +131,8 @@ struct LogQuickFoodIntent: AppIntent {
 
 /// Log water from widget
 struct LogWaterIntent: AppIntent {
-    static var title: LocalizedStringResource = "Log Water"
-    static var description = IntentDescription("Log a glass of water")
+    static let title: LocalizedStringResource = "Log Water"
+    static let description = IntentDescription("Log a glass of water")
 
     func perform() async throws -> some IntentResult {
         let intent = LogQuickFoodIntent(foodType: .water)
@@ -142,8 +142,8 @@ struct LogWaterIntent: AppIntent {
 
 /// Log coffee from widget
 struct LogCoffeeIntent: AppIntent {
-    static var title: LocalizedStringResource = "Log Coffee"
-    static var description = IntentDescription("Log a cup of coffee")
+    static let title: LocalizedStringResource = "Log Coffee"
+    static let description = IntentDescription("Log a cup of coffee")
 
     func perform() async throws -> some IntentResult {
         let intent = LogQuickFoodIntent(foodType: .coffee)
@@ -153,8 +153,8 @@ struct LogCoffeeIntent: AppIntent {
 
 /// Log snack from widget
 struct LogSnackIntent: AppIntent {
-    static var title: LocalizedStringResource = "Log Snack"
-    static var description = IntentDescription("Log a quick snack")
+    static let title: LocalizedStringResource = "Log Snack"
+    static let description = IntentDescription("Log a quick snack")
 
     func perform() async throws -> some IntentResult {
         let intent = LogQuickFoodIntent(foodType: .snack)

@@ -11,7 +11,7 @@ import SwiftData
 /// A return-only snapshot. Transient entities cannot be browsed or resolved later,
 /// which keeps private nutrition data out of Spotlight and entity suggestions.
 struct NutritionProgressEntity: TransientAppEntity {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Nutrition Progress"
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Nutrition Progress"
 
     @Property(title: "Calories Consumed")
     var caloriesConsumed: Int
@@ -65,8 +65,8 @@ struct NutritionProgressEntity: TransientAppEntity {
 }
 
 struct GetNutritionProgressIntent: AppIntent {
-    static var title: LocalizedStringResource = "Get Nutrition Progress"
-    static var description = IntentDescription(
+    static let title: LocalizedStringResource = "Get Nutrition Progress"
+    static let description = IntentDescription(
         "Get today's aggregate nutrition progress from Trai"
     )
     static var supportedModes: IntentModes { .background }

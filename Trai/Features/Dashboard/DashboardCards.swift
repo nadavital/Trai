@@ -45,6 +45,7 @@ struct CalorieProgressCard: View {
     let consumed: Int
     let goal: Int
     var onTap: (() -> Void)?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var state: NutritionDisplayPolicy.CalorieState {
         NutritionDisplayPolicy.calorieState(consumed: consumed, target: goal)
@@ -90,27 +91,65 @@ struct CalorieProgressCard: View {
                 }
                 .frame(height: 8)
 
-                HStack {
-                    VStack(alignment: .leading) {
-                        TraiAnimatedNumber(value: consumed, font: .traiBold(28))
-                        Text("consumed")
-                            .font(.traiLabel(11))
-                            .foregroundStyle(.secondary)
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: TraiSpacing.sm) {
+                        CalorieMetricRow(label: "Consumed", value: consumed, color: .primary)
+                        CalorieMetricRow(label: "Remaining", value: state.remaining, color: progressColor)
                     }
+                } else {
+                    HStack {
+                        VStack(alignment: .leading) {
+                            TraiAnimatedNumber(value: consumed, font: .traiBold(28))
+                            Text("consumed")
+                                .font(.traiLabel(11))
+                                .foregroundStyle(.secondary)
+                        }
 
-                    Spacer()
+                        Spacer()
 
-                    VStack(alignment: .trailing) {
-                        TraiAnimatedNumber(value: state.remaining, font: .traiBold(28), color: progressColor)
-                        Text("remaining")
-                            .font(.traiLabel(11))
-                            .foregroundStyle(.secondary)
+                        VStack(alignment: .trailing) {
+                            TraiAnimatedNumber(value: state.remaining, font: .traiBold(28), color: progressColor)
+                            Text("remaining")
+                                .font(.traiLabel(11))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
             .traiCard()
         }
         .buttonStyle(TraiPressStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Calories")
+        .accessibilityValue("\(consumed) consumed, \(state.remaining) remaining, goal \(goal)")
+        .accessibilityHint(onTap == nil ? "" : "Shows calorie details")
+    }
+}
+
+private struct CalorieMetricRow: View {
+    let label: String
+    let value: Int
+    let color: Color
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize >= .accessibility3 {
+            VStack(alignment: .leading, spacing: TraiSpacing.xs) {
+                Text(label)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                TraiAnimatedNumber(value: value, font: .traiBold(24), color: color)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: TraiSpacing.md) {
+                Text(label)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: TraiSpacing.sm)
+                TraiAnimatedNumber(value: value, font: .traiBold(24), color: color)
+            }
+        }
     }
 }
 
@@ -122,6 +161,7 @@ struct MacroBreakdownCard: View {
     let macroGoals: [MacroType: Int]
     let enabledMacros: Set<MacroType>
     var onTap: (() -> Void)?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// Convenience initializer for legacy usage
     init(
@@ -181,6 +221,12 @@ struct MacroBreakdownCard: View {
 
                 if orderedEnabledMacros.isEmpty {
                     emptyStateView
+                } else if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: TraiSpacing.md) {
+                        ForEach(macroStates) { state in
+                            MacroAccessibilityRow(state: state)
+                        }
+                    }
                 } else {
                     GeometryReader { geometry in
                         let layout = macroLayout(in: geometry.size.width)
@@ -206,6 +252,10 @@ struct MacroBreakdownCard: View {
             .traiCard()
         }
         .buttonStyle(TraiPressStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Macros")
+        .accessibilityValue(macroAccessibilityValue)
+        .accessibilityHint(onTap == nil ? "" : "Shows macro details")
     }
 
     private var macroStates: [NutritionDisplayPolicy.MacroState] {
@@ -230,6 +280,13 @@ struct MacroBreakdownCard: View {
         .padding(.vertical, 8)
     }
 
+    private var macroAccessibilityValue: String {
+        guard !macroStates.isEmpty else { return "Tracking calories only" }
+        return macroStates
+            .map { "\($0.macro.displayName) \(Int($0.current)) of \($0.target) grams" }
+            .joined(separator: ", ")
+    }
+
     private var macroLayoutHeight: CGFloat {
         let count = orderedEnabledMacros.count
         if count >= 5 {
@@ -252,6 +309,29 @@ struct MacroBreakdownCard: View {
     }
 }
 
+private struct MacroAccessibilityRow: View {
+    let state: NutritionDisplayPolicy.MacroState
+
+    private var progress: Double {
+        guard state.target > 0 else { return 0 }
+        return min(max(state.current / Double(state.target), 0), 1)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: TraiSpacing.sm) {
+            Text(state.macro.displayName)
+                .font(.body)
+            Text("\(Int(state.current)) / \(state.target) g")
+                .font(.traiLabel())
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+
+            ProgressView(value: progress)
+                .tint(state.macro.color)
+        }
+    }
+}
+
 // MARK: - Today's Activity Card
 
 struct TodaysActivityCard: View {
@@ -263,6 +343,7 @@ struct TodaysActivityCard: View {
     let exerciseMinutesLabel: String
     let workoutCount: Int?
     var isLoading: Bool = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(spacing: TraiSpacing.md) {
@@ -278,9 +359,29 @@ struct TodaysActivityCard: View {
             }
 
             if isLoading && activityMetrics.isEmpty {
-                HStack(spacing: TraiSpacing.md) {
-                    ForEach(0..<4, id: \.self) { _ in
-                        ActivityMetricPlaceholder()
+                if dynamicTypeSize.isAccessibilitySize {
+                    LazyVGrid(columns: activityColumns, spacing: TraiSpacing.md) {
+                        ForEach(0..<4, id: \.self) { _ in
+                            ActivityMetricPlaceholder()
+                        }
+                    }
+                } else {
+                    HStack(spacing: TraiSpacing.md) {
+                        ForEach(0..<4, id: \.self) { _ in
+                            ActivityMetricPlaceholder()
+                        }
+                    }
+                }
+            } else if dynamicTypeSize.isAccessibilitySize {
+                LazyVGrid(columns: activityColumns, spacing: TraiSpacing.md) {
+                    ForEach(activityMetrics, id: \.valueAccessibilityIdentifier) { metric in
+                        ActivityMetricItem(
+                            icon: metric.icon,
+                            value: metric.value,
+                            label: metric.label,
+                            color: metric.color,
+                            valueAccessibilityIdentifier: metric.valueAccessibilityIdentifier
+                        )
                     }
                 }
             } else {
@@ -291,8 +392,7 @@ struct TodaysActivityCard: View {
                             value: metric.value,
                             label: metric.label,
                             color: metric.color,
-                            valueAccessibilityIdentifier: metric.valueAccessibilityIdentifier,
-                            labelAccessibilityIdentifier: metric.labelAccessibilityIdentifier
+                            valueAccessibilityIdentifier: metric.valueAccessibilityIdentifier
                         )
 
                         if index < activityMetrics.count - 1 {
@@ -307,6 +407,16 @@ struct TodaysActivityCard: View {
         .accessibilityIdentifier("dashboardActivityCard")
     }
 
+    private var activityColumns: [GridItem] {
+        if dynamicTypeSize >= .accessibility3 {
+            return [GridItem(.flexible())]
+        }
+        return [
+            GridItem(.flexible(), spacing: TraiSpacing.md),
+            GridItem(.flexible(), spacing: TraiSpacing.md)
+        ]
+    }
+
     private var activityMetrics: [ActivityMetric] {
         var metrics: [ActivityMetric] = []
 
@@ -317,8 +427,7 @@ struct TodaysActivityCard: View {
                     value: formatSteps(steps),
                     label: "Steps",
                     color: .green,
-                    valueAccessibilityIdentifier: "dashboardActivityStepsValue",
-                    labelAccessibilityIdentifier: "dashboardActivityStepsLabel"
+                    valueAccessibilityIdentifier: "dashboardActivityStepsValue"
                 )
             )
         }
@@ -330,8 +439,7 @@ struct TodaysActivityCard: View {
                     value: "\(activeCalories)",
                     label: activeCaloriesLabel,
                     color: .orange,
-                    valueAccessibilityIdentifier: "dashboardActivityCaloriesValue",
-                    labelAccessibilityIdentifier: "dashboardActivityCaloriesLabel"
+                    valueAccessibilityIdentifier: "dashboardActivityCaloriesValue"
                 )
             )
         }
@@ -343,8 +451,7 @@ struct TodaysActivityCard: View {
                     value: "\(exerciseMinutes)",
                     label: exerciseMinutesLabel,
                     color: .cyan,
-                    valueAccessibilityIdentifier: "dashboardActivityExerciseValue",
-                    labelAccessibilityIdentifier: "dashboardActivityExerciseLabel"
+                    valueAccessibilityIdentifier: "dashboardActivityExerciseValue"
                 )
             )
         }
@@ -356,8 +463,7 @@ struct TodaysActivityCard: View {
                     value: "\(workoutCount)",
                     label: "Workouts",
                     color: .purple,
-                    valueAccessibilityIdentifier: "dashboardActivityWorkoutsValue",
-                    labelAccessibilityIdentifier: "dashboardActivityWorkoutsLabel"
+                    valueAccessibilityIdentifier: "dashboardActivityWorkoutsValue"
                 )
             )
         }
@@ -380,7 +486,6 @@ private struct ActivityMetric {
     let label: String
     let color: Color
     let valueAccessibilityIdentifier: String
-    let labelAccessibilityIdentifier: String
 }
 
 // MARK: - Activity Metric Item
@@ -391,26 +496,37 @@ private struct ActivityMetricItem: View {
     let label: String
     let color: Color
     let valueAccessibilityIdentifier: String
-    let labelAccessibilityIdentifier: String
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(spacing: TraiSpacing.sm) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(HStackLayout(spacing: TraiSpacing.sm))
+            : AnyLayout(VStackLayout(spacing: TraiSpacing.sm))
+
+        layout {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(color)
+                .accessibilityHidden(true)
 
-            Text(value)
-                .font(.traiBold(17))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .accessibilityIdentifier(valueAccessibilityIdentifier)
+            VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center, spacing: TraiSpacing.xs) {
+                Text(value)
+                    .font(.traiBold(17))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
 
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .accessibilityIdentifier(labelAccessibilityIdentifier)
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .center)
+            }
         }
         .frame(maxWidth: .infinity)
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
+        .accessibilityIdentifier(valueAccessibilityIdentifier)
     }
 }
 

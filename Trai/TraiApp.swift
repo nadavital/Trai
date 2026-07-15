@@ -307,6 +307,7 @@ struct TraiApp: App {
                 ContentView(deepLinkDestination: $deepLinkDestination)
                     .tint(brandAccent)
                     .accentColor(brandAccent)
+                    .modifier(UITestVisualEnvironmentModifier())
                     .environment(notificationService)
                     .environment(appAccountService)
                     .environment(accountSessionService)
@@ -841,6 +842,15 @@ struct TraiApp: App {
                 }
             }
         }
+    }
+}
+
+private struct UITestVisualEnvironmentModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .preferredColorScheme(
+                AppLaunchArguments.shouldUseDarkAppearanceForUITest ? .dark : nil
+            )
     }
 }
 

@@ -10,8 +10,8 @@ import SwiftData
 
 /// Intent for logging body weight
 struct LogWeightIntent: AppIntent {
-    static var title: LocalizedStringResource = "Log Weight"
-    static var description = IntentDescription("Record your current weight")
+    static let title: LocalizedStringResource = "Log Weight"
+    static let description = IntentDescription("Record your current weight")
     static var supportedModes: IntentModes { .background }
 
     @available(iOS 27.0, *)

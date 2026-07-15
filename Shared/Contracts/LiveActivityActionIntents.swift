@@ -11,9 +11,9 @@ import Foundation
 
 /// Intent for adding a set to the current strength exercise from Live Activity.
 struct AddSetIntent: LiveActivityIntent {
-    static var title: LocalizedStringResource = "Add Set"
-    static var description = IntentDescription("Add a set to the current strength exercise")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Add Set"
+    static let description = IntentDescription("Add a set to the current strength exercise")
+    static let openAppWhenRun: Bool = false
 
     func perform() async throws -> some IntentResult {
         if let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName) {
@@ -33,9 +33,9 @@ struct AddSetIntent: LiveActivityIntent {
 
 /// Intent for toggling workout pause state from Live Activity.
 struct TogglePauseIntent: LiveActivityIntent {
-    static var title: LocalizedStringResource = "Toggle Pause"
-    static var description = IntentDescription("Pause or resume the current workout")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Toggle Pause"
+    static let description = IntentDescription("Pause or resume the current workout")
+    static let openAppWhenRun: Bool = false
 
     func perform() async throws -> some IntentResult {
         if let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName) {
@@ -55,9 +55,9 @@ struct TogglePauseIntent: LiveActivityIntent {
 
 /// Intent for moving from the current exercise to the next one from Live Activity.
 struct AdvanceExerciseIntent: LiveActivityIntent {
-    static var title: LocalizedStringResource = "Up Next"
-    static var description = IntentDescription("Move to the next exercise in the active workout")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Up Next"
+    static let description = IntentDescription("Move to the next exercise in the active workout")
+    static let openAppWhenRun: Bool = false
 
     func perform() async throws -> some IntentResult {
         if let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName) {

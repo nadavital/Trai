@@ -10,8 +10,8 @@ import SwiftData
 
 /// Intent for logging food by text description using Trai analysis
 struct LogFoodTextIntent: AppIntent {
-    static var title: LocalizedStringResource = "Log Food"
-    static var description = IntentDescription("Log food by describing what you ate")
+    static let title: LocalizedStringResource = "Log Food"
+    static let description = IntentDescription("Log food by describing what you ate")
     static var supportedModes: IntentModes { .background }
 
     @available(iOS 27.0, *)
