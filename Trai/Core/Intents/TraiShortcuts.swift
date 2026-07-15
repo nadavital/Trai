@@ -75,5 +75,27 @@ struct TraiShortcuts: AppShortcutsProvider {
             shortTitle: "Daily Summary",
             systemImageName: "chart.bar.fill"
         )
+
+        AppShortcut(
+            intent: GetNutritionProgressIntent(),
+            phrases: [
+                "Check my nutrition in \(.applicationName)",
+                "Get my calorie progress from \(.applicationName)",
+                "Get my protein progress from \(.applicationName)"
+            ],
+            shortTitle: "Nutrition Progress",
+            systemImageName: "chart.pie.fill"
+        )
+
+        AppShortcut(
+            intent: GetLatestWorkoutSummaryIntent(),
+            phrases: [
+                "Get my latest workout from \(.applicationName)",
+                "Summarize my last workout with \(.applicationName)",
+                "Show my last workout in \(.applicationName)"
+            ],
+            shortTitle: "Latest Workout",
+            systemImageName: "figure.strengthtraining.traditional"
+        )
     }
 }

@@ -408,6 +408,7 @@ struct LiveWorkoutView: View {
                             },
                             watchConnectionHint: viewModel.watchConnectionHint,
                             heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
+                            heartRateZone: viewModel.isWatchConnected ? viewModel.currentHeartRateZone : nil,
                             calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
                         )
 
@@ -491,6 +492,7 @@ struct LiveWorkoutView: View {
                             },
                             watchConnectionHint: viewModel.watchConnectionHint,
                             heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
+                            heartRateZone: viewModel.isWatchConnected ? viewModel.currentHeartRateZone : nil,
                             calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
                         )
 

@@ -175,6 +175,7 @@ struct TraiApp: App {
                 for: schema,
                 configurations: [modelConfiguration]
             )
+            TraiApp.sharedModelContainer = modelContainer
             modelContainerLaunchError = nil
 
             notificationService.ensureNotificationSetup()
@@ -187,17 +188,23 @@ struct TraiApp: App {
             // Set shared container for App Intents access
             let container = modelContainer
             Task { @MainActor in
-                TraiApp.sharedModelContainer = container
-
                 if #available(iOS 27.0, *) {
                     TraiMetricReporter.shared.start()
                 }
 
                 if isUITesting && !AppLaunchArguments.shouldRunOnboardingFlowUITest {
                     seedUITestProfileIfNeeded(modelContainer: container)
+                    #if DEBUG
+                    if AppLaunchArguments.shouldSeedAppIntentsTestingData {
+                        seedAppIntentsTestingData(modelContainer: container)
+                    } else if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {
+                        seedAppStoreScreenshotDataIfNeeded(modelContainer: container)
+                    }
+                    #else
                     if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {
                         seedAppStoreScreenshotDataIfNeeded(modelContainer: container)
                     }
+                    #endif
                     if AppLaunchArguments.shouldSeedGoalPreviewData {
                         seedGoalPreviewDataIfNeeded(modelContainer: container)
                     }
@@ -227,6 +234,7 @@ struct TraiApp: App {
                     for: Self.appSchema,
                     configurations: [recoveryConfiguration]
                 )
+                TraiApp.sharedModelContainer = modelContainer
             } catch {
                 preconditionFailure("Failed to create recovery ModelContainer: \(error)")
             }
@@ -1142,6 +1150,81 @@ private func seedAppStoreScreenshotDataIfNeeded(modelContainer: ModelContainer) 
 
     try? context.save()
 }
+
+#if DEBUG
+/// Rebuilds only the records AppIntentsTesting reads so each run remains
+/// independent of a prior day's persistent screenshot seed.
+@MainActor
+private func seedAppIntentsTestingData(modelContainer: ModelContainer) {
+    let context = modelContainer.mainContext
+
+    do {
+        for workout in try context.fetch(FetchDescriptor<LiveWorkout>()) {
+            context.delete(workout)
+        }
+        for foodEntry in try context.fetch(FetchDescriptor<FoodEntry>()) {
+            context.delete(foodEntry)
+        }
+        for profile in try context.fetch(FetchDescriptor<UserProfile>()) {
+            context.delete(profile)
+        }
+        try context.save()
+
+        let profile = UserProfile()
+        profile.name = "App Intents Test User"
+        profile.hasCompletedOnboarding = true
+        profile.dailyCalorieGoal = 2_450
+        profile.dailyProteinGoal = 175
+        profile.dailyCarbsGoal = 260
+        profile.dailyFatGoal = 72
+        profile.workoutPlan = screenshotWorkoutPlan()
+        context.insert(profile)
+
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        seedScreenshotFoodEntries(context: context, calendar: calendar, today: today)
+
+        let startedAt = calendar.date(
+            byAdding: .hour,
+            value: 17,
+            to: calendar.date(byAdding: .day, value: -1, to: today) ?? today
+        ) ?? today
+        let workout = LiveWorkout(
+            name: "Upper Strength",
+            workoutType: .strength,
+            targetMuscleGroups: [.chest, .back, .shoulders],
+            focusAreas: ["Chest", "Back", "Shoulders"]
+        )
+        workout.startedAt = startedAt
+        workout.completedAt = calendar.date(byAdding: .minute, value: 58, to: startedAt)
+        workout.healthKitCalories = 260
+        workout.healthKitAvgHeartRate = 116
+
+        let press = LiveWorkoutEntry(
+            exerciseName: "Incline Dumbbell Press",
+            orderIndex: 0
+        )
+        press.addSet(.init(reps: 8, weight: .init(kg: 42.5, lbs: 94), preferredWeightUnit: .lbs, completed: true))
+        press.addSet(.init(reps: 8, weight: .init(kg: 45, lbs: 99), preferredWeightUnit: .lbs, completed: true))
+        press.addSet(.init(reps: 7, weight: .init(kg: 45, lbs: 99), preferredWeightUnit: .lbs, completed: true))
+        press.completedAt = workout.completedAt
+
+        let row = LiveWorkoutEntry(
+            exerciseName: "Chest-Supported Row",
+            orderIndex: 1
+        )
+        row.addSet(.init(reps: 10, weight: .init(kg: 50, lbs: 110), preferredWeightUnit: .lbs, completed: true))
+        row.addSet(.init(reps: 10, weight: .init(kg: 52.5, lbs: 116), preferredWeightUnit: .lbs, completed: true))
+        row.completedAt = workout.completedAt
+
+        workout.entries = [press, row]
+        context.insert(workout)
+        try context.save()
+    } catch {
+        preconditionFailure("Unable to prepare App Intents test fixtures: \(error)")
+    }
+}
+#endif
 
 @MainActor
 private func seedGoalPreviewDataIfNeeded(modelContainer: ModelContainer) {

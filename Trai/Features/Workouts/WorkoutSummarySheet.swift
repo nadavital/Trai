@@ -37,6 +37,7 @@ struct WorkoutSummarySheet: View {
     let onDismiss: () -> Void
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @Query private var profiles: [UserProfile]
     @Query(sort: \ExerciseHistory.performedAt, order: .reverse)
     private var allExerciseHistory: [ExerciseHistory]
@@ -140,6 +141,14 @@ struct WorkoutSummarySheet: View {
                         showConfetti: showConfetti
                     )
 
+                    if let averageHeartRate = workout.healthKitAvgHeartRate,
+                       let zone = healthKitService?.preferredHeartRateZone(for: averageHeartRate) {
+                        WorkoutHeartRateZoneSummaryCard(
+                            averageHeartRate: averageHeartRate,
+                            zone: zone
+                        )
+                    }
+
                     if !goalInsights.isEmpty {
                         WorkoutGoalProgressCard(
                             insights: goalInsights,
@@ -203,6 +212,10 @@ struct WorkoutSummarySheet: View {
                 }
             }
             .task {
+                if #available(iOS 27.0, *),
+                   workout.healthKitAvgHeartRate != nil {
+                    try? await healthKitService?.refreshPreferredHeartRateZones()
+                }
                 withAnimation {
                     showConfetti = true
                 }
@@ -325,6 +338,7 @@ struct WorkoutSummaryContent: View {
     let onDismiss: () -> Void
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @Query private var profiles: [UserProfile]
     @Query(sort: \ExerciseHistory.performedAt, order: .reverse)
     private var allExerciseHistory: [ExerciseHistory]
@@ -422,6 +436,14 @@ struct WorkoutSummaryContent: View {
                     showConfetti: showConfetti
                 )
 
+                if let averageHeartRate = workout.healthKitAvgHeartRate,
+                   let zone = healthKitService?.preferredHeartRateZone(for: averageHeartRate) {
+                    WorkoutHeartRateZoneSummaryCard(
+                        averageHeartRate: averageHeartRate,
+                        zone: zone
+                    )
+                }
+
                 if !goalInsights.isEmpty {
                     WorkoutGoalProgressCard(
                         insights: goalInsights,
@@ -482,6 +504,10 @@ struct WorkoutSummaryContent: View {
             }
         }
         .task {
+            if #available(iOS 27.0, *),
+               workout.healthKitAvgHeartRate != nil {
+                try? await healthKitService?.refreshPreferredHeartRateZones()
+            }
             withAnimation {
                 showConfetti = true
             }
@@ -637,6 +663,66 @@ struct PRRow: View {
 }
 
 // MARK: - Summary Header
+
+private struct WorkoutHeartRateZoneSummaryCard: View {
+    let averageHeartRate: Double
+    let zone: HealthKitService.HeartRateZoneSummary
+
+    private var rangeDescription: String? {
+        switch (zone.minimumBPM, zone.maximumBPM) {
+        case let (minimum?, maximum?):
+            return "\(Int(minimum.rounded()))–\(Int(maximum.rounded())) BPM"
+        case let (minimum?, nil):
+            return "\(Int(minimum.rounded()))+ BPM"
+        case let (nil, maximum?):
+            return "Below \(Int(maximum.rounded())) BPM"
+        case (nil, nil):
+            return nil
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "heart.fill")
+                .font(.title2)
+                .foregroundStyle(.red)
+                .frame(width: 44, height: 44)
+                .background(.red.opacity(0.12), in: .circle)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Average Heart Rate")
+                    .font(.subheadline.weight(.semibold))
+
+                Text("\(Int(averageHeartRate.rounded())) BPM")
+                    .font(.title3.weight(.bold))
+                    .monospacedDigit()
+            }
+
+            Spacer(minLength: 8)
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("Zone \(zone.index)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.accentColor.opacity(0.12), in: .capsule)
+
+                if let rangeDescription {
+                    Text(rangeDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+        }
+        .traiCard()
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Average heart rate, \(Int(averageHeartRate.rounded())) beats per minute, zone \(zone.index)"
+        )
+    }
+}
 
 private struct WorkoutSummaryHeader: View {
     let title: String

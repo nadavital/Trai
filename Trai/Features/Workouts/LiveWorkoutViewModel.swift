@@ -151,6 +151,10 @@ final class LiveWorkoutViewModel {
     var workoutCalories: Double = 0
     var lastCalorieUpdate: Date?
     var isHeartRateAvailable: Bool { currentHeartRate != nil }
+    var currentHeartRateZone: HealthKitService.HeartRateZoneSummary? {
+        guard let currentHeartRate else { return nil }
+        return healthKitService?.preferredHeartRateZone(for: currentHeartRate)
+    }
     var isWatchConnected: Bool {
         if AppLaunchArguments.shouldShowAppStoreScreenshotWatchConnected {
             return true
@@ -944,6 +948,10 @@ final class LiveWorkoutViewModel {
 
     private func syncWatchData(using service: HealthKitService) async throws {
         try await service.ensureAuthorization()
+
+        if #available(iOS 27.0, *) {
+            try? await service.refreshPreferredHeartRateZones()
+        }
 
         watchSetupErrorMessage = nil
         service.startHeartRateStreaming(from: workout.startedAt)

@@ -23,6 +23,7 @@ struct WorkoutTimerHeader: View {
 
     // Optional Apple Watch data - only shown when available
     var heartRate: Double?
+    var heartRateZone: HealthKitService.HeartRateZoneSummary?
     var calories: Double?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -137,7 +138,7 @@ struct WorkoutTimerHeader: View {
                     if let hr = heartRate {
                         TimerStat(
                             value: "\(Int(hr))",
-                            label: "BPM",
+                            label: heartRateZone.map { "BPM • Zone \($0.index)" } ?? "BPM",
                             icon: "heart.fill",
                             iconColor: .red
                         )

@@ -31,6 +31,65 @@ private struct BackendErrorPayload: Decodable {
 final class TraiBackendClient {
     static let shared = TraiBackendClient()
 
+    private enum RequestPolicy {
+        static let timeoutInterval: TimeInterval = 30
+        static let maximumReadAttempts = 2
+        static let initialRetryDelay: Duration = .milliseconds(250)
+
+        static func shouldRetry(statusCode: Int) -> Bool {
+            statusCode == 408
+                || statusCode == 425
+                || statusCode == 429
+                || [500, 502, 503, 504].contains(statusCode)
+        }
+
+        static func shouldRetry(error: Error) -> Bool {
+            guard !Task.isCancelled, let urlError = error as? URLError else { return false }
+
+            switch urlError.code {
+            case .timedOut,
+                 .cannotFindHost,
+                 .cannotConnectToHost,
+                 .networkConnectionLost,
+                 .dnsLookupFailed,
+                 .notConnectedToInternet,
+                 .resourceUnavailable:
+                return true
+            case .cancelled:
+                return false
+            default:
+                return false
+            }
+        }
+
+        static func retryDelay(for response: HTTPURLResponse) -> Duration {
+            guard [429, 503].contains(response.statusCode),
+                  let rawRetryAfter = response.value(forHTTPHeaderField: "Retry-After")?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                  !rawRetryAfter.isEmpty else {
+                return initialRetryDelay
+            }
+
+            let retryAfterSeconds: TimeInterval?
+            if let seconds = TimeInterval(rawRetryAfter) {
+                retryAfterSeconds = seconds
+            } else {
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.timeZone = TimeZone(secondsFromGMT: 0)
+                formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss z"
+                retryAfterSeconds = formatter.date(from: rawRetryAfter)?
+                    .timeIntervalSinceNow
+            }
+
+            guard let retryAfterSeconds else { return initialRetryDelay }
+            let boundedMilliseconds = Int64(
+                (min(max(retryAfterSeconds, 0), 5) * 1_000).rounded()
+            )
+            return .milliseconds(boundedMilliseconds)
+        }
+    }
+
     private enum InfoKey {
         static let stagingBaseURL = "TRAIBackendStagingBaseURL"
         static let productionBaseURL = "TRAIBackendProductionBaseURL"
@@ -205,6 +264,7 @@ final class TraiBackendClient {
         let url = baseURL.appending(path: path)
         var request = URLRequest(url: url)
         request.httpMethod = method
+        request.timeoutInterval = RequestPolicy.timeoutInterval
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(appAccountToken, forHTTPHeaderField: "X-Trai-App-Account-Token")
 
@@ -219,8 +279,38 @@ final class TraiBackendClient {
             request.httpBody = data
         }
 
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
+        let maximumAttempts = method == "GET" ? RequestPolicy.maximumReadAttempts : 1
+        var attempt = 0
+        var data = Data()
+        var httpResponse: HTTPURLResponse?
+
+        while attempt < maximumAttempts {
+            attempt += 1
+            var retryDelay = RequestPolicy.initialRetryDelay
+
+            do {
+                let (responseData, response) = try await session.data(for: request)
+                guard let response = response as? HTTPURLResponse else {
+                    throw BackendClientError.invalidResponse
+                }
+
+                data = responseData
+                httpResponse = response
+
+                let shouldRetryResponse = attempt < maximumAttempts
+                    && RequestPolicy.shouldRetry(statusCode: response.statusCode)
+                guard shouldRetryResponse else { break }
+                retryDelay = RequestPolicy.retryDelay(for: response)
+            } catch {
+                let shouldRetryTransport = attempt < maximumAttempts
+                    && RequestPolicy.shouldRetry(error: error)
+                guard shouldRetryTransport else { throw error }
+            }
+
+            try await Task.sleep(for: retryDelay)
+        }
+
+        guard let httpResponse else {
             throw BackendClientError.invalidResponse
         }
 

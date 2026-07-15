@@ -129,53 +129,71 @@ struct WorkoutTrendChart: View {
 
     @ViewBuilder
     private var chartView: some View {
-        Chart {
-            ForEach(data) { day in
-                if metric == .frequency {
-                    // Bar chart for frequency
-                    BarMark(
-                        x: .value("Date", day.date),
-                        y: .value(metric.displayTitle, day[keyPath: metric.keyPath])
-                    )
-                    .foregroundStyle(day.workoutCount > 0 ? metric.color : Color.secondary.opacity(0.3))
-                    .clipShape(.rect(cornerRadius: 4))
-                } else if day.workoutCount > 0 {
-                    // Line chart for other metrics
-                    LineMark(
-                        x: .value("Date", day.date),
-                        y: .value(metric.displayTitle, day[keyPath: metric.keyPath])
-                    )
-                    .foregroundStyle(metric.color)
-                    .interpolationMethod(.catmullRom)
+        if metric == .frequency {
+            Chart(data) { day in
+                BarMark(
+                    x: .value("Date", day.date),
+                    y: .value(metric.displayTitle, day[keyPath: metric.keyPath])
+                )
+                .foregroundStyle(day.workoutCount > 0 ? metric.color : Color.secondary.opacity(0.3))
+                .clipShape(.rect(cornerRadius: 4))
+            }
+            .frame(height: 150)
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine()
+                    AxisValueLabel {
+                        if let intValue = value.as(Int.self) {
+                            Text("\(intValue)")
+                                .font(.caption2)
+                        }
+                    }
+                }
+            }
+            .chartXAxis {
+                chartXAxisMarks
+            }
+        } else {
+            Chart(daysWithData) { day in
+                LineMark(
+                    x: .value("Date", day.date),
+                    y: .value(metric.displayTitle, day[keyPath: metric.keyPath])
+                )
+                .foregroundStyle(metric.color)
+                .interpolationMethod(.catmullRom)
 
-                    PointMark(
-                        x: .value("Date", day.date),
-                        y: .value(metric.displayTitle, day[keyPath: metric.keyPath])
-                    )
-                    .foregroundStyle(metric.color)
-                    .symbolSize(30)
-                }
+                PointMark(
+                    x: .value("Date", day.date),
+                    y: .value(metric.displayTitle, day[keyPath: metric.keyPath])
+                )
+                .foregroundStyle(metric.color)
+                .symbolSize(30)
             }
-        }
-        .frame(height: 150)
-        .chartYAxis {
-            AxisMarks(position: .leading) { value in
-                AxisGridLine()
-                AxisValueLabel {
-                    if let intValue = value.as(Int.self) {
-                        Text("\(intValue)")
-                            .font(.caption2)
+            .frame(height: 150)
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine()
+                    AxisValueLabel {
+                        if let intValue = value.as(Int.self) {
+                            Text("\(intValue)")
+                                .font(.caption2)
+                        }
                     }
                 }
             }
+            .chartXAxis {
+                chartXAxisMarks
+            }
         }
-        .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: data.count > 14 ? 7 : 1)) { value in
-                AxisValueLabel {
-                    if let date = value.as(Date.self) {
-                        Text(date, format: .dateTime.weekday(.abbreviated))
-                            .font(.caption2)
-                    }
+    }
+
+    @AxisContentBuilder
+    private var chartXAxisMarks: some AxisContent {
+        AxisMarks(values: .stride(by: .day, count: data.count > 14 ? 7 : 1)) { value in
+            AxisValueLabel {
+                if let date = value.as(Date.self) {
+                    Text(date, format: .dateTime.weekday(.abbreviated))
+                        .font(.caption2)
                 }
             }
         }

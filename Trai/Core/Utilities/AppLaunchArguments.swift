@@ -27,6 +27,9 @@ enum AppLaunchArguments {
     static let appStoreScreenshotPlanReview = "--app-store-screenshot-plan-review"
     static let appStoreScreenshotWatchConnected = "--app-store-screenshot-watch-connected"
     static let appStoreScreenshotChatScenario = "--app-store-screenshot-chat-scenario"
+    #if DEBUG
+    static let appIntentsTestingSeed = "--app-intents-testing-seed"
+    #endif
     static let enableTabPrewarm = "--enable-tab-prewarm"
     static let disableTabPrewarm = "--disable-tab-prewarm"
     static let disableHeavyTabDeferral = "--disable-heavy-tab-deferral"
@@ -109,6 +112,12 @@ enum AppLaunchArguments {
     static var shouldUseAppStoreScreenshotSeed: Bool {
         ProcessInfo.processInfo.arguments.contains(appStoreScreenshotMode)
     }
+
+    #if DEBUG
+    static var shouldSeedAppIntentsTestingData: Bool {
+        ProcessInfo.processInfo.arguments.contains(appIntentsTestingSeed)
+    }
+    #endif
 
     static var appStoreScreenshotInitialTabRawValue: String? {
         let arguments = ProcessInfo.processInfo.arguments

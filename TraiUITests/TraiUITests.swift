@@ -1,6 +1,10 @@
 import XCTest
 import Foundation
 
+#if canImport(AppIntentsTesting)
+import AppIntentsTesting
+#endif
+
 final class TraiUITests: XCTestCase {
     private static var didBootstrapPersistentStoreProfile = false
     private static let liveWorkoutStabilityStressFlagPath = "/tmp/trai_run_live_workout_stability_ui_stress"
@@ -1116,3 +1120,172 @@ private struct VisualStateTarget: Decodable, CustomStringConvertible {
         .joined(separator: ", ")
     }
 }
+
+#if canImport(AppIntentsTesting)
+/// Exercises Trai's App Intents through the same out-of-process metadata and
+/// execution path used by Siri and Shortcuts. AppIntentsTesting is an iOS 27
+/// framework, so the app and test targets can continue supporting iOS 26.
+@available(iOS 27.0, *)
+final class TraiAppIntentsTests: XCTestCase {
+    private let appBundleIdentifier = "Nadav.Trai"
+    private var seededApp: XCUIApplication!
+
+    private var definitions: IntentDefinitions {
+        IntentDefinitions(bundleIdentifier: appBundleIdentifier)
+    }
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+
+        seededApp = XCUIApplication()
+        seededApp.launchArguments = [
+            "UITEST_MODE",
+            "--use-persistent-store",
+            "--app-intents-testing-seed",
+            "--disable-tab-prewarm"
+        ]
+        seededApp.launch()
+
+        XCTAssertTrue(
+            seededApp.descendants(matching: .any)["dashboardRootReady"]
+                .waitForExistence(timeout: 15),
+            "Trai did not finish loading its persistent App Intents test seed."
+        )
+    }
+
+    override func tearDownWithError() throws {
+        seededApp?.terminate()
+        seededApp = nil
+    }
+
+    func testSiriIntentCatalogContainsTraiShortcuts() {
+        let expectedIntentNames = [
+            "LogFoodTextIntent",
+            "LogFoodCameraIntent",
+            "LogWeightIntent",
+            "AskTraiIntent",
+            "StartWorkoutIntent",
+            "GetDailySummaryIntent",
+            "GetNutritionProgressIntent",
+            "GetLatestWorkoutSummaryIntent"
+        ]
+
+        for name in expectedIntentNames {
+            let definition = definitions.intents[name]
+            XCTAssertEqual(definition.bundleIdentifier, appBundleIdentifier)
+            XCTAssertEqual(definition.identifier, name)
+        }
+    }
+
+    func testTextAndWeightParametersRoundTripThroughIntentMetadata() throws {
+        let foodIntent = definitions.intents["LogFoodTextIntent"].makeIntent(
+            food: "Greek yogurt with blueberries"
+        )
+        let food: String = try foodIntent.food
+        XCTAssertEqual(food, "Greek yogurt with blueberries")
+
+        let askIntent = definitions.intents["AskTraiIntent"].makeIntent(
+            question: "How much protein have I logged today?"
+        )
+        let question: String = try askIntent.question
+        XCTAssertEqual(question, "How much protein have I logged today?")
+
+        let weightIntent = definitions.intents["LogWeightIntent"].makeIntent(
+            weight: 176.4,
+            unit: "lbs"
+        )
+        let weight: Double = try weightIntent.weight
+        let unit: String = try weightIntent.unit
+        XCTAssertEqual(weight, 176.4, accuracy: 0.001)
+        XCTAssertEqual(unit, "lbs")
+    }
+
+    func testWorkoutEntityCanPopulateStartWorkoutIntent() throws {
+        let identifier = "11111111-1111-1111-1111-111111111111"
+        let workoutDefinition = definitions.entities["WorkoutNameEntity"]
+        let workout = workoutDefinition.makeReference(identifier: identifier)
+        let startWorkout = definitions.intents["StartWorkoutIntent"].makeIntent(
+            workout: workout
+        )
+
+        let populatedWorkout: AnyAppEntity = try startWorkout.workout
+        XCTAssertEqual(populatedWorkout.identifier.instanceIdentifier, identifier)
+        XCTAssertEqual(
+            populatedWorkout.identifier.entityType.bundleIdentifier,
+            appBundleIdentifier
+        )
+    }
+
+    func testWorkoutEntityQuerySupportsSuggestionsAndIdentifierResolution() async throws {
+        let workoutDefinition = definitions.entities["WorkoutNameEntity"]
+        let suggested = try await workoutDefinition.suggestedEntities()
+        let emptySearch = try await workoutDefinition.entities(matching: "")
+
+        XCTAssertEqual(
+            emptySearch,
+            suggested,
+            "An empty Siri workout search should preserve the query's suggestions."
+        )
+        XCTAssertFalse(
+            suggested.isEmpty,
+            "The App Intents test seed should expose workout-plan suggestions to Siri."
+        )
+        let first = try XCTUnwrap(suggested.first)
+
+        let resolved = try await workoutDefinition.entities(
+            identifiers: [first.identifier.instanceIdentifier]
+        )
+        XCTAssertEqual(resolved, [first])
+    }
+
+    func testDailySummaryRunsOutOfProcessAndReturnsSpokenText() async throws {
+        let result = try await definitions.intents["GetDailySummaryIntent"]
+            .makeIntent()
+            .run()
+        let summary: String = try result.value
+
+        XCTAssertEqual(
+            summary,
+            "You've logged 1955 calories and 162 grams of protein today, your calorie target is 2450."
+        )
+    }
+
+    func testNutritionProgressReturnsExactSeededAggregate() async throws {
+        let result = try await definitions.intents["GetNutritionProgressIntent"]
+            .makeIntent()
+            .run()
+        let progress: AnyTransientAppEntity = try result.value
+        let caloriesConsumed: Int = try progress.caloriesConsumed
+        let calorieTarget: Int = try progress.calorieTarget
+        let proteinConsumed: Int = try progress.proteinConsumedGrams
+        let proteinTarget: Int = try progress.proteinTargetGrams
+        let carbohydratesConsumed: Int = try progress.carbohydratesConsumedGrams
+        let fatConsumed: Int = try progress.fatConsumedGrams
+
+        XCTAssertEqual(caloriesConsumed, 1_955)
+        XCTAssertEqual(calorieTarget, 2_450)
+        XCTAssertEqual(proteinConsumed, 162)
+        XCTAssertEqual(proteinTarget, 175)
+        XCTAssertEqual(carbohydratesConsumed, 194)
+        XCTAssertEqual(fatConsumed, 62)
+    }
+
+    func testLatestWorkoutSummaryReturnsExactSeededWorkout() async throws {
+        let result = try await definitions.intents["GetLatestWorkoutSummaryIntent"]
+            .makeIntent()
+            .run()
+        let summary: AnyTransientAppEntity = try result.value
+        let workoutName: String = try summary.workoutName
+        let durationMinutes: Int = try summary.durationMinutes
+        let entryCount: Int = try summary.entryCount
+        let completedSets: Int = try summary.completedSets
+        let activeCalories: Int = try summary.activeCalories
+
+        XCTAssertEqual(workoutName, "Upper Strength")
+        XCTAssertEqual(durationMinutes, 58)
+        XCTAssertEqual(entryCount, 2)
+        XCTAssertEqual(completedSets, 5)
+        XCTAssertEqual(activeCalories, 260)
+    }
+}
+#endif
