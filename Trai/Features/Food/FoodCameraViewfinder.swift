@@ -227,9 +227,11 @@ private struct FoodCameraDescriptionBar: View {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
+                        .frame(width: 36, height: 36)
                 }
                 .glassEffect(.regular.tint(canSubmitDescription ? .accent : .gray).interactive(), in: .circle)
+                .frame(width: 44, height: 44)
+                .contentShape(.circle)
                 .opacity(canSubmitDescription ? 1 : 0.5)
                 .disabled(!canSubmitDescription)
                 .accessibilityLabel("Save notes")

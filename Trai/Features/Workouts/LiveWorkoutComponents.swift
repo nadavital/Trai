@@ -27,6 +27,7 @@ struct WorkoutTimerHeader: View {
     var calories: Double?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .largeTitle) private var timerFontSize = 48.0
 
     var body: some View {
         VStack(spacing: 16) {
@@ -34,10 +35,10 @@ struct WorkoutTimerHeader: View {
             TimelineView(.periodic(from: .now, by: 1.0)) { context in
                 let elapsed = calculateElapsed(at: context.date)
                 Text(formatTime(elapsed))
-                    .font(.traiHero(48).weight(.light).monospaced())
+                    .font(.system(size: timerFontSize, weight: .light, design: .monospaced))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    .minimumScaleFactor(0.6)
                     .contentTransition(reduceMotion ? .identity : .numericText())
             }
 

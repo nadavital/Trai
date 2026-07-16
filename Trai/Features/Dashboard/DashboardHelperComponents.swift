@@ -105,6 +105,8 @@ struct QuickActionButton: View {
                     .font(.traiLabel())
                     .foregroundStyle(color)
                     .multilineTextAlignment(.leading)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.8)
 
                 if dynamicTypeSize.isAccessibilitySize {
                     Spacer(minLength: 0)
@@ -116,10 +118,13 @@ struct QuickActionButton: View {
             .frame(minHeight: 44)
             .padding(.horizontal, dynamicTypeSize.isAccessibilitySize ? 14 : 8)
             .padding(.vertical, 14)
-            .background(color.opacity(0.12), in: .rect(cornerRadius: TraiRadius.medium))
+            .glassEffect(
+                .regular.tint(color.opacity(0.28)).interactive(),
+                in: .rect(cornerRadius: TraiRadius.medium)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: TraiRadius.medium, style: .continuous)
-                    .strokeBorder(color.opacity(0.22), lineWidth: 1)
+                    .strokeBorder(.white.opacity(0.18), lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.03), radius: 5, y: 3)
         }

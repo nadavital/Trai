@@ -682,45 +682,76 @@ private struct WorkoutHeartRateZoneSummaryCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "heart.fill")
-                .font(.title2)
-                .foregroundStyle(.red)
-                .frame(width: 44, height: 44)
-                .background(.red.opacity(0.12), in: .circle)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Average Heart Rate")
-                    .font(.subheadline.weight(.semibold))
-
-                Text("\(Int(averageHeartRate.rounded())) BPM")
-                    .font(.title3.weight(.bold))
-                    .monospacedDigit()
-            }
-
-            Spacer(minLength: 8)
-
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("Zone \(zone.index)")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color.accentColor.opacity(0.12), in: .capsule)
-
-                if let rangeDescription {
-                    Text(rangeDescription)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-            }
+        ViewThatFits(in: .horizontal) {
+            horizontalContent
+            verticalContent
         }
         .traiCard()
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "Average heart rate, \(Int(averageHeartRate.rounded())) beats per minute, zone \(zone.index)"
         )
+    }
+
+    private var horizontalContent: some View {
+        HStack(spacing: 14) {
+            heartIcon
+            averageHeartRateContent
+
+            Spacer(minLength: 8)
+
+            zoneContent(alignment: .trailing)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var verticalContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                heartIcon
+                averageHeartRateContent
+            }
+
+            zoneContent(alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var heartIcon: some View {
+        Image(systemName: "heart.fill")
+            .font(.title2)
+            .foregroundStyle(.red)
+            .frame(width: 44, height: 44)
+            .background(.red.opacity(0.12), in: .circle)
+    }
+
+    private var averageHeartRateContent: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Average Heart Rate")
+                .font(.subheadline.weight(.semibold))
+
+            Text("\(Int(averageHeartRate.rounded())) BPM")
+                .font(.title3.weight(.bold))
+                .monospacedDigit()
+        }
+    }
+
+    private func zoneContent(alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 4) {
+            Text("Zone \(zone.index)")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.accentColor.opacity(0.12), in: .capsule)
+
+            if let rangeDescription {
+                Text(rangeDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
     }
 }
 

@@ -171,9 +171,11 @@ struct TraiProValueList: View {
     }
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 10) {
-            ForEach(modules) { module in
-                TraiProModuleTile(module: module)
+        GlassEffectContainer(spacing: 10) {
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(modules) { module in
+                    TraiProModuleTile(module: module)
+                }
             }
         }
     }
@@ -196,21 +198,27 @@ struct TraiProModuleTile: View {
                     .font(.subheadline.weight(.heavy))
                     .foregroundStyle(.white)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .frame(maxWidth: .infinity, alignment: .bottomLeading)
+                    .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.86)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: dynamicTypeSize.isAccessibilitySize ? 0 : 36,
+                        alignment: .bottomLeading
+                    )
 
                 Text(module.subtitle)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.68))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.86)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: dynamicTypeSize.isAccessibilitySize ? 0 : 32,
+                        alignment: .topLeading
+                    )
             }
         }
         .frame(maxWidth: .infinity, minHeight: dynamicTypeSize.isAccessibilitySize ? 0 : 138, alignment: .topLeading)
         .padding(14)
-        .background(.black.opacity(0.18), in: .rect(cornerRadius: 18))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18)
-                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
-        }
+        .glassEffect(.clear.tint(.black.opacity(0.18)), in: .rect(cornerRadius: 18))
     }
 }

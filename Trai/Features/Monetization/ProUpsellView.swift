@@ -177,6 +177,7 @@ struct ProUpsellView: View {
                     .frame(minHeight: 44)
                     .padding(.vertical, 15)
                     .background(.white.opacity(0.92), in: .capsule)
+                    .glassEffect(.clear.tint(.white.opacity(0.20)).interactive(), in: .capsule)
             }
             .buttonStyle(.plain)
             .disabled(isPurchaseDisabled)
@@ -190,6 +191,7 @@ struct ProUpsellView: View {
                         .frame(minHeight: 44)
                         .padding(.vertical, 13)
                         .background(.white.opacity(0.16), in: .capsule)
+                        .glassEffect(.clear.tint(.white.opacity(0.10)).interactive(), in: .capsule)
                 }
                 .buttonStyle(.plain)
             }

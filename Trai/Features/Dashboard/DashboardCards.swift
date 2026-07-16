@@ -516,7 +516,7 @@ private struct ActivityMetricItem: View {
                     .contentTransition(.numericText())
 
                 Text(label)
-                    .font(.caption)
+                    .font(dynamicTypeSize.isAccessibilitySize ? .caption : .caption2)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .center)
             }
@@ -627,14 +627,20 @@ struct QuickActionsCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: TraiSpacing.sm) {
-                    quickActions
-                }
-            } else {
-                HStack(spacing: TraiSpacing.sm + TraiSpacing.xs) {
-                    quickActions
+        GlassEffectContainer(
+            spacing: dynamicTypeSize.isAccessibilitySize
+                ? TraiSpacing.sm
+                : TraiSpacing.sm + TraiSpacing.xs
+        ) {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: TraiSpacing.sm) {
+                        quickActions
+                    }
+                } else {
+                    HStack(spacing: TraiSpacing.sm + TraiSpacing.xs) {
+                        quickActions
+                    }
                 }
             }
         }
