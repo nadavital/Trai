@@ -8,6 +8,7 @@
 import ActivityKit
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct LiveWorkoutView: View {
     private enum LiveWorkoutSheet: Identifiable {
@@ -47,6 +48,7 @@ struct LiveWorkoutView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
+    @Environment(NotificationService.self) private var notificationService: NotificationService?
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
     @Query private var profiles: [UserProfile]
     @Query private var workoutGoals: [WorkoutGoal]
@@ -120,6 +122,10 @@ struct LiveWorkoutView: View {
     @State private var didApplyPresentationFinishRequest = false
     @State private var shouldDismissAfterCancelConfirmation = false
     @State private var focusedSetID: UUID?
+    @State private var restTimer = LiveWorkoutRestTimer()
+    @State private var restNotificationTask: Task<Void, Never>?
+    @State private var restNotificationIdentifier: String?
+    @AppStorage("liveWorkoutDefaultRestSeconds") private var defaultRestSeconds = 90
     private let onCancelled: (() -> Void)?
 
     // MARK: - Initialization
@@ -164,6 +170,9 @@ struct LiveWorkoutView: View {
         .accentColor(Color("AccentColor"))
         .traiBackground()
         .accessibilityIdentifier("liveWorkoutView")
+        .task(id: restTimer.endDate) {
+            await finishRestTimerWhenDue()
+        }
     }
 
     private var navigationContent: some View {
@@ -285,6 +294,7 @@ struct LiveWorkoutView: View {
             )
             return
         }
+        stopRestTimer()
         onCancelled?()
         shouldDismissAfterCancelConfirmation = true
         showingCancelConfirmation = false
@@ -369,6 +379,8 @@ struct LiveWorkoutView: View {
             }
         }
 
+        stopRestTimer()
+
         withAnimation {
             showingSummary = true
         }
@@ -436,7 +448,7 @@ struct LiveWorkoutView: View {
                             }
                         }
 
-                        Color.clear.frame(height: 100)
+                        Color.clear.frame(height: bottomContentClearance)
                     }
                     .padding()
                 }
@@ -451,12 +463,7 @@ struct LiveWorkoutView: View {
                 }
             }
 
-            WorkoutBottomBar(
-                onAddExercise: { activeSheet = .exerciseList },
-                onAskTrai: { activeSheet = .chat },
-                addLabel: "Add Exercise",
-                addSystemImage: "plus.circle.fill"
-            )
+            workoutBottomControls(addLabel: "Add Exercise")
         }
     }
 
@@ -542,7 +549,7 @@ struct LiveWorkoutView: View {
                         }
 
                         // Bottom padding for the bar
-                        Color.clear.frame(height: 100)
+                        Color.clear.frame(height: bottomContentClearance)
                     }
                     .padding()
                 }
@@ -557,12 +564,8 @@ struct LiveWorkoutView: View {
                 }
             }
 
-            // Bottom bar
-            WorkoutBottomBar(
-                onAddExercise: { activeSheet = .exerciseList },
-                onAskTrai: { activeSheet = .chat },
-                addLabel: viewModel.usesFocusedCardioWorkspace ? "Add Interval" : "Add Exercise",
-                addSystemImage: "plus.circle.fill"
+            workoutBottomControls(
+                addLabel: viewModel.usesFocusedCardioWorkspace ? "Add Interval" : "Add Exercise"
             )
         }
     }
@@ -578,7 +581,7 @@ struct LiveWorkoutView: View {
                 onAddSet: { viewModel.addSet(to: entry) },
                 onRemoveSet: { setIndex in viewModel.removeSet(at: setIndex, from: entry) },
                 onUpdateSet: { setIndex, reps, weightKg, weightLbs, notes, preferredWeightUnit in
-                    viewModel.updateSet(
+                    let didFinishLoggingSet = viewModel.updateSet(
                         at: setIndex,
                         in: entry,
                         reps: reps,
@@ -587,6 +590,9 @@ struct LiveWorkoutView: View {
                         notes: notes,
                         preferredWeightUnit: preferredWeightUnit
                     )
+                    if didFinishLoggingSet {
+                        startRestTimer(for: entry)
+                    }
                 },
                 onToggleWarmup: { setIndex in viewModel.toggleWarmup(at: setIndex, in: entry) },
                 onDeleteExercise: { removeEntry(entry) },
@@ -639,6 +645,112 @@ struct LiveWorkoutView: View {
                 },
                 onDeleteExercise: { removeEntry(entry) }
             )
+        }
+    }
+
+    @ViewBuilder
+    private var restTimerBar: some View {
+        if let endDate = restTimer.endDate, endDate > .now {
+            LiveWorkoutRestTimerBar(
+                endDate: endDate,
+                exerciseName: restTimer.exerciseName,
+                onAddTime: {
+                    restTimer.add(seconds: 30)
+                    scheduleRestTimerNotification()
+                    HapticManager.lightTap()
+                },
+                onSkip: {
+                    stopRestTimer()
+                    HapticManager.lightTap()
+                }
+            )
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private var bottomContentClearance: CGFloat {
+        restTimer.isActive ? 180 : 100
+    }
+
+    private func workoutBottomControls(addLabel: String) -> some View {
+        VStack(spacing: 8) {
+            restTimerBar
+            WorkoutBottomBar(
+                onAddExercise: { activeSheet = .exerciseList },
+                onAskTrai: { activeSheet = .chat },
+                addLabel: addLabel,
+                addSystemImage: "plus.circle.fill"
+            )
+        }
+    }
+
+    private func startRestTimer(for entry: LiveWorkoutEntry) {
+        let seconds = resolvedRestSeconds(for: entry)
+        guard seconds > 0 else { return }
+        withAnimation(.snappy) {
+            restTimer.start(seconds: seconds, exerciseName: entry.exerciseName)
+        }
+        scheduleRestTimerNotification()
+        HapticManager.selectionChanged()
+    }
+
+    private func resolvedRestSeconds(for entry: LiveWorkoutEntry) -> Int {
+        if let planned = viewModel.plannedRestSeconds(for: entry.exerciseName) {
+            return planned
+        }
+
+        let workoutTemplate = profiles.first?.workoutPlan?.templates.first { template in
+            if let sourceID = viewModel.workout.sourcePlanTemplateID {
+                return template.id == sourceID
+            }
+            return template.name.goalNormalizedKey == viewModel.workout.name.goalNormalizedKey
+        }
+        if let planned = workoutTemplate?.structuredExercises.first(where: {
+            $0.exerciseName.goalNormalizedKey == entry.exerciseName.goalNormalizedKey
+        })?.restSeconds {
+            return planned
+        }
+        return defaultRestSeconds
+    }
+
+    private func finishRestTimerWhenDue() async {
+        guard let scheduledEndDate = restTimer.endDate else { return }
+        let milliseconds = max(0, Int(scheduledEndDate.timeIntervalSinceNow * 1_000))
+        try? await Task.sleep(for: .milliseconds(milliseconds))
+        guard !Task.isCancelled, restTimer.endDate == scheduledEndDate else { return }
+        withAnimation(.snappy) {
+            restTimer.stop()
+        }
+        restNotificationTask = nil
+        notificationService?.cancelLiveWorkoutRestTimer(identifier: restNotificationIdentifier)
+        restNotificationIdentifier = nil
+        HapticManager.success()
+        UIAccessibility.post(notification: .announcement, argument: "Rest complete")
+    }
+
+    private func scheduleRestTimerNotification() {
+        restNotificationTask?.cancel()
+        notificationService?.cancelLiveWorkoutRestTimer(identifier: restNotificationIdentifier)
+        guard let endDate = restTimer.endDate else { return }
+        let exerciseName = restTimer.exerciseName
+        let identifier = NotificationService.liveWorkoutRestTimerRequestIdentifier(id: UUID())
+        restNotificationIdentifier = identifier
+        restNotificationTask = Task {
+            await notificationService?.scheduleLiveWorkoutRestTimer(
+                identifier: identifier,
+                endDate: endDate,
+                exerciseName: exerciseName
+            )
+        }
+    }
+
+    private func stopRestTimer() {
+        restNotificationTask?.cancel()
+        restNotificationTask = nil
+        notificationService?.cancelLiveWorkoutRestTimer(identifier: restNotificationIdentifier)
+        restNotificationIdentifier = nil
+        withAnimation(.snappy) {
+            restTimer.stop()
         }
     }
 

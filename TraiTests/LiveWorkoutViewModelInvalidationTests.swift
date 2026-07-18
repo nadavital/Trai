@@ -75,6 +75,17 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(viewModel.completedSets, 1)
     }
 
+    func testRestTriggerOnlyReturnsForFirstWorkingSetRepEntry() {
+        let (workout, entry) = makeWorkout(initialReps: 0)
+        context.insert(workout)
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        XCTAssertFalse(viewModel.updateSet(at: 0, in: entry, weightKg: 40, weightLbs: 88.2))
+        XCTAssertTrue(viewModel.updateSet(at: 0, in: entry, reps: 8))
+        XCTAssertFalse(viewModel.updateSet(at: 0, in: entry, reps: 9))
+        XCTAssertFalse(viewModel.updateSet(at: 0, in: entry, notes: "Controlled"))
+    }
+
     func testGeneralActivityEntryWithLoggedDataCountsAsComplete() {
         let workout = LiveWorkout(name: "Recovery Session", workoutType: .mobility)
         let entry = LiveWorkoutEntry(

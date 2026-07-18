@@ -56,6 +56,8 @@ struct FoodSessionCard: View {
     let entries: [FoodEntry]
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     var onAddMore: (() -> Void)?
+    var onLogAgain: (() -> Void)?
+    var onLogEntryAgain: ((FoodEntry) -> Void)?
     let onEditEntry: (FoodEntry) -> Void
     let onDeleteEntry: (FoodEntry) -> Void
 
@@ -142,21 +144,31 @@ struct FoodSessionCard: View {
                         SessionEntryRow(
                             entry: entry,
                             onTap: { onEditEntry(entry) },
+                            onLogAgain: onLogEntryAgain.map { action in { action(entry) } },
                             onDelete: { onDeleteEntry(entry) }
                         )
                     }
 
-                    if let addAction = onAddMore {
-                        Button(action: addAction) {
-                            HStack {
-                                Image(systemName: "plus.circle.fill")
-                                Text("Add to this meal")
+                    HStack(spacing: 16) {
+                        if let replayAction = onLogAgain {
+                            Button("Log meal again", systemImage: "arrow.clockwise", action: replayAction)
+                                .font(.caption)
+                                .foregroundStyle(.tint)
+                        }
+
+                        if let addAction = onAddMore {
+                            Button(action: addAction) {
+                                HStack {
+                                    Image(systemName: "plus.circle.fill")
+                                    Text("Add to this meal")
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.tint)
                             }
-                            .font(.caption)
-                            .foregroundStyle(.tint)
-                            .padding(.vertical, 8)
                         }
                     }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, 8)
                 }
                 .padding(.top, 4)
                 .padding(.leading, 24)
@@ -170,6 +182,7 @@ struct FoodSessionCard: View {
 struct SessionEntryRow: View {
     let entry: FoodEntry
     let onTap: () -> Void
+    var onLogAgain: (() -> Void)?
     let onDelete: () -> Void
 
     @State private var showingDeleteConfirm = false
@@ -216,6 +229,14 @@ struct SessionEntryRow: View {
             .clipShape(.rect(cornerRadius: 6))
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if let onLogAgain {
+                Button("Log Again", systemImage: "arrow.clockwise", action: onLogAgain)
+            }
+        }
+        .accessibilityAction(named: "Log Again") {
+            onLogAgain?()
+        }
         .confirmationDialog(
             "Delete \(entry.name)?",
             isPresented: $showingDeleteConfirm,
@@ -233,6 +254,7 @@ struct FoodEntryTimelineRow: View {
     let entry: FoodEntry
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     let onTap: () -> Void
+    var onLogAgain: (() -> Void)?
     let onDelete: () -> Void
 
     @State private var showingDeleteConfirm = false
@@ -253,71 +275,92 @@ struct FoodEntryTimelineRow: View {
     }
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 10) {
-                Group {
-                    if let imageData = entry.imageData,
-                       let uiImage = UIImage(data: imageData) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        Text(entry.displayEmoji)
-                            .font(.system(size: 24))
+        HStack(spacing: 10) {
+            Button(action: onTap) {
+                HStack(spacing: 10) {
+                    Group {
+                        if let imageData = entry.imageData,
+                           let uiImage = UIImage(data: imageData) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Text(entry.displayEmoji)
+                                .font(.system(size: 24))
+                        }
                     }
-                }
-                .frame(width: 44, height: 44)
-                .background(Color(.quaternarySystemFill))
-                .clipShape(.rect(cornerRadius: 8))
+                    .frame(width: 44, height: 44)
+                    .background(Color(.quaternarySystemFill))
+                    .clipShape(.rect(cornerRadius: 8))
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.name)
-                        .font(.subheadline)
-                        .bold()
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.name)
+                            .font(.subheadline)
+                            .bold()
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
 
-                    HStack(spacing: 8) {
-                        if let serving = entry.servingSize {
-                            Text(serving)
+                        HStack(spacing: 8) {
+                            if let serving = entry.servingSize {
+                                Text(serving)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+
+                            Text(entry.loggedAt, format: .dateTime.hour().minute())
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("\(entry.calories) kcal")
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+
+                        if let macro = firstEnabledMacro {
+                            Text("\(Int(valueFor(macro)))g \(macro.displayName.lowercased())")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(1)
                         }
-
-                        Text(entry.loggedAt, format: .dateTime.hour().minute())
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
                     }
                 }
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(entry.calories) kcal")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-
-                    if let macro = firstEnabledMacro {
-                        Text("\(Int(valueFor(macro)))g \(macro.displayName.lowercased())")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Button(action: { showingDeleteConfirm = true }) {
-                    Image(systemName: "trash")
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.7))
-                        .padding(8)
-                }
-                .buttonStyle(.plain)
+                .contentShape(.rect)
             }
-            .padding(12)
-            .background(Color(.tertiarySystemBackground))
-            .clipShape(.rect(cornerRadius: 12))
+            .buttonStyle(.plain)
+
+            if let onLogAgain {
+                Button("Log Again", systemImage: "arrow.clockwise", action: onLogAgain)
+                    .labelStyle(.iconOnly)
+                    .font(.caption)
+                    .foregroundStyle(.tint)
+                    .padding(8)
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Creates a new food log for now")
+            }
+
+            Button(action: { showingDeleteConfirm = true }) {
+                Image(systemName: "trash")
+                    .font(.caption)
+                    .foregroundStyle(.red.opacity(0.7))
+                    .padding(8)
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(12)
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(.rect(cornerRadius: 12))
+        .contextMenu {
+            if let onLogAgain {
+                Button("Log Again", systemImage: "arrow.clockwise", action: onLogAgain)
+            }
+        }
+        .accessibilityAction(named: "Log Again") {
+            onLogAgain?()
+        }
         .confirmationDialog(
             "Delete \(entry.name)?",
             isPresented: $showingDeleteConfirm,

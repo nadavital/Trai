@@ -138,6 +138,7 @@ final class LiveWorkoutViewModel {
     private var cachedMetrics: WorkoutMetrics = .zero
     private var cachedCurrentExerciseNameSet: Set<String> = []
     private var cachedMuscleGroupByExerciseName: [String: String] = [:]
+    private var plannedRestSecondsByExerciseName: [String: Int] = [:]
 
     // User preferences cache (exercise usage frequency)
     var exerciseUsageFrequency: [String: Int] = [:]
@@ -545,6 +546,16 @@ final class LiveWorkoutViewModel {
             }
         }
         self.init(workout: workout, suggestions: [])
+        if let template {
+            for exercise in template.structuredExercises {
+                guard let seconds = exercise.restSeconds else { continue }
+                plannedRestSecondsByExerciseName[exercise.exerciseName.goalNormalizedKey] = seconds
+            }
+        }
+    }
+
+    func plannedRestSeconds(for exerciseName: String) -> Int? {
+        plannedRestSecondsByExerciseName[exerciseName.goalNormalizedKey]
     }
 
     // MARK: - Setup
@@ -1519,6 +1530,7 @@ final class LiveWorkoutViewModel {
         saveDebounced(updateLiveActivity: true)
     }
 
+    @discardableResult
     func updateSet(
         at index: Int,
         in entry: LiveWorkoutEntry,
@@ -1527,9 +1539,9 @@ final class LiveWorkoutViewModel {
         weightLbs: Double? = nil,
         notes: String? = nil,
         preferredWeightUnit: WeightUnit? = nil
-    ) {
+    ) -> Bool {
         let sets = entry.sets
-        guard index < sets.count else { return }
+        guard index < sets.count else { return false }
 
         let originalSet = sets[index]
         var set = originalSet
@@ -1557,13 +1569,18 @@ final class LiveWorkoutViewModel {
         if didChange, !set.isWarmup, !set.completed, set.hasLoggedData {
             set.completed = true
         }
-        guard didChange else { return }
+        guard didChange else { return false }
+        let didFinishLoggingSet = reps != nil
+            && originalSet.reps <= 0
+            && set.reps > 0
+            && !set.isWarmup
         entry.updateSet(at: index, with: set)
         markLiveActivityFocusedEntry(entry)
         if metricsImpactChanged(from: originalSet, to: set) {
             refreshCachedMetrics()
         }
         saveDebounced(updateLiveActivity: true)
+        return didFinishLoggingSet
     }
 
     func removeSet(at index: Int, from entry: LiveWorkoutEntry) {

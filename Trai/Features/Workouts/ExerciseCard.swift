@@ -7,6 +7,18 @@
 
 import SwiftUI
 
+enum ExerciseSetFocus: Hashable {
+    case weight(UUID)
+    case reps(UUID)
+    case notes(UUID)
+
+    var setID: UUID {
+        switch self {
+        case .weight(let id), .reps(let id), .notes(let id): id
+        }
+    }
+}
+
 // MARK: - Exercise Card
 
 struct ExerciseCard: View {
@@ -25,6 +37,7 @@ struct ExerciseCard: View {
 
     @State private var isExpanded = true
     @State private var showDeleteConfirmation = false
+    @FocusState private var focusedField: ExerciseSetFocus?
 
     private var weightUnit: String {
         usesMetricWeight ? "kg" : "lbs"
@@ -195,9 +208,7 @@ struct ExerciseCard: View {
                                     onRemoveSet(index)
                                 }
                             },
-                            onFocusChange: { isFocused in
-                                onFocusedSetChange(isFocused ? set.id : nil)
-                            }
+                            focusedField: $focusedField
                         )
                         .id(setRowScrollID(set.id))
                     }
@@ -218,6 +229,25 @@ struct ExerciseCard: View {
             }
         }
         .traiCard()
+        .onChange(of: focusedField) { _, field in
+            onFocusedSetChange(field?.setID)
+        }
+        .toolbar {
+            if focusedField != nil {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Button("Previous", systemImage: "chevron.left", action: moveToPreviousField)
+                        .disabled(!canMoveFocusBackward)
+
+                    Button("Next", systemImage: "chevron.right", action: moveToNextField)
+                        .disabled(!canMoveFocusForward)
+
+                    Spacer()
+
+                    Button("Done", action: dismissKeyboard)
+                        .bold()
+                }
+            }
+        }
         .confirmationDialog(
             "Remove \(entry.exerciseName)?",
             isPresented: $showDeleteConfirmation,
@@ -230,6 +260,48 @@ struct ExerciseCard: View {
         } message: {
             Text("This will remove the exercise and all its sets from this workout.")
         }
+    }
+
+    private var focusSequence: [ExerciseSetFocus] {
+        entry.sets.flatMap { set in
+            var fields: [ExerciseSetFocus] = [.weight(set.id), .reps(set.id)]
+            if !set.notes.isEmpty || focusedField == .notes(set.id) {
+                fields.append(.notes(set.id))
+            }
+            return fields
+        }
+    }
+
+    private var focusedFieldIndex: Int? {
+        guard let focusedField else { return nil }
+        return focusSequence.firstIndex(of: focusedField)
+    }
+
+    private var canMoveFocusBackward: Bool {
+        guard let focusedFieldIndex else { return false }
+        return focusedFieldIndex > focusSequence.startIndex
+    }
+
+    private var canMoveFocusForward: Bool {
+        guard let focusedFieldIndex else { return false }
+        return focusSequence.index(after: focusedFieldIndex) < focusSequence.endIndex
+    }
+
+    private func moveToPreviousField() {
+        guard let focusedFieldIndex, canMoveFocusBackward else { return }
+        focusedField = focusSequence[focusSequence.index(before: focusedFieldIndex)]
+    }
+
+    private func moveToNextField() {
+        guard let focusedFieldIndex, canMoveFocusForward else {
+            dismissKeyboard()
+            return
+        }
+        focusedField = focusSequence[focusSequence.index(after: focusedFieldIndex)]
+    }
+
+    private func dismissKeyboard() {
+        focusedField = nil
     }
 }
 
@@ -256,7 +328,7 @@ struct SetRow: View {
     let onUpdateWeightUnit: (WeightUnit?) -> Void
     let onToggleWarmup: () -> Void
     let onDelete: () -> Void
-    let onFocusChange: (Bool) -> Void
+    var focusedField: FocusState<ExerciseSetFocus?>.Binding
 
     @State private var weightText: String = ""
     @State private var repsText: String = ""
@@ -268,9 +340,6 @@ struct SetRow: View {
     @State private var pendingWeight: CleanWeight?
     @State private var pendingReps: Int?
     @State private var currentDisplayUnit: WeightUnit = .kg
-    @FocusState private var isWeightFocused: Bool
-    @FocusState private var isRepsFocused: Bool
-    @FocusState private var isNotesFocused: Bool
 
     // Debounce tasks for input fields
     @State private var weightDebounceTask: Task<Void, Never>?
@@ -296,8 +365,16 @@ struct SetRow: View {
         }
     }
 
-    private var hasFieldFocus: Bool {
-        isWeightFocused || isRepsFocused || isNotesFocused
+    private var isWeightFocused: Bool {
+        focusedField.wrappedValue == .weight(set.id)
+    }
+
+    private var isRepsFocused: Bool {
+        focusedField.wrappedValue == .reps(set.id)
+    }
+
+    private var isNotesFocused: Bool {
+        focusedField.wrappedValue == .notes(set.id)
     }
 
     var body: some View {
@@ -326,7 +403,7 @@ struct SetRow: View {
                         .padding(.vertical, 8)
                         .background(Color(.tertiarySystemFill))
                         .clipShape(.rect(cornerRadius: 8))
-                        .focused($isWeightFocused)
+                        .focused(focusedField, equals: .weight(set.id))
                         .onChange(of: weightText) { _, newValue in
                             guard !isUpdatingFromUnitChange else { return }
                             weightDebounceTask?.cancel()
@@ -367,7 +444,7 @@ struct SetRow: View {
                         .padding(.vertical, 8)
                         .background(Color(.tertiarySystemFill))
                         .clipShape(.rect(cornerRadius: 8))
-                        .focused($isRepsFocused)
+                        .focused(focusedField, equals: .reps(set.id))
                         .onChange(of: repsText) { _, newValue in
                             repsDebounceTask?.cancel()
                             repsDebounceTask = Task { @MainActor in
@@ -395,7 +472,7 @@ struct SetRow: View {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         showNotesField.toggle()
                         if showNotesField {
-                            isNotesFocused = true
+                            focusedField.wrappedValue = .notes(set.id)
                         }
                     }
                 } label: {
@@ -427,7 +504,7 @@ struct SetRow: View {
                     .background(Color(.tertiarySystemFill))
                     .clipShape(.rect(cornerRadius: 8))
                     .padding(.leading, 40)
-                    .focused($isNotesFocused)
+                    .focused(focusedField, equals: .notes(set.id))
                     .onChange(of: notesText) { _, newValue in
                         // Cancel any pending debounce
                         notesDebounceTask?.cancel()
@@ -458,9 +535,6 @@ struct SetRow: View {
             notesText = set.notes
             showNotesField = !set.notes.isEmpty
         }
-        .onChange(of: hasFieldFocus) { _, hasFocus in
-            onFocusChange(hasFocus)
-        }
         .onChange(of: effectiveDisplayUnit) { _, newUnit in
             currentDisplayUnit = newUnit
             let displayWeight = displayWeightValue(for: newUnit)
@@ -469,9 +543,6 @@ struct SetRow: View {
             Task { @MainActor in
                 isUpdatingFromUnitChange = false
             }
-        }
-        .onDisappear {
-            onFocusChange(false)
         }
         .confirmationDialog(
             "Large Weight Increase",
@@ -529,7 +600,7 @@ struct SetRow: View {
             onUpdateWeight(cleanWeight.kg, cleanWeight.lbs)
         }
     }
-    
+
     /// Check if the new weight represents a suspiciously large jump
     private func isLargeWeightJump(newWeightKg: Double) -> Bool {
         // Get the reference weight (previous set or current set's original value)

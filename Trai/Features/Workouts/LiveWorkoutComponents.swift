@@ -340,3 +340,67 @@ struct WorkoutBottomBar: View {
         .buttonStyle(.plain)
     }
 }
+
+// MARK: - Rest Timer
+
+struct LiveWorkoutRestTimerBar: View {
+    let endDate: Date
+    let exerciseName: String?
+    let onAddTime: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let remaining = max(0, Int(ceil(endDate.timeIntervalSince(context.date))))
+            ViewThatFits(in: .horizontal) {
+                timerContent(remaining: remaining, layout: AnyLayout(HStackLayout(spacing: 10)))
+                timerContent(remaining: remaining, layout: AnyLayout(VStackLayout(spacing: 8)))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .glassEffect(.regular.tint(.orange.opacity(0.18)), in: .rect(cornerRadius: 18))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(.orange.opacity(0.18), lineWidth: 1)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Rest timer, \(remaining) seconds remaining")
+        }
+        .padding(.horizontal, 16)
+        .accessibilityIdentifier("liveWorkoutRestTimer")
+    }
+
+    private func timerContent(remaining: Int, layout: AnyLayout) -> some View {
+        layout {
+            HStack(spacing: 8) {
+                Image(systemName: "timer")
+                    .foregroundStyle(.orange)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Rest \(remaining / 60):\(String(format: "%02d", remaining % 60))")
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                    if let exerciseName, !exerciseName.isEmpty {
+                        Text(exerciseName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 8) {
+                Button("Add 30 seconds", systemImage: "plus") {
+                    onAddTime()
+                }
+                .labelStyle(.titleAndIcon)
+                .buttonStyle(.glass)
+
+                Button("Skip", action: onSkip)
+                    .buttonStyle(.glass)
+            }
+        }
+    }
+}

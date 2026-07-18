@@ -16,6 +16,7 @@ final class BehaviorTracker {
         self.modelContext = modelContext
     }
 
+    @discardableResult
     func record(
         actionKey: String,
         domain: BehaviorDomain,
@@ -25,8 +26,8 @@ final class BehaviorTracker {
         metadata: [String: String]? = nil,
         occurredAt: Date = .now,
         saveImmediately: Bool = true
-    ) {
-        guard !actionKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    ) -> BehaviorEvent? {
+        guard !actionKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
 
         let event = BehaviorEvent(
             actionKey: actionKey,
@@ -42,6 +43,7 @@ final class BehaviorTracker {
         if saveImmediately {
             try? modelContext.save()
         }
+        return event
     }
 
     func recordDeferred(

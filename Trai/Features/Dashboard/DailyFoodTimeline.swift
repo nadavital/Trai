@@ -14,6 +14,8 @@ struct DailyFoodTimeline: View {
     var isToday: Bool = true
     var onAddFood: (() -> Void)?
     var onAddToSession: ((UUID) -> Void)?
+    var onLogAgain: ((FoodEntry) -> Void)?
+    var onLogSessionAgain: (([FoodEntry]) -> Void)?
     let onEditEntry: (FoodEntry) -> Void
     let onDeleteEntry: (FoodEntry) -> Void
 
@@ -95,6 +97,7 @@ struct DailyFoodTimeline: View {
                                 entry: entry,
                                 enabledMacros: enabledMacros,
                                 onTap: { onEditEntry(entry) },
+                                onLogAgain: onLogAgain.map { action in { action(entry) } },
                                 onDelete: { onDeleteEntry(entry) }
                             )
 
@@ -103,6 +106,8 @@ struct DailyFoodTimeline: View {
                                 entries: sessionEntries,
                                 enabledMacros: enabledMacros,
                                 onAddMore: onAddToSession.map { action in { action(sessionId) } },
+                                onLogAgain: onLogSessionAgain.map { action in { action(sessionEntries) } },
+                                onLogEntryAgain: onLogAgain,
                                 onEditEntry: onEditEntry,
                                 onDeleteEntry: onDeleteEntry
                             )

@@ -74,6 +74,20 @@ final class NotificationService {
         "\(NotificationCategory.customReminder.rawValue)_\(reminderId.uuidString)_\(occurrenceDateToken(for: date, calendar: calendar))"
     }
 
+    nonisolated static func liveWorkoutRestTimerRequestIdentifier(id: UUID) -> String {
+        "LIVE_WORKOUT_REST_TIMER_\(id.uuidString)"
+    }
+
+    struct PendingReminderSnapshot {
+        let identifier: String
+        let title: String
+        let body: String
+        let category: NotificationCategory
+        let userInfo: [AnyHashable: Any]
+        let hour: Int
+        let minute: Int
+    }
+
     // MARK: - Initialization
 
     init() {
@@ -520,6 +534,82 @@ final class NotificationService {
     func cancelPendingRequest(identifier: String?) {
         guard let identifier, !identifier.isEmpty else { return }
         center.removePendingNotificationRequests(withIdentifiers: [identifier])
+    }
+
+    func scheduleLiveWorkoutRestTimer(
+        identifier: String,
+        endDate: Date,
+        exerciseName: String?
+    ) async {
+        guard endDate > .now else { return }
+
+        let settings = await center.notificationSettings()
+        guard [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus) else { return }
+        guard !Task.isCancelled else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Rest Complete"
+        if let exerciseName, !exerciseName.isEmpty {
+            content.body = "Ready for your next \(exerciseName) set."
+        } else {
+            content.body = "Ready for your next set."
+        }
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive
+        content.userInfo = ["destination": "liveWorkout"]
+
+        let request = UNNotificationRequest(
+            identifier: identifier,
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(
+                timeInterval: max(1, endDate.timeIntervalSinceNow),
+                repeats: false
+            )
+        )
+
+        do {
+            try await center.add(request)
+            if Task.isCancelled {
+                cancelLiveWorkoutRestTimer(identifier: identifier)
+            }
+        } catch {
+            print("Failed to schedule live workout rest timer: \(error)")
+        }
+    }
+
+    func cancelLiveWorkoutRestTimer(identifier: String?) {
+        guard let identifier else { return }
+        let identifiers = [identifier]
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
+    func restorePendingReminder(_ snapshot: PendingReminderSnapshot) async {
+        let settings = await center.notificationSettings()
+        guard [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus) else { return }
+
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: .now)
+        components.hour = snapshot.hour
+        components.minute = snapshot.minute
+        guard let fireDate = Calendar.current.date(from: components), fireDate > .now else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = snapshot.title
+        content.body = snapshot.body
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive
+        content.categoryIdentifier = snapshot.category.rawValue
+        content.userInfo = snapshot.userInfo
+
+        do {
+            try await center.add(UNNotificationRequest(
+                identifier: snapshot.identifier,
+                content: content,
+                trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            ))
+        } catch {
+            print("Failed to restore reminder request \(snapshot.identifier): \(error)")
+        }
     }
 
     // MARK: - Cancellation

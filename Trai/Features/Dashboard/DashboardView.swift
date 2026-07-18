@@ -81,6 +81,7 @@ struct DashboardView: View {
     @State private var reminderComposerSeed: ReminderComposerSeed?
     @State private var activationChecklistHealthError: String?
     @State private var persistenceError: DashboardPersistenceError?
+    @State private var activeUndoNotice: TraiUndoNotice?
     @AppStorage("dashboardActivationChecklistHasLoggedFood")
     private var cachedActivationHasLoggedFood = false
     @AppStorage("dashboardActivationChecklistHasWorkoutPlan")
@@ -659,6 +660,7 @@ struct DashboardView: View {
                 }
             }
             .onDisappear {
+                commitActiveUndoNotice()
                 isDashboardTabVisible = false
                 tabActivationPolicy.deactivate()
                 deferredInitialLoadTask?.cancel()
@@ -762,6 +764,17 @@ struct DashboardView: View {
                     .opacity(0.01)
                     .accessibilityElement(children: .ignore)
                     .accessibilityIdentifier("dashboardRootReady")
+            }
+            .overlay(alignment: .bottom) {
+                if let notice = activeUndoNotice {
+                    TraiUndoBanner(
+                        notice: notice,
+                        onUndo: { performUndo(for: notice.id) },
+                        onExpire: { expireUndoNotice(notice.id) }
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(10)
+                }
             }
             .overlay(alignment: .topLeading) { latencyProbeOverlay }
             }
@@ -908,6 +921,8 @@ struct DashboardView: View {
                     targetDate: selectedDate
                 )
             },
+            onLogAgain: logFoodAgain,
+            onLogSessionAgain: logFoodSessionAgain,
             onEditEntry: { entryToEdit = $0 },
             onDeleteEntry: deleteFoodEntry
         )
@@ -1589,7 +1604,13 @@ struct DashboardView: View {
         do {
             try modelContext.save()
         } catch {
-            print("Failed to save reminder completion: \(error)")
+            modelContext.rollback()
+            persistenceError = DashboardPersistenceError(
+                title: "Reminder Not Completed",
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return
         }
         reminderCompletionHistory.insert(completion, at: 0)
         trimReminderCompletionHistory(to: now)
@@ -1599,20 +1620,25 @@ struct DashboardView: View {
             todaysCompletedReminderIds.insert(reminder.id)
         }
         notificationService?.cancelPendingRequest(identifier: reminder.pendingNotificationIdentifier)
-
-        BehaviorTracker(modelContext: modelContext).record(
+        let behaviorEvent = BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.completeReminder,
             domain: .reminder,
             surface: .dashboard,
             outcome: .completed,
             relatedEntityId: reminder.id,
-            metadata: [
-                "title": reminder.title,
-                "time": reminder.time
-            ]
+            metadata: ["title": reminder.title, "time": reminder.time]
         )
-
         scheduleCoachContextRefresh(forceRefresh: true, immediate: true)
+        presentUndoNotice(
+            message: "Reminder completed",
+            action: {
+                undoReminderCompletion(
+                    completion,
+                    behaviorEvent: behaviorEvent,
+                    reminder: reminder
+                )
+            }
+        )
         HapticManager.success()
     }
 
@@ -1684,7 +1710,7 @@ struct DashboardView: View {
     }
 
     private func deleteFoodEntry(_ entry: FoodEntry) {
-        entry.imageData = nil
+        let snapshot = FoodEntrySnapshot(entry: entry)
         modelContext.delete(entry)
         do {
             try modelContext.save()
@@ -1697,7 +1723,223 @@ struct DashboardView: View {
             HapticManager.error()
             return
         }
+        if let imageStorageKey = snapshot.imageStorageKey {
+            LocalImageStore.shared.removeData(for: imageStorageKey)
+        }
+        presentUndoNotice(
+            message: "Food deleted",
+            action: { restoreDeletedFood(snapshot) }
+        )
         HapticManager.success()
+    }
+
+    private func logFoodAgain(_ entry: FoodEntry) {
+        let snapshot = FoodEntrySnapshot(entry: entry, includeImage: false)
+        let replay = snapshot.makeReplayEntry(
+            loggedAt: .now,
+            sessionId: nil,
+            sessionOrder: 0
+        )
+        persistFoodReplay([replay], successMessage: "Logged \(entry.name) again")
+    }
+
+    private func logFoodSessionAgain(_ entries: [FoodEntry]) {
+        let sessionID = UUID()
+        let loggedAt = Date()
+        let replayEntries = entries
+            .sorted { $0.sessionOrder < $1.sessionOrder }
+            .enumerated()
+            .map { index, entry in
+                FoodEntrySnapshot(entry: entry, includeImage: false).makeReplayEntry(
+                    loggedAt: loggedAt,
+                    sessionId: sessionID,
+                    sessionOrder: index
+                )
+            }
+        persistFoodReplay(replayEntries, successMessage: "Meal logged again")
+    }
+
+    private func persistFoodReplay(_ entries: [FoodEntry], successMessage: String) {
+        guard !entries.isEmpty else { return }
+        entries.forEach(modelContext.insert)
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            persistenceError = DashboardPersistenceError(
+                title: "Food Not Logged",
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return
+        }
+
+        presentUndoNotice(
+            message: successMessage,
+            action: { undoFoodReplay(entries) }
+        )
+        HapticManager.success()
+    }
+
+    private func undoFoodReplay(_ entries: [FoodEntry]) {
+        entries.forEach(modelContext.delete)
+        do {
+            try modelContext.save()
+            HapticManager.selectionChanged()
+        } catch {
+            modelContext.rollback()
+            persistenceError = DashboardPersistenceError(
+                title: "Could Not Undo Food Log",
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+        }
+    }
+
+    private func restoreDeletedFood(_ snapshot: FoodEntrySnapshot) {
+        let restoredEntry = snapshot.makeRestoredEntry()
+        modelContext.insert(restoredEntry)
+        do {
+            try modelContext.save()
+            HapticManager.selectionChanged()
+        } catch {
+            modelContext.rollback()
+            restoredEntry.imageData = nil
+            persistenceError = DashboardPersistenceError(
+                title: "Could Not Restore Food",
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+        }
+    }
+
+    private func undoReminderCompletion(
+        _ completion: ReminderCompletion,
+        behaviorEvent: BehaviorEvent?,
+        reminder: TodaysRemindersCard.ReminderItem
+    ) {
+        modelContext.delete(completion)
+        if let behaviorEvent {
+            modelContext.delete(behaviorEvent)
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            persistenceError = DashboardPersistenceError(
+                title: "Could Not Undo Reminder",
+                message: error.localizedDescription
+            )
+            HapticManager.error()
+            return
+        }
+        reminderCompletionHistory.removeAll { $0.id == completion.id }
+        _ = withAnimation(.easeInOut(duration: 0.3)) {
+            todaysCompletedReminderIds.remove(reminder.id)
+        }
+        if let snapshot = reminderNotificationSnapshot(for: reminder) {
+            Task {
+                await notificationService?.restorePendingReminder(snapshot)
+            }
+        }
+        scheduleCoachContextRefresh(forceRefresh: true, immediate: true)
+        HapticManager.selectionChanged()
+    }
+
+    private func reminderNotificationSnapshot(
+        for reminder: TodaysRemindersCard.ReminderItem
+    ) -> NotificationService.PendingReminderSnapshot? {
+        guard let identifier = reminder.pendingNotificationIdentifier else { return nil }
+        let scheduledDate = NotificationService.occurrenceDateToken(for: .now)
+
+        if reminder.isCustom,
+           let customReminder = customReminders.first(where: { $0.id == reminder.id }) {
+            return NotificationService.PendingReminderSnapshot(
+                identifier: identifier,
+                title: customReminder.title,
+                body: customReminder.body,
+                category: .customReminder,
+                userInfo: [
+                    "reminderId": reminder.id.uuidString,
+                    "reminderHour": reminder.hour,
+                    "reminderMinute": reminder.minute,
+                    "scheduledDate": scheduledDate
+                ],
+                hour: reminder.hour,
+                minute: reminder.minute
+            )
+        }
+
+        if let meal = MealReminderTime.allMeals.first(where: {
+            StableUUID.forMeal($0.id) == reminder.id
+        }) {
+            return NotificationService.PendingReminderSnapshot(
+                identifier: identifier,
+                title: "Time for \(meal.displayName)",
+                body: meal.message,
+                category: .mealReminder,
+                userInfo: [
+                    "mealId": meal.id,
+                    "reminderHour": reminder.hour,
+                    "reminderMinute": reminder.minute,
+                    "scheduledDate": scheduledDate
+                ],
+                hour: reminder.hour,
+                minute: reminder.minute
+            )
+        }
+
+        if reminder.id == StableUUID.forWorkoutReminder() {
+            return NotificationService.PendingReminderSnapshot(
+                identifier: identifier,
+                title: "Workout Time",
+                body: "Ready to crush your workout? Let's go!",
+                category: .workoutReminder,
+                userInfo: [
+                    "reminderId": reminder.id.uuidString,
+                    "reminderHour": reminder.hour,
+                    "reminderMinute": reminder.minute,
+                    "scheduledDate": scheduledDate
+                ],
+                hour: reminder.hour,
+                minute: reminder.minute
+            )
+        }
+
+        return nil
+    }
+
+    private func presentUndoNotice(
+        message: String,
+        action: @escaping () -> Void,
+        commit: (() -> Void)? = nil
+    ) {
+        activeUndoNotice?.commit?()
+        withAnimation(.snappy) {
+            activeUndoNotice = TraiUndoNotice(message: message, action: action, commit: commit)
+        }
+    }
+
+    private func performUndo(for id: UUID) {
+        guard let notice = activeUndoNotice, notice.id == id else { return }
+        withAnimation(.snappy) {
+            activeUndoNotice = nil
+        }
+        notice.action()
+    }
+
+    private func expireUndoNotice(_ id: UUID) {
+        guard let notice = activeUndoNotice, notice.id == id else { return }
+        withAnimation(.snappy) {
+            activeUndoNotice = nil
+        }
+        notice.commit?()
+    }
+
+    private func commitActiveUndoNotice() {
+        guard let notice = activeUndoNotice else { return }
+        activeUndoNotice = nil
+        notice.commit?()
     }
 
     private func behaviorActionStateForToday() -> (openedActionKeys: Set<String>, completedActionKeys: Set<String>) {

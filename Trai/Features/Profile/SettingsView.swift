@@ -30,6 +30,7 @@ struct SettingsView: View {
     @State private var accountActionError: AccountActionError?
     @State private var workoutPlanSaveError: SettingsWorkoutPlanSaveError?
     @AppStorage("trai_coach_tone") private var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
+    @AppStorage("liveWorkoutDefaultRestSeconds") private var defaultRestSeconds = 90
 
     var body: some View {
         List {
@@ -218,6 +219,16 @@ struct SettingsView: View {
                     }
                 }
 
+                Picker(selection: $defaultRestSeconds) {
+                    Text("Off").tag(0)
+                    Text("60 sec").tag(60)
+                    Text("90 sec").tag(90)
+                    Text("2 min").tag(120)
+                    Text("3 min").tag(180)
+                } label: {
+                    Label("Default Rest Timer", systemImage: "timer")
+                }
+
                 Picker(selection: Binding(
                     get: { profile.volumePRModeValue },
                     set: { profile.volumePRModeValue = $0 }
@@ -234,7 +245,7 @@ struct SettingsView: View {
                 if profile.defaultWorkoutActionValue == .recommendedWorkout && !profile.hasWorkoutPlan {
                     Text("Create a workout plan to use the recommended workout option.")
                 } else {
-                    Text("Default reps when adding new exercises. \(profile.defaultWorkoutActionValue.description) Volume PR mode: \(profile.volumePRModeValue.description).")
+                    Text("Default reps and rest timing apply to ad hoc exercises; planned exercises use their saved rest target. \(profile.defaultWorkoutActionValue.description) Volume PR mode: \(profile.volumePRModeValue.description).")
                 }
             }
 
