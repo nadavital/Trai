@@ -83,9 +83,15 @@ final class TraiBackendClient {
             }
             return URL(string: "http://127.0.0.1:8789")
         case .staging:
-            return configuredURL(forInfoKey: InfoKey.stagingBaseURL, fallback: "https://staging-api.trai.app")
+            return configuredURL(
+                forInfoKey: InfoKey.stagingBaseURL,
+                fallback: "https://trai-backend-staging-g33i5go2kq-uc.a.run.app"
+            )
         case .production:
-            return configuredURL(forInfoKey: InfoKey.productionBaseURL, fallback: "https://api.trai.app")
+            return configuredURL(
+                forInfoKey: InfoKey.productionBaseURL,
+                fallback: "https://trai-backend-production-g33i5go2kq-uc.a.run.app"
+            )
         }
     }
 
