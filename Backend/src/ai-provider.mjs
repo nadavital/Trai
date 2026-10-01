@@ -203,7 +203,9 @@ function buildOpenAIResponsesRequest(config, request, { streaming, feature } = {
   };
 
   payload.prompt_cache_key = buildPromptCacheKey(feature, request.promptVersion);
-  if (supportsExtendedPromptCacheRetention(config.openAIModel)) {
+  if (String(config.openAIModel).trim().toLowerCase().startsWith('gpt-6')) {
+    payload.prompt_cache_options = { ttl: '30m' };
+  } else if (supportsExtendedPromptCacheRetention(config.openAIModel)) {
     payload.prompt_cache_retention = '24h';
   }
 
@@ -282,11 +284,19 @@ function extractOpenAIReasoningEffort(modelName, request) {
 
 function shouldIncludeOpenAISamplingControls(modelName, reasoningEffort) {
   const normalizedModelName = String(modelName ?? '').trim().toLowerCase();
+  if (normalizedModelName.startsWith('gpt-6')) {
+    // GPT-6 Luna defaults to medium reasoning, which rejects sampling controls.
+    return reasoningEffort === 'none';
+  }
   if (!normalizedModelName.startsWith('gpt-5')) {
     return true;
   }
 
-  if (normalizedModelName.startsWith('gpt-5.4') || normalizedModelName.startsWith('gpt-5.2')) {
+  if (
+    normalizedModelName.startsWith('gpt-5.6')
+    || normalizedModelName.startsWith('gpt-5.4')
+    || normalizedModelName.startsWith('gpt-5.2')
+  ) {
     return !reasoningEffort || reasoningEffort === 'none';
   }
 
@@ -295,8 +305,15 @@ function shouldIncludeOpenAISamplingControls(modelName, reasoningEffort) {
 
 function openAILowestReasoningEffortForModel(modelName) {
   const normalizedModelName = String(modelName ?? '').trim().toLowerCase();
+  if (normalizedModelName.startsWith('gpt-6-astra')) {
+    return 'low';
+  }
+  if (normalizedModelName.startsWith('gpt-6-luna') || normalizedModelName.startsWith('gpt-6-sol')) {
+    return 'none';
+  }
   if (
-    normalizedModelName.startsWith('gpt-5.4')
+    normalizedModelName.startsWith('gpt-5.6')
+    || normalizedModelName.startsWith('gpt-5.4')
     || normalizedModelName.startsWith('gpt-5.2')
     || normalizedModelName.startsWith('gpt-5.1')
   ) {

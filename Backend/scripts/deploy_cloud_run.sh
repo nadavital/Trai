@@ -28,7 +28,7 @@ Optional environment variables:
   MAX_INSTANCES                  optional Cloud Run cap, e.g. 3
   TRAI_AI_PROVIDER               default: openai
   GEMINI_MODEL                   default: gemini-3-flash-preview
-  OPENAI_MODEL                   default: gpt-5.4-mini
+  OPENAI_MODEL                   default: gpt-6-luna
   APPLE_EXPECTED_AUDIENCES       default: Nadav.Trai
   APP_STORE_EXPECTED_BUNDLE_IDS  default: Nadav.Trai
   GEMINI_SECRET_NAME             default: GEMINI_API_KEY
@@ -64,7 +64,7 @@ REPOSITORY="${REPOSITORY:-trai-backend}"
 TRAI_DATABASE_DRIVER="${TRAI_DATABASE_DRIVER:-firestore}"
 TRAI_AI_PROVIDER="${TRAI_AI_PROVIDER:-openai}"
 GEMINI_MODEL="${GEMINI_MODEL:-gemini-3-flash-preview}"
-OPENAI_MODEL="${OPENAI_MODEL:-gpt-5.4-mini}"
+OPENAI_MODEL="${OPENAI_MODEL:-gpt-6-luna}"
 APPLE_EXPECTED_AUDIENCES="${APPLE_EXPECTED_AUDIENCES:-Nadav.Trai}"
 APP_STORE_EXPECTED_BUNDLE_IDS="${APP_STORE_EXPECTED_BUNDLE_IDS:-Nadav.Trai}"
 GEMINI_SECRET_NAME="${GEMINI_SECRET_NAME:-GEMINI_API_KEY}"

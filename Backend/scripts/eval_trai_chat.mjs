@@ -14,7 +14,7 @@ if (selectedCases.length === 0) {
 if (options.directOpenAI) {
   const directReport = await runDirectOpenAIEval(selectedCases, {
     ...options,
-    openAIModel: options.openAIModels[0] ?? 'gpt-5.4-mini',
+    openAIModel: options.openAIModels[0] ?? 'gpt-6-luna',
     variantName: 'direct-openai'
   });
   console.log(formatDirectReport(directReport));
@@ -47,7 +47,7 @@ function parseOptions(argv) {
     baseURL: process.env.TRAI_EVAL_BASE_URL ?? 'http://127.0.0.1:8789',
     adminKey: process.env.TRAI_ADMIN_API_KEY ?? 'local-dev-admin',
     openAIAPIKey: process.env.OPENAI_API_KEY ?? '',
-    openAIModels: (process.env.OPENAI_MODEL ?? 'gpt-5.4-mini').split(',').map((value) => value.trim()).filter(Boolean),
+    openAIModels: (process.env.OPENAI_MODEL ?? 'gpt-6-luna').split(',').map((value) => value.trim()).filter(Boolean),
     directOpenAI: false,
     reportPath: null,
     category: null,
@@ -179,7 +179,7 @@ async function runDirectOpenAIEval(cases, options) {
     throw new Error('OPENAI_API_KEY is required for --direct-openai.');
   }
 
-  const model = options.openAIModel ?? options.openAIModels[0] ?? 'gpt-5.4-mini';
+  const model = options.openAIModel ?? options.openAIModels[0] ?? 'gpt-6-luna';
   const provider = createAIProvider({
     aiProvider: 'openai',
     openAIApiKey: apiKey,
@@ -908,8 +908,8 @@ function printHelpAndExit(exitCode = 0) {
     '  --direct-openai                Run directly through the OpenAI adapter using OPENAI_API_KEY.',
     '  --base-url=http://127.0.0.1:8789',
     '  --admin-key=local-dev-admin',
-    '  --model=gpt-5.4-mini',
-    '  --models=gpt-5.4-mini,gpt-5.4',
+    '  --model=gpt-6-luna',
+    '  --models=gpt-6-luna,gpt-5.6-terra',
     '  --category=food',
     '  --case=food-log-banana',
     '  --limit=5',

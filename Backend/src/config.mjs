@@ -24,7 +24,7 @@ export function createConfig(env = process.env) {
       : 'sqlite';
 
   const geminiModel = env.GEMINI_MODEL ?? 'gemini-3-flash-preview';
-  const openAIModel = env.OPENAI_MODEL ?? 'gpt-5.4-mini';
+  const openAIModel = env.OPENAI_MODEL ?? 'gpt-6-luna';
   const defaultOpenAITokenPricing = defaultTokenPricingForProvider('openai', openAIModel);
   const defaultGeminiTokenPricing = defaultTokenPricingForProvider('gemini', geminiModel);
 
@@ -157,6 +157,22 @@ function defaultTokenPricingForProvider(provider, model) {
   const normalizedModel = String(model ?? '').trim().toLowerCase();
 
   if (normalizedProvider === 'openai') {
+    if (normalizedModel.startsWith('gpt-6-luna')) {
+      return {
+        inputUSDPer1M: 0.1,
+        outputUSDPer1M: 0.5,
+        cachedInputUSDPer1M: 0.01
+      };
+    }
+
+    if (normalizedModel.startsWith('gpt-5.6-luna')) {
+      return {
+        inputUSDPer1M: 0.2,
+        outputUSDPer1M: 1.2,
+        cachedInputUSDPer1M: 0.02
+      };
+    }
+
     if (normalizedModel.startsWith('gpt-5.4-mini')) {
       return {
         inputUSDPer1M: 0.75,

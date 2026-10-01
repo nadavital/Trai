@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createAIProvider } from '../src/ai-provider.mjs';
+import { createConfig } from '../src/config.mjs';
 import { canonicalTraiRequestFixtures } from './trai_ai_contract_fixtures.mjs';
 import {
   buildGeminiRequestFromTraiRequest,
@@ -21,10 +22,19 @@ const baseConfig = {
   openAIApiKeys: {
     default: 'test-openai-key'
   },
-  openAIModel: 'gpt-5.4-mini',
+  openAIModel: 'gpt-6-luna',
   geminiApiKey: '',
   geminiModel: 'gemini-3-flash-preview'
 };
+
+const defaultConfig = createConfig({});
+assert.equal(defaultConfig.openAIModel, 'gpt-6-luna');
+assert.deepEqual(defaultConfig.aiTokenPricing.openai, {
+  inputUSDPer1M: 0.1, outputUSDPer1M: 0.5, cachedInputUSDPer1M: 0.01
+});
+assert.deepEqual(createConfig({ OPENAI_MODEL: 'gpt-5.6-luna' }).aiTokenPricing.openai, {
+  inputUSDPer1M: 0.2, outputUSDPer1M: 1.2, cachedInputUSDPer1M: 0.02
+});
 
 await testNonStreamingTextAndRequestShape();
 await testPromptVersionScopesOpenAIPromptCacheKey();
@@ -45,7 +55,7 @@ await testGeminiSchemaDropsEmptyEnumValues();
 await testLegacyGeminiRequestDerivesCanonicalMessages();
 await testGeminiRoundTripPreservesGenerationConfig();
 await testGeminiThinkingLevelMapsToOpenAIReasoning();
-await testGeminiMinimalThinkingMapsToNoneForGPT54();
+await testGeminiMinimalThinkingMapsToNoneForGPT6();
 await testCanonicalTraiFoodPhotoRequestMapsToOpenAIVisionPayload();
 await testOpenAIUsesCanonicalMessagesWhenFlattenedMessagesAreAbsent();
 await testCanonicalTraiRequestExecutesAgainstGemini();
@@ -109,9 +119,12 @@ async function testNonStreamingTextAndRequestShape() {
 
   assert.equal(captured.length, 1);
   assert.equal(captured[0].url, 'https://api.openai.com/v1/responses');
-  assert.equal(captured[0].body.model, 'gpt-5.4-mini');
+  assert.equal(captured[0].body.model, 'gpt-6-luna');
   assert.equal(captured[0].body.prompt_cache_key, 'trai-agentcoachchat-v1');
-  assert.equal(captured[0].body.prompt_cache_retention, '24h');
+  assert.deepEqual(captured[0].body.prompt_cache_options, { ttl: '30m' });
+  assert.equal('prompt_cache_retention' in captured[0].body, false);
+  assert.equal('temperature' in captured[0].body, false);
+  assert.equal('top_p' in captured[0].body, false);
   assert.equal(captured[0].body.instructions, 'Be concise.');
   assert.equal(captured[0].body.parallel_tool_calls, true);
   assert.equal(captured[0].body.tool_choice, 'auto');
@@ -501,7 +514,7 @@ async function testFoodPhotoAnalysisRequestMapsToStrictOpenAIVisionPayload() {
   assert.equal(captured.length, 1);
 
   const requestBody = captured[0].body;
-  assert.equal(requestBody.model, 'gpt-5.4-mini');
+  assert.equal(requestBody.model, 'gpt-6-luna');
   assert.deepEqual(requestBody.reasoning, { effort: 'medium' });
   assert.equal(requestBody.max_output_tokens, 512);
 
@@ -1004,7 +1017,7 @@ async function testGeminiThinkingLevelMapsToOpenAIReasoning() {
   assert.equal('top_p' in requestBody, false);
 }
 
-async function testGeminiMinimalThinkingMapsToNoneForGPT54() {
+async function testGeminiMinimalThinkingMapsToNoneForGPT6() {
   const captured = [];
   const provider = withMockedFetch(async (url, init) => {
     captured.push({ url, body: JSON.parse(init.body) });

@@ -1,0 +1,10 @@
+.gcloudignore
+.git
+.gitignore
+.env
+.env.*
+node_modules
+data
+*.sqlite
+*.sqlite-*
+npm-debug.log
