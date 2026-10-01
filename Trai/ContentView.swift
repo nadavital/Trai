@@ -287,8 +287,7 @@ struct MainTabView: View {
         Binding(
             get: { selectedTabState },
             set: { newValue in
-                _ = loadedTabs.insert(newValue)
-                selectedTabState = newValue
+                selectTab(newValue)
             }
         )
     }
@@ -297,6 +296,7 @@ struct MainTabView: View {
     @State private var liveWorkoutPresentation: LiveWorkoutPresentation?
     @State private var showingEndConfirmation = false
     @State private var showingReminders = false
+    @State private var showingAccount = false
 
     // App Intent / Deep link triggered states
     @State private var foodCameraPresentation: FoodCameraPresentation?
@@ -349,13 +349,17 @@ struct MainTabView: View {
             .environment(\.appTabSelection, selectedTab)
             .onAppear(perform: handleTabViewAppear)
             .onChange(of: selectedTabState) { _, tab in
-                persistedSelectedTabRaw = tab.rawValue
+                // Persistence is an output after initial restoration, not a second
+                // live selection source. Replaying its onChange during a cold route
+                // can bounce the TabView between the restored and requested tabs.
+                if persistedSelectedTabRaw != tab.rawValue {
+                    persistedSelectedTabRaw = tab.rawValue
+                }
                 scheduleTabPrewarmIfNeeded()
             }
-            .onChange(of: persistedSelectedTabRaw) { _, newValue in
-                guard let tab = AppTab(rawValue: newValue) else { return }
-                guard tab != selectedTabState else { return }
-                selectedTabState = tab
+            .sheet(isPresented: $showingAccount) {
+                ProfileView(mode: .account, onSelectTab: selectTab)
+                    .traiSheetBranding()
             }
             .onChange(of: showRemindersFromNotification.wrappedValue) { _, shouldShow in
                 guard shouldShow else { return }
@@ -395,7 +399,7 @@ struct MainTabView: View {
             } message: {
                 Text("Are you sure you want to end this workout?")
             }
-            .fullScreenCover(item: $foodCameraPresentation) { presentation in
+            .sheet(item: $foodCameraPresentation) { presentation in
                 FoodCameraView(sessionId: presentation.sessionId, targetDate: presentation.targetDate)
                     .traiSheetBranding()
             }
@@ -454,11 +458,6 @@ struct MainTabView: View {
                 }
             }
 
-            Tab("Profile", systemImage: "person.fill", value: .profile) {
-                cachedTabContent(for: .profile) {
-                    ProfileView(onSelectTab: selectTab)
-                }
-            }
         }
     }
 
@@ -468,13 +467,15 @@ struct MainTabView: View {
             if (AppLaunchArguments.shouldUseAppStoreScreenshotSeed || AppLaunchArguments.shouldSeedGoalPreviewData),
                let rawTab = AppLaunchArguments.appStoreScreenshotInitialTabRawValue,
                let screenshotTab = AppTab(rawValue: rawTab) {
-                selectedTabState = screenshotTab
-                persistedSelectedTabRaw = screenshotTab.rawValue
+                selectedTabState = screenshotTab == .profile ? .dashboard : screenshotTab
+                persistedSelectedTabRaw = selectedTabState.rawValue
             } else if AppLaunchArguments.isUITesting {
                 selectedTabState = .dashboard
                 persistedSelectedTabRaw = AppTab.dashboard.rawValue
             } else {
-                selectedTabState = AppTab(rawValue: persistedSelectedTabRaw) ?? .dashboard
+                let restored = AppTab(rawValue: persistedSelectedTabRaw) ?? .dashboard
+                selectedTabState = restored == .profile ? .dashboard : restored
+                persistedSelectedTabRaw = selectedTabState.rawValue
             }
         }
         if loadedTabs.isEmpty {
@@ -586,6 +587,12 @@ struct MainTabView: View {
     }
 
     private func selectTab(_ tab: AppTab) {
+        // Preserve old profile requests without retaining a fourth tab.
+        guard tab != .profile else {
+            persistedSelectedTabRaw = selectedTabState.rawValue
+            showingAccount = true
+            return
+        }
         _ = loadedTabs.insert(tab)
         selectedTabState = tab
     }

@@ -56,38 +56,27 @@ struct DailyFoodTimeline: View {
         entries.isEmpty
     }
 
-    private var canAddFood: Bool {
-        onAddFood != nil
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
-                Text(isToday ? "Today's Food" : "Food Log")
+                Text(isToday ? "Meals today" : "Meals")
                     .font(.headline)
 
                 Spacer()
 
                 if let addAction = onAddFood {
-                    Button("Add", systemImage: "plus", action: addAction)
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(
-                            .traiSecondary(
-                                color: .accentColor,
-                                size: .compact,
-                                width: 32,
-                                height: 32,
-                                fillOpacity: 0.18
-                            )
-                        )
+                    Button("Log food", systemImage: "plus", action: addAction)
+                        .font(.subheadline.weight(.medium))
+                        .buttonStyle(.borderless)
+                        .frame(minHeight: 44)
                 }
             }
 
             if isEmpty {
                 EmptyMealsView(onAddFood: onAddFood)
             } else {
-                VStack(spacing: 8) {
+                VStack(spacing: 4) {
                     ForEach(groupedEntries) { group in
                         switch group {
                         case .single(let entry):
@@ -111,7 +100,7 @@ struct DailyFoodTimeline: View {
                 }
             }
         }
-        .traiCard(cornerRadius: 16)
+        .padding(.horizontal, 4)
     }
 }
 

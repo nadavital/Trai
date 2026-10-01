@@ -49,6 +49,8 @@ struct WorkoutSummarySheet: View {
         order: .reverse
     )
     private var workoutGoals: [WorkoutGoal]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var showsWorkoutDetails = false
     @State private var showConfetti = false
     @State private var showCelebration = false
     @State private var activePresentation: WorkoutSummaryPresentation?
@@ -94,14 +96,7 @@ struct WorkoutSummarySheet: View {
     }
 
     private var summaryTitle: String {
-        usesFlexibleSessionPresentation ? "Session Complete!" : "Workout Complete!"
-    }
-
-    private var entriesTitle: String {
-        if usesFlexibleSessionPresentation {
-            return "Activities"
-        }
-        return loggedEntries.contains(where: { !$0.isStrength }) ? "Workout Log" : "Exercises"
+        usesFlexibleSessionPresentation ? "Session complete" : "Workout complete"
     }
 
     private var goalInsights: [WorkoutGoalInsight] {
@@ -130,14 +125,14 @@ struct WorkoutSummarySheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 16) {
                     WorkoutSummaryHeader(
                         title: summaryTitle,
-                        subtitle: usesFlexibleSessionPresentation ? workout.displayFocusSummary : nil,
+                        subtitle: workout.name,
                         formattedDuration: workout.formattedDuration,
                         entryStats: entryStats,
-                        showCelebration: showCelebration,
-                        showConfetti: showConfetti
+                        showCelebration: showCelebration && !reduceMotion,
+                        showConfetti: showConfetti && !reduceMotion
                     )
 
                     if !goalInsights.isEmpty {
@@ -156,7 +151,7 @@ struct WorkoutSummarySheet: View {
                             HStack {
                                 Image(systemName: "trophy.fill")
                                     .foregroundStyle(.yellow)
-                                Text("Personal Records!")
+                                Text("Personal records")
                                     .font(.headline)
                                     .foregroundStyle(.primary)
                             }
@@ -167,35 +162,37 @@ struct WorkoutSummarySheet: View {
                                 }
                             }
                         }
-                        .padding()
-                        .background(Color.yellow.opacity(0.15))
-                        .clipShape(.rect(cornerRadius: 16))
+                        .traiCard()
                     }
 
                     // Exercises completed with full detail
                     if !loggedEntries.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(entriesTitle)
-                                .font(.headline)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                            ForEach(loggedEntries) { entry in
-                                if entry.isStrength {
-                                    ExerciseSummaryRow(entry: entry, usesMetric: usesMetric) {
-                                        activePresentation = .exercisePR(IdentifiableExerciseName(id: entry.exerciseName))
+                        DisclosureGroup(isExpanded: $showsWorkoutDetails) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                ForEach(loggedEntries) { entry in
+                                    if entry.isStrength {
+                                        ExerciseSummaryRow(entry: entry, usesMetric: usesMetric) {
+                                            activePresentation = .exercisePR(IdentifiableExerciseName(id: entry.exerciseName))
+                                        }
+                                    } else {
+                                        ActivitySummaryRow(entry: entry, usesMetric: usesMetric)
                                     }
-                                } else {
-                                    ActivitySummaryRow(entry: entry, usesMetric: usesMetric)
                                 }
                             }
+                            .padding(.top, 12)
+                        } label: {
+                            Text("Workout details")
+                                .font(.system(.headline, design: .rounded))
+                                .foregroundStyle(.primary)
                         }
+                        .accessibilityIdentifier("workoutSummaryDetails")
                         .traiCard()
                     }
                 }
                 .padding()
             }
             .navigationTitle("Summary")
-            .toolbarTitleDisplayMode(.inlineLarge)
+            .toolbarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark", action: onDismiss)
@@ -203,10 +200,12 @@ struct WorkoutSummarySheet: View {
                 }
             }
             .task {
+                guard !reduceMotion else { return }
                 withAnimation {
                     showConfetti = true
                 }
                 try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
                 showCelebration = true
             }
             .sheet(item: $activePresentation) { presentation in
@@ -218,14 +217,6 @@ struct WorkoutSummarySheet: View {
                     message: Text(error.message),
                     dismissButton: .default(Text("OK"))
                 )
-            }
-        }
-        .overlay {
-            // Confetti overlay - covers entire sheet
-            if showConfetti {
-                ConfettiView()
-                    .allowsHitTesting(false)
-                    .ignoresSafeArea()
             }
         }
         .traiSheetBranding()
@@ -336,6 +327,8 @@ struct WorkoutSummaryContent: View {
         order: .reverse
     )
     private var workoutGoals: [WorkoutGoal]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var showsWorkoutDetails = false
     @State private var showConfetti = false
     @State private var showCelebration = false
     @State private var selectedGoal: WorkoutGoal?
@@ -377,14 +370,7 @@ struct WorkoutSummaryContent: View {
     }
 
     private var summaryTitle: String {
-        usesFlexibleSessionPresentation ? "Session Complete!" : "Workout Complete!"
-    }
-
-    private var entriesTitle: String {
-        if usesFlexibleSessionPresentation {
-            return "Activities"
-        }
-        return loggedEntries.contains(where: { !$0.isStrength }) ? "Workout Log" : "Exercises"
+        usesFlexibleSessionPresentation ? "Session complete" : "Workout complete"
     }
 
     private var goalInsights: [WorkoutGoalInsight] {
@@ -412,14 +398,14 @@ struct WorkoutSummaryContent: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: 16) {
                 WorkoutSummaryHeader(
                     title: summaryTitle,
-                    subtitle: usesFlexibleSessionPresentation ? workout.displayFocusSummary : nil,
+                    subtitle: workout.name,
                     formattedDuration: workout.formattedDuration,
                     entryStats: entryStats,
-                    showCelebration: showCelebration,
-                    showConfetti: showConfetti
+                    showCelebration: showCelebration && !reduceMotion,
+                    showConfetti: showConfetti && !reduceMotion
                 )
 
                 if !goalInsights.isEmpty {
@@ -438,7 +424,7 @@ struct WorkoutSummaryContent: View {
                         HStack {
                             Image(systemName: "trophy.fill")
                                 .foregroundStyle(.yellow)
-                            Text("Personal Records!")
+                            Text("Personal records")
                                 .font(.headline)
                                 .foregroundStyle(.primary)
                         }
@@ -449,43 +435,40 @@ struct WorkoutSummaryContent: View {
                             }
                         }
                     }
-                    .padding()
-                    .background(Color.yellow.opacity(0.15))
-                    .clipShape(.rect(cornerRadius: 16))
+                    .traiCard()
                 }
 
                 // Exercises completed with full detail
                 if !loggedEntries.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(entriesTitle)
-                            .font(.headline)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                        ForEach(loggedEntries) { entry in
-                            if entry.isStrength {
-                                ExerciseSummaryRow(entry: entry, usesMetric: usesMetric)
-                            } else {
-                                ActivitySummaryRow(entry: entry, usesMetric: usesMetric)
+                    DisclosureGroup(isExpanded: $showsWorkoutDetails) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(loggedEntries) { entry in
+                                if entry.isStrength {
+                                    ExerciseSummaryRow(entry: entry, usesMetric: usesMetric)
+                                } else {
+                                    ActivitySummaryRow(entry: entry, usesMetric: usesMetric)
+                                }
                             }
                         }
+                        .padding(.top, 12)
+                    } label: {
+                        Text("Workout details")
+                            .font(.system(.headline, design: .rounded))
+                            .foregroundStyle(.primary)
                     }
+                    .accessibilityIdentifier("workoutSummaryDetails")
                     .traiCard()
                 }
             }
             .padding()
         }
-        .overlay {
-            if showConfetti {
-                ConfettiView()
-                    .allowsHitTesting(false)
-                    .ignoresSafeArea()
-            }
-        }
         .task {
+            guard !reduceMotion else { return }
             withAnimation {
                 showConfetti = true
             }
             try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
             showCelebration = true
         }
         .sheet(item: $selectedGoal) { goal in
@@ -667,10 +650,9 @@ private struct WorkoutSummaryHeader: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.traiHero(26))
-                        .traiGradientText()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
+                        .font(.system(.title2, design: .rounded, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     if let subtitleText {
                         Text(subtitleText)
@@ -883,16 +865,11 @@ struct ExerciseSummaryRow: View {
                         .foregroundStyle(.secondary)
                 } else {
                     // Original format with individual badges
-                    HStack(spacing: 4) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), alignment: .leading)], alignment: .leading, spacing: 6) {
                         ForEach(completedSets.indices, id: \.self) { index in
                             let set = completedSets[index]
                             SetBadge(set: set, isBest: set == entry.bestSet, usesMetric: usesMetric)
 
-                            if index < completedSets.count - 1 {
-                                Text("•")
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
                         }
                     }
                 }

@@ -144,49 +144,17 @@ struct ReminderSettingsView: View {
             }
             .buttonStyle(.traiPrimary(fullWidth: true))
         }
-        .padding(16)
         .traiCard(cornerRadius: 18)
     }
 
     private var createReminderCTA: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.accentColor, Color.accentColor.opacity(0.72)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-
-                    Image(systemName: "bell.badge.fill")
-                        .font(.title3)
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 52, height: 52)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Create a reminder")
-                        .font(.traiHeadline(17))
-                        .foregroundStyle(.primary)
-
-                    Text("Tell Trai what to remember or start from a preset.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-            }
-
-            Button("Create Reminder", systemImage: "plus", action: { composerSeed = .blank })
-                .buttonStyle(.traiPrimary(fullWidth: true))
+        Button("Create reminder", systemImage: "plus") {
+            composerSeed = .blank
         }
-        .padding(16)
-        .traiCard(cornerRadius: 20, contentPadding: 0)
+        .font(.subheadline.weight(.semibold))
+        .buttonStyle(.bordered)
+        .tint(.accentColor)
+        .controlSize(.large)
     }
 
     private var remindersCard: some View {

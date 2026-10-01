@@ -63,10 +63,14 @@ struct MacroDetailSheet: View {
                         emptyMacrosView
                     } else {
                         // Visual macro breakdown
-                        MacroRingsDisplay(
+                        MacroTargetSummary(
                             macroValues: macroValues,
                             macroGoals: macroGoals,
-                            enabledMacros: enabledMacros
+                            enabledMacros: enabledMacros,
+                            incompleteMacros: Set([
+                                entries.contains { $0.fiberGrams == nil } ? MacroType.fiber : nil,
+                                entries.contains { $0.sugarGrams == nil } ? MacroType.sugar : nil
+                            ].compactMap { $0 })
                         )
                         .padding(.top)
 
@@ -99,7 +103,7 @@ struct MacroDetailSheet: View {
                 }
                 .padding()
             }
-            .navigationTitle("Macro Breakdown")
+            .navigationTitle("Nutrition details")
             .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -135,118 +139,47 @@ struct MacroDetailSheet: View {
     }
 }
 
-// MARK: - Macro Rings Display
+// MARK: - Macro Target Summary
 
-private struct MacroRingsDisplay: View {
+private struct MacroTargetSummary: View {
     let macroValues: [MacroType: Double]
     let macroGoals: [MacroType: Int]
     let enabledMacros: Set<MacroType>
+    let incompleteMacros: Set<MacroType>
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private var orderedMacros: [MacroType] {
-        MacroType.displayOrder.filter { enabledMacros.contains($0) }
-    }
-
-    private var macroStates: [NutritionDisplayPolicy.MacroState] {
-        NutritionDisplayPolicy.macroStates(
-            values: macroValues,
-            targets: macroGoals,
-            enabledMacros: enabledMacros
-        )
+    private var columns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible(), alignment: .leading)]
+            : [GridItem(.adaptive(minimum: 140), alignment: .leading)]
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            let layout = ringLayout(for: geometry.size.width)
-
-            HStack(spacing: layout.spacing) {
-                ForEach(macroStates) { state in
-                    MacroRing(
-                        name: state.macro.displayName,
-                        compactLabel: state.macro.shortName,
-                        current: state.current,
-                        goal: Double(state.target),
-                        color: state.macro.color,
-                        unit: "g",
-                        diameter: layout.diameter,
-                        prefersCompactLabel: layout.useCompactLabels
-                    )
-                    .frame(width: layout.itemWidth)
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+            ForEach(MacroType.displayOrder.filter { enabledMacros.contains($0) }) { macro in
+                VStack(alignment: .leading, spacing: 8) {
+                    Label {
+                        Text(macro.displayName).foregroundStyle(.primary)
+                    } icon: {
+                        Circle().fill(macro.color).frame(width: 8, height: 8)
+                    }.font(.subheadline.weight(.medium))
+                    Text("\(incompleteMacros.contains(macro) ? "≥" : "")\(Int(macroValues[macro] ?? 0)) g")
+                        .font(.title3.weight(.semibold)).monospacedDigit()
+                    if incompleteMacros.contains(macro) {
+                        Text("Partial estimate")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if let target = macroGoals[macro], target > 0 {
+                        Text("Target \(target) g").font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("Target not set").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(macro.color.opacity(0.08), in: .rect(cornerRadius: 16))
+                .accessibilityElement(children: .combine)
             }
-        }
-        .frame(height: orderedMacros.count >= 5 ? 126 : 138)
-        .traiCard()
-    }
-
-    private func ringLayout(for availableWidth: CGFloat) -> (itemWidth: CGFloat, diameter: CGFloat, spacing: CGFloat, useCompactLabels: Bool) {
-        let count = max(CGFloat(orderedMacros.count), 1)
-        let spacing: CGFloat = count >= 5 ? 8 : 12
-        let totalSpacing = spacing * max(count - 1, 0)
-        let itemWidth = max((availableWidth - totalSpacing) / count, 48)
-        let diameter = min(80, max(52, itemWidth - 6))
-        let useCompactLabels = itemWidth < 66
-        return (itemWidth, diameter, spacing, useCompactLabels)
-    }
-}
-
-private struct MacroRing: View {
-    let name: String
-    let compactLabel: String
-    let current: Double
-    let goal: Double
-    let color: Color
-    let unit: String
-    let diameter: CGFloat
-    let prefersCompactLabel: Bool
-
-    private var progress: Double {
-        guard goal > 0 else { return 0 }
-        return min(current / goal, 1.0)
-    }
-
-    private var remaining: Double {
-        return max(goal - current, 0)
-    }
-
-    private var labelText: String {
-        prefersCompactLabel ? compactLabel : name
-    }
-
-    var body: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .stroke(color.opacity(0.2), lineWidth: 10)
-
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(.spring(duration: 0.6), value: progress)
-
-                VStack(spacing: 2) {
-                    Text("\(Int(current))")
-                        .font(.system(size: diameter < 62 ? 18 : 22, weight: .bold, design: .rounded))
-                        .bold()
-
-                    Text(unit)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: diameter, height: diameter)
-
-            Text(labelText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-
-            Text("\(Int(remaining))\(unit) left")
-                .font(.caption2)
-                .foregroundStyle(color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
         }
     }
 }
@@ -308,7 +241,7 @@ private struct CalorieContributionCard: View {
             .frame(height: 12)
 
             // Legend
-            HStack(spacing: 16) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), alignment: .leading)], alignment: .leading, spacing: 12) {
                 ForEach(mainMacros) { macro in
                     MacroLegendItem(
                         name: macro.displayName,

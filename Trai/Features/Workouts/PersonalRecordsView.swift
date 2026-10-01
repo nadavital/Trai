@@ -499,7 +499,7 @@ private struct StatBox: View {
         .frame(minWidth: 0, maxWidth: .infinity)
         .frame(minHeight: 96)
         .padding()
-        .background(.ultraThinMaterial)
+        .background(Color(.secondarySystemGroupedBackground))
         .clipShape(.rect(cornerRadius: 14))
     }
 }

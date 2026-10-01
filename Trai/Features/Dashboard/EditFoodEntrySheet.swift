@@ -83,13 +83,13 @@ struct EditFoodEntrySheet: View {
                                 .foregroundStyle(.primary)
 
                             Text("Name and quantity")
-                                .font(.traiLabel(12))
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
 
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Name")
-                                .font(.traiLabel(12))
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
 
                             TextField("e.g. Grilled chicken salad", text: $name)
@@ -99,7 +99,7 @@ struct EditFoodEntrySheet: View {
 
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Quantity")
-                                .font(.traiLabel(12))
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
 
                             TextField("e.g. 1 bowl, 150 g, 2 slices", text: $servingSize)
@@ -200,10 +200,10 @@ struct EditFoodEntrySheet: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Ask Trai")
-                        .font(.traiHeadline(14))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.accentColor)
                     Text(entry.name)
-                        .font(.traiLabel(12))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -224,15 +224,7 @@ struct EditFoodEntrySheet: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .glassEffect(
-            .regular.tint(Color.accentColor.opacity(0.20)).interactive(),
-            in: .rect(cornerRadius: 24)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 24)
-                .strokeBorder(.white.opacity(0.18), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.03), radius: 5, y: 3)
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 20))
     }
 
     private func sectionTitle(_ title: String, icon: String) -> some View {

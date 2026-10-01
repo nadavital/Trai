@@ -2269,7 +2269,7 @@ struct OnboardingWorkoutPlanSetupView: View {
                 .frame(minHeight: minHeight)
                 .padding(10)
                 .scrollContentBackground(.hidden)
-                .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
+                .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
                 .overlay {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)

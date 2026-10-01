@@ -11,6 +11,12 @@ import SwiftData
 // MARK: - Suggested Edit Card
 
 struct SuggestedEditCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private var actionLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(spacing: 10))
+    }
     let edit: SuggestedFoodEdit
     let onAccept: () -> Void
     let onDismiss: () -> Void
@@ -47,11 +53,16 @@ struct SuggestedEditCard: View {
 
             VStack(spacing: 8) {
                 ForEach(edit.changes) { change in
-                    HStack {
+                    actionLayout {
                         Text(change.field)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         Spacer()
+                        if dynamicTypeSize.isAccessibilitySize {
+                            Text("\(change.oldValue) → \(change.newValue)")
+                                .font(.subheadline)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
                         HStack(spacing: 4) {
                             Text(change.oldValue)
                                 .strikethrough()
@@ -64,11 +75,12 @@ struct SuggestedEditCard: View {
                                 .foregroundStyle(.orange)
                         }
                         .font(.subheadline)
+                        }
                     }
                 }
             }
 
-            HStack(spacing: 10) {
+            actionLayout {
                 Button {
                     onDismiss()
                 } label: {
@@ -118,6 +130,12 @@ struct AppliedEditBadge: View {
 }
 
 struct SuggestedComponentEditCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private var actionLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(spacing: 10))
+    }
     let edit: SuggestedFoodComponentEdit
     let onAccept: () -> Void
     let onDismiss: () -> Void
@@ -159,7 +177,7 @@ struct SuggestedComponentEditCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack {
+            actionLayout {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Before")
                         .font(.caption)
@@ -176,7 +194,7 @@ struct SuggestedComponentEditCard: View {
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: 2) {
                     Text("After")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -187,7 +205,7 @@ struct SuggestedComponentEditCard: View {
                 }
             }
 
-            HStack(spacing: 10) {
+            actionLayout {
                 Button("Cancel", action: onDismiss)
                     .frame(maxWidth: .infinity)
                     .buttonStyle(.traiTertiary())
@@ -265,6 +283,12 @@ struct LoggedMealBadge: View {
 // MARK: - Suggested Meal Card
 
 struct SuggestedMealCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private var actionLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(spacing: 10))
+    }
     let meal: SuggestedFoodEntry
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     var isLogging: Bool = false
@@ -339,7 +363,9 @@ struct SuggestedMealCard: View {
             }
 
             if !orderedEnabledMacros.isEmpty {
-                HStack(spacing: 12) {
+                LazyVGrid(columns: dynamicTypeSize.isAccessibilitySize
+                    ? [GridItem(.flexible(), alignment: .leading)]
+                    : [GridItem(.adaptive(minimum: 88), alignment: .leading)], alignment: .leading, spacing: 10) {
                     ForEach(orderedEnabledMacros) { macro in
                         MealMacroPill(
                             label: macro.displayName,
@@ -350,7 +376,7 @@ struct SuggestedMealCard: View {
                 }
             }
 
-            HStack(spacing: 10) {
+            actionLayout {
                 Button {
                     onEdit()
                 } label: {

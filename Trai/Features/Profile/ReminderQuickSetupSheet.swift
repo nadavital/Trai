@@ -92,8 +92,8 @@ struct ReminderQuickSetupSheet: View {
         canAccessReminderAI ? Self.defaultIntroMessage : Self.manualIntroMessage
     }
 
-    private static let defaultIntroMessage = "Tell Trai what you want to remember, or start from a preset. I’ll make a draft first so you can choose the exact day and time before anything is saved."
-    private static let manualIntroMessage = "Choose a preset below and set the exact day and time before anything is saved."
+    private static let defaultIntroMessage = "What would you like to remember? Choose a preset or tell Trai. You’ll review the time before saving."
+    private static let manualIntroMessage = "Choose a preset, then set a time."
 
     var body: some View {
         NavigationStack {

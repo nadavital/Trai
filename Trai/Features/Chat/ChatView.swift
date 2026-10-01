@@ -453,6 +453,7 @@ struct ChatView: View {
     }
 
     private var chatContentList: some View {
+        VStack(spacing: 20) {
         ChatContentSection(
             messages: currentSessionMessages,
             isLoading: isLoading,
@@ -510,6 +511,17 @@ struct ChatView: View {
             onReviewPlan: handlePlanReviewRequest,
             onDismissPlanRecommendation: handleDismissPlanRecommendation
         )
+            // Show suggestion rows when chat is empty (not in incognito)
+            if currentSessionMessages.isEmpty && !isTemporarySession && !isPreparingFirstMessageTransition {
+                SuggestionRowsView(
+                    context: smartStarterContext,
+                    suggestionUsage: suggestionUsage,
+                    onSuggestionTapped: { _ = sendMessage($0) },
+                    onTrackTap: trackSuggestionTap
+                )
+                .transition(.opacity)
+            }
+        }
     }
 
     private var chatNavigationStack: some View {
@@ -714,16 +726,6 @@ struct ChatView: View {
 
     private var chatInputBar: some View {
         VStack(spacing: 0) {
-            // Show suggestion rows when chat is empty (not in incognito)
-            if currentSessionMessages.isEmpty && !isTemporarySession && !isPreparingFirstMessageTransition {
-                SuggestionRowsView(
-                    context: smartStarterContext,
-                    suggestionUsage: suggestionUsage,
-                    onSuggestionTapped: { _ = sendMessage($0) },
-                    onTrackTap: trackSuggestionTap
-                )
-                .transition(.opacity)
-            }
 
             ChatInputBar(
                 selectedImage: $selectedImage,
@@ -1125,6 +1127,7 @@ struct ChatView: View {
 }
 
 private struct ChatScrollContainer: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let content: AnyView
     let inputBar: AnyView
     @Binding var isInputFocused: Bool
@@ -1154,6 +1157,11 @@ private struct ChatScrollContainer: View {
             }
             .safeAreaInset(edge: .bottom) {
                 inputBar
+                    .background {
+                        if dynamicTypeSize.isAccessibilitySize {
+                            Color(.systemBackground).ignoresSafeArea(edges: .bottom)
+                        }
+                    }
             }
         }
         .background(alignment: .bottom) {

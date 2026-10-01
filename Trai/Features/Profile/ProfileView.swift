@@ -7,6 +7,19 @@ import SwiftUI
 import SwiftData
 
 struct ProfileView: View {
+    enum Mode: Equatable {
+        case account, nutritionPlan, workoutPlan
+
+        var title: String {
+            switch self {
+            case .account: "Account"
+            case .nutritionPlan: "Nutrition plan"
+            case .workoutPlan: "Workout plan"
+            }
+        }
+    }
+
+    let mode: Mode
     let onSelectTab: ((AppTab) -> Void)?
     @Query var profiles: [UserProfile]
     @Query private var activeWorkouts: [LiveWorkout]
@@ -16,7 +29,10 @@ struct ProfileView: View {
     @Query private var todaysWorkouts: [WorkoutSession]
     @Query private var todaysLiveWorkouts: [LiveWorkout]
 
+    @Environment(\.dismiss) private var dismiss
+    @Environment(BillingService.self) private var billingService: BillingService?
     @Environment(\.appTabSelection) private var appTabSelection
+    @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(\.modelContext) var modelContext
     @Environment(AccountSessionService.self) var accountSessionService: AccountSessionService?
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
@@ -70,7 +86,8 @@ struct ProfileView: View {
         AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 2200 : 320
     }
 
-    init(onSelectTab: ((AppTab) -> Void)? = nil) {
+    init(mode: Mode = .account, onSelectTab: ((AppTab) -> Void)? = nil) {
+        self.mode = mode
         self.onSelectTab = onSelectTab
         let now = Date()
         let startOfToday = Calendar.current.startOfDay(for: now)
@@ -118,7 +135,7 @@ struct ProfileView: View {
         var todaysLiveWorkoutDescriptor = FetchDescriptor<LiveWorkout>(
             predicate: #Predicate<LiveWorkout> { workout in
                 (workout.startedAt >= startOfToday && workout.startedAt < endOfToday)
-                    || (workout.completedAt != nil && workout.completedAt! >= startOfToday && workout.completedAt! < endOfToday)
+                    || ((workout.completedAt ?? workout.startedAt) >= startOfToday && (workout.completedAt ?? workout.startedAt) < endOfToday)
             },
             sortBy: [SortDescriptor(\LiveWorkout.startedAt, order: .reverse)]
         )
@@ -138,7 +155,7 @@ struct ProfileView: View {
     }
 
     private var isProfileTabActive: Bool {
-        isProfileTabVisible && appTabSelection.wrappedValue == .profile
+        isProfileTabVisible
     }
 
     private var isActiveWorkoutInProgress: Bool {
@@ -179,38 +196,17 @@ struct ProfileView: View {
         let currentProfile = profile
 
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    if let currentProfile {
-                        if shouldShowAccountSignInCard {
-                            accountSignInCard
-                        }
-                        headerCard(currentProfile)
-                        planCard(currentProfile)
-                        workoutPlanCard(currentProfile)
-                        memoriesCard()
-                        chatHistoryCard()
-                        exercisesCard()
-                        remindersCard(currentProfile, customRemindersCount: customRemindersCount)
-                    }
-                }
-                .id(currentProfile?.id)
-                .padding()
-            }
+            destinationContent
             .refreshable {
                 refreshProfileMetrics()
                 fetchCustomRemindersCount()
             }
-            .navigationTitle("Profile")
+            .navigationTitle(mode.title)
             .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showSettingsSheet = true
-                    } label: {
-                        Image(systemName: "gearshape.fill")
-                            .foregroundStyle(TraiColors.brandAccent)
-                    }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark") { dismiss() }
+                        .accessibilityIdentifier(mode == .account ? "accountDone" : "profileDestinationDone")
                 }
             }
             .sheet(isPresented: $showPlanSheet) {
@@ -260,10 +256,7 @@ struct ProfileView: View {
                 )
             }
             .onAppear {
-                handleProfileTabSelectionChange(to: appTabSelection.wrappedValue, trackOpen: true)
-            }
-            .onChange(of: appTabSelection.wrappedValue) { _, selectedTab in
-                handleProfileTabSelectionChange(to: selectedTab, trackOpen: true)
+                activateDestination(trackOpen: true)
             }
             .onChange(of: activeWorkouts.count) {
                 markProfileMetricsRefreshNeeded(delayMilliseconds: 180)
@@ -328,26 +321,100 @@ struct ProfileView: View {
         }
     }
 
-    private var accountSignInCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Sign in to Trai")
-                .font(.traiHeadline(20))
-
-            Text("Trai accounts keep your plan, Pro access, AI features, and history connected.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                presentedAccountSetupContext = .secureExistingData
-            } label: {
-                Text("Sign In")
-                    .frame(maxWidth: .infinity)
+    @ViewBuilder
+    private var destinationContent: some View {
+        if let profile {
+            switch mode {
+            case .account:
+                accountList(profile)
+            case .nutritionPlan:
+                ScrollView {
+                    planCard(profile).padding(16)
+                }
+            case .workoutPlan:
+                ScrollView {
+                    workoutPlanCard(profile).padding(16)
+                }
             }
-            .buttonStyle(.traiPrimary(color: .accentColor, fullWidth: true))
+        } else {
+            ContentUnavailableView("Account unavailable", systemImage: "person.crop.circle", description: Text("Your profile will appear when setup is complete."))
         }
-        .padding(20)
-        .traiCard(cornerRadius: 20, contentPadding: 0)
+    }
+
+    private func accountList(_ profile: UserProfile) -> some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(profile.name.isEmpty ? "Your account" : profile.name)
+                        .font(.headline)
+                    Text(profile.goal.displayName)
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+                Button { showSettingsSheet = true } label: {
+                    HStack {
+                        Label("Personal details & settings", systemImage: "person.crop.circle")
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityIdentifier("accountSettings")
+                NavigationLink {
+                    ReminderSettingsView(profile: profile)
+                } label: {
+                    Label("Reminders", systemImage: "bell")
+                }
+            }
+            Section("Your Trai") {
+                NavigationLink {
+                    AllMemoriesView()
+                } label: {
+                    Label("Memories", systemImage: "circle.hexagongrid")
+                }
+                NavigationLink {
+                    AllChatSessionsView { sessionId in
+                        currentChatSessionIdString = sessionId.uuidString
+                        pendingOpenChatSessionIdString = sessionId.uuidString
+                        openTraiTab()
+                    }
+                } label: {
+                    Label("Saved conversations", systemImage: "bubble.left.and.bubble.right")
+                }
+            }
+            Section("Account & subscription") {
+                if shouldShowAccountSignInCard {
+                    Button {
+                        presentedAccountSetupContext = .secureExistingData
+                    } label: {
+                        Label("Sign in with Apple", systemImage: "person.crop.circle.badge.plus")
+                    }
+                } else if let accountSessionService {
+                    LabeledContent("Signed in", value: accountSessionService.currentUserDisplayName)
+                }
+                LabeledContent("Plan", value: canAccessAIFeatures ? "Trai Pro" : "Free")
+                if shouldShowProUpsellCard {
+                    Button("Explore Trai Pro", systemImage: "sparkles") {
+                        proUpsellCoordinator?.present(source: .settings)
+                    }
+                }
+                if let url = billingService?.manageSubscriptionsURL {
+                    Link(destination: url) {
+                        Label("Manage subscription", systemImage: "creditcard")
+                    }
+                }
+            }
+        }
+        .tint(.primary)
+        .accessibilityIdentifier("accountRootReady")
+    }
+
+    func openTraiTab() {
+        dismiss()
+        if let onSelectTab {
+            onSelectTab(.trai)
+        } else {
+            appTabSelection.wrappedValue = .trai
+        }
     }
 
     private var profileLatencyProbeLabel: String {
@@ -388,18 +455,7 @@ struct ProfileView: View {
         )
     }
 
-    private func handleProfileTabSelectionChange(to selectedTab: AppTab, trackOpen: Bool) {
-        let shouldBeActive = selectedTab == .profile
-
-        guard shouldBeActive else {
-            guard isProfileTabVisible else { return }
-            isProfileTabVisible = false
-            tabActivationPolicy.deactivate()
-            profileMetricsRefreshTask?.cancel()
-            remindersCountTask?.cancel()
-            return
-        }
-
+    private func activateDestination(trackOpen: Bool) {
         let wasVisible = isProfileTabVisible
         if tabActivationPolicy.activeSince == nil || !wasVisible {
             tabActivationPolicy = TabActivationPolicy(
@@ -608,148 +664,6 @@ struct ProfileView: View {
             hydrated = true
         }
         return hydrated
-    }
-
-    // MARK: - Header Card
-
-    @ViewBuilder
-    private func headerCard(_ profile: UserProfile) -> some View {
-        VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .stroke(
-                        LinearGradient(
-                            colors: [TraiColors.brandAccent, TraiColors.brandAccent.opacity(0.5)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 3
-                    )
-                    .frame(width: 90, height: 90)
-
-                Circle()
-                    .fill(TraiColors.brandAccent.opacity(0.15))
-                    .frame(width: 80, height: 80)
-                    .overlay {
-                        Text(profile.name.prefix(1).uppercased())
-                            .font(.system(size: 36, weight: .bold, design: .rounded))
-                            .foregroundStyle(TraiColors.brandAccent)
-                    }
-            }
-
-            VStack(spacing: 4) {
-                Text(profile.name.isEmpty ? "Welcome" : profile.name)
-                    .font(.title2)
-                    .fontWeight(.bold)
-
-                HStack(spacing: 8) {
-                    Image(systemName: profile.goal.iconName)
-                        .font(.caption)
-                    Text(profile.goal.displayName)
-                        .font(.subheadline)
-                }
-                .foregroundStyle(.secondary)
-            }
-
-            if shouldShowProUpsellCard {
-                ProUpsellInlineCard(
-                    source: .settings,
-                    title: "Unlock Trai Pro",
-                    message: "Coaching, food analysis, and personalized plans.",
-                    actionTitle: "Unlock Trai Pro",
-                    showsActionButton: false,
-                    showsShadow: false
-                ) {
-                    proUpsellCoordinator?.present(source: .settings)
-                }
-                .padding(.horizontal, 6)
-            }
-
-            HStack(spacing: 8) {
-                profileTintBadge(
-                    title: hasWorkoutToday ? "Training Day" : "Rest Day",
-                    icon: nil,
-                    tint: hasWorkoutToday ? .green : .orange
-                )
-
-                if canAccessAIFeatures {
-                    profileProBadge()
-                } else {
-                    profileFreeBadge()
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 24)
-        .traiCard(cornerRadius: 24, contentPadding: 0)
-    }
-
-    private func profileTintBadge(title: String, icon: String?, tint: Color) -> some View {
-        HStack(spacing: 8) {
-            if let icon {
-                Image(systemName: icon)
-                    .font(.caption.weight(.semibold))
-            } else {
-                Circle()
-                    .fill(tint)
-                    .frame(width: 8, height: 8)
-            }
-
-            Text(title)
-                .font(.caption)
-                .fontWeight(.medium)
-        }
-        .foregroundStyle(tint)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(
-            Capsule()
-                .fill(tint.opacity(0.15))
-        )
-    }
-
-    private func profileFreeBadge() -> some View {
-        HStack(spacing: 7) {
-            TraiLensSymbolIcon(size: 13, variant: .enclosed, color: TraiColors.brandAccent)
-
-            Text("Free Plan")
-                .font(.caption)
-                .fontWeight(.medium)
-        }
-        .foregroundStyle(TraiColors.brandAccent)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(
-            Capsule()
-                .fill(Color(.tertiarySystemBackground))
-        )
-        .overlay(
-            Capsule()
-                .stroke(TraiColors.brandAccent.opacity(0.16), lineWidth: 1)
-        )
-    }
-
-    private func profileProBadge() -> some View {
-        HStack(spacing: 7) {
-            TraiLensSymbolIcon(size: 13, variant: .enclosedFilled, color: .white)
-
-            Text("Trai Pro")
-                .font(.caption)
-                .fontWeight(.semibold)
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(
-            TraiGradient.actionVibrant(TraiColors.ember, TraiColors.blaze),
-            in: Capsule()
-        )
-        .overlay(
-            Capsule()
-                .stroke(Color.white.opacity(0.18), lineWidth: 1)
-        )
-        .shadow(color: TraiColors.ember.opacity(0.24), radius: 8, y: 3)
     }
 
     func saveStandardWorkoutPlan(

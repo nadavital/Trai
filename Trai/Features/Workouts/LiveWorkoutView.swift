@@ -43,6 +43,11 @@ struct LiveWorkoutView: View {
 
     // MARK: - Properties
 
+    @State private var selectedEntryID: UUID?
+    @State private var visitedEntryIDs: Set<UUID> = []
+    @State private var showsSuggestions = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var showsWorkoutTargets = false
     @State private var viewModel: LiveWorkoutViewModel
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -183,6 +188,15 @@ struct LiveWorkoutView: View {
         .toolbar { liveWorkoutToolbar }
         .onAppear(perform: handleAppear)
         .onDisappear(perform: handleDisappear)
+        .onChange(of: viewModel.entries.map(\.id)) { oldIDs, newIDs in
+            if let addedID = newIDs.first(where: { !oldIDs.contains($0) }) {
+                selectExercise(addedID)
+            }
+        }
+        .onChange(of: viewModel.focusedEntryID) { oldID, newID in
+            if let oldID { visitedEntryIDs.insert(oldID) }
+            selectedEntryID = newID
+        }
         .confirmationDialog("Cancel Workout", isPresented: $showingCancelConfirmation, titleVisibility: .visible) {
             Button("Cancel Workout", role: .destructive, action: cancelWorkout)
             Button("Continue Workout", role: .cancel) {}
@@ -224,7 +238,7 @@ struct LiveWorkoutView: View {
                     .labelStyle(.iconOnly)
             }
         } else {
-            if AppLaunchArguments.isUITesting && AppLaunchArguments.shouldUseLiveWorkoutUITestPreset {
+            if AppLaunchArguments.isUITesting && ProcessInfo.processInfo.arguments.contains("--ui-test-live-workout-stress-controls") {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Stress +4", systemImage: "bolt.fill", action: applyUITestStressMutationBurst)
                         .accessibilityIdentifier("liveWorkoutStressAddSetBurst")
@@ -239,6 +253,7 @@ struct LiveWorkoutView: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityLabel("Cancel workout")
                 .accessibilityIdentifier("liveWorkoutCancelButton")
             }
 
@@ -262,6 +277,9 @@ struct LiveWorkoutView: View {
                 message: error.localizedDescription
             )
             return
+        }
+        if selectedEntryID == nil, let entry = viewModel.entries.first(where: { !$0.isComplete }) ?? viewModel.entries.first {
+            selectExercise(entry.id)
         }
         startHeartRateUpdates()
         applyPresentationFinishRequestIfNeeded()
@@ -367,194 +385,163 @@ struct LiveWorkoutView: View {
         }
     }
 
-    @ViewBuilder
+    private var focusedEntry: LiveWorkoutEntry? {
+        viewModel.entries.first(where: { $0.id == (selectedEntryID ?? viewModel.focusedEntryID) })
+            ?? viewModel.entries.first(where: { !$0.isComplete })
+            ?? viewModel.entries.last
+    }
+
     private var workoutContent: some View {
-        if viewModel.usesGeneralSessionWorkspace {
-            generalWorkoutContent
-        } else {
-            structuredWorkoutContent
-        }
-    }
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    WorkoutTimerHeader(
+                        workoutStartedAt: viewModel.workout.startedAt,
+                        isTimerRunning: viewModel.isTimerRunning,
+                        totalPauseDuration: viewModel.totalPauseDuration,
+                        pausedElapsedTime: viewModel.pausedElapsedTimeSnapshot,
+                        onTogglePause: {
+                            if viewModel.isTimerRunning { viewModel.pauseTimer() }
+                            else { viewModel.resumeTimer() }
+                        },
+                        showsWatchSyncButton: !viewModel.isWatchConnected,
+                        isWatchSyncing: viewModel.isRetryingWatchSync,
+                        onRetryWatchSync: { viewModel.retryWatchSync() },
+                        watchConnectionHint: viewModel.watchConnectionHint,
+                        heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
+                        calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
+                    )
 
-    private var generalWorkoutContent: some View {
-        ZStack(alignment: .bottom) {
-            ScrollViewReader { scrollProxy in
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: 16) {
-                        WorkoutTimerHeader(
-                            workoutStartedAt: viewModel.workout.startedAt,
-                            isTimerRunning: viewModel.isTimerRunning,
-                            totalPauseDuration: viewModel.totalPauseDuration,
-                            pausedElapsedTime: viewModel.pausedElapsedTimeSnapshot,
-                            totalVolume: viewModel.totalVolume,
-                            onTogglePause: {
-                                if viewModel.isTimerRunning {
-                                    viewModel.pauseTimer()
-                                } else {
-                                    viewModel.resumeTimer()
-                                }
-                            },
-                            showsWatchSyncButton: !viewModel.isWatchConnected,
-                            isWatchSyncing: viewModel.isRetryingWatchSync,
-                            onRetryWatchSync: {
-                                viewModel.retryWatchSync()
-                            },
-                            watchConnectionHint: viewModel.watchConnectionHint,
-                            heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
-                            calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
-                        )
-
-                        workoutTargetSelector
-
-                        GeneralSessionOverviewCard(workout: viewModel.workout)
-
-                        SessionNotesCard(
-                            notes: Binding(
-                                get: { viewModel.workout.notes },
-                                set: { viewModel.updateWorkoutNotes($0) }
-                            )
-                        )
-
-                        if viewModel.entries.isEmpty {
-                            ContentUnavailableView(
-                                "No Activities Yet",
-                                systemImage: viewModel.workout.type.iconName,
-                                description: Text("Add exercises or activities to track in this session.")
-                            )
-                            .padding(.top, 8)
-                        } else {
-                            ForEach(viewModel.entries, id: \.id) { entry in
+                    if !viewModel.entries.isEmpty {
+                        exerciseNavigation
+                        // Keep visited editors mounted so debounced edits and validation dialogs
+                        // survive switching exercises. Only the selected editor participates visually.
+                        VStack(spacing: 0) {
+                            ForEach(viewModel.entries.filter { visitedEntryIDs.contains($0.id) || $0.id == focusedEntry?.id }) { entry in
+                                let selected = entry.id == focusedEntry?.id
                                 workoutEntryCard(entry)
+                                    .accessibilityElement(children: .contain)
+                                    .accessibilityIdentifier(selected ? "focusedExerciseEditor" : "inactiveExerciseEditor-\(entry.id)")
+                                    .frame(height: selected ? nil : 0, alignment: .top)
+                                    .opacity(selected ? 1 : 0)
+                                    .allowsHitTesting(selected)
+                                    .accessibilityHidden(!selected)
                             }
                         }
+                    } else if viewModel.usesGeneralSessionWorkspace {
+                        GeneralSessionOverviewCard(workout: viewModel.workout)
+                    } else if viewModel.upNextSuggestion == nil {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Where shall we start?")
+                                .font(.system(.title2, design: .rounded, weight: .bold))
+                            Text("Choose your first exercise below.")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        }.padding(.vertical, 24)
+                    }
 
-                        Color.clear.frame(height: 100)
+                    sessionSuggestions
+
+                    DisclosureGroup("Session details", isExpanded: $showsWorkoutTargets) {
+                        if viewModel.totalVolume > 0 {
+                            let volume = usesMetricExerciseWeight ? viewModel.totalVolume : viewModel.totalVolume * WeightUtility.kgToLbs
+                            LabeledContent("Volume", value: "\(volume.formatted(.number.precision(.fractionLength(0)))) \(usesMetricExerciseWeight ? "kg" : "lbs") × reps")
+                                .font(.subheadline).padding(.top, 12)
+                        }
+                        workoutTargetSelector.padding(.top, 12)
+                        SessionNotesCard(notes: Binding(
+                            get: { viewModel.workout.notes },
+                            set: { viewModel.updateWorkoutNotes($0) }
+                        ))
                     }
-                    .padding()
+                    .font(.subheadline).tint(.secondary)
+                    .padding(.horizontal, 4)
                 }
-                .scrollDismissesKeyboard(.interactively)
-                .simultaneousGesture(
-                    TapGesture().onEnded {
-                        dismissKeyboard()
-                    }
-                )
-                .onChange(of: focusedSetID) { _, setID in
-                    scrollFocusedSet(setID, with: scrollProxy)
-                }
+                .padding(16)
             }
-
-            WorkoutBottomBar(
-                onAddExercise: { activeSheet = .exerciseList },
-                onAskTrai: { activeSheet = .chat },
-                addLabel: "Add Exercise",
-                addSystemImage: "plus.circle.fill"
-            )
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: focusedSetID) { _, setID in
+                scrollFocusedSet(setID, with: scrollProxy)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                WorkoutBottomBar(
+                    onAddExercise: { activeSheet = .exerciseList },
+                    onAskTrai: { activeSheet = .chat },
+                    addLabel: viewModel.usesFocusedCardioWorkspace ? "Add Interval" : "Add Exercise"
+                )
+            }
         }
     }
 
-    private var structuredWorkoutContent: some View {
-        ZStack(alignment: .bottom) {
-            ScrollViewReader { scrollProxy in
-                ScrollView(showsIndicators: false) {
-                    let entries = viewModel.entries
-                    let upNext = viewModel.upNextSuggestion
-                    let availableSuggestions = viewModel.availableSuggestions
-                    let suggestionsByMuscle = viewModel.suggestionsByMuscle
-                    let upNextSuggestionID = upNext?.id
+    private func selectExercise(_ id: UUID) {
+        if let current = focusedEntry { visitedEntryIDs.insert(current.id) }
+        dismissKeyboard()
+        selectedEntryID = id
+        viewModel.selectEntry(id: id)
+    }
 
-                    LazyVStack(spacing: 16) {
-                        // Timer header with optional watch data
-                        WorkoutTimerHeader(
-                            workoutStartedAt: viewModel.workout.startedAt,
-                            isTimerRunning: viewModel.isTimerRunning,
-                            totalPauseDuration: viewModel.totalPauseDuration,
-                            pausedElapsedTime: viewModel.pausedElapsedTimeSnapshot,
-                            totalVolume: viewModel.totalVolume,
-                            onTogglePause: {
-                                if viewModel.isTimerRunning {
-                                    viewModel.pauseTimer()
-                                } else {
-                                    viewModel.resumeTimer()
+    private var exerciseNavigation: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                GlassEffectContainer(spacing: 8) {
+                    HStack(spacing: 8) {
+                        ForEach(viewModel.entries) { entry in
+                            Button {
+                                selectExercise(entry.id)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(entry.exerciseName)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(entry.isStrength ? "\(entry.sets.count) sets" : entry.formattedDuration ?? "Not logged")
+                                        .font(.caption).foregroundStyle(.secondary)
                                 }
-                            },
-                            showsWatchSyncButton: !viewModel.isWatchConnected,
-                            isWatchSyncing: viewModel.isRetryingWatchSync,
-                            onRetryWatchSync: {
-                                viewModel.retryWatchSync()
-                            },
-                            watchConnectionHint: viewModel.watchConnectionHint,
-                            heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
-                            calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
-                        )
-
-                        workoutTargetSelector
-
-                        // Planned and ad hoc workout entries share the same logging surface.
-                        ForEach(entries, id: \.id) { entry in
-                            workoutEntryCard(entry)
-                        }
-
-                        // Up Next suggestion (smart rotation)
-                        if let upNext {
-                            UpNextSuggestionCard(
-                                suggestion: upNext,
-                                lastPerformance: viewModel.lastPerformances[upNext.exerciseName],
-                                usesMetricWeight: usesMetricExerciseWeight
-                            ) {
-                                viewModel.addUpNextExercise()
+                                .padding(.horizontal, 14).padding(.vertical, 10)
+                                .glassEffect(.regular.tint(focusedEntry?.id == entry.id ? Color.indigo.opacity(0.14) : .clear).interactive(), in: .rect(cornerRadius: 18))
                             }
+                            .buttonStyle(.plain).foregroundStyle(.primary)
+                            .accessibilityIdentifier("liveExercise-\(entry.exerciseName)")
+                            .accessibilityAddTraits(focusedEntry?.id == entry.id ? [.isSelected] : [])
+                            .id(entry.id)
                         }
-
-                        // More suggestions by muscle group
-                        if !availableSuggestions.isEmpty {
-                            // Filter out the up next suggestion from the grouped view
-                            let filteredSuggestions = suggestionsByMuscle.mapValues { suggestions in
-                                guard let upNextSuggestionID else { return suggestions }
-                                return suggestions.filter { $0.id != upNextSuggestionID }
-                            }.filter { !$0.value.isEmpty }
-
-                            if !filteredSuggestions.isEmpty {
-                                SuggestionsByMuscleSection(
-                                    suggestionsByMuscle: filteredSuggestions,
-                                    lastPerformances: viewModel.lastPerformances
-                                ) { suggestion in
-                                    viewModel.addExerciseFromSuggestion(suggestion)
-                                }
-                            }
-                        }
-
-                        if entries.isEmpty && upNext == nil && availableSuggestions.isEmpty {
-                            ContentUnavailableView(
-                                "No Exercises Yet",
-                                systemImage: "figure.mixed.cardio",
-                                description: Text("Add an exercise or activity to track in this session.")
-                            )
-                            .padding(.top, 4)
-                        }
-
-                        // Bottom padding for the bar
-                        Color.clear.frame(height: 100)
-                    }
-                    .padding()
-                }
-                .scrollDismissesKeyboard(.interactively)
-                .simultaneousGesture(
-                    TapGesture().onEnded {
-                        dismissKeyboard()
-                    }
-                )
-                .onChange(of: focusedSetID) { _, setID in
-                    scrollFocusedSet(setID, with: scrollProxy)
+                    }.padding(.vertical, 4)
                 }
             }
+            .scrollIndicators(.hidden)
+            .onChange(of: selectedEntryID) { _, id in
+                withAnimation(reduceMotion ? nil : .smooth) { proxy.scrollTo(id, anchor: .center) }
+            }
+        }
+    }
 
-            // Bottom bar
-            WorkoutBottomBar(
-                onAddExercise: { activeSheet = .exerciseList },
-                onAskTrai: { activeSheet = .chat },
-                addLabel: viewModel.usesFocusedCardioWorkspace ? "Add Interval" : "Add Exercise",
-                addSystemImage: "plus.circle.fill"
-            )
+    @ViewBuilder private var sessionSuggestions: some View {
+        if let upNext = viewModel.upNextSuggestion {
+            if viewModel.entries.isEmpty {
+                UpNextSuggestionCard(
+                    suggestion: upNext,
+                    lastPerformance: viewModel.lastPerformances[upNext.exerciseName],
+                    usesMetricWeight: usesMetricExerciseWeight
+                ) { viewModel.addUpNextExercise() }
+            } else {
+                Button { viewModel.addUpNextExercise() } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "plus").foregroundStyle(.indigo)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Suggested next").font(.caption).foregroundStyle(.secondary)
+                            Text(upNext.exerciseName).font(.subheadline.weight(.semibold))
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                    }.padding(16)
+                    .background(Color.indigo.opacity(0.07), in: .rect(cornerRadius: 22))
+                }.buttonStyle(.plain).foregroundStyle(.primary)
+            }
+        }
+        if !viewModel.availableSuggestions.isEmpty {
+            DisclosureGroup("More exercises for you", isExpanded: $showsSuggestions) {
+                SuggestionsByMuscleSection(
+                    suggestionsByMuscle: viewModel.suggestionsByMuscle,
+                    lastPerformances: viewModel.lastPerformances
+                ) { viewModel.addExerciseFromSuggestion($0) }
+            }.font(.subheadline).tint(.secondary)
         }
     }
 
@@ -585,7 +572,9 @@ struct LiveWorkoutView: View {
                     activeSheet = .exerciseReplacement(entry)
                 },
                 setRowScrollID: setRowScrollID,
-                onFocusedSetChange: { focusedSetID = $0 }
+                onFocusedSetChange: { focusedSetID = $0 },
+                isFocusedWorkspace: true,
+                expansion: .constant(true)
             )
         } else {
             CardioExerciseCard(
@@ -628,7 +617,9 @@ struct LiveWorkoutView: View {
                 onRemoveSegment: { index in
                     viewModel.removeActivitySegment(from: entry, at: index)
                 },
-                onDeleteExercise: { removeEntry(entry) }
+                onDeleteExercise: { removeEntry(entry) },
+                isFocusedWorkspace: true,
+                expansion: .constant(true)
             )
         }
     }

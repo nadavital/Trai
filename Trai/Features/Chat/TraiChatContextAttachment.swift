@@ -99,13 +99,9 @@ struct TraiChatContextAttachmentCard: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .frame(minHeight: 50)
-            .glassEffect(
-                .regular
-                    .tint(attachment.accent.color.opacity(0.14)),
-                in: .capsule
-            )
+            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 18))
             .overlay {
-                Capsule()
+                RoundedRectangle(cornerRadius: 18)
                     .strokeBorder(attachment.accent.color.opacity(0.18), lineWidth: 1)
             }
     }
@@ -121,9 +117,9 @@ struct TraiChatContextAttachmentCard: View {
                     .lineLimit(1)
 
                 Text(attachment.title)
-                    .font(.traiLabel(14))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -132,6 +128,8 @@ struct TraiChatContextAttachmentCard: View {
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .symbolRenderingMode(.hierarchical)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Remove attached context")

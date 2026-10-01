@@ -127,7 +127,7 @@ struct WatchHeartRateCard: View {
         .padding()
         .background {
             RoundedRectangle(cornerRadius: 12)
-                .fill(.ultraThinMaterial)
+                .fill(Color(.secondarySystemGroupedBackground))
         }
         .animation(.easeInOut(duration: 0.3), value: heartRate)
         .animation(.easeInOut(duration: 0.3), value: calories)

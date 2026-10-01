@@ -71,10 +71,11 @@ struct PlanReviewRecommendationCard: View {
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(.secondary)
-                        .frame(width: 24, height: 24)
+                        .frame(width: 44, height: 44)
                         .background(Color(.quaternarySystemFill))
                         .clipShape(.circle)
                 }
+                .accessibilityLabel("Dismiss plan review suggestion")
             }
 
             // Message

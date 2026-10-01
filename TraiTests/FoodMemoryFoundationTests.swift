@@ -2,6 +2,29 @@ import XCTest
 @testable import Trai
 
 final class FoodMemoryFoundationTests: XCTestCase {
+    func testCapturePortionScalesNutrientsAndComponentsWithoutInventingMissingValues() {
+        let original = SuggestedFoodEntry(
+            name: "Meal", calories: 400, proteinGrams: 30, carbsGrams: 40, fatGrams: 12,
+            fiberGrams: nil, sugarGrams: 8, servingSize: "1 bowl",
+            components: [SuggestedFoodComponent(displayName: "Rice", quantity: 100, unit: "g",
+                calories: 200, proteinGrams: 5, carbsGrams: 40, fatGrams: 1,
+                fiberGrams: nil, sugarGrams: 2)]
+        )
+        let edited = original.adjustedForCapture(name: " Lunch ", multiplier: 1.5)
+        XCTAssertEqual(edited.name, "Lunch")
+        XCTAssertEqual(edited.calories, 600)
+        XCTAssertEqual(edited.proteinGrams, 45)
+        XCTAssertEqual(edited.carbsGrams, 60)
+        XCTAssertEqual(edited.fatGrams, 18)
+        XCTAssertEqual(edited.sugarGrams, 12)
+        XCTAssertNil(edited.fiberGrams)
+        XCTAssertEqual(edited.components.first?.quantity, 150)
+        XCTAssertEqual(edited.components.first?.calories, 300)
+        XCTAssertEqual(edited.components.first?.sugarGrams, 3)
+        XCTAssertNil(edited.components.first?.fiberGrams)
+        XCTAssertEqual(original.calories, 400, "Editing must not compound the original estimate")
+    }
+
     func testSuggestedFoodEntryDecodesLegacyPayloadWithoutStructuredFields() throws {
         let legacyPayload = """
         {

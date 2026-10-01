@@ -20,6 +20,7 @@ struct CalorieDetailSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var showTrends = true
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     private var consumed: Int {
         entries.reduce(0) { $0 + $1.calories }
@@ -42,22 +43,21 @@ struct CalorieDetailSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Large progress ring
-                    CalorieRing(state: calorieState)
-                        .frame(height: 200)
-                        .padding(.top)
-
-                    // Stats row
-                    HStack(spacing: 0) {
-                        StatItem(title: "Consumed", value: "\(consumed)", unit: "kcal", color: .primary)
-                        Divider()
-                            .frame(height: 40)
-                        StatItem(title: "Remaining", value: "\(calorieState.remaining)", unit: "kcal", color: .green)
-                        Divider()
-                            .frame(height: 40)
-                        StatItem(title: "Goal", value: "\(calorieState.target)", unit: "kcal", color: .secondary)
-                    }
-                    .traiCard()
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("\(consumed.formatted())").font(.largeTitle.weight(.semibold)).monospacedDigit()
+                            Text("kcal").font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        if goal > 0 {
+                            Text(consumed > goal ? "+\((consumed - goal).formatted()) above target · \(goal.formatted()) kcal target" : "\(goal.formatted()) kcal target")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        } else {
+                            Text("Target not set").font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        CalorieGlassBar(value: consumed, target: goal > 0 ? goal : nil, reduceTransparency: reduceTransparency)
+                            .frame(height: 28)
+                            .accessibilityHidden(true)
+                    }.traiCard()
 
                     // 7-Day Trend Chart
                     if !historicalEntries.isEmpty && showTrends {
@@ -80,7 +80,7 @@ struct CalorieDetailSheet: View {
                         } else {
                             VStack(spacing: 8) {
                                 ForEach(sortedEntries) { entry in
-                                    FoodCalorieRow(
+                                    FoodEntryTimelineRow(
                                         entry: entry,
                                         onTap: { onEditEntry(entry) },
                                         onDelete: { onDeleteEntry(entry) }
@@ -92,7 +92,7 @@ struct CalorieDetailSheet: View {
                 }
                 .padding()
             }
-            .navigationTitle("Calorie Breakdown")
+            .navigationTitle("Calories")
             .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -108,154 +108,6 @@ struct CalorieDetailSheet: View {
             }
         }
         .traiBackground()
-    }
-}
-
-// MARK: - Calorie Ring
-
-private struct CalorieRing: View {
-    let state: NutritionDisplayPolicy.CalorieState
-
-    private var progressColor: Color {
-        let progress = state.progress
-        if progress < 0.8 {
-            return .green
-        } else if progress < 1.0 {
-            return .teal
-        } else {
-            return .blue
-        }
-    }
-
-    var body: some View {
-        ZStack {
-            // Background ring
-            Circle()
-                .stroke(progressColor.opacity(0.2), lineWidth: 20)
-
-            Circle()
-                .trim(from: 0, to: state.progress)
-                .stroke(
-                    progressColor,
-                    style: StrokeStyle(lineWidth: 20, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-                .animation(.spring(duration: 0.8), value: state.progress)
-
-            // Center text
-            VStack(spacing: 2) {
-                Text("\(state.consumed)")
-                    .font(.system(size: 36, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.55)
-                    .lineLimit(1)
-                    .allowsTightening(true)
-
-                Text("of \(state.target) kcal")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .allowsTightening(true)
-
-                if state.remaining > 0 {
-                    Text("\(state.remaining) left")
-                        .font(.caption2)
-                        .foregroundStyle(.green)
-                        .padding(.top, 2)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .allowsTightening(true)
-                }
-            }
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: 120)
-            .padding(.horizontal, 8)
-        }
-        .padding(24)
-    }
-}
-
-// MARK: - Stat Item
-
-private struct StatItem: View {
-    let title: String
-    let value: String
-    let unit: String
-    let color: Color
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.title2)
-                .bold()
-                .foregroundStyle(color)
-
-            Text(unit)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-// MARK: - Food Calorie Row
-
-private struct FoodCalorieRow: View {
-    let entry: FoodEntry
-    let onTap: () -> Void
-    let onDelete: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 10) {
-                // Food image or emoji
-                Group {
-                    if let imageData = entry.imageData,
-                       let uiImage = UIImage(data: imageData) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        Text(entry.displayEmoji)
-                            .font(.system(size: 22))
-                    }
-                }
-                .frame(width: 40, height: 40)
-                .background(Color(.quaternarySystemFill))
-                .clipShape(.rect(cornerRadius: 8))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.name)
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    Text(entry.loggedAt, format: .dateTime.hour().minute())
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-
-                Spacer()
-
-                Text("\(entry.calories) kcal")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                Button(action: onDelete) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .padding(8)
-                }
-                .buttonStyle(.plain)
-            }
-            .traiCard()
-        }
-        .buttonStyle(.plain)
     }
 }
 

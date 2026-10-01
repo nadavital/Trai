@@ -31,6 +31,9 @@ struct ActivityLevelStepView: View {
                     selectedActivityResponse
                         .opacity(activityVisible ? 1 : 0)
                 }
+
+                activityContextField
+                    .opacity(activityVisible ? 1 : 0)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 140)
@@ -51,10 +54,15 @@ struct ActivityLevelStepView: View {
     }
 
     private var headerSection: some View {
-        OnboardingTraiHeader(
-            title: "Choose your activity level.",
-            lensSize: 52
-        )
+        VStack(alignment: .leading, spacing: 6) {
+            OnboardingTraiHeader(
+                title: "How active is a typical week?",
+                lensSize: 52
+            )
+            Text("Include everyday movement and exercise. This helps estimate nutrition needs; you’ll choose a workout schedule later if you want a plan.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
         .opacity(headerVisible ? 1 : 0)
         .offset(y: headerVisible ? 0 : -20)
     }
@@ -94,6 +102,18 @@ struct ActivityLevelStepView: View {
         }
         .onboardingTraiResponseCard()
         .animation(.smooth(duration: 0.3), value: activityLevel)
+    }
+
+    private var activityContextField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("What does movement look like for you? (Optional)")
+                .font(.subheadline.weight(.semibold))
+            TextField("For example: desk job, walks most days, training twice a week", text: $activityNotes, axis: .vertical)
+                .lineLimit(2...4)
+                .textInputAutocapitalization(.sentences)
+                .accessibilityIdentifier("onboardingActivityNotes")
+        }
+        .onboardingTraiResponseCard()
     }
 
     private var selectedActivityChoice: ActivityLevelChoice? {

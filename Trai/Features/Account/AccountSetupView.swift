@@ -165,7 +165,7 @@ private struct AccountSetupHero: View {
 
             VStack(spacing: 10) {
                 Text(context.title)
-                    .font(.traiBold(30))
+                    .font(.system(.title, design: .rounded, weight: .bold))
                     .multilineTextAlignment(.center)
 
                 if let message = context.message {

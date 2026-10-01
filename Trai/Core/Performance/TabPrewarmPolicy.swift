@@ -17,11 +17,11 @@ struct TabPrewarmPolicy: Sendable {
         let prioritized: [AppTab]
         switch selectedTab {
         case .dashboard:
-            prioritized = [.workouts, .trai, .profile]
+            prioritized = [.workouts, .trai]
         case .trai:
-            prioritized = [.dashboard, .workouts, .profile]
+            prioritized = [.dashboard, .workouts]
         case .workouts:
-            prioritized = [.dashboard, .profile, .trai]
+            prioritized = [.dashboard, .trai]
         case .profile:
             prioritized = [.dashboard, .workouts, .trai]
         }

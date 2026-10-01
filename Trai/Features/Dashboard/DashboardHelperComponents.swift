@@ -74,50 +74,48 @@ struct MacroRingItem: View {
 
 // MARK: - Quick Action Button
 
+/// A generous, matte action target with a semantic accent.
 struct QuickActionButton: View {
     let title: String
     let icon: String
     let color: Color
     let action: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         Button {
             HapticManager.lightTap()
             action()
         } label: {
-            VStack(spacing: TraiSpacing.sm) {
-                ZStack {
-                    Circle()
-                        .fill(color.opacity(0.78))
-                        .frame(width: 40, height: 40)
-
-                    Image(systemName: icon)
-                        .font(.body)
-                        .bold()
-                        .foregroundStyle(.white)
-                }
-
-                VStack(spacing: 2) {
-                    Text(title)
-                        .font(.traiLabel())
-                        .foregroundStyle(color)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(HStackLayout(spacing: 12))
+                : AnyLayout(VStackLayout(spacing: 10))
+            layout {
+                Image(systemName: icon)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(color)
+                    .frame(width: 30, height: 30)
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .glassEffect(
-                .regular.tint(color.opacity(0.28)).interactive(),
-                in: .rect(cornerRadius: TraiRadius.medium)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: TraiRadius.medium, style: .continuous)
-                    .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+            .frame(maxWidth: .infinity, minHeight: 60)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 12)
+            .background {
+                RoundedRectangle(cornerRadius: TraiRadius.medium)
+                    .fill(Color(.secondarySystemGroupedBackground))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: TraiRadius.medium)
+                            .fill(color.opacity(0.10))
+                    }
             }
-            .shadow(color: .black.opacity(0.03), radius: 5, y: 3)
+            .contentShape(.rect(cornerRadius: TraiRadius.medium))
         }
-        .buttonStyle(TraiPressStyle(scale: 0.93))
+        .buttonStyle(TraiPressStyle(scale: 0.97))
     }
 }
 
@@ -143,67 +141,6 @@ struct ShortcutChipButton: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(tint.opacity(0.12), in: Capsule())
-        }
-        .buttonStyle(TraiPressStyle(scale: 0.96))
-    }
-}
-
-struct ChatWithTraiCard: View {
-    let isUnlocked: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button {
-            HapticManager.lightTap()
-            action()
-        } label: {
-            HStack(spacing: TraiSpacing.sm) {
-                TraiLensSymbolIcon(size: 30, variant: .enclosedFilled, color: Color.accentColor)
-                    .frame(width: 30, height: 30)
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 6) {
-                        Text("Chat with Trai")
-                            .font(.traiHeadline(14))
-                            .foregroundStyle(Color.accentColor)
-
-                        if !isUnlocked {
-                            Text("PRO")
-                                .font(.traiLabel(10))
-                                .foregroundStyle(TraiColors.ember)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(TraiColors.ember.opacity(0.10), in: Capsule())
-                        }
-                    }
-
-                    HStack(spacing: 6) {
-                        Text("Chat")
-                            .font(.traiHeadline(14))
-                            .foregroundStyle(Color.accentColor)
-
-                        if !isUnlocked {
-                            Text("PRO")
-                                .font(.traiLabel(10))
-                                .foregroundStyle(TraiColors.ember)
-                        }
-                    }
-                }
-
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .glassEffect(
-                .regular.tint(Color.accentColor.opacity(0.20)).interactive(),
-                in: .capsule
-            )
-            .overlay {
-                Capsule()
-                    .strokeBorder(.white.opacity(0.18), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.03), radius: 5, y: 3)
         }
         .buttonStyle(TraiPressStyle(scale: 0.96))
     }

@@ -29,6 +29,9 @@ private struct DashboardNutritionTotals {
 }
 
 struct DashboardView: View {
+    @State private var dashboardSection: DashboardSection = .today
+    @State private var nutritionTrendRequest = 0
+    @State private var nutritionTrendMetric: NutritionTrendChart.NutritionMetric = .calories
     /// Optional binding to control reminders sheet from parent (for notification taps)
     @Binding var showRemindersBinding: Bool
     let onSelectTab: ((AppTab) -> Void)?
@@ -45,6 +48,7 @@ struct DashboardView: View {
     @Query private var behaviorEvents: [BehaviorEvent]
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(NotificationService.self) private var notificationService: NotificationService?
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
@@ -74,7 +78,9 @@ struct DashboardView: View {
     // Sheet presentation state
     @State private var localFoodCameraPresentation: FoodCameraPresentation?
     @State private var showingLogWeight = false
-    @State private var showingWeightTracking = false
+    @State private var showingActivityGoal = false
+    @State private var activityGoalDraft = 3
+    @State private var showingNutritionPlan = false
     @State private var showingCalorieDetail = false
     @State private var showingMacroDetail = false
     @State private var entryToEdit: FoodEntry?
@@ -231,6 +237,7 @@ struct DashboardView: View {
     @State private var selectedDate = Date()
 
     // Activity data from HealthKit
+    @State private var hasLoadedActivitySummary = false
     @State private var todaySteps = 0
     @State private var todayActiveCalories = 0
     @State private var todayExerciseMinutes = 0
@@ -419,69 +426,6 @@ struct DashboardView: View {
         )
     }
 
-    private var selectedDayWorkoutCalories: Int {
-        let healthKitCalories = selectedDayUniqueHealthKitWorkouts
-            .compactMap(\.caloriesBurned)
-            .reduce(0, +)
-        let liveWorkoutCalories = selectedDayLiveWorkouts.reduce(0) { total, workout in
-            total + Int(workout.healthKitCalories ?? 0)
-        }
-        return healthKitCalories + liveWorkoutCalories
-    }
-
-    private var selectedDayWorkoutMinutes: Int {
-        let healthKitMinutes = selectedDayUniqueHealthKitWorkouts.reduce(0) { total, workout in
-            total + Int(workout.durationMinutes ?? 0)
-        }
-        let liveWorkoutMinutes = selectedDayLiveWorkouts.reduce(0) { total, workout in
-            total + Int(workout.duration / 60)
-        }
-        return healthKitMinutes + liveWorkoutMinutes
-    }
-
-    private var activityCardTitle: String {
-        isViewingToday ? "Today's Activity" : "Logged Activity"
-    }
-
-    private var activityCardSteps: Int? {
-        isViewingToday ? todaySteps : nil
-    }
-
-    private var activityCardCalories: Int? {
-        if isViewingToday { return todayActiveCalories }
-        return selectedDayWorkoutCalories > 0 ? selectedDayWorkoutCalories : nil
-    }
-
-    private var activityCardExerciseMinutes: Int? {
-        if isViewingToday { return todayExerciseMinutes }
-        return selectedDayWorkoutMinutes > 0 ? selectedDayWorkoutMinutes : nil
-    }
-
-    private var activityCardCaloriesLabel: String {
-        isViewingToday ? "Active Cal" : "Workout Cal"
-    }
-
-    private var activityCardExerciseLabel: String {
-        isViewingToday ? "Exercise" : "Minutes"
-    }
-
-    private var activityCardIsLoading: Bool {
-        isViewingToday && isLoadingActivity
-    }
-
-    private var activityCardWorkoutCount: Int? {
-        if isViewingToday { return selectedDayWorkoutCount }
-        return selectedDayWorkoutCount > 0 ? selectedDayWorkoutCount : nil
-    }
-
-    private var shouldShowActivityCard: Bool {
-        if isViewingToday { return true }
-        return activityCardSteps != nil ||
-            activityCardCalories != nil ||
-            activityCardExerciseMinutes != nil ||
-            activityCardWorkoutCount != nil
-    }
-
     private var hasActiveLiveWorkout: Bool {
         liveWorkouts.contains { $0.completedAt == nil }
     }
@@ -513,42 +457,54 @@ struct DashboardView: View {
             ZStack(alignment: .top) {
                 DashboardTopGradient()
                 ScrollViewReader { scrollProxy in
-                    GeometryReader { geometry in
-                        ScrollView(.vertical) {
-                            LazyVStack(spacing: 18) {
-                                dashboardTopSections
-                                dashboardNutritionSections
-                                dashboardActivitySections
+                    VStack(spacing: 0) {
+                        DashboardSectionHeader(
+                            selection: $dashboardSection,
+                            calories: totalCalories,
+                            macroProgress: dashboardMacroProgress,
+                            trainingDays: trainingRhythm,
+                            weeklyTrainingTarget: weeklyTrainingTarget,
+                            weightLabel: dashboardWeightLabel,
+                            onAccount: { onSelectTab?(.profile) }
+                        )
+                        TabView(selection: $dashboardSection) {
+                            ForEach(DashboardSection.allCases) { section in
+                                ScrollView(.vertical) {
+                                    LazyVStack(alignment: .leading, spacing: 24) {
+                                        if section == .today { dashboardHeading(section) }
+                                        if section == .today { connectedNutritionCard; dashboardContextCards; dashboardReminders }
+                                        if section == .nutrition { connectedNutritionSection }
+                                        if section == .activity { connectedWorkoutAction }
+                                        if section == .nutrition { dashboardNutritionSections }
+                                        if section == .activity { dashboardActivitySections; dashboardWorkoutHistory }
+                                        if section == .weight { connectedWeightSection }
+                                        if section == .today { dashboardTopSections }
+                                    }
+                                    .padding(.horizontal, 16).padding(.vertical, 20)
+                                    .frame(maxWidth: 600).frame(maxWidth: .infinity)
+                                }
+                                .task(id: "\(pendingScrollToReminders)-\(remindersLoaded)-\(dashboardSection)") {
+                                    guard section == .today, dashboardSection == .today,
+                                          pendingScrollToReminders, remindersLoaded else { return }
+                                    await Task.yield()
+                                    guard !Task.isCancelled else { return }
+                                    withAnimation(.smooth) { scrollProxy.scrollTo("reminders-section", anchor: .top) }
+                                    pendingScrollToReminders = false
+                                    showRemindersBinding = false
+                                }
+                                .accessibilityIdentifier("dashboardPage\(section.title)")
+                                .tag(section)
                             }
-                            .frame(width: max(0, geometry.size.width - 32), alignment: .leading)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 16)
-                        }
-                        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+                        }.tabViewStyle(.page(indexDisplayMode: .never))
+                        .ignoresSafeArea(.container, edges: .bottom)
                     }
-                .onChange(of: showRemindersBinding) { _, isShowing in
-                    // Scroll to reminders section when triggered by notification
-                    if isShowing {
-                        if remindersLoaded {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                scrollProxy.scrollTo("reminders-section", anchor: .top)
-                            }
-                            showRemindersBinding = false
-                        } else {
-                            // Data not ready yet - wait for it
-                            pendingScrollToReminders = true
-                        }
-                    }
+                .onChange(of: nutritionTrendRequest) { _, _ in
+                    withAnimation(.smooth) { scrollProxy.scrollTo("nutrition-trends", anchor: .top) }
                 }
-                .onChange(of: remindersLoaded) { _, loaded in
-                    // Execute pending scroll after reminders load
-                    if loaded && pendingScrollToReminders {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            scrollProxy.scrollTo("reminders-section", anchor: .top)
-                        }
-                        // Reset state even if no reminders to scroll to
-                        pendingScrollToReminders = false
-                        showRemindersBinding = false
+                .onChange(of: showRemindersBinding) { _, isShowing in
+                    if isShowing {
+                        pendingScrollToReminders = true
+                        dashboardSection = .today
                     }
                 }
             }
@@ -567,6 +523,10 @@ struct DashboardView: View {
                 scheduleDeferredStartupWork(
                     delayMilliseconds: Self.deferredStartupWorkDelayMilliseconds
                 )
+            }
+            .sheet(isPresented: $showingNutritionPlan) {
+                ProfileView(mode: .nutritionPlan, onSelectTab: onSelectTab)
+                    .traiSheetBranding()
             }
             .task(id: didPrimeInitialData) {
                 guard didPrimeInitialData, !hasSettledActivationChecklistState else { return }
@@ -667,22 +627,44 @@ struct DashboardView: View {
             .refreshable {
                 await refreshHealthData()
             }
-            .fullScreenCover(item: $localFoodCameraPresentation) { presentation in
+            .sheet(item: $localFoodCameraPresentation) { presentation in
                 FoodCameraView(sessionId: presentation.sessionId, targetDate: presentation.targetDate)
                     .traiSheetBranding()
+            }
+            .sheet(isPresented: $showingActivityGoal) {
+                NavigationStack {
+                    Form {
+                        TextField("Workouts per week", value: $activityGoalDraft, format: .number)
+                            .keyboardType(.numberPad)
+                        Text("Every completed workout counts, including multiple sessions on the same day.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        if weeklyTrainingTarget != nil {
+                            Button("Remove goal", role: .destructive) {
+                                profile?.weeklyWorkoutSessionGoal = nil
+                                showingActivityGoal = false
+                            }
+                        }
+                    }
+                    .navigationTitle("Weekly workout goal").navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingActivityGoal = false } }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Save") {
+                                profile?.weeklyWorkoutSessionGoal = activityGoalDraft
+                                showingActivityGoal = false
+                            }.disabled(activityGoalDraft < 1).tint(.accentColor)
+                        }
+                    }
+                }.presentationDetents([.medium])
             }
             .sheet(isPresented: $showingLogWeight) {
                 LogWeightSheet()
                     .traiSheetBranding()
             }
-            .sheet(isPresented: $showingWeightTracking) {
-                WeightTrackingView()
-                    .traiSheetBranding()
-            }
             .sheet(isPresented: $showingCalorieDetail) {
                 CalorieDetailSheet(
                     entries: selectedDayFoodEntries,
-                    goal: profile?.effectiveCalorieGoal(hasWorkoutToday: selectedDayHasWorkoutForTargets) ?? 2_000,
+                    goal: profile?.effectiveCalorieGoal(hasWorkoutToday: selectedDayHasWorkoutForTargets) ?? 0,
                     isToday: isViewingToday,
                     historicalEntries: detailSheetHistoricalFoodEntries,
                     onAddFood: {
@@ -706,12 +688,12 @@ struct DashboardView: View {
             .sheet(isPresented: $showingMacroDetail) {
                 MacroDetailSheet(
                     entries: selectedDayFoodEntries,
-                    proteinGoal: profile?.dailyProteinGoal ?? 150,
-                    carbsGoal: profile?.dailyCarbsGoal ?? 200,
-                    fatGoal: profile?.dailyFatGoal ?? 65,
+                    proteinGoal: profile?.dailyProteinGoal ?? 0,
+                    carbsGoal: profile?.dailyCarbsGoal ?? 0,
+                    fatGoal: profile?.dailyFatGoal ?? 0,
                     isToday: isViewingToday,
-                    fiberGoal: profile?.dailyFiberGoal ?? 30,
-                    sugarGoal: profile?.dailySugarGoal ?? 50,
+                    fiberGoal: profile?.dailyFiberGoal ?? 0,
+                    sugarGoal: profile?.dailySugarGoal ?? 0,
                     enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
                     historicalEntries: detailSheetHistoricalFoodEntries,
                     onAddFood: {
@@ -820,27 +802,342 @@ struct DashboardView: View {
         onSelectTab?(.workouts)
     }
 
+    private var dashboardMacroProgress: [Double] {
+        let current = [totalProtein, totalCarbs, totalFat]
+        let targets = [profile?.dailyProteinGoal, profile?.dailyCarbsGoal, profile?.dailyFatGoal]
+        return zip(current, targets).map { value, goal in
+            guard let goal, goal > 0 else { return 0 }
+            return value / Double(goal)
+        }
+    }
+
+    private var dashboardWeightLabel: String {
+        guard let weight = weightEntries.first else { return "Not logged" }
+        let metric = profile?.usesMetricWeight ?? true
+        let value = metric ? weight.weightKg : weight.weightKg * 2.20462
+        return "\(value.formatted(.number.precision(.fractionLength(1)))) \(metric ? "kg" : "lb")"
+    }
+
+    private var dashboardGreeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        let greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
+        guard let name = profile?.name.split(separator: " ").first else { return greeting }
+        return "\(greeting), \(name)"
+    }
+
+    private func dashboardHeading(_ section: DashboardSection) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(dashboardGreeting).font(.system(.title2, design: .rounded, weight: .bold))
+            dashboardFoodAction
+        }.padding(.horizontal, 4)
+    }
+
+    private var connectedNutritionCard: some View {
+        DashboardNutritionGlassCard(
+            entries: selectedDayFoodEntries,
+            profile: profile,
+            hasWorkoutToday: selectedDayHasWorkoutForTargets,
+            animates: isDashboardTabVisible && dashboardSection == .today,
+            onLogFood: { openFoodCameraFromDashboard(source: "nutrition_glass_card", targetDate: selectedDate) },
+            onDetails: { withAnimation(.smooth(duration: 0.3)) { dashboardSection = .nutrition } }
+        )
+    }
+
+    private var dashboardFoodAction: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 8))
+        return layout {
+            Button {
+                openFoodCameraFromDashboard(source: "dashboard_top_action", targetDate: selectedDate)
+            } label: {
+                HStack(spacing: 9) {
+                    Image(systemName: "camera.fill")
+                        .font(.body.weight(.semibold))
+                    Text("Log food").font(.system(.headline, design: .rounded))
+                }
+            }
+            .buttonStyle(.traiPrimary(size: .regular, fullWidth: true, height: dynamicTypeSize.isAccessibilitySize ? nil : 50))
+            .layoutPriority(1)
+            .accessibilityIdentifier("dashboardNutritionLogFood")
+
+            if hasActiveLiveWorkout {
+                Button("Resume", systemImage: "play.fill", action: openOrStartWorkout)
+                    .buttonStyle(.traiSecondary(size: .regular, height: 50))
+                    .accessibilityLabel("Resume workout")
+            }
+            Menu {
+                Button(hasActiveLiveWorkout ? "Resume workout" : nextWorkoutName == nil ? "Quick start workout" : "Start workout", systemImage: "play.fill", action: openOrStartWorkout)
+                Button("Log weight", systemImage: "scalemass") {
+                    openLogWeightFromDashboard(source: "dashboard_add_menu")
+                }
+                Button("Add reminder", systemImage: "bell.badge") { reminderComposerSeed = .blank }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                    Text("Add")
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            .buttonStyle(.traiTertiary(color: .primary, size: .regular, height: 50))
+            .accessibilityLabel("Add more")
+        }
+        .padding(.top, 6)
+    }
+
+    private var weeklyTrainingTarget: Int? {
+        guard let goal = profile?.weeklyWorkoutSessionGoal, goal > 0 else { return nil }
+        return goal
+    }
+
+    private var trainingRhythm: [TrainingRhythmDay] {
+        let calendar = Calendar.current
+        let start = calendar.dateInterval(of: .weekOfYear, for: selectedDate)?.start ?? calendar.startOfDay(for: selectedDate)
+        let mergedIDs = mergedHealthKitIDs
+        let sessions = allWorkouts.filter { workout in
+            guard let id = workout.healthKitWorkoutID else { return true }
+            return !mergedIDs.contains(id)
+        }
+        let completed = liveWorkouts.filter { $0.completedAt != nil }
+        return (0..<7).compactMap { offset in
+            guard let day = calendar.date(byAdding: .day, value: offset, to: start),
+                  let next = calendar.date(byAdding: .day, value: 1, to: day) else { return nil }
+            let logged = sessions.filter { $0.loggedAt >= day && $0.loggedAt < next }
+            let live = completed.filter { ($0.completedAt ?? $0.startedAt) >= day && ($0.completedAt ?? $0.startedAt) < next }
+            let strength = logged.filter { $0.sets > 0 || WorkoutMode.normalized(from: $0.healthKitWorkoutType) == .strength }.count
+                + live.filter { $0.type == .strength || $0.type == .mixed }.count
+            return TrainingRhythmDay(date: day, strength: strength, movement: logged.count + live.count - strength,
+                                     names: logged.map(\.displayName) + live.map(\.name),
+                                     isPartial: (allWorkouts.count >= Self.dashboardEntryFetchLimit && (allWorkouts.last?.loggedAt ?? .distantPast) > day)
+                                        || (liveWorkouts.count >= Self.dashboardEntryFetchLimit && (liveWorkouts.last?.startedAt ?? .distantPast) > day))
+        }
+    }
+
+    private var weightJourneySamples: [WeightJourneySample] {
+        let metric = profile?.usesMetricWeight ?? true
+        return weightEntries.prefix(30).reversed().map {
+            WeightJourneySample(id: $0.id, date: $0.loggedAt, value: metric ? $0.weightKg : $0.weightLbs)
+        }
+    }
+
+    private var nextWorkoutName: String? {
+        let templates = profile?.workoutPlan?.templates ?? []
+        guard !templates.isEmpty, profile?.defaultWorkoutActionValue != .customWorkout else { return nil }
+        return templates.first(where: { $0.id == cachedRecommendedTemplateId })?.name ?? templates.first?.name
+    }
+
+    private var dashboardContextCards: some View {
+        VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                dashboardSectionLink("Activity", icon: "figure.run", tint: .orange, section: .activity)
+                activityDial(compact: true)
+                workoutContextAction
+            }.traiCard(contentPadding: 18)
+
+            VStack(alignment: .leading, spacing: 12) {
+                dashboardSectionLink("Weight", icon: "scalemass", tint: .accentColor, section: .weight)
+                WeightJourneyVisual(samples: weightJourneySamples,
+                                    unit: (profile?.usesMetricWeight ?? true) ? "kg" : "lb", compact: true)
+                weightContextAction
+            }.traiCard(contentPadding: 18)
+        }
+    }
+
+    private var workoutContextAction: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let active = liveWorkouts.first(where: { $0.completedAt == nil }) {
+                Text("In progress").font(.caption).foregroundStyle(.secondary)
+                Text(active.name).font(.headline)
+            } else if let nextWorkoutName {
+                Text("Up next").font(.caption).foregroundStyle(.secondary)
+                Text(nextWorkoutName).font(.headline)
+            } else {
+                Text(profile?.workoutPlan == nil ? "Train your way" : "Choose your workout")
+                    .font(.headline)
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { workoutContextButtons }
+                VStack(alignment: .leading, spacing: 12) { workoutContextButtons }
+            }
+        }
+    }
+
+    @ViewBuilder private var workoutContextButtons: some View {
+        if hasActiveLiveWorkout || nextWorkoutName != nil {
+            Button(hasActiveLiveWorkout ? "Resume" : "Start", systemImage: "play.fill", action: openOrStartWorkout)
+                .buttonStyle(.traiPrimary())
+                .accessibilityLabel(hasActiveLiveWorkout ? "Resume active workout" : "Start recommended workout")
+        } else {
+            Button(profile?.workoutPlan == nil ? "Make a plan" : "Choose session", systemImage: "list.bullet") {
+                if profile?.workoutPlan == nil {
+                    openWorkoutPlanSetupFromActivationChecklist()
+                } else {
+                    onSelectTab?(.workouts)
+                }
+            }.buttonStyle(.traiPrimary())
+            Button("Quick start", systemImage: "play.fill", action: startCustomWorkout)
+                .buttonStyle(.traiSecondary())
+                .accessibilityIdentifier("dashboardQuickStartWorkout")
+        }
+    }
+
+    private var weightContextAction: some View {
+            Button { openLogWeightFromDashboard(source: "weight_visual") } label: {
+                Label {
+                    Text("Log weight")
+                } icon: {
+                    Image(systemName: "plus")
+                }
+            }
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.traiSecondary())
+                .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func dashboardSectionLink(_ title: String, icon: String, tint: Color, section: DashboardSection) -> some View {
+        Button {
+            withAnimation(.smooth) { dashboardSection = section }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: icon).foregroundStyle(tint)
+                Text(title).foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            .font(.subheadline.weight(.semibold))
+            .frame(minHeight: 44)
+            .contentShape(.rect)
+        }.buttonStyle(.plain)
+        .accessibilityLabel("Show \(title.lowercased()) details")
+    }
+
+    private var connectedNutritionSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            DashboardNutritionGlassCard(
+                entries: selectedDayFoodEntries,
+                profile: profile,
+                hasWorkoutToday: selectedDayHasWorkoutForTargets,
+                isSection: true,
+                animates: isDashboardTabVisible && dashboardSection == .nutrition,
+                onLogFood: { openFoodCameraFromDashboard(source: "nutrition_section", targetDate: selectedDate) },
+                onDetails: { nutritionTrendRequest += 1 }
+            )
+            heroActions {
+                Button("Log food", systemImage: "camera.fill") {
+                    openFoodCameraFromDashboard(source: "nutrition_section", targetDate: selectedDate)
+                }.buttonStyle(.traiPrimary())
+                    .accessibilityIdentifier("dashboardNutritionLogFood")
+                Menu {
+                    Button("Trends", systemImage: "chart.xyaxis.line") { nutritionTrendRequest += 1 }
+                    Button("Nutrition plan", systemImage: "slider.horizontal.3") { showingNutritionPlan = true }
+                } label: { Label("More", systemImage: "ellipsis") }
+                    .buttonStyle(.traiTertiary(color: .primary))
+                    .accessibilityLabel("Nutrition options")
+            }
+        }
+    }
+
+    private func activityDial(compact: Bool) -> some View {
+        let days = trainingRhythm
+        let count = days.reduce(0) { $0 + $1.count }
+        let partial = days.contains(where: \.isPartial)
+        let horizontal = compact && !dynamicTypeSize.isAccessibilitySize
+        let layout = horizontal ? AnyLayout(HStackLayout(spacing: 18)) : AnyLayout(VStackLayout(spacing: 12))
+        let amount = "\(partial ? "≥" : "")\(count)\(weeklyTrainingTarget.map { " / \($0)" } ?? "")"
+        let centeredCount = !compact && !dynamicTypeSize.isAccessibilitySize
+        return layout {
+            WorkoutGauge(target: weeklyTrainingTarget, completed: count, miniature: compact, glass: !compact, showsCount: false)
+                .frame(width: compact ? 100 : 240, height: compact ? 100 : 240)
+                .overlay {
+                    if centeredCount {
+                        VStack(spacing: 6) {
+                            Text(amount).font(.largeTitle.bold()).fontDesign(.rounded).monospacedDigit()
+                            Text("workouts\nthis week").font(.caption).foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: 110)
+                        }.offset(y: 10)
+                    }
+                }
+                // The open arc leaves an unused lower part of its square canvas.
+                .frame(height: compact ? 100 : 210, alignment: .top)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(centeredCount ? "\(amount) workouts this week" : "")
+                .accessibilityHidden(!centeredCount)
+            if !centeredCount || compact || partial {
+            VStack(alignment: horizontal ? .leading : .center, spacing: 6) {
+                if !centeredCount {
+                    Text(amount).font(.largeTitle.bold()).fontDesign(.rounded).monospacedDigit()
+                    Text("workouts this week").font(.subheadline).foregroundStyle(.secondary)
+                }
+                if compact {
+                Button(weeklyTrainingTarget == nil ? "Set weekly goal" : "Edit weekly goal") {
+                    activityGoalDraft = weeklyTrainingTarget ?? 3
+                    showingActivityGoal = true
+                }.font(.caption.weight(.semibold)).tint(.accentColor)
+                    .disabled(profile == nil)
+                }
+                if partial { Text("Some older workouts may be missing").font(.caption2).foregroundStyle(.secondary) }
+            }.frame(maxWidth: .infinity, alignment: horizontal ? .leading : .center)
+            }
+        }.accessibilityIdentifier("activityDial")
+    }
+
+    private func heroActions<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12, content: content)
+            VStack(spacing: 12, content: content)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 4)
+    }
+
+    private var connectedWorkoutAction: some View {
+        VStack(spacing: 16) {
+            activityDial(compact: false)
+            if let name = liveWorkouts.first(where: { $0.completedAt == nil })?.name ?? nextWorkoutName {
+                Text(name).font(.headline).multilineTextAlignment(.center)
+            }
+            heroActions {
+                Button(hasActiveLiveWorkout ? "Resume" : nextWorkoutName != nil ? "Start" : "Quick start", systemImage: "play.fill", action: openOrStartWorkout)
+                    .buttonStyle(.traiPrimary())
+                    .accessibilityLabel(hasActiveLiveWorkout ? "Resume active workout" : nextWorkoutName != nil ? "Start recommended workout" : "Quick start workout")
+                activityOptions
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private var activityOptions: some View {
+        Menu {
+            Button(weeklyTrainingTarget == nil ? "Set weekly goal" : "Edit weekly goal", systemImage: "target") {
+                activityGoalDraft = weeklyTrainingTarget ?? 3
+                showingActivityGoal = true
+            }.disabled(profile == nil)
+            Button(profile?.workoutPlan == nil ? "Make a plan" : "Workout plan", systemImage: "list.bullet") {
+                if profile?.workoutPlan == nil { openWorkoutPlanSetupFromActivationChecklist() }
+                else { onSelectTab?(.workouts) }
+            }
+        } label: { Label("More", systemImage: "ellipsis") }
+            .buttonStyle(.traiTertiary(color: .primary))
+            .accessibilityLabel("Activity options")
+    }
+
+    private var connectedWeightSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            WeightJourneyVisual(samples: weightJourneySamples,
+                                unit: (profile?.usesMetricWeight ?? true) ? "kg" : "lb")
+            heroActions {
+                Button("Log weight", systemImage: "plus") {
+                    openLogWeightFromDashboard(source: "weight_visual")
+                }.buttonStyle(.traiPrimary())
+            }
+            WeightTrackingView(embedded: true)
+        }
+    }
+
     @ViewBuilder
     private var dashboardTopSections: some View {
-        DateNavigationBar(
-            selectedDate: $selectedDate,
-            isToday: isViewingToday
-        )
-
         if isViewingToday, profile != nil {
-            QuickActionsCard(
-                onLogFood: { openFoodCameraFromDashboard(source: "quick_actions") },
-                onAddWorkout: { startWorkout() },
-                onLogWeight: { openLogWeightFromDashboard(source: "quick_actions") }
-            )
-            .traiEntrance(index: 0)
-
-            ChatWithTraiCard(
-                isUnlocked: canAccessAIFeatures,
-                action: { openTraiChatFromDashboard() }
-            )
-            .traiEntrance(index: 1)
-
             if shouldShowActivationChecklist {
                 OnboardingActivationChecklistCard(
                     hasLoggedFood: hasLoggedFood,
@@ -857,50 +1154,28 @@ struct DashboardView: View {
                 .traiEntrance(index: 2)
             }
 
-            if remindersLoaded, !todaysReminderItems.isEmpty {
-                TodaysRemindersCard(
-                    reminders: todaysReminderItems,
-                    hasActiveReminderSetup: hasActiveReminderSetup,
-                    onReminderTap: openReminderComposer,
-                    onComplete: completeReminder,
-                    onAdd: { reminderComposerSeed = .blank }
-                )
-                .id("reminders-section")
-                .traiEntrance(index: 3)
-            }
+        }
+    }
+
+    @ViewBuilder private var dashboardReminders: some View {
+        if isViewingToday, remindersLoaded, profile != nil {
+            TodaysRemindersCard(
+                reminders: todaysReminderItems,
+                hasActiveReminderSetup: hasActiveReminderSetup,
+                onReminderTap: openReminderComposer,
+                onComplete: completeReminder,
+                onAdd: { reminderComposerSeed = .blank }
+            )
+            .id("reminders-section")
         }
     }
 
     @ViewBuilder
     private var dashboardNutritionSections: some View {
-        CalorieProgressCard(
-            consumed: totalCalories,
-            goal: profile?.effectiveCalorieGoal(hasWorkoutToday: selectedDayHasWorkoutForTargets) ?? 2_000,
-            onTap: { openCalorieDetailFromDashboard(source: "calorie_progress_card") }
-        )
-        .traiEntrance(index: 3)
-
-        MacroBreakdownCard(
-            protein: totalProtein,
-            carbs: totalCarbs,
-            fat: totalFat,
-            fiber: totalFiber,
-            sugar: totalSugar,
-            proteinGoal: profile?.dailyProteinGoal ?? 150,
-            carbsGoal: profile?.dailyCarbsGoal ?? 200,
-            fatGoal: profile?.dailyFatGoal ?? 65,
-            fiberGoal: profile?.dailyFiberGoal ?? 30,
-            sugarGoal: profile?.dailySugarGoal ?? 50,
-            enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
-            onTap: { openMacroDetailFromDashboard(source: "macro_breakdown_card") }
-        )
-        .traiEntrance(index: 4)
-
         DailyFoodTimeline(
             entries: selectedDayFoodEntries,
             enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
             isToday: isViewingToday,
-            onAddFood: { openFoodCameraFromDashboard(source: "food_timeline_add", targetDate: selectedDate) },
             onAddToSession: { sessionId in
                 openFoodCameraFromDashboard(
                     source: "food_timeline_add_to_session",
@@ -912,54 +1187,109 @@ struct DashboardView: View {
             onDeleteEntry: deleteFoodEntry
         )
         .traiEntrance(index: 5)
+        dashboardNutritionTrends
+    }
 
-        if isViewingToday, remindersLoaded, profile != nil, todaysReminderItems.isEmpty {
-            TodaysRemindersCard(
-                reminders: [],
-                hasActiveReminderSetup: hasActiveReminderSetup,
-                onReminderTap: openReminderComposer,
-                onComplete: completeReminder,
-                onAdd: { reminderComposerSeed = .blank }
+    private var dashboardWorkoutHistory: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("This week’s sessions").font(.headline)
+            let loggedDays = trainingRhythm.filter { $0.count > 0 }
+            if loggedDays.isEmpty {
+                Text("No sessions logged this week.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            } else {
+                ForEach(loggedDays.reversed()) { day in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(day.date, format: .dateTime.weekday(.wide).month(.abbreviated).day())
+                            .font(.subheadline.weight(.semibold))
+                        Text(day.names.joined(separator: " · "))
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            Button("Workout history & plan", systemImage: "figure.strengthtraining.traditional") {
+                onSelectTab?(.workouts)
+            }.buttonStyle(.traiTertiary(color: .primary))
+        }
+        .traiCard(contentPadding: 18)
+        .accessibilityIdentifier("dashboardWorkoutHistory")
+    }
+
+    private var enabledTrendMacros: [MacroType] {
+        let enabled = profile?.enabledMacros ?? MacroType.defaultEnabled
+        return MacroType.allCases.filter { enabled.contains($0) }
+    }
+
+    private var dashboardNutritionTrends: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Past 7 days").font(.headline)
+                Spacer()
+                Picker("Nutrient", selection: $nutritionTrendMetric) {
+                    Text("Calories").tag(NutritionTrendChart.NutritionMetric.calories)
+                    ForEach(enabledTrendMacros) { macro in
+                        Text(macro.displayName).tag(nutritionMetric(for: macro))
+                    }
+                }.pickerStyle(.menu).tint(.primary)
+            }
+            NutritionTrendChart(
+                data: TrendsService.aggregateNutritionByDay(entries: isViewingToday ? last7DaysFoodEntries : detailSheetHistoricalFoodEntries, days: 7, endDate: selectedDate),
+                goal: nil, metric: nutritionTrendMetric
             )
-            .id("reminders-section-lower")
-            .traiEntrance(index: 6)
+        }
+        .id("nutrition-trends")
+        .accessibilityIdentifier("dashboardNutritionTrends")
+        .task(id: selectedDate) { loadFoodTrendHistoryForSelectedDateIfNeeded() }
+    }
+
+    private func nutritionMetric(for macro: MacroType) -> NutritionTrendChart.NutritionMetric {
+        switch macro {
+        case .protein: .protein
+        case .carbs: .carbs
+        case .fat: .fat
+        case .fiber: .fiber
+        case .sugar: .sugar
         }
     }
 
-    @ViewBuilder
-    private var dashboardActivitySections: some View {
-        if shouldShowActivityCard {
-            TodaysActivityCard(
-                title: activityCardTitle,
-                steps: activityCardSteps,
-                activeCalories: activityCardCalories,
-                activeCaloriesLabel: activityCardCaloriesLabel,
-                exerciseMinutes: activityCardExerciseMinutes,
-                exerciseMinutesLabel: activityCardExerciseLabel,
-                workoutCount: activityCardWorkoutCount,
-                isLoading: activityCardIsLoading
-            )
-            .traiEntrance(index: 7)
-        }
-
-        if isViewingToday, let latestWeight = weightEntries.first {
-            NavigationLink {
-                WeightTrackingView()
-            } label: {
-                WeightTrendCard(
-                    currentWeight: latestWeight.weightKg,
-                    targetWeight: profile?.targetWeightKg,
-                    useLbs: !(profile?.usesMetricWeight ?? true)
-                )
-            }
-            .simultaneousGesture(
-                TapGesture().onEnded {
-                    trackOpenWeightFromDashboard(source: "weight_trend_card")
+    @ViewBuilder private var dashboardActivitySections: some View {
+        if hasLoadedActivitySummary {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Label("Daily movement", systemImage: "heart.fill").font(.headline)
+                        .accessibilityIdentifier("dashboardActivityTitle")
+                    Spacer()
+                    Text("Health").font(.caption).foregroundStyle(.secondary)
                 }
-            )
-            .buttonStyle(.plain)
-            .traiEntrance(index: 8)
+                let columns = dynamicTypeSize.isAccessibilitySize ? 1 : 3
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: columns), alignment: .leading, spacing: 16) {
+                    movementValue(todaySteps.formatted(), label: "Steps", color: .green, identifier: "dashboardActivityStepsValue")
+                    movementValue(todayActiveCalories.formatted(), label: "Active kcal", color: .orange, identifier: "dashboardActivityCaloriesValue")
+                    movementValue(todayExerciseMinutes.formatted(), label: "Exercise min", color: .cyan, identifier: "dashboardActivityExerciseValue")
+                }
+            }
+            .traiCard(contentPadding: 18)
+            .accessibilityIdentifier("dashboardActivityCard")
+        } else {
+            HStack(spacing: 8) {
+                if isLoadingActivity { ProgressView().controlSize(.small) }
+                else { Image(systemName: "heart") }
+                Text(isLoadingActivity ? "Loading movement from Health…" : "Movement from Health isn’t available.")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.footnote).foregroundStyle(.secondary)
+            .padding(.horizontal, 4)
+            .accessibilityIdentifier("dashboardActivityStatus")
         }
+    }
+
+    private func movementValue(_ value: String, label: String, color: Color, identifier: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value).font(.title2.bold()).foregroundStyle(color.gradient).monospacedDigit()
+                .accessibilityIdentifier(identifier)
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }.accessibilityElement(children: .combine)
     }
 
     private func recordDashboardLatencyProbe(
@@ -1622,14 +1952,16 @@ struct DashboardView: View {
 
         guard isViewingToday else { return }
         isLoadingActivity = true
+        hasLoadedActivitySummary = false
         defer { isLoadingActivity = false }
-        guard let healthKitService else { return }
+        guard let healthKitService, healthKitService.isHealthKitAvailable else { return }
 
         do {
             let summary = try await healthKitService.fetchTodayActivitySummaryAuthorized()
             todaySteps = summary.steps
             todayActiveCalories = summary.activeCalories
             todayExerciseMinutes = summary.exerciseMinutes
+            hasLoadedActivitySummary = true
         } catch {
             // Silently fail - user may not have granted HealthKit permissions
             print("Failed to load activity data: \(error)")
@@ -1766,17 +2098,6 @@ struct DashboardView: View {
         )
     }
 
-    private func openTraiChatFromDashboard() {
-        onSelectTab?(.trai)
-        HapticManager.selectionChanged()
-        BehaviorTracker(modelContext: modelContext).recordDeferred(
-            actionKey: "engagement.dashboard_chat_shortcut",
-            domain: .engagement,
-            surface: .dashboard,
-            outcome: .opened
-        )
-    }
-
     private func openCalorieDetailFromDashboard(source: String) {
         loadFoodTrendHistoryForSelectedDateIfNeeded()
         showingCalorieDetail = true
@@ -1812,6 +2133,14 @@ struct DashboardView: View {
     }
 
     // MARK: - Workout Actions
+
+    private func openOrStartWorkout() {
+        if let workout = liveWorkouts.first(where: { $0.completedAt == nil }) {
+            presentLiveWorkout(workout: workout)
+        } else {
+            startWorkout()
+        }
+    }
 
     private func startWorkout() {
         guard let profile else {
@@ -1982,65 +2311,63 @@ private struct OnboardingActivationChecklistCard: View {
     let onSetReminders: () -> Void
     let onDismiss: () -> Void
 
+    @State private var isExpanded = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Finish setting up Trai")
-                        .font(.headline)
-                    Text("A few quick wins after your first plan.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                ActivationChecklistProgressView(completedCount: completedCount, totalCount: 4)
-
-                Button("Dismiss", systemImage: "xmark") {
-                    onDismiss()
-                }
-                .labelStyle(.iconOnly)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
-                .buttonStyle(.plain)
-                .accessibilityLabel("Dismiss setup checklist")
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(.smooth) { isExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Finish setting up Trai").font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                            Text("\(4 - completedCount) optional steps").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    }.frame(minHeight: 44).contentShape(.rect)
+                }.buttonStyle(.plain).accessibilityIdentifier("dashboardSetupToggle")
+                    .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+                Button("Dismiss setup checklist", systemImage: "xmark", action: onDismiss)
+                    .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
             }
+            if isExpanded {
+                VStack(spacing: 10) {
+                    if !hasLoggedFood {
+                        checklistRow(
+                            title: "Log your first meal",
+                            icon: "camera.fill",
+                            action: onLogFood
+                        )
+                    }
 
-            VStack(spacing: 10) {
-                if !hasLoggedFood {
-                    checklistRow(
-                        title: "Log your first meal",
-                        icon: "camera.fill",
-                        action: onLogFood
-                    )
+                    if !hasWorkoutPlan {
+                        checklistRow(
+                            title: "Create a workout plan",
+                            icon: "figure.strengthtraining.traditional",
+                            action: onCreateWorkoutPlan
+                        )
+                    }
+
+                    if !hasHealthAccess {
+                        checklistRow(
+                            title: "Connect Apple Health",
+                            icon: "heart.fill",
+                            action: onConnectHealth
+                        )
+                    }
+
+                    if !hasReminders {
+                        checklistRow(
+                            title: "Set reminders",
+                            icon: "bell.badge.fill",
+                            action: onSetReminders
+                        )
+                    }
                 }
 
-                if !hasWorkoutPlan {
-                    checklistRow(
-                        title: "Create a workout plan",
-                        icon: "figure.strengthtraining.traditional",
-                        action: onCreateWorkoutPlan
-                    )
-                }
-
-                if !hasHealthAccess {
-                    checklistRow(
-                        title: "Connect Apple Health",
-                        icon: "heart.fill",
-                        action: onConnectHealth
-                    )
-                }
-
-                if !hasReminders {
-                    checklistRow(
-                        title: "Set reminders",
-                        icon: "bell.badge.fill",
-                        action: onSetReminders
-                    )
-                }
             }
 
             if let healthError, !healthError.isEmpty {
@@ -2050,7 +2377,7 @@ private struct OnboardingActivationChecklistCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .traiCard(cornerRadius: 20)
+        .traiCard(contentPadding: 14)
     }
 
     private var completedCount: Int {
@@ -2087,47 +2414,6 @@ private struct OnboardingActivationChecklistCard: View {
             .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
-    }
-}
-
-private struct ActivationChecklistProgressView: View {
-    let completedCount: Int
-    let totalCount: Int
-
-    private var progress: Double {
-        guard totalCount > 0 else { return 0 }
-        return min(max(Double(completedCount) / Double(totalCount), 0), 1)
-    }
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(Color(.tertiarySystemFill), lineWidth: 4)
-
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(
-                    AngularGradient(
-                        colors: [
-                            TraiColors.brandAccent,
-                            TraiColors.blaze,
-                            TraiColors.brandAccent
-                        ],
-                        center: .center
-                    ),
-                    style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-
-            Text("\(completedCount)")
-                .font(.caption.weight(.bold))
-                .monospacedDigit()
-                .foregroundStyle(.primary)
-        }
-        .frame(width: 38, height: 38)
-        .accessibilityLabel("Setup progress")
-        .accessibilityValue("\(completedCount) of \(totalCount) complete")
-        .animation(.easeInOut(duration: 0.25), value: completedCount)
     }
 }
 

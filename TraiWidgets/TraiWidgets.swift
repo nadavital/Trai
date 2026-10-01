@@ -13,9 +13,9 @@ import WidgetKit
 
 extension Color {
     static let calorieColor = Color.red
-    static let proteinColor = Color.blue
-    static let carbsColor = Color.orange
-    static let fatColor = Color.purple
+    static let proteinColor = Color(red: 0.98, green: 0.25, blue: 0.30)
+    static let carbsColor = Color(red: 0.00, green: 0.73, blue: 0.79)
+    static let fatColor = Color(red: 0.61, green: 0.35, blue: 0.97)
 }
 
 private extension WidgetData.Macro {

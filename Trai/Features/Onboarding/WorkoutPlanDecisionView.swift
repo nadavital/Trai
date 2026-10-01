@@ -29,7 +29,7 @@ struct WorkoutPlanDecisionView: View {
 
                     Text(hasWorkoutPlan
                          ? "Review your personalized workout plan below."
-                         : "Choose how you want to start training in Trai.")
+                         : "A workout plan is optional. Choose whether to build one before you start.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -67,8 +67,8 @@ struct WorkoutPlanDecisionView: View {
 
                         workoutChoiceCard(
                             icon: "figure.strengthtraining.traditional",
-                            title: "Track Workouts Only",
-                            subtitle: "Log sessions and decide on a plan later",
+                            title: "Start Without a Plan",
+                            subtitle: "Log workouts now; make a plan any time",
                             tint: .secondary,
                             action: onSkipPlan
                         )
@@ -77,7 +77,7 @@ struct WorkoutPlanDecisionView: View {
                     .opacity(contentVisible ? 1 : 0)
 
                     // Info text
-                    Text("You can always create or modify your workout plan later from the Workouts tab.")
+                    Text("Without a plan, Trai won’t suggest a next workout. You can create one later in Workouts → Plan.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)

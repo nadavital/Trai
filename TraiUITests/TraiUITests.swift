@@ -13,6 +13,539 @@ final class TraiUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    private func captureMigrationScreen(_ app: XCUIApplication, name: String) {
+        // Let section transitions and glass compositing settle before visual evidence.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.7))
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    func testActivityDiscStudy() {
+        let app = makeApp(extraArguments: ["--activity-disc-study", "--disc-fitted"])
+        app.launch()
+        XCTAssertTrue(app.buttons["discPetal0"].waitForExistence(timeout: 15))
+        captureMigrationScreen(app, name: "Disc partial")
+        app.buttons["discPetal0"].tap()
+        XCTAssertTrue(app.buttons["discPetal0"].isSelected)
+        captureMigrationScreen(app, name: "Disc selected")
+        app.buttons["discReset"].tap()
+        captureMigrationScreen(app, name: "Disc empty")
+        for _ in 0..<4 { app.buttons["discAdd"].tap() }
+        captureMigrationScreen(app, name: "Disc complete")
+        app.buttons["discAdd"].tap()
+        XCTAssertTrue(app.staticTexts["1 additional training days"].exists)
+        captureMigrationScreen(app, name: "Disc extra")
+        app.buttons["Flower"].tap()
+        captureMigrationScreen(app, name: "Bloom complete")
+        app.buttons["discReset"].tap()
+        app.buttons["discAdd"].tap()
+        app.buttons["discAdd"].tap()
+        captureMigrationScreen(app, name: "Bloom partial")
+        app.buttons["Glass"].tap()
+        captureMigrationScreen(app, name: "Glass partial")
+        app.buttons["discAdd"].tap()
+        app.buttons["discAdd"].tap()
+        captureMigrationScreen(app, name: "Glass complete")
+        app.buttons["Switch appearance"].tap()
+        captureMigrationScreen(app, name: "Glass dark")
+        app.buttons["Petal disc"].tap()
+        captureMigrationScreen(app, name: "Disc dark")
+        let stepper = app.steppers["discTarget"]
+        if !stepper.isHittable { app.swipeUp() }
+        for _ in 0..<3 { stepper.buttons["discTarget-Increment"].tap() }
+        captureMigrationScreen(app, name: "Disc seven")
+        for _ in 0..<6 { stepper.buttons["discTarget-Decrement"].tap() }
+        captureMigrationScreen(app, name: "Disc one")
+    }
+
+    func testIntegratedActivityDial() {
+        let app = makeApp(extraArguments: ["--app-store-screenshot-mode", "--ui-test-mock-food-ai", "--ui-test-dial-sessions"])
+        app.launch()
+        XCTAssertTrue(app.buttons["dashboardSectionActivity"].waitForExistence(timeout: 20))
+        app.buttons["dashboardSectionActivity"].tap()
+        XCTAssertTrue(app.buttons["Set weekly goal"].waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Activity dial no goal")
+        app.buttons["Set weekly goal"].tap()
+        XCTAssertTrue(app.navigationBars["Weekly workout goal"].waitForExistence(timeout: 5))
+        app.buttons["Save"].tap()
+        XCTAssertTrue(app.buttons["Edit weekly goal"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.otherElements["2 / 3 workouts this week"].exists || app.staticTexts["2 / 3 workouts this week"].exists)
+        captureMigrationScreen(app, name: "Activity dial connected")
+        app.buttons["Edit weekly goal"].tap()
+        let field = app.textFields["Workouts per week"]
+        field.tap()
+        field.typeText(XCUIKeyboardKey.delete.rawValue + "1")
+        app.buttons["Save"].tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "2 / 1 workouts this week")).firstMatch.waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Activity dial over goal")
+        app.buttons["dashboardSectionToday"].tap()
+        app.swipeUp()
+        XCTAssertTrue(app.buttons["Show weight details"].waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "All visuals connected")
+    }
+
+    func testIntegratedWeightScale() {
+        let app = makeApp(extraArguments: ["--app-store-screenshot-mode", "--ui-test-mock-food-ai"])
+        app.launch()
+        XCTAssertTrue(app.buttons["dashboardNutritionLogFood"].firstMatch.waitForExistence(timeout: 20))
+        captureMigrationScreen(app, name: "Integrated Today")
+        app.swipeUp()
+        XCTAssertTrue(app.buttons["Show weight details"].waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Integrated context cards")
+        app.buttons["Show weight details"].tap()
+        XCTAssertTrue(app.buttons["See weight history"].waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Integrated Weight")
+        app.buttons["Log weight"].tap()
+        XCTAssertTrue(app.navigationBars["Log Weight"].waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Integrated weight logging")
+        let field = app.textFields["0.0"].firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        let oldValue = field.value as? String ?? ""
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: oldValue.count) + "178.2")
+        app.buttons["Save"].tap()
+        XCTAssertTrue(waitForNonExistence(app.navigationBars["Log Weight"], timeout: 5))
+        XCTAssertTrue(app.staticTexts["178.2"].firstMatch.waitForExistence(timeout: 5), "Saved weight must update the section")
+        captureMigrationScreen(app, name: "Weight section after saving")
+        app.buttons["See weight history"].tap()
+        XCTAssertTrue(app.buttons["weightHistoryDone"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["178.2"].firstMatch.exists)
+        captureMigrationScreen(app, name: "Saved weight in history")
+    }
+
+    func testWeightScaleStudy() {
+        let app = makeApp(extraArguments: ["--scale-study"])
+        app.launch()
+        XCTAssertTrue(app.buttons["Log weight from dashboard"].waitForExistence(timeout: 30))
+        captureMigrationScreen(app, name: "Scale light")
+        app.buttons["Log weight from dashboard"].tap()
+        app.buttons["Save"].tap()
+        XCTAssertTrue(app.staticTexts["Today’s check-in"].waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Scale saved")
+        app.buttons["Switch appearance"].tap()
+        XCTAssertEqual(app.buttons["Switch appearance"].value as? String, "Dark")
+        captureMigrationScreen(app, name: "Scale dark")
+    }
+
+    func testRoutineRhythmStudy() {
+        let app = makeApp(extraArguments: ["--rhythm-study"])
+        app.launch()
+        XCTAssertTrue(app.buttons["rhythmRow-weight"].waitForExistence(timeout: 15))
+        captureMigrationScreen(app, name: "Rhythm light")
+        app.buttons["rhythmRow-weight"].tap()
+        app.buttons["Save check-in"].tap()
+        XCTAssertTrue(app.staticTexts["Today’s check-ins are complete."].waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Rhythm completed")
+        app.buttons["Switch appearance"].tap()
+        XCTAssertEqual(app.buttons["Switch appearance"].value as? String, "Dark")
+        captureMigrationScreen(app, name: "Rhythm dark")
+        app.swipeUp()
+        app.buttons["rhythmDay"].tap()
+        app.buttons["Sun"].tap()
+        XCTAssertTrue(app.buttons["rhythmRow-weight"].exists)
+        XCTAssertTrue(app.buttons["rhythmRow-plan"].exists)
+        XCTAssertTrue(app.staticTexts["Coming up"].exists)
+        captureMigrationScreen(app, name: "Rhythm Sunday")
+    }
+
+    func testRoutineStudy() {
+        let app = makeApp(extraArguments: ["--routine-study"])
+        app.launch()
+        XCTAssertTrue(app.buttons["routineCheckIn"].waitForExistence(timeout: 15))
+        captureMigrationScreen(app, name: "Routine light")
+        app.buttons["routineCheckIn"].tap()
+        app.buttons["Save check-in"].tap()
+        XCTAssertTrue(app.staticTexts["Your week is covered"].waitForExistence(timeout: 5))
+        app.buttons["Complete Pack your gym bag"].tap()
+        XCTAssertTrue(app.buttons["Undo Pack your gym bag"].exists)
+        captureMigrationScreen(app, name: "Routine completed")
+        app.buttons["Options for Plan tomorrow’s meals"].tap()
+        app.buttons["Snooze until tomorrow"].tap()
+        app.buttons["Options for Plan tomorrow’s meals"].tap()
+        app.buttons["Edit"].tap()
+        XCTAssertEqual(app.textFields["Reminder"].value as? String, "Plan tomorrow’s meals")
+        XCTAssertTrue(app.buttons["Save reminder"].isEnabled)
+        app.buttons["Save reminder"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "Tomorrow", "7:30")).firstMatch.waitForExistence(timeout: 5))
+        let dismissal = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["Save reminder"])
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissal], timeout: 10), .completed)
+        let appearance = app.buttons["Switch appearance"]
+        let tappable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: appearance)
+        XCTAssertEqual(XCTWaiter.wait(for: [tappable], timeout: 10), .completed)
+        appearance.tap()
+        let dark = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Dark"), object: appearance)
+        XCTAssertEqual(XCTWaiter.wait(for: [dark], timeout: 5), .completed)
+        captureMigrationScreen(app, name: "Routine dark")
+        app.buttons["routineSection0"].tap()
+        captureMigrationScreen(app, name: "Routine today card")
+    }
+
+    func testWeightMarkStudy() {
+        let app = makeApp(extraArguments: ["--weight-mark-study"])
+        app.launch()
+        XCTAssertTrue(app.buttons["weightMarkHero"].waitForExistence(timeout: 15))
+        captureMigrationScreen(app, name: "Weight fold light")
+        app.buttons["weightMarkLog"].tap()
+        XCTAssertTrue(app.buttons["Save sample"].waitForExistence(timeout: 5))
+        app.buttons["Save sample"].tap()
+        XCTAssertTrue(app.staticTexts["Just checked in"].waitForExistence(timeout: 5))
+        app.buttons["Imprint"].tap()
+        captureMigrationScreen(app, name: "Weight imprint light")
+        app.buttons["Switch appearance"].tap()
+        captureMigrationScreen(app, name: "Weight imprint dark")
+        app.buttons["Fold"].tap()
+        captureMigrationScreen(app, name: "Weight fold dark")
+        app.switches["weightMarkSample"].tap()
+        captureMigrationScreen(app, name: "Weight empty")
+    }
+
+    func testActivityGaugeWorkoutCount() {
+        let app = makeApp(extraArguments: ["--activity-disc-study", "--disc-gauge", "--disc-single-target", "--disc-extra"])
+        app.launch()
+        let status = app.descendants(matching: .any)["gaugeStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 15))
+        XCTAssertEqual(status.label, "6 workouts completed this week, weekly goal 1")
+        XCTAssertEqual(app.staticTexts["discCompactCount"].label, "6 workouts")
+        captureMigrationScreen(app, name: "Workout count six of one")
+        app.buttons["discAdd"].tap()
+        app.buttons["discAdd"].tap()
+        XCTAssertEqual(status.label, "8 workouts completed this week, weekly goal 1")
+        XCTAssertEqual(app.staticTexts["discCompactCount"].label, "8 workouts")
+        XCTAssertTrue(app.buttons["discAdd"].isEnabled)
+        captureMigrationScreen(app, name: "Workout count beyond seven")
+    }
+
+    func testActivityGaugeLaps() {
+        let app = makeApp(extraArguments: ["--activity-disc-study", "--disc-gauge", "--disc-laps"])
+        app.launch()
+        XCTAssertTrue(app.descendants(matching: .any)["gaugeStatus"].waitForExistence(timeout: 15))
+        captureMigrationScreen(app, name: "Laps exactly one")
+        app.buttons["discAdd"].tap()
+        captureMigrationScreen(app, name: "Laps one and a half")
+        app.buttons["discAdd"].tap()
+        captureMigrationScreen(app, name: "Laps exactly two")
+        app.buttons["discAdd"].tap()
+        captureMigrationScreen(app, name: "Laps two and a half")
+        app.buttons["discAdd"].tap()
+        captureMigrationScreen(app, name: "Laps exactly three")
+        app.buttons["discAdd"].tap()
+        captureMigrationScreen(app, name: "Laps three and a half")
+        app.buttons["Switch appearance"].tap()
+        captureMigrationScreen(app, name: "Laps dark")
+        app.buttons["discReset"].tap()
+        captureMigrationScreen(app, name: "Laps reset")
+    }
+
+    func testActivityGaugeStudy() {
+        let app = makeApp(extraArguments: ["--activity-disc-study", "--disc-gauge"])
+        app.launch()
+        XCTAssertTrue(app.descendants(matching: .any)["gaugeStatus"].waitForExistence(timeout: 15))
+        captureMigrationScreen(app, name: "Gauge partial glass")
+        app.buttons["discReset"].tap()
+        captureMigrationScreen(app, name: "Gauge empty")
+        for _ in 0..<4 { app.buttons["discAdd"].tap() }
+        captureMigrationScreen(app, name: "Gauge complete")
+        app.buttons["discAdd"].tap()
+        app.buttons["discAdd"].tap()
+        captureMigrationScreen(app, name: "Gauge extra")
+        app.switches["gaugeGlass"].tap()
+        captureMigrationScreen(app, name: "Gauge satin")
+        app.switches["gaugeGlass"].tap()
+        app.buttons["Switch appearance"].tap()
+        captureMigrationScreen(app, name: "Gauge dark")
+    }
+
+    func testActivityOrbitStudy() {
+        let app = makeApp(extraArguments: ["--activity-disc-study", "--disc-orbit"])
+        app.launch()
+        XCTAssertTrue(app.buttons["discPetal0"].waitForExistence(timeout: 15))
+        captureMigrationScreen(app, name: "Orbit partial")
+        app.buttons["discPetal0"].tap()
+        XCTAssertTrue(app.buttons["discPetal0"].isSelected)
+        app.buttons["discReset"].tap()
+        captureMigrationScreen(app, name: "Orbit empty")
+        for _ in 0..<5 { app.buttons["discAdd"].tap() }
+        captureMigrationScreen(app, name: "Orbit complete")
+        app.buttons["discAdd"].tap()
+        captureMigrationScreen(app, name: "Orbit extra")
+        app.buttons["discBonus0"].tap()
+        XCTAssertTrue(app.buttons["discBonus0"].isSelected)
+        app.buttons["discAdd"].tap()
+        captureMigrationScreen(app, name: "Orbit two extras")
+        app.buttons["Switch appearance"].tap()
+        captureMigrationScreen(app, name: "Orbit dark")
+        let stepper = app.steppers["discTarget"]
+        stepper.buttons["discTarget-Increment"].tap()
+        stepper.buttons["discTarget-Increment"].tap()
+        captureMigrationScreen(app, name: "Orbit seven")
+        for _ in 0..<3 { stepper.buttons["discTarget-Decrement"].tap() }
+        captureMigrationScreen(app, name: "Orbit four")
+        app.swipeUp()
+        captureMigrationScreen(app, name: "Orbit identity comparison")
+    }
+
+    func testActivityFlowerStudy() {
+        let app = makeApp(extraArguments: ["--activity-disc-study", "--disc-bloom"])
+        app.launch()
+        XCTAssertTrue(app.buttons["discPetal0"].waitForExistence(timeout: 15))
+        captureMigrationScreen(app, name: "Flower partial")
+        app.buttons["discPetal0"].tap()
+        XCTAssertTrue(app.buttons["discPetal0"].isSelected)
+        captureMigrationScreen(app, name: "Flower selected")
+        app.buttons["discReset"].tap()
+        captureMigrationScreen(app, name: "Flower empty")
+        for _ in 0..<4 { app.buttons["discAdd"].tap() }
+        captureMigrationScreen(app, name: "Flower complete")
+        app.buttons["discAdd"].tap()
+        captureMigrationScreen(app, name: "Flower one extra")
+        app.buttons["discAdd"].tap()
+        captureMigrationScreen(app, name: "Flower two extras")
+        app.buttons["discBonus1"].tap()
+        XCTAssertTrue(app.buttons["discBonus1"].isSelected)
+        app.buttons["discBonus1"].tap()
+        app.buttons["Switch appearance"].tap()
+        captureMigrationScreen(app, name: "Flower dark extras")
+        let stepper = app.steppers["discTarget"]
+        for _ in 0..<3 { stepper.buttons["discTarget-Increment"].tap() }
+        XCTAssertTrue(app.buttons["discPetal6"].exists)
+        captureMigrationScreen(app, name: "Flower seven")
+        for _ in 0..<6 { stepper.buttons["discTarget-Decrement"].tap() }
+        XCTAssertFalse(app.buttons["discPetal1"].exists)
+        captureMigrationScreen(app, name: "Flower one goal five extras")
+        stepper.buttons["discTarget-Increment"].tap()
+        captureMigrationScreen(app, name: "Flower two goal four extras")
+        stepper.buttons["discTarget-Increment"].tap()
+        app.buttons["discAdd"].tap()
+        captureMigrationScreen(app, name: "Flower three goal four extras")
+    }
+
+    func testActivitySymbolTargets() {
+        let app = makeApp(extraArguments: ["--symbol-exploration"])
+        app.launch()
+        let stepper = app.steppers["studyTarget"]
+        XCTAssertTrue(stepper.waitForExistence(timeout: 15))
+        if !stepper.isHittable { app.swipeUp() }
+        for _ in 0..<3 { stepper.buttons["studyTarget-Increment"].tap() }
+        XCTAssertTrue(app.buttons["studyPetal6"].exists)
+        captureMigrationScreen(app, name: "Symbol Activity seven")
+        for _ in 0..<6 { stepper.buttons["studyTarget-Decrement"].tap() }
+        XCTAssertFalse(app.buttons["studyPetal1"].exists)
+        captureMigrationScreen(app, name: "Symbol Activity one extra")
+        app.buttons["studyReset"].tap()
+        captureMigrationScreen(app, name: "Symbol Activity empty")
+    }
+
+    func testSymbolExploration() {
+        let app = makeApp(extraArguments: ["--symbol-exploration"])
+        app.launch()
+        XCTAssertTrue(app.buttons["studyPetal0"].waitForExistence(timeout: 15))
+        captureMigrationScreen(app, name: "Symbol Activity open")
+        app.buttons["studyPetal0"].tap()
+        XCTAssertTrue(app.buttons["studyPetal0"].isSelected)
+        app.buttons["Folded petals"].tap()
+        captureMigrationScreen(app, name: "Symbol Activity folded")
+        app.buttons["studyAddDay"].tap()
+        app.buttons["studyAddDay"].tap()
+        captureMigrationScreen(app, name: "Symbol Activity complete")
+        app.buttons["Switch appearance"].tap()
+        captureMigrationScreen(app, name: "Symbol Activity dark")
+        app.buttons["Weight"].tap()
+        captureMigrationScreen(app, name: "Symbol Weight dark")
+        app.buttons["Switch appearance"].tap()
+        captureMigrationScreen(app, name: "Symbol Weight light")
+        app.buttons["weightPebble-large-0"].tap()
+        XCTAssertTrue(app.buttons["weightPebble-large-0"].isSelected)
+        app.buttons["Fanned"].tap()
+        captureMigrationScreen(app, name: "Symbol Weight fanned")
+        app.buttons["One"].tap()
+        captureMigrationScreen(app, name: "Symbol Weight one")
+        app.buttons["Empty"].tap()
+        XCTAssertTrue(app.staticTexts["No check-ins yet"].exists)
+        captureMigrationScreen(app, name: "Symbol Weight empty")
+
+    }
+
+    func testPersonalActivityAndWeightCheckIn() {
+        let app = makeApp(extraArguments: ["--app-store-screenshot-mode", "--ui-test-mock-food-ai"])
+        app.launch()
+        XCTAssertTrue(app.buttons["dashboardNutritionLogFood"].firstMatch.waitForExistence(timeout: 15))
+        app.swipeUp()
+        captureMigrationScreen(app, name: "Personal Today context")
+        // Move through adjacent sections so enlarged header pills are on screen.
+        app.buttons["dashboardSectionNutrition"].tap()
+        app.buttons["dashboardSectionActivity"].tap()
+        let day = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "activityRhythmDay-")).firstMatch
+        XCTAssertTrue(day.waitForExistence(timeout: 5))
+        day.tap()
+        XCTAssertTrue(day.isSelected)
+        captureMigrationScreen(app, name: "Personal Activity")
+        app.buttons["dashboardSectionWeight"].tap()
+        XCTAssertTrue(app.buttons["Log weight"].waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Personal Weight")
+        if !app.buttons["See weight history"].isHittable { app.swipeUp() }
+        app.buttons["See weight history"].tap()
+        XCTAssertTrue(app.buttons["weightHistoryDone"].waitForExistence(timeout: 5))
+        app.buttons["weightHistoryDone"].tap()
+        XCTAssertTrue(app.buttons["Log weight"].waitForExistence(timeout: 5))
+    }
+
+    func testVisualCleanupLargeText() {
+        let app = makeApp(extraArguments: ["--app-store-screenshot-mode", "--ui-test-mock-food-ai",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
+        app.launch()
+        XCTAssertTrue(app.buttons["dashboardAccount"].waitForExistence(timeout: 20))
+        captureMigrationScreen(app, name: "Large text Today")
+        for section in ["Nutrition", "Activity", "Weight"] {
+            app.buttons["dashboardSectionMenu"].tap()
+            app.buttons["dashboardSection" + section].tap()
+            captureMigrationScreen(app, name: "Large text " + section)
+        }
+        app.tabBars.buttons["Workouts"].tap()
+        XCTAssertTrue(app.buttons["workoutSection-Train"].waitForExistence(timeout: 10))
+        captureMigrationScreen(app, name: "Large text Train")
+        app.tabBars.buttons["Trai"].tap()
+        captureMigrationScreen(app, name: "Large text Chat")
+    }
+
+    func testMigrationScreenTour() {
+        let app = makeApp(extraArguments: ["--app-store-screenshot-mode", "--ui-test-mock-food-ai"])
+        app.launch()
+        XCTAssertTrue(app.buttons["dashboardNutritionLogFood"].firstMatch.waitForExistence(timeout: 15))
+        captureMigrationScreen(app, name: "Migration Today")
+        app.swipeUp()
+        captureMigrationScreen(app, name: "Migration Today context")
+        app.buttons["dashboardSectionNutrition"].tap()
+        XCTAssertTrue(app.buttons["dashboardNutritionDetails"].firstMatch.waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Migration Nutrition")
+        app.buttons["dashboardNutritionDetails"].firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Nutrition details"].waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Migration nutrition detail")
+        app.buttons["Done"].firstMatch.tap()
+        for section in ["Activity", "Weight"] {
+            app.buttons["dashboardSection" + section].tap()
+            if section == "Activity" {
+                XCTAssertTrue(app.buttons["Set weekly goal"].waitForExistence(timeout: 5))
+            }
+            captureMigrationScreen(app, name: "Migration Dashboard " + section)
+        }
+        app.buttons["See weight history"].tap()
+        XCTAssertTrue(app.buttons["weightHistoryDone"].waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Migration Weight history")
+        app.buttons["weightHistoryDone"].tap()
+        app.tabBars.buttons["Workouts"].tap()
+        XCTAssertTrue(app.buttons["workoutSection-Train"].waitForExistence(timeout: 10))
+        print("WORKOUT_HEADER_FRAME \(app.buttons["workoutSection-Train"].frame) hittable=\(app.buttons["workoutSection-Train"].isHittable)")
+        captureMigrationScreen(app, name: "Migration Workout Train")
+        for section in ["Plan", "Progress", "History"] {
+            app.buttons["workoutSection-" + section].tap()
+            XCTAssertTrue(app.buttons["workoutSection-" + section].isSelected)
+            captureMigrationScreen(app, name: "Migration Workout " + section)
+        }
+        app.tabBars.buttons["Dashboard"].tap()
+        XCTAssertTrue(app.buttons["dashboardAccount"].waitForExistence(timeout: 10))
+        app.buttons["dashboardAccount"].tap()
+        XCTAssertTrue(app.buttons["accountSettings"].waitForExistence(timeout: 10))
+        captureMigrationScreen(app, name: "Migration Account")
+        app.buttons["accountSettings"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Migration Settings")
+        app.navigationBars["Settings"].buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["accountDone"].waitForExistence(timeout: 5))
+        app.buttons["accountDone"].tap()
+        app.tabBars.buttons["Trai"].tap()
+        XCTAssertTrue(app.navigationBars["Trai"].waitForExistence(timeout: 10))
+        captureMigrationScreen(app, name: "Migration Chat")
+    }
+
+    func testFocusedWorkoutLoggingAndCompletion() {
+        let app = makeApp(extraArguments: ["--ui-test-authenticated-free-plan", "-pendingAppRoute", "trai://workout", "--ui-test-live-workout-preset"])
+        app.launch()
+        if !waitForLiveWorkoutScreen(in: app, timeout: 15) {
+            app.terminate()
+            app.launch()
+        }
+        XCTAssertTrue(waitForLiveWorkoutScreen(in: app, timeout: 15))
+        captureMigrationScreen(app, name: "Focused live workout")
+        let editor = app.otherElements["focusedExerciseEditor"]
+        app.buttons["liveExercise-Incline Press"].tap()
+        XCTAssertTrue(editor.textFields["Set 3 repetitions"].waitForExistence(timeout: 5))
+        editor.buttons["liveWorkoutAddSetButton"].tap()
+        XCTAssertTrue(editor.textFields["Set 4 repetitions"].waitForExistence(timeout: 5))
+        app.buttons["liveExercise-Bench Press"].tap()
+        editor.buttons["liveWorkoutAddSetButton"].tap()
+        XCTAssertTrue(editor.textFields["Set 5 repetitions"].waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Focused workout added set")
+        let weight = editor.textFields["Set 1 weight"]
+        weight.doubleTap()
+        weight.typeText("200")
+        let confirmWeight = app.buttons.matching(NSPredicate(format: "label == %@", "Use 200 kg")).firstMatch
+        XCTAssertTrue(confirmWeight.waitForExistence(timeout: 5))
+        confirmWeight.tap()
+        app.buttons["liveWorkoutEndButton"].tap()
+        app.buttons["End Workout"].tap()
+        XCTAssertTrue(app.navigationBars["Summary"].waitForExistence(timeout: 8))
+        captureMigrationScreen(app, name: "Workout completion overview")
+        let details = app.buttons["workoutSummaryDetails"]
+        XCTAssertTrue(details.waitForExistence(timeout: 5))
+        details.tap()
+        XCTAssertTrue(app.staticTexts["Bench Press"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Incline Press"].exists)
+        captureMigrationScreen(app, name: "Workout completion details")
+    }
+
+    func testWorkoutLargeTextLayout() {
+        let app = makeApp(extraArguments: [
+            "--ui-test-authenticated-free-plan", "-pendingAppRoute", "trai://workout",
+            "--ui-test-live-workout-preset", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"
+        ])
+        app.launch()
+        XCTAssertTrue(waitForLiveWorkoutScreen(in: app, timeout: 15))
+        captureMigrationScreen(app, name: "Live workout large text")
+        let add = app.otherElements["focusedExerciseEditor"].buttons["liveWorkoutAddSetButton"]
+        XCTAssertTrue(add.exists)
+        add.tap()
+        captureMigrationScreen(app, name: "Large text logging controls")
+    }
+
+    func testWorkoutSectionsInlineTour() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--test-persona", "consistent", "--test-persona-ai", "deterministic", "--disable-tab-prewarm", "-selectedTab", "dashboard"]
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["Workouts"].waitForExistence(timeout: 15))
+        app.tabBars.buttons["Workouts"].tap()
+        XCTAssertTrue(app.buttons["workoutSection-Train"].waitForExistence(timeout: 15))
+        app.buttons["workoutSection-Train"].tap()
+        captureMigrationScreen(app, name: "Workout Train")
+        for section in ["Plan", "Progress", "History"] {
+            let button = app.buttons["workoutSection-\(section)"]
+            if !button.isHittable {
+                app.buttons["workoutSection-Progress"].swipeLeft()
+            }
+            button.tap()
+            let content: XCUIElement
+            switch section {
+            case "Plan": content = app.buttons["Edit plan"].firstMatch
+            case "Progress": content = app.buttons["workoutAllRecords"]
+            default: content = app.staticTexts["Strength training"].firstMatch
+            }
+            let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: content)
+            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 8), .completed)
+            captureMigrationScreen(app, name: "Workout \(section)")
+            XCTAssertFalse(app.sheets.firstMatch.exists)
+        }
+    }
+
+    func testMigrationLiveWorkoutLayout() {
+        let app = makeApp(extraArguments: ["--ui-test-authenticated-free-plan", "-pendingAppRoute", "trai://workout", "--ui-test-live-workout-preset"])
+        app.launch()
+        XCTAssertTrue(waitForLiveWorkoutScreen(in: app, timeout: 15))
+        captureMigrationScreen(app, name: "Migration Live Workout")
+        app.swipeUp()
+        captureMigrationScreen(app, name: "Migration Live Workout sets")
+    }
+
     func testMainTabsAreVisibleAndNavigable() {
         let app = makeApp()
         app.launch()
@@ -23,12 +556,11 @@ final class TraiUITests: XCTestCase {
         let dashboardTab = tabBar.buttons["Dashboard"]
         let traiTab = tabBar.buttons["Trai"]
         let workoutsTab = tabBar.buttons["Workouts"]
-        let profileTab = tabBar.buttons["Profile"]
 
         XCTAssertTrue(dashboardTab.exists)
         XCTAssertTrue(traiTab.exists)
         XCTAssertTrue(workoutsTab.exists)
-        XCTAssertTrue(profileTab.exists)
+        XCTAssertFalse(tabBar.buttons["Profile"].exists)
 
         workoutsTab.tap()
         XCTAssertTrue(workoutsTab.isSelected)
@@ -36,11 +568,66 @@ final class TraiUITests: XCTestCase {
         traiTab.tap()
         XCTAssertTrue(traiTab.isSelected)
 
-        profileTab.tap()
-        XCTAssertTrue(profileTab.isSelected)
-
         dashboardTab.tap()
         XCTAssertTrue(dashboardTab.isSelected)
+    }
+
+    func testAccountSheetReplacesProfileTabAndKeepsSettingsAccessible() {
+        let app = makeApp()
+        app.launch()
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.waitForExistence(timeout: 10))
+        for title in ["Dashboard", "Workouts", "Trai"] {
+            XCTAssertTrue(tabBar.buttons[title].exists)
+        }
+        XCTAssertFalse(tabBar.buttons["Profile"].exists)
+        XCTAssertEqual(tabBar.buttons.count, 3)
+
+        let accountButton = app.buttons["dashboardAccount"]
+        XCTAssertTrue(accountButton.waitForExistence(timeout: 10))
+        accountButton.tap()
+        XCTAssertTrue(app.navigationBars["Account"].waitForExistence(timeout: 5))
+        let settingsButton = app.buttons["accountSettings"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 5))
+        settingsButton.tap()
+        let settingsNavigation = app.navigationBars["Settings"]
+        XCTAssertTrue(settingsNavigation.waitForExistence(timeout: 5))
+        settingsNavigation.buttons["Done"].tap()
+        let accountDone = app.buttons["accountDone"]
+        XCTAssertTrue(accountDone.waitForExistence(timeout: 5))
+        accountDone.tap()
+        XCTAssertTrue(waitForNonExistence(accountDone, timeout: 5))
+        XCTAssertTrue(tabBar.buttons["Dashboard"].isSelected)
+        XCTAssertTrue(accountButton.isHittable)
+    }
+
+    func testPlansRemainAccessibleFromNutritionAndWorkouts() {
+        let app = makeApp(extraArguments: ["--app-store-screenshot-mode"])
+        app.launch()
+        XCTAssertTrue(app.buttons["dashboardSectionNutrition"].waitForExistence(timeout: 10))
+        app.buttons["dashboardSectionNutrition"].tap()
+        let nutritionOptions = app.buttons["Nutrition options"]
+        for _ in 0..<4 where !nutritionOptions.isHittable { app.swipeUp() }
+        nutritionOptions.tap()
+        let nutritionPlan = app.buttons["Nutrition plan"]
+        XCTAssertTrue(nutritionPlan.waitForExistence(timeout: 5))
+        XCTAssertTrue(nutritionPlan.isHittable)
+        nutritionPlan.tap()
+        XCTAssertTrue(app.navigationBars["Nutrition plan"].waitForExistence(timeout: 5))
+        app.buttons["profileDestinationDone"].tap()
+
+        app.tabBars.buttons["Workouts"].tap()
+        XCTAssertTrue(app.buttons["workoutSection-Plan"].waitForExistence(timeout: 10))
+        app.buttons["workoutSection-Plan"].tap()
+        let workoutPlan = app.buttons["workoutManagePlan"]
+        for _ in 0..<4 where !workoutPlan.isHittable { app.swipeUp() }
+        XCTAssertTrue(workoutPlan.waitForExistence(timeout: 5))
+        XCTAssertTrue(workoutPlan.isHittable)
+        captureMigrationScreen(app, name: "Workout plan bottom actions")
+        workoutPlan.tap()
+        XCTAssertTrue(app.navigationBars["Workout plan"].waitForExistence(timeout: 5))
+        app.buttons["profileDestinationDone"].tap()
+        XCTAssertTrue(app.tabBars.buttons["Workouts"].isSelected)
     }
 
     func testPendingChatRouteSelectsTraiTabOnLaunch() {
@@ -60,9 +647,9 @@ final class TraiUITests: XCTestCase {
         let app = makeApp(extraArguments: ["-pendingAppRoute", "trai://logfood"])
         app.launch()
 
-        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["compactFoodClose"].waitForExistence(timeout: 8))
         XCTAssertTrue(
-            app.descendants(matching: .any)["foodCameraCaptureReady"].waitForExistence(timeout: 4)
+            app.buttons["compactFoodCapture"].waitForExistence(timeout: 4)
         )
     }
 
@@ -133,6 +720,65 @@ final class TraiUITests: XCTestCase {
         )
     }
 
+    func testDashboardResumeActionOpensExistingWorkout() {
+        let app = makeApp(extraArguments: [
+            "--ui-test-authenticated-free-plan",
+            "-pendingAppRoute", "trai://workout",
+            "--ui-test-live-workout-preset"
+        ])
+        app.launch()
+        XCTAssertTrue(waitForLiveWorkoutScreen(in: app, timeout: 12))
+        minimizeLiveWorkoutAndAssertBanner(in: app)
+        let dashboard = app.tabBars.buttons["Dashboard"]
+        if !dashboard.isHittable {
+            app.navigationBars.firstMatch.swipeDown()
+        }
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: dashboard)
+        XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 6), .completed)
+        dashboard.tap()
+        let resume = app.buttons["Resume workout"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 6))
+        resume.tap()
+        XCTAssertTrue(waitForLiveWorkoutScreen(in: app, timeout: 6))
+    }
+
+    func testDashboardContextCardsOpenWeightLogging() {
+        let app = makeApp(extraArguments: ["-selectedTab", "dashboard"])
+        app.launch()
+        XCTAssertTrue(app.buttons["dashboardNutritionLogFood"].firstMatch.waitForExistence(timeout: 10))
+        captureMigrationScreen(app, name: "Dashboard food and Add actions")
+        app.swipeUp()
+        XCTAssertTrue(app.buttons["Show activity details"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["Show weight details"].exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Contextual activity and weight cards"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.buttons["Log weight"].tap()
+        XCTAssertTrue(app.navigationBars["Log Weight"].waitForExistence(timeout: 5))
+    }
+
+    func testCameraRecentMealSuggestionOpensReviewBeforeSave() {
+        let app = makeApp(extraArguments: ["--ui-test-mock-food-ai", "--ui-test-food-suggestions"])
+        app.launch()
+        app.buttons["dashboardNutritionLogFood"].firstMatch.tap()
+        let recent = app.buttons["Salmon rice bowl"]
+        XCTAssertTrue(recent.waitForExistence(timeout: 8))
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "Camera with direct meal pills"
+        capture.lifetime = .keepAlways
+        add(capture)
+        recent.tap()
+        let save = app.buttons["compactFoodSave"]
+        XCTAssertTrue(save.waitForExistence(timeout: 6))
+        XCTAssertTrue(app.staticTexts["≈ 620 kcal"].exists)
+        captureMigrationScreen(app, name: "Camera suggestion review")
+        app.buttons["compactFoodClose"].tap()
+        let calories = app.descendants(matching: .any)["dashboardNutritionCalories"].firstMatch
+        XCTAssertTrue(calories.waitForExistence(timeout: 5))
+        XCTAssertFalse((calories.value as? String ?? "").contains("620"), "Selecting a suggestion must not save without confirmation")
+    }
+
     func testDashboardPastDateHidesUnavailableHistoricalActivityMetrics() {
         let app = makeApp()
         app.launch()
@@ -157,6 +803,147 @@ final class TraiUITests: XCTestCase {
         }
     }
 
+    func testDashboardNutritionCardNavigatesToSectionWithoutSheet() {
+        let app = makeApp()
+        app.launch()
+        let log = app.buttons["dashboardNutritionLogFood"].firstMatch
+        XCTAssertTrue(log.waitForExistence(timeout: 10))
+        XCTAssertTrue(log.isHittable)
+        app.buttons["dashboardNutritionDetails"].firstMatch.tap()
+        let section = app.buttons["dashboardSectionNutrition"]
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isSelected == true"), object: section)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 4), .completed)
+        XCTAssertFalse(app.sheets.firstMatch.exists)
+        XCTAssertTrue(app.descendants(matching: .any)["dashboardPageNutrition"].firstMatch.exists)
+        app.swipeRight()
+        XCTAssertTrue(log.waitForExistence(timeout: 4))
+        XCTAssertTrue(log.isHittable)
+    }
+
+    func testDashboardCameraLogAutomaticallyAnalyzesAndUpdatesNutrition() {
+        let app = makeApp(extraArguments: ["--ui-test-mock-food-ai"])
+        app.launch()
+
+        let logFood = app.buttons["dashboardNutritionLogFood"].firstMatch
+        XCTAssertTrue(logFood.waitForExistence(timeout: 12))
+        let before = XCTAttachment(screenshot: app.screenshot())
+        before.name = "Connected dashboard before logging"
+        before.lifetime = .keepAlways
+        add(before)
+        logFood.tap()
+
+        let shutter = app.buttons["compactFoodCapture"]
+        XCTAssertTrue(shutter.waitForExistence(timeout: 6))
+        shutter.tap()
+
+        let save = app.buttons["compactFoodSave"]
+        XCTAssertTrue(save.waitForExistence(timeout: 12), "Photo should analyze without an Analyze tap")
+        let review = XCTAttachment(screenshot: app.screenshot())
+        review.name = "Automatic photo estimate"
+        review.lifetime = .keepAlways
+        add(review)
+        save.tap()
+
+        XCTAssertTrue(logFood.waitForExistence(timeout: 8))
+        let calories = app.descendants(matching: .any)["dashboardNutritionCalories"].firstMatch
+        XCTAssertTrue(calories.waitForExistence(timeout: 4))
+        XCTAssertTrue((calories.value as? String ?? "").contains("430"), "Saved meal must update the real dashboard totals")
+        app.swipeLeft()
+        let nutritionSection = app.buttons["dashboardSectionNutrition"]
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isSelected == true"), object: nutritionSection)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 4), .completed)
+        XCTAssertTrue(app.staticTexts["Ui Test Meal"].firstMatch.waitForExistence(timeout: 6))
+        let after = XCTAttachment(screenshot: app.screenshot())
+        after.name = "Saved food in connected nutrition page"
+        after.lifetime = .keepAlways
+        add(after)
+        app.swipeUp()
+        let meals = XCTAttachment(screenshot: app.screenshot())
+        meals.name = "Refreshed meal timeline"
+        meals.lifetime = .keepAlways
+        add(meals)
+    }
+
+    func testFoodSheetSavesEditedPortion() {
+        let app = makeApp(extraArguments: ["--ui-test-mock-food-ai"])
+        app.launch()
+        let log = app.buttons["dashboardNutritionLogFood"].firstMatch
+        XCTAssertTrue(log.waitForExistence(timeout: 12))
+        log.tap()
+        let capture = app.buttons["compactFoodCapture"]
+        XCTAssertTrue(capture.waitForExistence(timeout: 6))
+        let camera = XCTAttachment(screenshot: app.screenshot())
+        camera.name = "Connected half-sheet capture"
+        camera.lifetime = .keepAlways
+        add(camera)
+        capture.tap()
+        let save = app.buttons["compactFoodSave"]
+        XCTAssertTrue(save.waitForExistence(timeout: 12))
+        let portion = app.steppers["compactFoodPortion"]
+        XCTAssertTrue(portion.exists)
+        portion.buttons["compactFoodPortion-Increment"].tap()
+        XCTAssertTrue(app.staticTexts["≈ 645 kcal"].waitForExistence(timeout: 3))
+        let review = XCTAttachment(screenshot: app.screenshot())
+        review.name = "Connected half-sheet edited estimate"
+        review.lifetime = .keepAlways
+        add(review)
+        save.tap()
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: save)
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 8), .completed)
+        let calories = app.descendants(matching: .any)["dashboardNutritionCalories"].firstMatch
+        XCTAssertTrue(calories.waitForExistence(timeout: 4))
+        XCTAssertTrue((calories.value as? String ?? "").contains("645"), "Edited portion must persist and update dashboard")
+        app.swipeLeft()
+        XCTAssertTrue(app.staticTexts["Ui Test Meal"].firstMatch.waitForExistence(timeout: 6))
+    }
+
+    func testFoodSheetRefinesAdjustedPortion() {
+        let app = makeApp(extraArguments: ["--ui-test-mock-food-ai"])
+        app.launch()
+        let log = app.buttons["dashboardNutritionLogFood"].firstMatch
+        XCTAssertTrue(log.waitForExistence(timeout: 12))
+        log.tap()
+        let capture = app.buttons["compactFoodCapture"]
+        XCTAssertTrue(capture.waitForExistence(timeout: 6))
+        capture.tap()
+        XCTAssertTrue(app.buttons["compactFoodSave"].waitForExistence(timeout: 12))
+        app.steppers["compactFoodPortion"].buttons["compactFoodPortion-Increment"].tap()
+        app.buttons["Adjust estimate"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3), "Adjust should focus the correction without an extra tap")
+        let correction = app.textFields["What should change?"].firstMatch
+        let multiline = app.textViews.firstMatch
+        let input = correction.exists ? correction : multiline
+        XCTAssertTrue(input.waitForExistence(timeout: 3))
+        input.tap()
+        input.typeText("Add 100 calories")
+        app.buttons["Update estimate"].tap()
+        XCTAssertTrue(app.staticTexts["≈ 745 kcal"].waitForExistence(timeout: 8), "Correction must use the locally adjusted 645-calorie estimate")
+        XCTAssertTrue(waitForNonExistence(app.keyboards.firstMatch, timeout: 3), "Updating should reveal the estimate and save action")
+        captureMigrationScreen(app, name: "Food correction completed without keyboard")
+    }
+
+    func testFoodSheetRetakeAndCancelDoNotSave() {
+        let app = makeApp(extraArguments: ["--ui-test-mock-food-ai"])
+        app.launch()
+        let log = app.buttons["dashboardNutritionLogFood"].firstMatch
+        XCTAssertTrue(log.waitForExistence(timeout: 12))
+        log.tap()
+        let capture = app.buttons["compactFoodCapture"]
+        XCTAssertTrue(capture.waitForExistence(timeout: 6))
+        capture.tap()
+        XCTAssertTrue(app.buttons["compactFoodSave"].waitForExistence(timeout: 12))
+        app.buttons["compactFoodRetake"].tap()
+        XCTAssertTrue(capture.waitForExistence(timeout: 4))
+        app.buttons["compactFoodClose"].tap()
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: capture)
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
+        let calories = app.descendants(matching: .any)["dashboardNutritionCalories"].firstMatch
+        XCTAssertFalse((calories.value as? String ?? "").contains("430"))
+        log.tap()
+        XCTAssertTrue(capture.waitForExistence(timeout: 4), "Reopening must start with a fresh capture")
+        XCTAssertFalse(app.buttons["compactFoodSave"].exists)
+    }
+
     func testFoodCameraRefinementRestoresSaveButton() {
         let app = makeApp(extraArguments: [
             "-pendingAppRoute", "trai://logfood",
@@ -165,38 +952,26 @@ final class TraiUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(
-            app.descendants(matching: .any)["foodCameraCaptureReady"].waitForExistence(timeout: 4)
+            app.buttons["compactFoodCapture"].waitForExistence(timeout: 4)
         )
 
-        let descriptionField = readinessElement(in: app, identifier: "foodCameraDescriptionField")
+        app.buttons["Describe food"].tap()
+        let descriptionField = app.descendants(matching: .any)["compactFoodDescription"].firstMatch
         XCTAssertTrue(descriptionField.waitForExistence(timeout: 4))
+        captureMigrationScreen(app, name: "Glass meal description input")
         descriptionField.tap()
         descriptionField.typeText("banana yogurt bowl")
-
-        let submitButton = readinessElement(in: app, identifier: "foodCameraDescriptionSubmitButton")
-        XCTAssertTrue(submitButton.waitForExistence(timeout: 4))
-        submitButton.tap()
-
-        let saveButton = readinessElement(in: app, identifier: "foodCameraReviewSaveButton")
-        XCTAssertTrue(saveButton.waitForExistence(timeout: 6))
-
-        let refineButton = readinessElement(in: app, identifier: "foodCameraReviewRefineButton")
-        XCTAssertTrue(refineButton.exists)
-        refineButton.tap()
-
-        let refinementField = readinessElement(in: app, identifier: "foodCameraRefinementField")
-        XCTAssertTrue(refinementField.waitForExistence(timeout: 4))
-        XCTAssertTrue(waitForNonExistence(saveButton, timeout: 2))
-
-        refinementField.tap()
-        refinementField.typeText("add 100 calories")
-
-        let sendButton = readinessElement(in: app, identifier: "foodCameraRefinementSendButton")
-        XCTAssertTrue(sendButton.exists)
-        sendButton.tap()
-
-        XCTAssertTrue(saveButton.waitForExistence(timeout: 6))
-        XCTAssertTrue(waitForNonExistence(refinementField, timeout: 6))
+        app.buttons["compactFoodAnalyze"].tap()
+        let save = app.buttons["compactFoodSave"]
+        XCTAssertTrue(save.waitForExistence(timeout: 8))
+        app.buttons["Adjust estimate"].tap()
+        let input = app.descendants(matching: .any)["compactFoodCorrection"].firstMatch
+        XCTAssertTrue(input.waitForExistence(timeout: 4))
+        input.tap()
+        input.typeText("add 100 calories")
+        app.buttons["Update estimate"].tap()
+        XCTAssertTrue(app.staticTexts["≈ 530 kcal"].waitForExistence(timeout: 8))
+        XCTAssertTrue(save.isEnabled)
     }
 
     func testLiveWorkoutStabilityPresetHandlesRepeatedMutationsAndReopen() throws {
@@ -213,32 +988,27 @@ final class TraiUITests: XCTestCase {
         let app = makeApp(extraArguments: [
             "-pendingAppRoute", "trai://workout",
             "--ui-test-live-workout-preset",
-            "--seed-live-workout-perf-data"
+            "--seed-live-workout-perf-data",
+            "--ui-test-live-workout-stress-controls"
         ])
         app.launch()
 
-        var workoutReady = waitForLiveWorkoutScreen(in: app, timeout: 12)
-        if !workoutReady {
-            app.terminate()
-            app.launch()
-            workoutReady = waitForLiveWorkoutScreen(in: app, timeout: 16)
-        }
-        guard workoutReady else {
-            throw XCTSkip("Live workout screen did not become queryable on this simulator run")
-        }
+        XCTAssertTrue(app.buttons["liveWorkoutEndButton"].waitForExistence(timeout: 12))
+        app.buttons["Pause"].tap()
+        XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 3))
+        app.buttons["Resume"].tap()
+        XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 3))
 
-        for _ in 0..<3 {
-            app.navigationBars.firstMatch.swipeDown()
-
-            let banner = app.otherElements["activeWorkoutBanner"]
-            guard banner.waitForExistence(timeout: 8) else {
-                throw XCTSkip("Active workout banner was not queryable after minimizing workout")
-            }
-            banner.tap()
-            guard waitForLiveWorkoutScreen(in: app, timeout: 8) else {
-                throw XCTSkip("Live workout screen did not restore from banner on this simulator run")
-            }
+        for iteration in 1...3 {
+            app.buttons["liveWorkoutStressAddSetBurst"].tap()
+            XCTAssertTrue(app.staticTexts["\(4 + iteration * 4) sets"].firstMatch.waitForExistence(timeout: 4))
+            minimizeLiveWorkoutAndAssertBanner(in: app)
+            app.otherElements["activeWorkoutBanner"].tap()
+            XCTAssertTrue(app.buttons["liveWorkoutEndButton"].waitForExistence(timeout: 8))
+            XCTAssertTrue(app.staticTexts["\(4 + iteration * 4) sets"].firstMatch.exists,
+                          "Added sets must survive minimizing and reopening the workout")
         }
+        captureMigrationScreen(app, name: "Workout after repeated mutations and reopen")
     }
 
     func testStartupAndTabSwitchLatencySmoke() {
@@ -263,18 +1033,16 @@ final class TraiUITests: XCTestCase {
         let dashboardTab = tabBar.buttons["Dashboard"]
         let traiTab = tabBar.buttons["Trai"]
         let workoutsTab = tabBar.buttons["Workouts"]
-        let profileTab = tabBar.buttons["Profile"]
 
         XCTAssertTrue(dashboardTab.exists)
         XCTAssertTrue(traiTab.exists)
         XCTAssertTrue(workoutsTab.exists)
-        XCTAssertTrue(profileTab.exists)
+        XCTAssertFalse(tabBar.buttons["Profile"].exists)
 
         ensureTabSelected(dashboardTab, label: "Dashboard")
         assertReadiness(in: app, identifier: "dashboardRootReady", timeout: 10)
         _ = tapAndMeasureSelection(workoutsTab, in: app, label: "Workouts", readinessIdentifier: "workoutsRootReady")
         _ = tapAndMeasureSelection(traiTab, in: app, label: "Trai", readinessIdentifier: "traiRootReady")
-        _ = tapAndMeasureSelection(profileTab, in: app, label: "Profile", readinessIdentifier: "profileRootReady")
         _ = tapAndMeasureSelection(dashboardTab, in: app, label: "Dashboard", readinessIdentifier: "dashboardRootReady")
     }
 
@@ -368,12 +1136,10 @@ final class TraiUITests: XCTestCase {
         let dashboardTab = tabBar.buttons["Dashboard"]
         let traiTab = tabBar.buttons["Trai"]
         let workoutsTab = tabBar.buttons["Workouts"]
-        let profileTab = tabBar.buttons["Profile"]
 
         ensureTabSelected(dashboardTab, label: "Dashboard")
         _ = tapAndMeasureContentReadiness(workoutsTab, in: app, label: "Workouts", readinessIdentifier: "workoutsRootReady")
         _ = tapAndMeasureContentReadiness(traiTab, in: app, label: "Trai", readinessIdentifier: "traiRootReady")
-        _ = tapAndMeasureContentReadiness(profileTab, in: app, label: "Profile", readinessIdentifier: "profileRootReady")
         _ = tapAndMeasureContentReadiness(dashboardTab, in: app, label: "Dashboard", readinessIdentifier: "dashboardRootReady")
     }
 
@@ -391,7 +1157,6 @@ final class TraiUITests: XCTestCase {
         let dashboardTab = tabBar.buttons["Dashboard"]
         let traiTab = tabBar.buttons["Trai"]
         let workoutsTab = tabBar.buttons["Workouts"]
-        let profileTab = tabBar.buttons["Profile"]
 
         ensureTabSelected(dashboardTab, label: "Dashboard")
         assertReadiness(in: app, identifier: "dashboardRootReady", timeout: 20)
@@ -427,19 +1192,6 @@ final class TraiUITests: XCTestCase {
             label: "Trai"
         )
         _ = tapAndMeasureContentReadiness(
-            profileTab,
-            in: app,
-            label: "Profile",
-            readinessIdentifier: "profileRootReady",
-            metricName: "tab_switch_profile_ready_real_data",
-            enforceBudget: false
-        )
-        logLatencyProbeSummary(
-            in: app,
-            identifier: "profileLatencyProbe",
-            label: "Profile"
-        )
-        _ = tapAndMeasureContentReadiness(
             dashboardTab,
             in: app,
             label: "Dashboard",
@@ -458,7 +1210,8 @@ final class TraiUITests: XCTestCase {
         let app = makeApp(extraArguments: [
             "-pendingAppRoute", "trai://workout",
             "--ui-test-live-workout-preset",
-            "--seed-live-workout-perf-data"
+            "--seed-live-workout-perf-data",
+            "--ui-test-live-workout-stress-controls"
         ])
         app.launch()
 
@@ -469,6 +1222,7 @@ final class TraiUITests: XCTestCase {
         }
         XCTAssertTrue(endButton.waitForExistence(timeout: 10))
 
+        captureMigrationScreen(app, name: "Add exercise ready")
         let addExerciseByLabel = app.buttons["Add Exercise"]
         let addExerciseByIdentifier = app.descendants(matching: .any)
             .matching(identifier: "liveWorkoutAddExerciseButton")
@@ -513,7 +1267,11 @@ final class TraiUITests: XCTestCase {
         tapOnboardingPrimaryButton(in: app)
         skipWorkoutSetupInOnboarding(in: app)
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["Finish setting up Trai"].waitForExistence(timeout: 5))
+        let setupChecklist = app.staticTexts["Finish setting up Trai"]
+        for _ in 0..<4 where !setupChecklist.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(setupChecklist.waitForExistence(timeout: 5))
     }
 
     func testOnboardingGuidedNutritionShowsFreeUserProChoiceAndStandardFallback() {
@@ -538,8 +1296,109 @@ final class TraiUITests: XCTestCase {
         skipWorkoutSetupInOnboarding(in: app)
 
         XCTAssertTrue(app.staticTexts["Finish setting up Trai"].waitForExistence(timeout: 8))
+        app.buttons["dashboardSetupToggle"].tap()
         XCTAssertTrue(app.buttons["Create a workout plan"].exists)
         XCTAssertTrue(app.buttons["Connect Apple Health"].exists)
+    }
+
+    func testRefinedTodayAndWorkoutEntry() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--test-persona", "consistent", "--test-persona-ai", "deterministic", "--disable-tab-prewarm", "-selectedTab", "dashboard"]
+        app.launch()
+        XCTAssertTrue(app.buttons["dashboardNutritionLogFood"].firstMatch.waitForExistence(timeout: 15))
+        captureMigrationScreen(app, name: "Refined Today entry")
+        app.tabBars.buttons["Workouts"].tap()
+        XCTAssertTrue(app.buttons["workoutSection-Train"].waitForExistence(timeout: 10))
+        app.buttons["workoutSection-Train"].tap()
+        XCTAssertTrue(app.buttons["Start workout"].waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Refined workout entry")
+    }
+
+    func testDashboardSectionsShowDetailsInline() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--test-persona", "consistent", "--test-persona-ai", "deterministic", "--disable-tab-prewarm", "-selectedTab", "dashboard"]
+        app.launch()
+        XCTAssertTrue(app.buttons["dashboardSectionNutrition"].waitForExistence(timeout: 15))
+        captureMigrationScreen(app, name: "Today contextual entry")
+        app.buttons["dashboardSectionNutrition"].tap()
+        captureMigrationScreen(app, name: "Nutrition page with direct logging")
+        app.buttons["Nutrition options"].tap()
+        app.buttons["Trends"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["dashboardNutritionTrends"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.sheets.firstMatch.exists)
+        captureMigrationScreen(app, name: "Inline nutrition trends")
+        app.buttons["dashboardSectionActivity"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["dashboardWorkoutHistory"].firstMatch.waitForExistence(timeout: 5))
+        captureMigrationScreen(app, name: "Activity sessions inline")
+        app.buttons["dashboardSectionWeight"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["weightInlineHistory"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recent entries"].exists)
+        XCTAssertFalse(app.buttons["See weight history"].exists)
+        XCTAssertFalse(app.sheets.firstMatch.exists)
+        captureMigrationScreen(app, name: "Weight history inline")
+        app.swipeUp()
+        let finalWeight = app.staticTexts["72.8 kg"].firstMatch
+        XCTAssertTrue(finalWeight.waitForExistence(timeout: 5))
+        XCTAssertTrue(finalWeight.isHittable)
+        XCTAssertLessThanOrEqual(finalWeight.frame.maxY, app.tabBars.firstMatch.frame.minY,
+                                 "The final history entry must scroll clear of the floating tab bar")
+        captureMigrationScreen(app, name: "Weight history bottom clearance")
+        app.swipeDown()
+        app.buttons["Log weight"].tap()
+        XCTAssertTrue(app.navigationBars["Log Weight"].waitForExistence(timeout: 5))
+    }
+
+    func testPersonaLocalLiveFoodPhotoUsesRealAIAndSavesResult() throws {
+        guard ProcessInfo.processInfo.environment["RUN_PERSONA_LOCAL_LIVE_AI_UI_TEST"] == "1" else {
+            throw XCTSkip("Set RUN_PERSONA_LOCAL_LIVE_AI_UI_TEST=1 with a configured local AI backend to run this paid request.")
+        }
+
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--test-persona", "consistent",
+            "--test-persona-ai", "local-live",
+            "--disable-tab-prewarm"
+        ]
+        if let imagePath = ProcessInfo.processInfo.environment["TRAI_TEST_FOOD_IMAGE_PATH"],
+           !imagePath.isEmpty {
+            app.launchArguments += ["--test-food-image-path", imagePath]
+        }
+        app.launch()
+
+        let logFood = app.buttons["dashboardNutritionLogFood"].firstMatch
+        XCTAssertTrue(logFood.waitForExistence(timeout: 35),
+                      "Local backend authentication must finish before the dashboard appears")
+        logFood.tap()
+
+        let shutter = app.buttons["compactFoodCapture"]
+        XCTAssertTrue(shutter.waitForExistence(timeout: 8))
+        shutter.tap()
+
+        let save = app.buttons["compactFoodSave"]
+        XCTAssertTrue(save.waitForExistence(timeout: 90),
+                      "A real AI food estimate should reach the review step")
+        let name = app.textFields["compactFoodName"]
+        XCTAssertTrue(name.exists)
+        let mealName = name.value as? String ?? ""
+        XCTAssertFalse(mealName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        XCTAssertNotEqual(mealName, "Ui Test Meal", "The local mock response must not be used")
+        let kcal = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "≈ [1-9][0-9]* kcal")).firstMatch
+        XCTAssertTrue(kcal.exists, "A nonzero estimate must be visible before saving")
+
+        let review = XCTAttachment(screenshot: app.screenshot())
+        review.name = "Local live AI estimate"
+        review.lifetime = .keepAlways
+        add(review)
+        save.tap()
+
+        XCTAssertTrue(logFood.waitForExistence(timeout: 15))
+        app.swipeLeft()
+        XCTAssertTrue(app.staticTexts[mealName].firstMatch.waitForExistence(timeout: 10),
+                      "The reviewed AI meal must appear in Nutrition after saving")
+        let saved = XCTAttachment(screenshot: app.screenshot())
+        saved.name = "Local live AI saved meal"
+        saved.lifetime = .keepAlways
+        add(saved)
     }
 
     private func makeApp(
@@ -560,6 +1419,11 @@ final class TraiUITests: XCTestCase {
         app.launchArguments = [
             "UITEST_MODE",
             "--ui-test-onboarding-flow",
+            "-dashboardActivationChecklistDismissed", "NO",
+            "-dashboardActivationChecklistHasLoggedFood", "NO",
+            "-dashboardActivationChecklistHasWorkoutPlan", "NO",
+            "-dashboardActivationChecklistHasHealthAccess", "NO",
+            "-dashboardActivationChecklistHasReminders", "NO",
             "--use-in-memory-store",
             "--disable-tab-prewarm"
         ] + extraArguments
@@ -575,7 +1439,7 @@ final class TraiUITests: XCTestCase {
         XCTAssertTrue(welcomeButton.waitForExistence(timeout: 5))
         welcomeButton.tap()
 
-        XCTAssertTrue(app.staticTexts["Choose your goal."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["What would you like to focus on?"].waitForExistence(timeout: 5))
         let goalButton = button(containing: goalLabel, in: app)
         XCTAssertTrue(goalButton.waitForExistence(timeout: 5))
         goalButton.tap()
@@ -594,7 +1458,7 @@ final class TraiUITests: XCTestCase {
         typeTextIfNeeded("155", in: weightField, app: app)
         tapOnboardingPrimaryButton(in: app)
 
-        XCTAssertTrue(app.staticTexts["Choose your activity level."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["How active is a typical week?"].waitForExistence(timeout: 5))
         let activityButton = button(containing: "Moderately Active", in: app)
         XCTAssertTrue(activityButton.waitForExistence(timeout: 5))
         activityButton.tap()
@@ -630,7 +1494,7 @@ final class TraiUITests: XCTestCase {
 
     private func skipWorkoutSetupInOnboarding(in app: XCUIApplication) {
         XCTAssertTrue(app.staticTexts["Set Up Workouts"].waitForExistence(timeout: 8))
-        let skipButton = button(containing: "Track Workouts Only", in: app)
+        let skipButton = button(containing: "Start Without a Plan", in: app)
         XCTAssertTrue(skipButton.waitForExistence(timeout: 5))
         if !skipButton.isHittable {
             app.swipeUp()
@@ -849,12 +1713,16 @@ final class TraiUITests: XCTestCase {
     }
 
     private func minimizeLiveWorkoutAndAssertBanner(in app: XCUIApplication) {
-        app.navigationBars.firstMatch.swipeDown()
+        let start = app.navigationBars.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92))
+        start.press(forDuration: 0.1, thenDragTo: end)
+        XCTAssertTrue(waitForNonExistence(app.buttons["liveWorkoutEndButton"], timeout: 6),
+                      "The workout must actually be minimized before testing Resume")
         let banner = app.otherElements["activeWorkoutBanner"]
-        XCTAssertTrue(
-            banner.waitForExistence(timeout: 8),
-            "Expected the active workout bottom accessory after minimizing the live workout sheet."
-        )
+        XCTAssertTrue(banner.waitForExistence(timeout: 8))
+        let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: banner)
+        XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 6), .completed)
+        captureMigrationScreen(app, name: "Minimized workout ready to resume")
     }
 
     @discardableResult
@@ -870,21 +1738,11 @@ final class TraiUITests: XCTestCase {
             return true
         }
 
-        let primaryNavigationBar = app.navigationBars["Custom Workout"]
-        if primaryNavigationBar.waitForExistence(timeout: max(4, timeout / 2)) {
-            return true
-        }
-
-        let fallbackNavigationBar = app.navigationBars.firstMatch
-        if fallbackNavigationBar.waitForExistence(timeout: max(4, timeout / 2)) {
-            return true
-        }
-
-        // Fallback: if the workout is minimized, reopen from the active banner.
+        // A different screen's navigation bar is not evidence that a workout opened.
         let banner = app.otherElements["activeWorkoutBanner"]
         guard banner.waitForExistence(timeout: 3) else { return false }
         banner.tap()
-        return fallbackNavigationBar.waitForExistence(timeout: max(4, timeout / 2))
+        return app.buttons["liveWorkoutEndButton"].waitForExistence(timeout: max(4, timeout / 2))
     }
 }
 

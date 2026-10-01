@@ -42,11 +42,11 @@ enum MacroType: String, CaseIterable, Identifiable, Codable {
     /// Color used for this macro in UI
     var color: Color {
         switch self {
-        case .protein: .blue
-        case .carbs: .orange
-        case .fat: .purple
-        case .fiber: .green
-        case .sugar: .pink
+        case .protein: Color(red: 0.98, green: 0.25, blue: 0.30)
+        case .carbs: Color(red: 0.00, green: 0.73, blue: 0.79)
+        case .fat: Color(red: 0.61, green: 0.35, blue: 0.97)
+        case .fiber: Color(red: 0.23, green: 0.66, blue: 0.34)
+        case .sugar: .orange
         }
     }
 

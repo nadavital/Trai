@@ -44,18 +44,30 @@
       "settleSeconds": 1.0
     },
     {
-      "id": "profile",
-      "title": "Profile",
-      "groups": ["core", "tabs", "title-sweep"],
+      "id": "account",
+      "title": "Account",
+      "groups": ["core", "account", "title-sweep"],
       "launchArguments": [
         "UITEST_MODE",
         "--disable-tab-prewarm",
         "--app-store-screenshot-mode",
         "--app-store-screenshot-tab",
-        "profile"
+        "dashboard"
       ],
-      "ready": { "identifier": "profileRootReady", "timeout": 12 },
-      "settleSeconds": 1.0
+      "ready": { "identifier": "dashboardAccount", "timeout": 12 },
+      "settleSeconds": 1.0,
+      "steps": [
+        {
+          "action": "tap",
+          "target": { "identifier": "dashboardAccount", "kind": "button" },
+          "timeout": 8
+        },
+        {
+          "action": "waitFor",
+          "target": { "identifier": "accountRootReady" },
+          "timeout": 8
+        }
+      ]
     },
     {
       "id": "food-camera",
@@ -69,7 +81,7 @@
         "-pendingAppRoute",
         "trai://logfood"
       ],
-      "ready": { "identifier": "foodCameraNoCameraReady", "timeout": 12 },
+      "ready": { "identifier": "compactFoodClose", "timeout": 12 },
       "settleSeconds": 0.8
     },
     {
@@ -84,7 +96,7 @@
         "-pendingAppRoute",
         "trai://logfood"
       ],
-      "ready": { "identifier": "foodCameraReviewSaveButton", "timeout": 12 },
+      "ready": { "identifier": "compactFoodSave", "timeout": 12 },
       "settleSeconds": 0.8
     },
     {

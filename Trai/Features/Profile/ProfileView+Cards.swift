@@ -13,7 +13,7 @@ extension ProfileView {
     @ViewBuilder
     func planCard(_ profile: UserProfile) -> some View {
         VStack(spacing: 16) {
-            HStack {
+            planActionLayout {
                 VStack(alignment: .leading, spacing: 4) {
                     Label("Nutrition Plan", systemImage: "chart.pie.fill")
                         .font(.headline)
@@ -21,7 +21,7 @@ extension ProfileView {
 
                 }
 
-                Spacer()
+                if !dynamicTypeSize.isAccessibilitySize { Spacer() }
 
                 Button {
                     showPlanSheet = true
@@ -30,15 +30,16 @@ extension ProfileView {
                         .font(.subheadline)
                         .fontWeight(.medium)
                 }
-                .buttonStyle(.traiTertiary(size: .compact, width: 76, height: 32))
+                .buttonStyle(.traiTertiary(size: .compact, width: dynamicTypeSize.isAccessibilitySize ? nil : 76, height: dynamicTypeSize.isAccessibilitySize ? nil : 44))
                 .controlSize(.small)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             let effectiveCalories = profile.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutToday)
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("\(effectiveCalories)")
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .font(.system(.title, design: .rounded, weight: .bold))
 
                 Text("kcal/day")
                     .font(.subheadline)
@@ -60,7 +61,8 @@ extension ProfileView {
             // Show enabled macros with dynamic grid layout
             let macros = profile.enabledMacrosOrdered
             if !macros.isEmpty {
-                VStack(spacing: 8) {
+                DisclosureGroup("Daily macro targets") {
+                    VStack(spacing: 8) {
                     ForEach(Array(balancedMacroRows(for: macros).enumerated()), id: \.offset) { _, row in
                         HStack(spacing: 8) {
                             ForEach(row) { macro in
@@ -73,10 +75,14 @@ extension ProfileView {
                             }
                         }
                     }
+                    }
+                    .padding(.top, 8)
                 }
+                .font(.subheadline)
+                .tint(.primary)
             }
 
-            HStack(spacing: 12) {
+            planActionLayout {
                 // Review with Trai button
                 Button {
                     if canAccessAIFeatures {
@@ -90,7 +96,7 @@ extension ProfileView {
                                     actionKind: .nutritionPlanReview
                                 ).write()
                             }
-                            onSelectTab?(.trai)
+                            openTraiTab()
                         }
                     } else {
                         proUpsellCoordinator?.present(source: .nutritionPlan)
@@ -102,7 +108,7 @@ extension ProfileView {
                         unlockedTitle: "Review with Trai"
                     )
                 }
-                .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fullWidth: true, height: 40))
+                .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fullWidth: true, height: dynamicTypeSize.isAccessibilitySize ? nil : 44))
 
                 // Plan History link
                 NavigationLink {
@@ -111,12 +117,14 @@ extension ProfileView {
                     HStack {
                         Image(systemName: "clock.arrow.circlepath")
                         Text("History")
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
+                            .font(.subheadline.weight(.medium))
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .frame(maxWidth: .infinity)
+                    .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
+                    .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
                 }
-                .buttonStyle(.traiTertiary(size: .compact, width: 96, height: 40))
+                .buttonStyle(.traiTertiary(size: .compact, height: dynamicTypeSize.isAccessibilitySize ? nil : 44))
+                .layoutPriority(1)
             }
 
             if let currentWeight = latestWeightForPlanPrompt,
@@ -143,7 +151,7 @@ extension ProfileView {
                         showPlanSheet = true
                     }
                     .font(.subheadline)
-                    .buttonStyle(.traiPrimary(color: .accentColor, size: .compact, width: 76, height: 32))
+                    .buttonStyle(.traiPrimary(color: .accentColor, size: .compact, width: dynamicTypeSize.isAccessibilitySize ? nil : 76, height: dynamicTypeSize.isAccessibilitySize ? nil : 44))
                     .controlSize(.small)
                 }
                 .padding()
@@ -162,7 +170,7 @@ extension ProfileView {
             // Has plan - show detailed card like nutrition plan
             VStack(spacing: 16) {
                 // Header with title and adjust button
-                HStack {
+                planActionLayout {
                     VStack(alignment: .leading, spacing: 4) {
                         Label("Workout Plan", systemImage: "figure.strengthtraining.traditional")
                             .font(.headline)
@@ -177,7 +185,7 @@ extension ProfileView {
                         .foregroundStyle(.secondary)
                     }
 
-                    Spacer()
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer() }
 
                     Button {
                         showPlanEditSheet = true
@@ -186,15 +194,16 @@ extension ProfileView {
                             .font(.subheadline)
                             .fontWeight(.medium)
                     }
-                    .buttonStyle(.traiTertiary(size: .compact, width: 76, height: 32))
+                    .buttonStyle(.traiTertiary(size: .compact, width: dynamicTypeSize.isAccessibilitySize ? nil : 76, height: dynamicTypeSize.isAccessibilitySize ? nil : 44))
                     .controlSize(.small)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 // Big stats display
-                HStack(spacing: 24) {
+                planActionLayout {
                     VStack(spacing: 2) {
                         Text("\(plan.daysPerWeek)")
-                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .font(.system(.title2, design: .rounded, weight: .bold))
                             .foregroundStyle(.green)
                         Text("days/week")
                             .font(.caption)
@@ -203,7 +212,7 @@ extension ProfileView {
 
                     VStack(spacing: 2) {
                         Text("\(plan.templates.count)")
-                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .font(.system(.title2, design: .rounded, weight: .bold))
                             .foregroundStyle(Color.accentColor)
                         Text("workouts")
                             .font(.caption)
@@ -213,7 +222,7 @@ extension ProfileView {
                     if let avgDuration = plan.templates.isEmpty ? nil : plan.templates.map(\.estimatedDurationMinutes).reduce(0, +) / plan.templates.count {
                         VStack(spacing: 2) {
                             Text("~\(avgDuration)")
-                                .font(.system(size: 36, weight: .bold, design: .rounded))
+                                .font(.system(.title2, design: .rounded, weight: .bold))
                                 .foregroundStyle(.orange)
                             Text("min avg")
                                 .font(.caption)
@@ -224,15 +233,19 @@ extension ProfileView {
                 .frame(maxWidth: .infinity)
 
                 // Template chips
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                DisclosureGroup("Your workouts") {
+                    VStack(alignment: .leading, spacing: 8) {
                         ForEach(plan.templates.sorted { $0.order < $1.order }) { template in
                             WorkoutPlanChip(template: template)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 8)
                 }
+                .font(.subheadline)
+                .tint(.primary)
 
-                HStack(spacing: 12) {
+                planActionLayout {
                     Button {
                         if canAccessAIFeatures {
                             if accountSessionService?.isAuthenticated == false {
@@ -244,7 +257,7 @@ extension ProfileView {
                                         launchLabel: "Reviewing your workout plan..."
                                     ).write()
                                 }
-                                onSelectTab?(.trai)
+                                openTraiTab()
                             }
                         } else {
                             proUpsellCoordinator?.present(source: .workoutPlan)
@@ -256,7 +269,7 @@ extension ProfileView {
                             unlockedTitle: "Review with Trai"
                         )
                     }
-                    .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fullWidth: true, height: 40))
+                    .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fullWidth: true, height: dynamicTypeSize.isAccessibilitySize ? nil : 44))
 
                     NavigationLink {
                         WorkoutPlanHistoryView()
@@ -264,12 +277,14 @@ extension ProfileView {
                         HStack {
                             Image(systemName: "clock.arrow.circlepath")
                             Text("History")
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.85)
+                                .font(.subheadline.weight(.medium))
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        .frame(maxWidth: .infinity)
+                        .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
+                        .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
                     }
-                    .buttonStyle(.traiTertiary(size: .compact, width: 96, height: 40))
+                    .buttonStyle(.traiTertiary(size: .compact, height: dynamicTypeSize.isAccessibilitySize ? nil : 44))
+                    .layoutPriority(1)
                 }
             }
             .padding(20)
@@ -345,82 +360,9 @@ extension ProfileView {
         .clipShape(.capsule)
     }
 
-    // MARK: - Memories Card
-
-    @ViewBuilder
-    func memoriesCard() -> some View {
-        NavigationLink {
-            AllMemoriesView()
-        } label: {
-            HStack {
-                TraiLensIcon(size: 28)
-                    .frame(width: 40, height: 40)
-                    .background(Color.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Trai Memories")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-
-                    Text(memoryCount == 0 ? "No memories yet" : "\(memoryCount) memories saved")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding()
-            .traiCard(cornerRadius: 16, contentPadding: 0)
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Chat History Card
-
-    @ViewBuilder
-    func chatHistoryCard() -> some View {
-        NavigationLink {
-            AllChatSessionsView { sessionId in
-                currentChatSessionIdString = sessionId.uuidString
-                pendingOpenChatSessionIdString = sessionId.uuidString
-                onSelectTab?(.trai)
-            }
-        } label: {
-            HStack {
-                Image(systemName: "bubble.left.and.bubble.right.fill")
-                    .font(.title2)
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 40, height: 40)
-                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Chat History")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-
-                    Text("View saved conversations")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding()
-            .traiCard(cornerRadius: 16, contentPadding: 0)
-        }
-        .buttonStyle(.plain)
-    }
-
     func balancedMacroRows(for macros: [MacroType]) -> [[MacroType]] {
-        switch macros.count {
+        if dynamicTypeSize.isAccessibilitySize { return macros.map { [$0] } }
+        return switch macros.count {
         case 0...3:
             [macros]
         case 4:
@@ -434,128 +376,28 @@ extension ProfileView {
         }
     }
 
-    // MARK: - Exercise Library Card
-
-    @ViewBuilder
-    func exercisesCard() -> some View {
-        NavigationLink {
-            CustomExercisesView()
-        } label: {
-            HStack {
-                Image(systemName: "figure.strengthtraining.traditional")
-                    .font(.title2)
-                    .foregroundStyle(.orange)
-                    .frame(width: 40, height: 40)
-                    .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Exercise Library")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-
-                    Text("Manage exercises and activities")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding()
-            .traiCard(cornerRadius: 16, contentPadding: 0)
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Reminders Card
-
-    @ViewBuilder
-    func remindersCard(_ profile: UserProfile, customRemindersCount: Int) -> some View {
-        NavigationLink {
-            ReminderSettingsView(profile: profile)
-        } label: {
-            HStack {
-                Image(systemName: "bell.fill")
-                    .font(.title2)
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 40, height: 40)
-                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Reminders")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-
-                    Text(remindersSummary(profile, customCount: customRemindersCount))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding()
-            .traiCard(cornerRadius: 16, contentPadding: 0)
-        }
-        .buttonStyle(.plain)
-    }
-
     // MARK: - Helpers
 
-    @ViewBuilder
+    private var planActionLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 12))
+    }
+
     private func aiActionButtonLabel(isUnlocked: Bool, unlockedTitle: String) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 6) {
-                TraiLensSymbolIcon(size: 14, variant: .enclosedFilled, color: Color.accentColor)
-                Text(unlockedTitle)
-                if !isUnlocked {
-                    Text("PRO")
-                        .font(.traiLabel(10))
-                        .foregroundStyle(TraiColors.ember)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(TraiColors.ember.opacity(0.10), in: Capsule())
-                }
+        HStack(spacing: 6) {
+            TraiLensSymbolIcon(size: 14, variant: .enclosedFilled, color: Color.accentColor)
+                .accessibilityHidden(true)
+            Text(unlockedTitle)
+                .font(.subheadline.weight(.medium))
+                .fixedSize(horizontal: false, vertical: true)
+            if !isUnlocked {
+                Text("PRO")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity)
-
-            HStack(spacing: 6) {
-                TraiLensSymbolIcon(size: 14, variant: .enclosedFilled, color: Color.accentColor)
-                Text("Review")
-                if !isUnlocked {
-                    Text("PRO")
-                        .font(.traiLabel(10))
-                        .foregroundStyle(TraiColors.ember)
-                }
-            }
-            .frame(maxWidth: .infinity)
         }
-        .lineLimit(1)
-        .minimumScaleFactor(0.82)
+        .frame(maxWidth: .infinity, minHeight: 44)
     }
 
-    func remindersSummary(_ profile: UserProfile, customCount: Int) -> String {
-        var builtInCount = 0
-        if profile.mealRemindersEnabled { builtInCount += 1 }
-        if profile.workoutRemindersEnabled { builtInCount += 1 }
-        if profile.weightReminderEnabled { builtInCount += 1 }
-
-        let totalCount = builtInCount + customCount
-
-        if totalCount == 0 {
-            return "No reminders set"
-        } else if customCount > 0 && builtInCount == 0 {
-            return "\(customCount) custom"
-        } else if customCount > 0 {
-            return "\(totalCount) active"
-        } else {
-            return "\(builtInCount) enabled"
-        }
-    }
 }

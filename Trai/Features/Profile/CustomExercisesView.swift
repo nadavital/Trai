@@ -460,9 +460,10 @@ private struct ExerciseManagementCard: View {
                     Image(systemName: "ellipsis")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Options for \(exercise.name)")
             }
 
             VStack(alignment: .leading, spacing: 5) {
@@ -490,7 +491,7 @@ private struct ExerciseManagementCard: View {
             }
         }
         .padding(12)
-        .frame(height: 136, alignment: .topLeading)
+        .frame(minHeight: 136, alignment: .topLeading)
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
         .contentShape(RoundedRectangle(cornerRadius: 14))
     }

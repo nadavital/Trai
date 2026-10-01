@@ -120,6 +120,7 @@ private struct MacroToggleRow: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityValue(isEnabled ? "On" : "Off")
         .animation(.spring(response: 0.3), value: isEnabled)
     }
 }
@@ -151,9 +152,9 @@ private struct MacroPreviewCard: View {
                 }
                 .padding(.vertical, 16)
             } else {
-                HStack(spacing: 12) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
                     ForEach(orderedMacros) { macro in
-                        PreviewRing(macro: macro)
+                        SelectedMacroChip(macro: macro)
                     }
                 }
                 .padding(.vertical, 8)
@@ -165,37 +166,24 @@ private struct MacroPreviewCard: View {
 
 // MARK: - Preview Ring
 
-private struct PreviewRing: View {
+private struct SelectedMacroChip: View {
     let macro: MacroType
 
     var body: some View {
-        VStack(spacing: 4) {
-            ZStack {
-                Circle()
-                    .stroke(macro.color.opacity(0.2), lineWidth: 4)
-                    .frame(width: 36, height: 36)
-
-                Circle()
-                    .trim(from: 0, to: 0.6)
-                    .stroke(
-                        macro.color,
-                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                    )
-                    .frame(width: 36, height: 36)
-                    .rotationEffect(.degrees(-90))
-
-                Text(macro.shortName)
-                    .font(.caption2)
-                    .fontWeight(.bold)
-                    .foregroundStyle(macro.color)
-            }
-
+        HStack(spacing: 6) {
+            Circle()
+                .fill(macro.color)
+                .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
             Text(macro.displayName)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 36)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(macro.color.opacity(0.10), in: .rect(cornerRadius: 12))
     }
 }
 

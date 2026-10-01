@@ -1732,15 +1732,7 @@ struct WorkoutTraiReviewCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .glassEffect(
-                .regular.tint(Color.accentColor.opacity(0.20)).interactive(),
-                in: .capsule
-            )
-            .overlay {
-                Capsule()
-                    .strokeBorder(.white.opacity(0.18), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.03), radius: 5, y: 3)
+            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
         }
         .buttonStyle(TraiPressStyle(scale: 0.96))
     }
@@ -1766,7 +1758,7 @@ struct WorkoutGoalsOverviewSection: View {
     private var overviewContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             TraiSectionHeader("Goals", icon: "scope") {
-                if canCreateGoalsWithTrai {
+                if canCreateGoalsWithTrai && (!insights.isEmpty || completedGoalCount > 0) {
                     Button("Set Goals", action: onCreateGoalWithTrai)
                         .buttonStyle(.traiTertiary(size: .compact, height: 32))
                 }

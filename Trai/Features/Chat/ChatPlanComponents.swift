@@ -10,6 +10,12 @@ import SwiftUI
 // MARK: - Plan Update Suggestion Card
 
 struct PlanUpdateSuggestionCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private var actionLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 12))
+    }
     let suggestion: PlanUpdateSuggestionEntry
     let currentCalories: Int?
     let currentProtein: Int?
@@ -252,7 +258,7 @@ struct PlanUpdateSuggestionCard: View {
             }
 
             // Action buttons
-            HStack(spacing: 12) {
+            actionLayout {
                 Button {
                     onEdit()
                 } label: {
@@ -292,6 +298,7 @@ struct PlanUpdateSuggestionCard: View {
 // MARK: - Plan Change Row
 
 struct PlanChangeRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let color: Color
     let label: String
     let current: Int
@@ -309,6 +316,20 @@ struct PlanChangeRow: View {
     }
 
     var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label {
+                        Text(label).foregroundStyle(.primary)
+                    } icon: {
+                        Circle().fill(color).frame(width: 10, height: 10)
+                    }
+                    Text("\(current) \(unit) → \(proposed) \(unit)")
+                    Text("Change: \(changeText) \(unit)").foregroundStyle(.secondary)
+                }
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
         HStack(spacing: 8) {
             Circle()
                 .fill(color)
@@ -346,7 +367,10 @@ struct PlanChangeRow: View {
                 .foregroundStyle(.tertiary)
                 .frame(width: 28, alignment: .leading)
         }
+            }
+        }
         .padding(.vertical, 10)
+        .accessibilityElement(children: .combine)
     }
 }
 
