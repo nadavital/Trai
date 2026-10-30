@@ -1,0 +1,27 @@
+name: Trai internal TestFlight
+on:
+  push:
+    branches: [release/trai-49-cloud]
+permissions:
+  contents: read
+concurrency:
+  group: trai-internal-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'nadavital/Trai' && github.ref == 'refs/heads/release/trai-49-cloud'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: trai-internal-release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Verify pipeline logic
+        run: python3 -m unittest discover -s scripts/ci -p 'test_*.py'
+      - name: Start and verify Apple cloud release
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: python3 scripts/ci/release_cloud.py
