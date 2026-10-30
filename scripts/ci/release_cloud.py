@@ -106,7 +106,7 @@ def run(api, sha):
             builds = api.all('/ciBuildRuns/' + current['id'] + '/builds')
             for build in builds:
                 detail = api.request('/builds/' + build['id'] + '/buildBetaDetail')['data']['attributes']
-                groups = api.all('/builds/' + build['id'] + '/betaGroups?limit=200')
+                groups = api.all('/betaGroups?filter%5Bbuilds%5D=' + build['id'] + '&limit=200')
                 if build['attributes']['processingState'] == 'VALID' and detail['internalBuildState'] == 'IN_BETA_TESTING' and {g['id'] for g in groups} == {GROUP}:
                     print('Verified Nadav-only TestFlight build:', build['attributes']['version'], 'commit:', sha)
                     return
