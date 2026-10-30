@@ -33,9 +33,6 @@ struct ProfileEditSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Header
-                    headerSection
-
                     // Name
                     nameSection
 
@@ -88,33 +85,6 @@ struct ProfileEditSheet: View {
         !name.trimmingCharacters(in: .whitespaces).isEmpty &&
         (Double(heightCm) ?? 0) >= 100 &&
         (targetWeightKg.isEmpty || (Double(targetWeightKg) ?? 0) >= 30)
-    }
-
-    // MARK: - Header
-
-    private var headerSection: some View {
-        ZStack {
-            Circle()
-                .stroke(
-                    LinearGradient(
-                        colors: [.accentColor, .accentColor.opacity(0.5)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 3
-                )
-                .frame(width: 90, height: 90)
-
-            Circle()
-                .fill(Color.accentColor.opacity(0.15))
-                .frame(width: 80, height: 80)
-                .overlay {
-                    Text(name.prefix(1).uppercased())
-                        .font(.system(size: 36, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.accentColor)
-                }
-        }
-        .padding(.top, 8)
     }
 
     // MARK: - Name Section

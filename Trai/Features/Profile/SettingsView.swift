@@ -31,6 +31,18 @@ struct SettingsView: View {
     @State private var workoutPlanSaveError: SettingsWorkoutPlanSaveError?
     @AppStorage("trai_coach_tone") private var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
 
+    // Store kilograms regardless of the unit shown in the field.
+    private var displayedTargetWeight: Binding<Double?> {
+        Binding(
+            get: {
+                profile.targetWeightKg.map { profile.usesMetricWeight ? $0 : $0 * 2.20462 }
+            },
+            set: { value in
+                profile.targetWeightKg = value.map { profile.usesMetricWeight ? $0 : $0 / 2.20462 }
+            }
+        )
+    }
+
     var body: some View {
         List {
             // MARK: - Personal Info Section
@@ -48,7 +60,7 @@ struct SettingsView: View {
                 HStack {
                     Label("Height", systemImage: "ruler")
                     Spacer()
-                    TextField("cm", value: $profile.heightCm, format: .number)
+                    TextField("—", value: $profile.heightCm, format: .number)
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.trailing)
                         .frame(minWidth: 60, idealWidth: 72, maxWidth: 96)
@@ -60,7 +72,7 @@ struct SettingsView: View {
                 HStack {
                     Label("Target Weight", systemImage: "target")
                     Spacer()
-                    TextField("—", value: $profile.targetWeightKg, format: .number.precision(.fractionLength(1)))
+                    TextField("—", value: displayedTargetWeight, format: .number.precision(.fractionLength(1)))
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
                         .frame(minWidth: 60, idealWidth: 72, maxWidth: 96)

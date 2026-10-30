@@ -19,6 +19,8 @@
 		7C1000093C00000100C10001 /* UserProfileNutritionTargetsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C10000A3C00000100C10001 /* UserProfileNutritionTargetsTests.swift */; };
 		7C10000B3C00000100C10001 /* NutritionDisplayPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C10000C3C00000100C10001 /* NutritionDisplayPolicyTests.swift */; };
 		7C10000D3C00000100C10001 /* OnboardingFlowPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C10000E3C00000100C10001 /* OnboardingFlowPlannerTests.swift */; };
+		DA2400013C00000100C10001 /* MuscleRecoveryLookupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2400023C00000100C10001 /* MuscleRecoveryLookupTests.swift */; };
+		DA2700013C00000100C10001 /* WorkoutArtworkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2700023C00000100C10001 /* WorkoutArtworkTests.swift */; };
 		7C10000F3C00000100C10001 /* OnboardingProAccessStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1000103C00000100C10001 /* OnboardingProAccessStateTests.swift */; };
 		B1F0A0013D00000100B1F001 /* FoodMemoryFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F0A0023D00000100B1F001 /* FoodMemoryFoundationTests.swift */; };
 		B1F0A0033D00000100B1F001 /* FoodMemoryMatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F0A0043D00000100B1F001 /* FoodMemoryMatcherTests.swift */; };
@@ -103,6 +105,8 @@
 		7C10000A3C00000100C10001 /* UserProfileNutritionTargetsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UserProfileNutritionTargetsTests.swift; sourceTree = "<group>"; };
 		7C10000C3C00000100C10001 /* NutritionDisplayPolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NutritionDisplayPolicyTests.swift; sourceTree = "<group>"; };
 		7C10000E3C00000100C10001 /* OnboardingFlowPlannerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnboardingFlowPlannerTests.swift; sourceTree = "<group>"; };
+		DA2400023C00000100C10001 /* MuscleRecoveryLookupTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MuscleRecoveryLookupTests.swift; sourceTree = "<group>"; };
+		DA2700023C00000100C10001 /* WorkoutArtworkTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkoutArtworkTests.swift; sourceTree = "<group>"; };
 		7C1000103C00000100C10001 /* OnboardingProAccessStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnboardingProAccessStateTests.swift; sourceTree = "<group>"; };
 		B1F0A0023D00000100B1F001 /* FoodMemoryFoundationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodMemoryFoundationTests.swift; sourceTree = "<group>"; };
 		B1F0A0043D00000100B1F001 /* FoodMemoryMatcherTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodMemoryMatcherTests.swift; sourceTree = "<group>"; };
@@ -264,6 +268,8 @@
 				F3A100122E00000100A10001 /* FoodPatternRecommendationTests.swift */,
 				7C10000C3C00000100C10001 /* NutritionDisplayPolicyTests.swift */,
 				7C10000E3C00000100C10001 /* OnboardingFlowPlannerTests.swift */,
+				DA2400023C00000100C10001 /* MuscleRecoveryLookupTests.swift */,
+				DA2700023C00000100C10001 /* WorkoutArtworkTests.swift */,
 				7C1000103C00000100C10001 /* OnboardingProAccessStateTests.swift */,
 				7C10000A3C00000100C10001 /* UserProfileNutritionTargetsTests.swift */,
 				7C1000083C00000100C10001 /* UserProfileWorkoutPlanRequestTests.swift */,
@@ -502,6 +508,8 @@
 				B1F0A0053D00000100B1F001 /* FoodMemoryServiceTests.swift in Sources */,
 				7C10000B3C00000100C10001 /* NutritionDisplayPolicyTests.swift in Sources */,
 				7C10000D3C00000100C10001 /* OnboardingFlowPlannerTests.swift in Sources */,
+				DA2400013C00000100C10001 /* MuscleRecoveryLookupTests.swift in Sources */,
+				DA2700013C00000100C10001 /* WorkoutArtworkTests.swift in Sources */,
 				7C10000F3C00000100C10001 /* OnboardingProAccessStateTests.swift in Sources */,
 				7C1000093C00000100C10001 /* UserProfileNutritionTargetsTests.swift in Sources */,
 				7C1000073C00000100C10001 /* UserProfileWorkoutPlanRequestTests.swift in Sources */,
@@ -570,7 +578,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = TraiWidgets/TraiWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 37;
+				CURRENT_PROJECT_VERSION = 42;
 				DEVELOPMENT_TEAM = C4MRP56MF5;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TraiWidgets/Info.plist;
@@ -602,7 +610,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = TraiWidgets/TraiWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 37;
+				CURRENT_PROJECT_VERSION = 42;
 				DEVELOPMENT_TEAM = C4MRP56MF5;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TraiWidgets/Info.plist;
@@ -755,7 +763,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Trai/Trai.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 37;
+				CURRENT_PROJECT_VERSION = 42;
 				DEVELOPMENT_TEAM = C4MRP56MF5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -794,7 +802,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Trai/Trai.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 37;
+				CURRENT_PROJECT_VERSION = 42;
 				DEVELOPMENT_TEAM = C4MRP56MF5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;

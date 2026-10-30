@@ -253,7 +253,7 @@ struct WorkoutTemplatesSection: View {
                         .foregroundStyle(.secondary)
                         .padding(.top, 8)
 
-                    ScrollView(.horizontal, showsIndicators: false) {
+                    TraiHorizontalScrollView() {
                         HStack(spacing: 12) {
                             ForEach(otherTemplates) { template in
                                 CompactTemplateCard(

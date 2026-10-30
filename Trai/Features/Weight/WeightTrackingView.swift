@@ -10,11 +10,13 @@ import SwiftData
 import Charts
 
 struct WeightTrackingView: View {
+    var embedded = false
     @Query(sort: \WeightEntry.loggedAt, order: .reverse)
     private var weightEntries: [WeightEntry]
 
     @Query private var profiles: [UserProfile]
 
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @State private var showingAddWeight = false
@@ -45,7 +47,7 @@ struct WeightTrackingView: View {
     }
 
     private var weightUnit: String {
-        useLbs ? "lbs" : "kg"
+        useLbs ? "lb" : "kg"
     }
 
     private func displayWeight(_ weightKg: Double) -> Double {
@@ -58,59 +60,79 @@ struct WeightTrackingView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Current weight card
-                    if let latest = weightEntries.first {
-                        CurrentWeightCard(
-                            entry: latest,
-                            targetWeight: profile?.targetWeightKg,
-                            useLbs: useLbs
-                        )
-                    }
+        if embedded {
+            historyContent
+        } else {
+            NavigationStack {
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Current weight card
+                        if let latest = weightEntries.first {
+                            CurrentWeightCard(
+                                entry: latest,
+                                targetWeight: profile?.targetWeightKg,
+                                useLbs: useLbs
+                            )
+                        }
 
-                    // Time range picker
-                    Picker("Time Range", selection: $selectedTimeRange) {
-                        ForEach(TimeRange.allCases) { range in
-                            Text(range.rawValue).tag(range)
+                        historyContent
+                    }
+                    .padding()
+                }
+                .navigationTitle("Weight")
+                .toolbarTitleDisplayMode(.inlineLarge)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done", systemImage: "checkmark") { dismiss() }
+                            .labelStyle(.iconOnly)
+                            .tint(.accentColor)
+                            .accessibilityIdentifier("weightHistoryDone")
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Log weight", systemImage: "plus") {
+                            showingAddWeight = true
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
-
-                    // Weight chart
-                    if filteredEntries.count > 1 {
-                        WeightChartView(
-                            entries: filteredEntries.reversed(),
-                            targetWeight: profile?.targetWeightKg,
-                            useLbs: useLbs
-                        )
-                    }
-
-                    // Weight history list
-                    WeightHistoryList(entries: Array(weightEntries.prefix(10)), useLbs: useLbs)
                 }
-                .padding()
-            }
-            .navigationTitle("Weight")
-            .toolbarTitleDisplayMode(.inlineLarge)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Add", systemImage: "plus") {
-                        showingAddWeight = true
-                    }
+                .sheet(isPresented: $showingAddWeight) {
+                    LogWeightSheet()
+                        .traiSheetBranding()
+                }
+                .refreshable {
+                    await syncHealthKit()
                 }
             }
-            .sheet(isPresented: $showingAddWeight) {
-                LogWeightSheet()
-                    .traiSheetBranding()
-            }
-            .refreshable {
-                await syncHealthKit()
-            }
+            .traiBackground()
         }
-        .traiBackground()
+    }
+
+    private var historyContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+            Text("History").font(.headline)
+            Spacer()
+            Picker("Time Range", selection: $selectedTimeRange) {
+                ForEach(TimeRange.allCases) { range in
+                    Text(range.rawValue).tag(range)
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(.primary)
+            }
+
+            // Weight chart
+            if filteredEntries.count > 1 {
+                WeightChartView(
+                    entries: filteredEntries.reversed(),
+                    targetWeight: profile?.targetWeightKg,
+                    useLbs: useLbs
+                )
+            }
+
+            // Weight history list
+            WeightHistoryList(entries: filteredEntries, useLbs: useLbs)
+        }
+        .accessibilityIdentifier("weightInlineHistory")
     }
 
     private func syncHealthKit() async {
@@ -149,42 +171,35 @@ struct CurrentWeightCard: View {
     }
 
     private var weightUnit: String {
-        useLbs ? "lbs" : "kg"
+        useLbs ? "lb" : "kg"
     }
 
+    @ScaledMetric(relativeTo: .largeTitle) private var weightFontSize: CGFloat = 42
+
     var body: some View {
-        VStack(spacing: 12) {
-            Text("Current Weight")
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Latest weight")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(displayWeight, format: .number.precision(.fractionLength(1)))
-                    .font(.system(size: 48, weight: .bold))
+                    .font(.system(size: weightFontSize, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
 
                 Text(weightUnit)
                     .font(.title2)
                     .foregroundStyle(.secondary)
             }
 
-            if let target = displayTarget {
-                let difference = displayWeight - target
-                HStack {
-                    Image(systemName: difference > 0 ? "arrow.down" : "arrow.up")
-                    Text("\(abs(difference), format: .number.precision(.fractionLength(1))) \(weightUnit) to goal")
-                }
-                .font(.subheadline)
-                .foregroundStyle(difference > 0 ? .orange : .green)
-            }
-
-            Text("Last updated: \(entry.loggedAt, format: .dateTime.month().day().hour().minute())")
+            Text(entry.loggedAt, format: .dateTime.month().day().hour().minute())
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .traiCard(contentPadding: 18)
     }
 }
 
@@ -200,7 +215,7 @@ struct WeightChartView: View {
     }
 
     private var weightUnit: String {
-        useLbs ? "lbs" : "kg"
+        useLbs ? "lb" : "kg"
     }
 
     /// Computes the Y-axis domain with padding around the data range
@@ -225,39 +240,58 @@ struct WeightChartView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Weight Trend")
-                .font(.headline)
+            HStack {
+                Text("Check-ins").font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(weightUnit).font(.caption).foregroundStyle(.secondary)
+            }
 
             Chart {
                 ForEach(entries) { entry in
+                    AreaMark(
+                        x: .value("Date", entry.loggedAt),
+                        yStart: .value("Baseline", yAxisDomain.lowerBound),
+                        yEnd: .value("Weight", displayWeight(entry.weightKg))
+                    )
+                    .foregroundStyle(LinearGradient(colors: [.accentColor.opacity(0.18), .accentColor.opacity(0.01)], startPoint: .top, endPoint: .bottom))
+                    .interpolationMethod(.monotone)
                     LineMark(
                         x: .value("Date", entry.loggedAt),
                         y: .value("Weight", displayWeight(entry.weightKg))
                     )
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(Color.accentColor)
+                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                    .interpolationMethod(.monotone)
 
                     PointMark(
                         x: .value("Date", entry.loggedAt),
                         y: .value("Weight", displayWeight(entry.weightKg))
                     )
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(Color.accentColor)
+                    .symbolSize(24)
                 }
 
                 if let target = targetWeight {
                     RuleMark(y: .value("Goal", displayWeight(target)))
-                        .foregroundStyle(.green.opacity(0.5))
+                        .foregroundStyle(.secondary.opacity(0.4))
                         .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 5]))
                 }
             }
-            .frame(height: 200)
+            .frame(height: 150)
             .chartYScale(domain: yAxisDomain)
             .chartYAxis {
-                AxisMarks(position: .leading)
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) {
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 4])).foregroundStyle(Color.secondary.opacity(0.14))
+                    AxisValueLabel().font(.caption2)
+                }
+            }
+            .chartXAxis {
+                AxisMarks(values: .automatic(desiredCount: 3)) { value in
+                    AxisValueLabel(format: .dateTime.month(.abbreviated).day()).font(.caption2)
+                }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(contentPadding: 18)
     }
 }
 
@@ -269,8 +303,8 @@ struct WeightHistoryList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Recent Entries")
-                .font(.headline)
+            Text("Recent entries")
+                .font(.subheadline.weight(.semibold))
 
             if entries.isEmpty {
                 Text("No weight entries yet")
@@ -283,9 +317,7 @@ struct WeightHistoryList: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(contentPadding: 18)
     }
 }
 
@@ -298,7 +330,7 @@ struct WeightEntryRow: View {
     }
 
     private var weightUnit: String {
-        useLbs ? "lbs" : "kg"
+        useLbs ? "lb" : "kg"
     }
 
     var body: some View {

@@ -59,11 +59,14 @@ struct ManualFoodEntrySheet: View {
                         TextField("Food name", text: $name)
                             .padding(12)
                             .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                        TextField("Serving size (optional)", text: $servingSize)
+                            .font(.subheadline)
+                            .padding(12)
+                            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
                     }
                     .traiCard(cornerRadius: 16)
 
                     VStack(alignment: .leading, spacing: 10) {
-                        sectionTitle("Calories", icon: "flame.fill")
                         MacroInputRow(label: "Calories", text: $caloriesText, unit: "kcal", color: .orange)
                     }
                     .traiCard(cornerRadius: 16)
@@ -83,13 +86,6 @@ struct ManualFoodEntrySheet: View {
                         .traiCard(cornerRadius: 16)
                     }
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        sectionTitle("Serving Size", icon: "scalemass")
-                        TextField("e.g., 1 cup, 100g", text: $servingSize)
-                            .padding(12)
-                            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-                    }
-                    .traiCard(cornerRadius: 16)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)

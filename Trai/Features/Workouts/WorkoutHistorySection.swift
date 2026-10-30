@@ -2,7 +2,7 @@
 //  WorkoutHistorySection.swift
 //  Trai
 //
-//  Section component showing recent workouts with "See All" functionality
+//  Inline workout history grouped by day
 //
 
 import SwiftUI
@@ -36,7 +36,7 @@ enum WorkoutHistoryRecencyFormatter {
 // MARK: - Workout History Section
 
 struct WorkoutHistorySection: View {
-    private enum PreviewItem: Identifiable {
+    private enum HistoryItem: Identifiable {
         case live(LiveWorkout)
         case session(WorkoutSession)
 
@@ -67,84 +67,104 @@ struct WorkoutHistorySection: View {
     let onDelete: (WorkoutSession) -> Void
     let onDeleteLiveWorkout: (LiveWorkout) -> Void
 
-    @State private var showAllWorkouts = false
+    @State private var pendingDelete: HistoryItem?
 
-    private var previewItems: [PreviewItem] {
-        let liveItems = liveWorkoutsByDate
-            .flatMap(\.workouts)
-            .map(PreviewItem.live)
-        let sessionItems = workoutsByDate
-            .flatMap(\.workouts)
-            .map(PreviewItem.session)
-
-        return (liveItems + sessionItems)
-            .sorted { $0.date > $1.date }
-            .prefix(5)
-            .map { $0 }
+    private struct HistoryDay: Identifiable {
+        let date: Date
+        let items: [HistoryItem]
+        var id: Date { date }
     }
 
-    /// Total workout count for "See All" button
-    private var totalWorkoutCount: Int {
-        let sessionCount = workoutsByDate.reduce(0) { $0 + $1.workouts.count }
-        let liveCount = liveWorkoutsByDate.reduce(0) { $0 + $1.workouts.count }
-        return sessionCount + liveCount
+    private var historyDays: [HistoryDay] {
+        let liveItems = liveWorkoutsByDate.flatMap(\.workouts).map(HistoryItem.live)
+        let sessionItems = workoutsByDate.flatMap(\.workouts).map(HistoryItem.session)
+        let grouped = Dictionary(grouping: liveItems + sessionItems) {
+            Calendar.current.startOfDay(for: $0.date)
+        }
+        return grouped.keys.sorted(by: >).map { date in
+            HistoryDay(date: date, items: (grouped[date] ?? []).sorted { $0.date > $1.date })
+        }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            TraiSectionHeader("Recent Workouts", icon: "clock.arrow.trianglehead.counterclockwise.rotate.90") {
-                if totalWorkoutCount > 5 {
-                    Button {
-                        showAllWorkouts = true
-                    } label: {
-                        Text("See All")
-                    }
-                    .buttonStyle(.traiTertiary(size: .compact, height: 32))
-                }
-            }
-
-            if previewItems.isEmpty {
+        LazyVStack(alignment: .leading, spacing: 20) {
+            if historyDays.isEmpty {
                 EmptyWorkoutHistory()
+                    .traiCard()
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(previewItems) { item in
-                            switch item {
-                            case .live(let workout):
-                                CompactLiveWorkoutRow(
-                                    workout: workout,
-                                    onTap: { onLiveWorkoutTap(workout) },
-                                    onDelete: { onDeleteLiveWorkout(workout) }
-                                )
-                                .frame(width: 150)
-                            case .session(let workout):
-                                CompactWorkoutSessionRow(
-                                    workout: workout,
-                                    onTap: { onWorkoutTap(workout) },
-                                    onDelete: { onDelete(workout) }
-                                )
-                                .frame(width: 150)
+                ForEach(historyDays) { day in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(day.date, format: .dateTime.weekday(.wide).month(.abbreviated).day())
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .accessibilityAddTraits(.isHeader)
+
+                        VStack(spacing: 12) {
+                            ForEach(day.items) { item in
+                                VStack(alignment: .leading, spacing: 0) {
+                                    HStack {
+                                        Text(item.date, format: .dateTime.hour().minute())
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        Spacer()
+                                        Menu {
+                                            Button("Delete workout", systemImage: "trash", role: .destructive) {
+                                                pendingDelete = item
+                                            }
+                                        } label: {
+                                            Image(systemName: "ellipsis")
+                                                .frame(width: 44, height: 44)
+                                                .contentShape(.rect)
+                                        }
+                                        .accessibilityLabel("Workout options")
+                                    }
+                                    switch item {
+                                    case .live(let workout):
+                                        LiveWorkoutHistoryRow(
+                                            workout: workout,
+                                            activeGoals: activeGoals,
+                                            onTap: { onLiveWorkoutTap(workout) },
+                                            onDelete: { onDeleteLiveWorkout(workout) }
+                                        )
+                                    case .session(let workout):
+                                        WorkoutHistoryRow(
+                                            workout: workout,
+                                            onTap: { onWorkoutTap(workout) },
+                                            onDelete: { onDelete(workout) }
+                                        )
+                                    }
+                                }
+                                if item.id != day.items.last?.id {
+                                    Divider()
+                                }
                             }
                         }
+                        .traiCard()
                     }
-                    .scrollTargetLayout()
                 }
-                .scrollTargetBehavior(.viewAligned)
-                .contentMargins(.horizontal, 1, for: .scrollContent)
             }
         }
-        .traiCard()
-        .sheet(isPresented: $showAllWorkouts) {
-            AllWorkoutsSheet(
-                workoutsByDate: workoutsByDate,
-                liveWorkoutsByDate: liveWorkoutsByDate,
-                activeGoals: activeGoals,
-                onWorkoutTap: onWorkoutTap,
-                onLiveWorkoutTap: onLiveWorkoutTap,
-                onDelete: onDelete,
-                onDeleteLiveWorkout: onDeleteLiveWorkout
-            )
+        .confirmationDialog(
+            "Delete workout?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingDelete
+        ) { item in
+            Button("Delete workout", role: .destructive) {
+                switch item {
+                case .live(let workout): onDeleteLiveWorkout(workout)
+                case .session(let workout): onDelete(workout)
+                }
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { _ in
+            Text("This cannot be undone.")
         }
+
     }
 }
 

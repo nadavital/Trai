@@ -25,7 +25,20 @@ struct CardioExerciseCard: View {
     var onRemoveSegment: ((Int) -> Void)?
     var onDeleteExercise: (() -> Void)? = nil
 
-    @State private var isExpanded = true
+    var isFocusedWorkspace = false
+    var expansion: Binding<Bool>? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var locallyExpanded = true
+
+    private var isExpanded: Bool { isFocusedWorkspace || (expansion?.wrappedValue ?? locallyExpanded) }
+
+    private func toggleExpansion() {
+        if let expansion {
+            expansion.wrappedValue.toggle()
+        } else {
+            locallyExpanded.toggle()
+        }
+    }
     @State private var showDeleteConfirmation = false
     @State private var didEnsureInitialSegment = false
     @State private var durationMinutes = ""
@@ -139,20 +152,20 @@ struct CardioExerciseCard: View {
     private var header: some View {
         HStack {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                    toggleExpansion()
                 }
             } label: {
                 HStack {
                     Image(systemName: entry.activityIconName)
-                        .font(.subheadline)
-                        .foregroundStyle(.accent)
-                        .frame(width: 28, height: 28)
-                        .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                        .font(isFocusedWorkspace ? .title3 : .subheadline)
+                        .foregroundStyle(.indigo)
+                        .frame(width: isFocusedWorkspace ? 44 : 28, height: isFocusedWorkspace ? 44 : 28)
+                        .background(Color.indigo.opacity(0.12), in: .rect(cornerRadius: 14))
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(entry.exerciseName)
-                            .font(.headline)
+                            .font(.system(isFocusedWorkspace ? .title2 : .headline, design: .rounded, weight: .bold))
 
                         if shouldShowActivitySubtitle {
                             Text(entry.activityTypeName)
@@ -170,12 +183,14 @@ struct CardioExerciseCard: View {
 
                     Spacer()
 
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if !isFocusedWorkspace {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
             .buttonStyle(.plain)
+            .disabled(isFocusedWorkspace)
 
             if onDeleteExercise != nil {
                 Menu {
@@ -275,7 +290,7 @@ struct CardioExerciseCard: View {
     private var notesRow: some View {
         VStack(alignment: .leading, spacing: 6) {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                     showNotesField.toggle()
                 }
             } label: {
@@ -436,6 +451,7 @@ struct CardioExerciseCard: View {
 }
 
 private struct ActivitySegmentRow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let index: Int
     let segment: LiveWorkoutEntry.ActivitySegment
     let fields: [Exercise.TrackingField]
@@ -499,7 +515,7 @@ private struct ActivitySegmentRow: View {
 
                 if fields.contains(.notes) {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                             showNotesField.toggle()
                         }
                     } label: {

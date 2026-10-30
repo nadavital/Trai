@@ -148,7 +148,7 @@ struct FoodCameraSuggestionRail: View {
     }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        TraiHorizontalScrollView() {
             GlassEffectContainer(spacing: 12) {
                 HStack(spacing: 12) {
                     ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in

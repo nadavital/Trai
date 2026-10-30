@@ -10,6 +10,8 @@ import SwiftUI
 // MARK: - Exercise Card
 
 struct ExerciseCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let entry: LiveWorkoutEntry
     let lastPerformance: ExerciseHistory?
     let personalRecord: ExerciseHistory?
@@ -23,7 +25,21 @@ struct ExerciseCard: View {
     var setRowScrollID: (UUID) -> String = { "liveWorkoutSet-\($0.uuidString)" }
     var onFocusedSetChange: (UUID?) -> Void = { _ in }
 
-    @State private var isExpanded = true
+    var isFocusedWorkspace: Bool = false
+    var expansion: Binding<Bool>? = nil
+    @State private var locallyExpanded = true
+
+    private var isExpanded: Bool {
+        isFocusedWorkspace || (expansion?.wrappedValue ?? locallyExpanded)
+    }
+
+    private func toggleExpansion() {
+        if let expansion {
+            expansion.wrappedValue.toggle()
+        } else {
+            locallyExpanded.toggle()
+        }
+    }
     @State private var showDeleteConfirmation = false
 
     private var weightUnit: String {
@@ -32,7 +48,8 @@ struct ExerciseCard: View {
 
     private var lastTimeDisplay: String? {
         guard let last = lastPerformance,
-              last.bestSetWeightKg > 0 else { return nil }
+            last.bestSetWeightKg > 0
+        else { return nil }
 
         let reps = last.bestSetReps
         let unit = WeightUnit(usesMetric: usesMetricWeight)
@@ -43,7 +60,8 @@ struct ExerciseCard: View {
 
     private var prDisplay: String? {
         guard let pr = personalRecord,
-              pr.bestSetWeightKg > 0 else { return nil }
+            pr.bestSetWeightKg > 0
+        else { return nil }
 
         let unit = WeightUnit(usesMetric: usesMetricWeight)
         let weight = WeightUtility.displayInt(pr.bestSetWeightKg, displayUnit: unit)
@@ -92,46 +110,65 @@ struct ExerciseCard: View {
             .foregroundStyle(.tertiary)
     }
 
+    private func exerciseHeading(setsCount: Int) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "dumbbell.fill")
+                .font(isFocusedWorkspace ? .title3 : .subheadline)
+                .foregroundStyle(isFocusedWorkspace ? Color.indigo : Color.accentColor)
+                .frame(width: isFocusedWorkspace ? 44 : 28, height: isFocusedWorkspace ? 44 : 28)
+                .background(
+                    (isFocusedWorkspace ? Color.indigo : Color.accentColor).opacity(0.12),
+                    in: .rect(cornerRadius: isFocusedWorkspace ? 14 : 8)
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(entry.exerciseName)
+                    .font(
+                        isFocusedWorkspace
+                            ? .system(.title2, design: .rounded, weight: .bold)
+                            : .headline
+                    )
+                    .fixedSize(horizontal: false, vertical: true)
+                if let equipment = entry.equipmentName, !equipment.isEmpty {
+                    Text(equipment)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if isFocusedWorkspace {
+                    Text("\(setsCount) \(setsCount == 1 ? "set" : "sets")")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    headerMetadata(setsCount: setsCount)
+                }
+            }
+            Spacer(minLength: 0)
+            if !isFocusedWorkspace {
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     var body: some View {
         let sets = entry.sets
 
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isExpanded.toggle()
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: "dumbbell.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.accent)
-                            .frame(width: 28, height: 28)
-                            .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(entry.exerciseName)
-                                .font(.headline)
-
-                            // Equipment name if available
-                            if let equipment = entry.equipmentName, !equipment.isEmpty {
-                                Text("@ \(equipment)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            headerMetadata(setsCount: sets.count)
+                if isFocusedWorkspace {
+                    exerciseHeading(setsCount: sets.count)
+                } else {
+                    Button {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                            toggleExpansion()
                         }
-
-                        Spacer()
-
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    } label: {
+                        exerciseHeading(setsCount: sets.count)
                     }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
                 // Exercise options menu
                 if onDeleteExercise != nil || onChangeExercise != nil {
@@ -155,26 +192,51 @@ struct ExerciseCard: View {
                         Image(systemName: "ellipsis")
                             .font(.body)
                             .foregroundStyle(.secondary)
-                            .padding(8)
+                            .frame(width: 44, height: 44)
                     }
+                    .accessibilityLabel("Exercise options")
                 }
+            }
+
+            if isFocusedWorkspace {
+                Button(action: onAddSet) {
+                    Label("Add Set", systemImage: "plus")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.traiPrimary(color: .indigo, fullWidth: true))
+                .accessibilityIdentifier("liveWorkoutAddSetButton")
             }
 
             // Sets list
             if isExpanded {
-                VStack(spacing: 8) {
-                    // Header row
-                    HStack {
-                        Text("SET")
-                            .frame(width: ExerciseSetLayout.setColumnWidth, alignment: .leading)
-                        Text("WEIGHT")
-                            .frame(width: ExerciseSetLayout.weightColumnWidth)
-                        Text("REPS")
-                            .frame(width: ExerciseSetLayout.repsColumnWidth)
-                        Spacer()
+                VStack(spacing: isFocusedWorkspace ? 12 : 8) {
+                    // Each field carries its own label in the accessible layout.
+                    if !dynamicTypeSize.isAccessibilitySize && !isFocusedWorkspace {
+                        HStack {
+                            Text("SET")
+                                .frame(width: ExerciseSetLayout.setColumnWidth, alignment: .leading)
+                            Text("WEIGHT")
+                                .frame(width: ExerciseSetLayout.weightColumnWidth)
+                            Text("REPS")
+                                .frame(width: ExerciseSetLayout.repsColumnWidth)
+                            Spacer()
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                     }
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+
+                    if isFocusedWorkspace && !dynamicTypeSize.isAccessibilitySize {
+                        HStack(spacing: 8) {
+                            Text("SET").frame(width: ExerciseSetLayout.setColumnWidth, alignment: .leading)
+                            Text("WEIGHT").frame(width: ExerciseSetLayout.weightColumnWidth)
+                            Spacer(minLength: 0)
+                            Text("REPS").frame(width: ExerciseSetLayout.repsFieldWidth)
+                            Color.clear.frame(width: 44, height: 1)
+                        }
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    }
 
                     // Set rows
                     ForEach(Array(sets.enumerated()), id: \.element.id) { index, set in
@@ -183,38 +245,68 @@ struct ExerciseCard: View {
                             set: set,
                             usesMetricWeight: usesMetricWeight,
                             previousSetWeight: index > 0 ? sets[index - 1].weightKg : nil,
-                            onUpdateReps: { reps in onUpdateSet(index, reps, nil, nil, nil, set.preferredWeightUnit) },
-                            onUpdateWeight: { kg, lbs in onUpdateSet(index, nil, kg, lbs, nil, set.preferredWeightUnit) },
-                            onUpdateNotes: { notes in onUpdateSet(index, nil, nil, nil, notes, set.preferredWeightUnit) },
+                            onUpdateReps: { reps in
+                                onUpdateSet(index, reps, nil, nil, nil, set.preferredWeightUnit)
+                            },
+                            onUpdateWeight: { kg, lbs in
+                                onUpdateSet(index, nil, kg, lbs, nil, set.preferredWeightUnit)
+                            },
+                            onUpdateNotes: { notes in
+                                onUpdateSet(index, nil, nil, nil, notes, set.preferredWeightUnit)
+                            },
                             onUpdateWeightUnit: { preferredUnit in
                                 onUpdateSet(index, nil, nil, nil, nil, preferredUnit)
                             },
                             onToggleWarmup: { onToggleWarmup(index) },
                             onDelete: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
+                                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                                     onRemoveSet(index)
                                 }
                             },
                             onFocusChange: { isFocused in
                                 onFocusedSetChange(isFocused ? set.id : nil)
-                            }
+                            },
+                            isFocusedWorkspace: isFocusedWorkspace
                         )
                         .id(setRowScrollID(set.id))
                     }
 
-                    // Add set button
-                    Button(action: onAddSet) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "plus.circle.fill")
-                            Text("Add Set")
+                    // Keep the compact card's original action placement.
+                    if !isFocusedWorkspace {
+                        Button(action: onAddSet) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "plus.circle.fill")
+                                Text("Add Set")
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
                         }
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
+                        .buttonStyle(.traiTertiary(color: .accentColor, fullWidth: true))
+                        .accessibilityIdentifier("liveWorkoutAddSetButton")
+                        .padding(.top, 4)
                     }
-                    .buttonStyle(.traiTertiary(color: .accentColor, fullWidth: true))
-                    .accessibilityIdentifier("liveWorkoutAddSetButton")
-                    .padding(.top, 4)
                 }
+            }
+
+            if isFocusedWorkspace, lastTimeDisplay != nil || prDisplay != nil {
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let lastTimeDisplay {
+                            Text(lastTimeDisplay)
+                        }
+                        if let prDisplay {
+                            Label("Personal best · \(prDisplay)", systemImage: "trophy")
+                        }
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
+                } label: {
+                    Text("Previous performance")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .tint(.indigo)
             }
         }
         .traiCard()
@@ -246,6 +338,8 @@ private enum ExerciseSetLayout {
 // MARK: - Set Row
 
 struct SetRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let setNumber: Int
     let set: LiveWorkoutEntry.SetData
     let usesMetricWeight: Bool
@@ -257,6 +351,7 @@ struct SetRow: View {
     let onToggleWarmup: () -> Void
     let onDelete: () -> Void
     let onFocusChange: (Bool) -> Void
+    var isFocusedWorkspace: Bool = false
 
     @State private var weightText: String = ""
     @State private var repsText: String = ""
@@ -279,7 +374,7 @@ struct SetRow: View {
 
     // Debounce delay in seconds
     private let debounceDelay: Duration = .milliseconds(500)
-    
+
     // Weight jump detection thresholds
     private let percentageThreshold: Double = 0.5  // 50% increase
     private let absoluteThresholdKg: Double = 25.0  // 25kg / ~55lbs absolute jump
@@ -291,9 +386,7 @@ struct SetRow: View {
     }
 
     private var effectiveDisplayUnit: WeightUnit {
-        get {
-            set.preferredWeightUnit ?? defaultDisplayUnit
-        }
+        return set.preferredWeightUnit ?? defaultDisplayUnit
     }
 
     private var hasFieldFocus: Bool {
@@ -301,31 +394,47 @@ struct SetRow: View {
     }
 
     var body: some View {
+        let accessible = dynamicTypeSize.isAccessibilitySize
+        let layout =
+            accessible
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 8))
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
+            layout {
                 // Set number / warmup indicator
                 Button(action: onToggleWarmup) {
-                    Text(set.isWarmup ? "W" : "\(setNumber)")
-                        .font(.subheadline)
-                        .bold()
-                        .frame(width: 32, height: 32)
-                        .background(set.isWarmup ? Color.accentColor.opacity(0.2) : Color(.tertiarySystemFill))
-                        .foregroundStyle(set.isWarmup ? Color.accentColor : .primary)
-                        .clipShape(.circle)
+                    Text(
+                        accessible
+                            ? "Set \(setNumber)\(set.isWarmup ? " · Warmup" : "")"
+                            : (set.isWarmup ? "W" : "\(setNumber)")
+                    )
+                    .font(.subheadline)
+                    .bold()
+                    .padding(.horizontal, accessible ? 12 : 0)
+                    .frame(width: accessible ? nil : 36, height: accessible ? nil : 36)
+                    .frame(minHeight: 44)
+                    .background(set.isWarmup ? Color.accentColor.opacity(0.2) : Color(.tertiarySystemFill))
+                    .foregroundStyle(set.isWarmup ? Color.accentColor : .primary)
+                    .clipShape(.capsule)
                 }
                 .buttonStyle(.plain)
-                .frame(width: ExerciseSetLayout.setColumnWidth, alignment: .leading)
-                .accessibilityLabel(set.isWarmup ? "Mark set \(setNumber) as working set" : "Mark set \(setNumber) as warmup")
+                .frame(width: accessible ? nil : ExerciseSetLayout.setColumnWidth, alignment: .leading)
+                .accessibilityLabel(
+                    set.isWarmup ? "Mark set \(setNumber) as working set" : "Mark set \(setNumber) as warmup")
 
                 // Weight input
                 HStack(spacing: 8) {
+                    if accessible { Text("Weight").font(.caption).foregroundStyle(.secondary) }
                     TextField("0", text: $weightText)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.center)
-                        .frame(width: ExerciseSetLayout.weightFieldWidth)
-                        .padding(.vertical, 8)
+                        .frame(width: accessible ? nil : ExerciseSetLayout.weightFieldWidth)
+                        .accessibilityLabel("Set \(setNumber) weight")
+                        .accessibilityValue("\(weightText) \(currentDisplayUnit.symbol)")
+                        .font(.system(.body, design: .rounded, weight: .semibold))
+                        .frame(minHeight: 44)
                         .background(Color(.tertiarySystemFill))
-                        .clipShape(.rect(cornerRadius: 8))
+                        .clipShape(.rect(cornerRadius: 12))
                         .focused($isWeightFocused)
                         .onChange(of: weightText) { _, newValue in
                             guard !isUpdatingFromUnitChange else { return }
@@ -349,24 +458,27 @@ struct SetRow: View {
                         Text(currentDisplayUnit.symbol)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .frame(width: ExerciseSetLayout.weightUnitWidth)
+                            .frame(width: accessible ? nil : ExerciseSetLayout.weightUnitWidth)
+                            .frame(minWidth: accessible ? 44 : nil, minHeight: 44)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Switch weight unit")
                 }
-                .frame(width: ExerciseSetLayout.weightColumnWidth)
+                .frame(width: accessible ? nil : ExerciseSetLayout.weightColumnWidth)
 
-                Spacer()
+                Spacer().frame(height: accessible ? 0 : nil)
 
                 // Reps input
                 HStack(spacing: 8) {
                     TextField("0", text: $repsText)
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.center)
-                        .frame(width: ExerciseSetLayout.repsFieldWidth)
-                        .padding(.vertical, 8)
+                        .frame(width: accessible ? nil : ExerciseSetLayout.repsFieldWidth)
+                        .accessibilityLabel("Set \(setNumber) repetitions")
+                        .font(.system(.body, design: .rounded, weight: .semibold))
+                        .frame(minHeight: 44)
                         .background(Color(.tertiarySystemFill))
-                        .clipShape(.rect(cornerRadius: 8))
+                        .clipShape(.rect(cornerRadius: 12))
                         .focused($isRepsFocused)
                         .onChange(of: repsText) { _, newValue in
                             repsDebounceTask?.cancel()
@@ -383,39 +495,69 @@ struct SetRow: View {
                             }
                         }
 
-                    Text("reps")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: ExerciseSetLayout.repsLabelWidth, alignment: .leading)
+                    if !isFocusedWorkspace || accessible {
+                        Text("reps")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(
+                                width: accessible ? nil : ExerciseSetLayout.repsLabelWidth, alignment: .leading)
+                    }
                 }
-                .frame(width: ExerciseSetLayout.repsColumnWidth)
+                .frame(
+                    width: accessible
+                        ? nil
+                        : (isFocusedWorkspace
+                            ? ExerciseSetLayout.repsFieldWidth : ExerciseSetLayout.repsColumnWidth))
 
-                // Notes toggle button
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showNotesField.toggle()
-                        if showNotesField {
+                if isFocusedWorkspace {
+                    Menu {
+                        Button(set.notes.isEmpty ? "Add set notes" : "Edit set notes", systemImage: "note.text") {
+                            showNotesField = true
                             isNotesFocused = true
                         }
+                        Button(set.isWarmup ? "Mark as working set" : "Mark as warmup", systemImage: "flame") {
+                            onToggleWarmup()
+                        }
+                        Button("Delete set", systemImage: "trash", role: .destructive, action: onDelete)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(.rect)
                     }
-                } label: {
-                    Image(systemName: set.notes.isEmpty ? "note.text.badge.plus" : "note.text")
-                        .font(.body)
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(set.notes.isEmpty ? Color.secondary : Color.accentColor)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(set.notes.isEmpty ? "Add set notes" : "Edit set notes")
+                    .accessibilityLabel("Set \(setNumber) options")
+                } else {
+                    HStack(spacing: accessible ? 24 : 8) {
+                        // Notes toggle button
+                        Button {
+                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                showNotesField.toggle()
+                                if showNotesField {
+                                    isNotesFocused = true
+                                }
+                            }
+                        } label: {
+                            Image(systemName: set.notes.isEmpty ? "note.text.badge.plus" : "note.text")
+                                .font(.body)
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(set.notes.isEmpty ? Color.secondary : Color.accentColor)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(set.notes.isEmpty ? "Add set notes" : "Edit set notes")
+                        .frame(minWidth: accessible ? 44 : nil, minHeight: 44)
 
-                // Delete button
-                Button(action: onDelete) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.secondary)
+                        // Delete button
+                        Button(action: onDelete) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title3)
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Delete set \(setNumber)")
+                        .frame(minWidth: accessible ? 44 : nil, minHeight: 44)
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Delete set \(setNumber)")
             }
 
             // Inline notes text field (expands below)
@@ -426,7 +568,7 @@ struct SetRow: View {
                     .padding(8)
                     .background(Color(.tertiarySystemFill))
                     .clipShape(.rect(cornerRadius: 8))
-                    .padding(.leading, 40)
+                    .padding(.leading, accessible ? 0 : 40)
                     .focused($isNotesFocused)
                     .onChange(of: notesText) { _, newValue in
                         // Cancel any pending debounce
@@ -450,6 +592,10 @@ struct SetRow: View {
                     }
             }
         }
+        .padding(accessible ? 12 : 0)
+        .background(
+            accessible ? Color(.secondarySystemBackground) : .clear, in: .rect(cornerRadius: 16)
+        )
         .onAppear {
             currentDisplayUnit = effectiveDisplayUnit
             let displayWeight = displayWeightValue(for: effectiveDisplayUnit)
@@ -491,8 +637,13 @@ struct SetRow: View {
             }
         } message: {
             if let weight = pendingWeight {
-                let previousDisplay = previousSetWeight.map { WeightUtility.format($0, displayUnit: currentDisplayUnit, showUnit: true) } ?? WeightUtility.format(set.weightKg, displayUnit: currentDisplayUnit, showUnit: true)
-                Text("This is a significant increase from \(previousDisplay) to \(weight.formatted(unit: currentDisplayUnit, showUnit: true)). Is this correct?")
+                let previousDisplay =
+                    previousSetWeight.map {
+                        WeightUtility.format($0, displayUnit: currentDisplayUnit, showUnit: true)
+                    } ?? WeightUtility.format(set.weightKg, displayUnit: currentDisplayUnit, showUnit: true)
+                Text(
+                    "This is a significant increase from \(previousDisplay) to \(weight.formatted(unit: currentDisplayUnit, showUnit: true)). Is this correct?"
+                )
             }
         }
         .confirmationDialog(
@@ -519,8 +670,9 @@ struct SetRow: View {
 
     /// Commit weight value to parent (called after debounce or on focus loss)
     private func commitWeight(_ value: String) {
-        guard let cleanWeight = WeightUtility.parseToCleanWeight(value, inputUnit: currentDisplayUnit) else { return }
-        
+        guard let cleanWeight = WeightUtility.parseToCleanWeight(value, inputUnit: currentDisplayUnit)
+        else { return }
+
         // Check for large weight jump
         if isLargeWeightJump(newWeightKg: cleanWeight.kg) {
             pendingWeight = cleanWeight
@@ -529,7 +681,7 @@ struct SetRow: View {
             onUpdateWeight(cleanWeight.kg, cleanWeight.lbs)
         }
     }
-    
+
     /// Check if the new weight represents a suspiciously large jump
     private func isLargeWeightJump(newWeightKg: Double) -> Bool {
         // Get the reference weight (previous set or current set's original value)
@@ -542,16 +694,16 @@ struct SetRow: View {
             // No reference weight, can't detect a jump
             return false
         }
-        
+
         // Skip if new weight is lower (decreasing weight is normal)
         guard newWeightKg > referenceWeightKg else { return false }
-        
+
         // Skip small weights (under 10kg) - relative jumps don't matter as much
         guard referenceWeightKg >= 10 else { return false }
-        
+
         let absoluteJump = newWeightKg - referenceWeightKg
         let percentageJump = absoluteJump / referenceWeightKg
-        
+
         // Flag if jump exceeds both thresholds (must be significant in both relative and absolute terms)
         return percentageJump >= percentageThreshold && absoluteJump >= absoluteThresholdKg
     }
@@ -602,9 +754,15 @@ struct SetRow: View {
     ExerciseCard(
         entry: {
             let entry = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)
-            entry.addSet(LiveWorkoutEntry.SetData(reps: 10, weight: CleanWeight(kg: 60, lbs: 132.5), completed: false, isWarmup: true))
-            entry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: CleanWeight(kg: 70, lbs: 155), completed: false, isWarmup: false))
-            entry.addSet(LiveWorkoutEntry.SetData(reps: 6, weight: CleanWeight(kg: 80, lbs: 177.5), completed: false, isWarmup: false))
+            entry.addSet(
+                LiveWorkoutEntry.SetData(
+                    reps: 10, weight: CleanWeight(kg: 60, lbs: 132.5), completed: false, isWarmup: true))
+            entry.addSet(
+                LiveWorkoutEntry.SetData(
+                    reps: 8, weight: CleanWeight(kg: 70, lbs: 155), completed: false, isWarmup: false))
+            entry.addSet(
+                LiveWorkoutEntry.SetData(
+                    reps: 6, weight: CleanWeight(kg: 80, lbs: 177.5), completed: false, isWarmup: false))
             return entry
         }(),
         lastPerformance: nil,

@@ -78,9 +78,9 @@ struct TraiPrimaryButtonStyle: ButtonStyle {
             .background(color)
             .clipShape(.capsule)
             .shadow(
-                color: color.opacity(configuration.isPressed ? 0.10 : 0.25),
-                radius: configuration.isPressed ? 2 : 8,
-                y: configuration.isPressed ? 1 : 4
+                color: color.opacity(configuration.isPressed ? 0.04 : 0.10),
+                radius: configuration.isPressed ? 1 : 4,
+                y: configuration.isPressed ? 1 : 2
             )
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .opacity(isEnabled ? 1 : 0.55)

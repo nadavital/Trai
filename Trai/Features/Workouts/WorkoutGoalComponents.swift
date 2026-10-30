@@ -1609,7 +1609,7 @@ struct WorkoutGoalProgressCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
+                TraiHorizontalScrollView() {
                     HStack(spacing: 10) {
                         ForEach(activeInsights.prefix(5)) { insight in
                             compactGoalCard(insight)
@@ -1619,7 +1619,7 @@ struct WorkoutGoalProgressCard: View {
                     .scrollTargetLayout()
                 }
                 .scrollTargetBehavior(.viewAligned)
-                .contentMargins(.horizontal, 1, for: .scrollContent)
+                .contentMargins(.leading, 1, for: .scrollContent)
             }
         }
         .padding(16)
@@ -1732,15 +1732,7 @@ struct WorkoutTraiReviewCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .glassEffect(
-                .regular.tint(Color.accentColor.opacity(0.20)).interactive(),
-                in: .capsule
-            )
-            .overlay {
-                Capsule()
-                    .strokeBorder(.white.opacity(0.18), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.03), radius: 5, y: 3)
+            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
         }
         .buttonStyle(TraiPressStyle(scale: 0.96))
     }
@@ -1766,7 +1758,7 @@ struct WorkoutGoalsOverviewSection: View {
     private var overviewContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             TraiSectionHeader("Goals", icon: "scope") {
-                if canCreateGoalsWithTrai {
+                if canCreateGoalsWithTrai && (!insights.isEmpty || completedGoalCount > 0) {
                     Button("Set Goals", action: onCreateGoalWithTrai)
                         .buttonStyle(.traiTertiary(size: .compact, height: 32))
                 }
@@ -1861,7 +1853,7 @@ struct WorkoutGoalsOverviewSection: View {
     }
 
     private var goalsCarousel: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        TraiHorizontalScrollView() {
             HStack(spacing: 10) {
                 if completedGoalCount > 0, celebratedGoal != nil {
                     completedGoalsCard(isHighlighted: true)
@@ -1881,7 +1873,7 @@ struct WorkoutGoalsOverviewSection: View {
             .scrollTargetLayout()
         }
         .scrollTargetBehavior(.viewAligned)
-        .contentMargins(.horizontal, 1, for: .scrollContent)
+        .contentMargins(.leading, 1, for: .scrollContent)
     }
 
     private func featuredGoalCard(_ insight: WorkoutGoalInsight) -> some View {
@@ -2048,7 +2040,7 @@ struct CompletedWorkoutGoalsSheet: View {
                     }
                 }
                 .padding()
-            }
+            }.traiHorizontalOverflowViewport()
             .navigationTitle("Completed Goals")
             .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
@@ -2423,7 +2415,7 @@ private struct RecurringGoalHistorySheet: View {
                     historyGridCard
                 }
                 .padding()
-            }
+            }.traiHorizontalOverflowViewport()
             .traiBackground()
             .navigationTitle("Goal History")
             .toolbarTitleDisplayMode(.inlineLarge)
@@ -2533,12 +2525,12 @@ private struct RecurringGoalHistorySheet: View {
                     availableWidth: availableWidth
                 )
 
-                ScrollView(.horizontal, showsIndicators: false) {
+                TraiHorizontalScrollView() {
                     grid
                         .frame(minWidth: availableWidth, alignment: .center)
                         .padding(.vertical, 2)
                 }
-                .contentMargins(.horizontal, 1, for: .scrollContent)
+                .contentMargins(.leading, 1, for: .scrollContent)
             }
             .frame(height: historyGridHeight)
 
@@ -2771,7 +2763,7 @@ struct WorkoutGoalDetailSheet: View {
                     goalActionsSection
                 }
                 .padding()
-            }
+            }.traiHorizontalOverflowViewport()
             .traiBackground()
             .navigationTitle("Goal Details")
             .toolbarTitleDisplayMode(.inlineLarge)
@@ -3071,7 +3063,7 @@ struct WorkoutGoalDetailSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
+                TraiHorizontalScrollView() {
                     HStack(spacing: 10) {
                         ForEach(Array(recentActivityItems.prefix(8))) { item in
                             if let workout = item.workout {
@@ -3092,7 +3084,7 @@ struct WorkoutGoalDetailSheet: View {
                     .scrollTargetLayout()
                 }
                 .scrollTargetBehavior(.viewAligned)
-                .contentMargins(.horizontal, 1, for: .scrollContent)
+                .contentMargins(.leading, 1, for: .scrollContent)
             }
         }
         .traiCard()
@@ -3373,7 +3365,7 @@ struct AddWorkoutGoalSheet: View {
                             .padding(12)
                             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
 
-                        ScrollView(.horizontal, showsIndicators: false) {
+                        TraiHorizontalScrollView() {
                             HStack(spacing: 8) {
                                 ForEach(WorkoutGoal.GoalKind.allCases) { kind in
                                     Button {
@@ -3534,7 +3526,7 @@ struct AddWorkoutGoalSheet: View {
                     .traiCard()
                 }
                 .padding()
-            }
+            }.traiHorizontalOverflowViewport()
             .navigationTitle(editingGoal == nil ? "New Goal" : "Edit Goal")
             .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {

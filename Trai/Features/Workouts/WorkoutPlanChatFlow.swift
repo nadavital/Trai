@@ -436,7 +436,7 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private var refinementSuggestionView: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        TraiHorizontalScrollView() {
             HStack(spacing: 8) {
                 ForEach(refinementSuggestions) { suggestion in
                     TraiSelectableChip(

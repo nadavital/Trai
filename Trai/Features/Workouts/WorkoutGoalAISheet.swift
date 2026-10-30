@@ -335,7 +335,7 @@ struct WorkoutGoalAISheet: View {
     }
 
     private var promptSuggestionChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        TraiHorizontalScrollView() {
             HStack(spacing: 8) {
                 ForEach(goalPromptSuggestions) { suggestion in
                     TraiSelectableChip(text: suggestion.title, isSelected: false) {

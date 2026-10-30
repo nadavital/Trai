@@ -172,7 +172,7 @@ struct MuscleRecoveryDetailSheet: View {
         NavigationStack {
             List {
                 ForEach(MuscleRecoveryService.RecoveryStatus.allCases, id: \.rawValue) { status in
-                    let muscles = recoveryInfo.filter { $0.status == status }
+                    let muscles = recoveryInfo.filter { $0.lastTrainedAt != nil && $0.status == status }
                     if !muscles.isEmpty {
                         Section {
                             ForEach(muscles) { muscle in
@@ -184,6 +184,14 @@ struct MuscleRecoveryDetailSheet: View {
                                 Text(status.displayName)
                             }
                             .foregroundStyle(colorForStatus(status))
+                        }
+                    }
+                }
+                let unknown = recoveryInfo.filter { $0.lastTrainedAt == nil }
+                if !unknown.isEmpty {
+                    Section("No recorded history") {
+                        ForEach(unknown) { muscle in
+                            MuscleRecoveryRow(info: muscle)
                         }
                     }
                 }
@@ -216,7 +224,8 @@ struct MuscleRecoveryRow: View {
     let info: MuscleRecoveryService.MuscleRecoveryInfo
 
     private var statusColor: Color {
-        switch info.status {
+        guard info.lastTrainedAt != nil else { return .secondary }
+        return switch info.status {
         case .ready: .green
         case .recovering: .orange
         case .tired: .red
@@ -234,14 +243,14 @@ struct MuscleRecoveryRow: View {
                 Text(info.muscleGroup.displayName)
                     .font(.body)
 
-                Text(info.formattedLastTrained)
+                Text(info.lastTrainedAt == nil ? "No recorded history" : info.formattedLastTrained)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            Text(info.status.displayName)
+            Text(info.lastTrainedAt == nil ? "Unknown" : info.status.displayName)
                 .font(.caption)
                 .foregroundStyle(statusColor)
                 .padding(.horizontal, 8)

@@ -15,6 +15,7 @@ struct WorkoutsView: View {
         case planSetup
         case standardPlanSetup
         case workoutPlanEdit
+        case workoutPlanManagement
         case muscleRecoveryDetail
         case workoutDetail(WorkoutSession)
         case liveWorkoutDetail(LiveWorkout)
@@ -32,6 +33,8 @@ struct WorkoutsView: View {
                 return Self.standardPlanSetupID
             case .workoutPlanEdit:
                 return "workoutPlanEdit"
+            case .workoutPlanManagement:
+                return "workoutPlanManagement"
             case .muscleRecoveryDetail:
                 return "muscleRecoveryDetail"
             case .workoutDetail(let workout):
@@ -378,6 +381,9 @@ struct WorkoutsView: View {
             .traiSheetBranding()
         case .workoutPlanEdit:
             workoutPlanEditSheet
+        case .workoutPlanManagement:
+            ProfileView(mode: .workoutPlan)
+                .traiSheetBranding()
         case .muscleRecoveryDetail:
             MuscleRecoveryDetailSheet(recoveryInfo: recoveryInfo)
                 .traiSheetBranding()
@@ -456,73 +462,264 @@ struct WorkoutsView: View {
         }
     }
 
+    private enum WorkoutSection: String, CaseIterable, Identifiable {
+        case train = "Train", plan = "Plan", recovery = "Recovery", progress = "Progress", exercises = "Exercises", history = "History"
+        var id: String { rawValue }
+        var icon: String {
+            switch self {
+            case .train: "figure.strengthtraining.traditional"
+            case .plan: "calendar"
+            case .recovery: "figure.stand"
+            case .exercises: "dumbbell"
+            case .progress: "trophy"
+            case .history: "clock.arrow.circlepath"
+            }
+        }
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var selectedSection: WorkoutSection = .train
+    @ScaledMetric(relativeTo: .caption) private var sectionNavigationHeight: CGFloat = 76
+    @Environment(\.dynamicTypeSize) private var workoutTypeSize
+
+    private func sectionValue(_ section: WorkoutSection) -> String {
+        switch section {
+        case .train: activeWorkout != nil ? "In progress" : "Up next"
+        case .plan: workoutPlan.map { "\($0.daysPerWeek) days / week" } ?? "Make it yours"
+        case .recovery: "Muscle history"
+        case .exercises: "Your library"
+        case .progress: "Records & goals"
+        case .history: "Your sessions"
+        }
+    }
+
+    @ViewBuilder private func sectionArtwork(_ section: WorkoutSection) -> some View {
+        switch section {
+        case .train:
+            if let template = workoutPlan?.templates.first(where: { $0.id == recommendedTemplateId }) ?? workoutPlan?.templates.first {
+                WorkoutTemplateArtwork(template: template, role: .row)
+            } else { WorkoutRenderedActivityAsset(key: "Strength", role: .row) }
+        case .plan, .history: WorkoutRenderedActivityAsset(key: "Plan", role: .row)
+        case .recovery: RecoveryMapNavigationArtwork()
+        case .progress: Image("PrototypeBlenderRecordsSectionCard228").resizable().scaledToFit().accessibilityHidden(true)
+        case .exercises: Image("PrototypeBlenderExercisesSectionCard228").resizable().scaledToFit().accessibilityHidden(true)
+        }
+    }
+
+    private var sectionNavigation: some View {
+        ScrollViewReader { proxy in
+            HeaderChipScrollView(identifier: "workoutChipScroll") {
+                GlassEffectContainer(spacing: 8) {
+                    HStack(spacing: 8) {
+                        ForEach(WorkoutSection.allCases) { section in
+                            Button {
+                                selectedSection = section
+                            } label: {
+                                HStack(spacing: 10) {
+                                    sectionArtwork(section)
+                                        .frame(width: 34, height: 34)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(section.rawValue).font(.caption).foregroundStyle(.secondary)
+                                        Text(sectionValue(section)).font(.subheadline.weight(.semibold))
+                                    }
+                                }
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 14).padding(.vertical, 12)
+                                .glassEffect(.regular.tint(selectedSection == section ? Color.red.opacity(0.12) : .clear).interactive(), in: .rect(cornerRadius: 20))
+                            }
+                            .buttonStyle(.plain).foregroundStyle(.primary)
+                            .id(section)
+                            .accessibilityLabel(section.rawValue)
+                            .accessibilityValue(sectionValue(section))
+                            .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
+                            .accessibilityIdentifier("workoutSection-\(section.rawValue)")
+                        }
+                    }.padding(.horizontal, 16).padding(.vertical, 8)
+                }
+            }
+            .scrollIndicators(.hidden)
+            .onChange(of: selectedSection) { _, section in
+                withAnimation(reduceMotion ? nil : .smooth) { proxy.scrollTo(section, anchor: .center) }
+            }
+        }
+        .frame(height: workoutTypeSize.isAccessibilitySize ? nil : sectionNavigationHeight)
+        .fixedSize(horizontal: false, vertical: workoutTypeSize.isAccessibilitySize)
+    }
+
+    @ViewBuilder private var planTools: some View {
+        if workoutPlan != nil {
+            Button("Manage plan", systemImage: "slider.horizontal.3") {
+                activeSheet = .workoutPlanManagement
+            }
+            .buttonStyle(.traiTertiary(color: .primary))
+            .accessibilityHint("Review, adjust, or view the history of your workout plan")
+            .accessibilityIdentifier("workoutManagePlan")
+        }
+        Button("Exercises", systemImage: "dumbbell") { activeSheet = .customExercises }
+            .buttonStyle(.traiTertiary(color: .primary))
+            .accessibilityLabel("Custom exercises")
+    }
+
+    private var trainingOverview: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 16) {
+                if let activeWorkout {
+                    Text("In progress").font(.subheadline).foregroundStyle(.secondary)
+                    Text(activeWorkout.name).font(.system(.title2, design: .rounded, weight: .bold))
+                    Button("Resume workout", systemImage: "play.fill") {
+                        presentLiveWorkout(workout: activeWorkout)
+                    }.buttonStyle(.traiPrimary())
+                } else {
+                    StartWorkoutSection(templates: workoutPlan?.templates ?? [], recoveryScores: templateScores,
+                        recommendedTemplateId: recommendedTemplateId,
+                        onStartTemplate: startWorkoutFromTemplate,
+                        onStartCustomWorkout: { startCustomWorkout(type: .custom) },
+                        onCreatePlan: workoutPlan == nil ? { presentStandardWorkoutPlanSetup() } : nil)
+                        .frame(maxWidth: 900, alignment: .leading)
+                }
+                if let workoutPlan {
+                    WorkoutAlternativeSessions(templates: workoutPlan.templates, featuredID: recommendedTemplateId,
+                        onSelect: startWorkoutFromTemplate, onCustom: { startCustomWorkout(type: .custom) },
+                        onChooseAnother: { selectedSection = .plan })
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 28) {
+                TrainingRecoveryOverview(recoveryInfo: recoveryInfo) { activeSheet = .muscleRecoveryDetail }
+                recentTrainingEvidence
+            }.frame(maxWidth: 640, alignment: .leading)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private var recentTrainingEvidence: some View {
+                if let recent = completedLiveWorkouts.max(by: { ($0.completedAt ?? .distantPast) < ($1.completedAt ?? .distantPast) }),
+                   let date = recent.completedAt {
+                    recentTrainingProgress(name: recent.name, date: date, completed: true, minutes: Int(recent.duration / 60))
+                } else if let recent = allWorkouts.max(by: { $0.loggedAt < $1.loggedAt }) {
+                    recentTrainingProgress(name: recent.exerciseName ?? recent.exercise?.name ?? "Workout", date: recent.loggedAt, completed: false, minutes: recent.durationMinutes.map { Int($0) })
+                }
+    }
+
+    private func recentTrainingProgress(name: String, date: Date, completed: Bool, minutes: Int?) -> some View {
+        Button { selectedSection = .history } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(completed ? "Last completed" : "Last recorded", systemImage: "checkmark.circle")
+                    .font(.subheadline).foregroundStyle(.red)
+                if let minutes, minutes > 0 {
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Text(minutes, format: .number).font(.system(.title, design: .rounded, weight: .semibold)).monospacedDigit()
+                        Text("min logged").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Text(name).font(.system(.headline, design: .rounded, weight: .semibold))
+                Text(date, style: .date).font(.caption).foregroundStyle(.secondary)
+                Label("View history", systemImage: "arrow.right").font(.caption.weight(.semibold))
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }.buttonStyle(.plain).accessibilityIdentifier("workoutRecentProgress")
+    }
+
     // MARK: - Body
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    if !canAccessAIFeatures {
-                        WorkoutProCompactBanner {
-                            proUpsellCoordinator?.present(source: .workoutPlan)
+            GeometryReader { pageGeometry in
+            VStack(alignment: .leading, spacing: 0) {
+                TabView(selection: $selectedSection) {
+                    ForEach(WorkoutSection.allCases) { section in
+                        if section == .exercises {
+                            CustomExercisesView(embeddedInWorkouts: true)
+                                .padding(.leading, pageGeometry.safeAreaInsets.leading)
+                                .padding(.trailing, pageGeometry.safeAreaInsets.trailing)
+                                .tag(section)
+                        } else {
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 24) {
+                                if section == .train { trainingOverview }
+                                if section == .plan {
+                                    if let workoutPlan {
+                                        WorkoutPlanSessionsSection(plan: workoutPlan,
+                                            onStartTemplate: startWorkoutFromTemplate,
+                                            onStartCustomWorkout: { startCustomWorkout(type: .custom) },
+                                            onEditPlan: { workoutPlanEditAction?() })
+                                    } else {
+                                        StartWorkoutSection(templates: [], recoveryScores: [:], recommendedTemplateId: nil,
+                                            onStartTemplate: startWorkoutFromTemplate,
+                                            onStartCustomWorkout: { startCustomWorkout(type: .custom) },
+                                            onCreatePlan: { presentStandardWorkoutPlanSetup() })
+                                    }
+                                    ViewThatFits(in: .horizontal) {
+                                        HStack(spacing: 12) { planTools }
+                                        VStack(alignment: .leading, spacing: 12) { planTools }
+                                    }.frame(maxWidth: .infinity)
+                                }
+                                if section == .recovery {
+                                    TrainingRecoveryOverview(recoveryInfo: recoveryInfo) { activeSheet = .muscleRecoveryDetail }
+                                }
+                                if section == .progress {
+                                    WorkoutProgressOverview(
+                                        histories: allExerciseHistory,
+                                        usesMetricWeight: usesMetricExerciseWeight,
+                                        volumePRMode: userProfile?.volumePRModeValue ?? .perSet,
+                                        onRecords: { activeSheet = .personalRecords },
+                                        onRecovery: { activeSheet = .muscleRecoveryDetail }
+                                    )
+                                    WorkoutGoalsOverviewSection(
+                                        insights: visibleWorkoutGoalInsights,
+                                        celebratedGoal: canAccessAIFeatures ? celebratedWorkoutGoal : nil,
+                                        canCreateGoalsWithTrai: canAccessAIFeatures,
+                                        completedGoalCount: completedWorkoutGoals.count,
+                                        onCreateGoalWithTrai: startWorkoutGoalsWithTrai,
+                                        onCompletedGoalsTap: {
+                                            celebratedWorkoutGoal = nil
+                                            activeSheet = .completedWorkoutGoals
+                                        },
+                                        onUnlockPro: {
+                                            proUpsellCoordinator?.present(source: .workoutPlan)
+                                        },
+                                        staleCheckInGoal: staleWorkoutGoalNeedingCheckIn,
+                                        onGoalTap: { activeSheet = .workoutGoalDetail($0) }
+                                    )
+
+                                }
+                                if section == .history {
+                                    WorkoutHistorySection(
+                                        workoutsByDate: workoutsByDate,
+                                        liveWorkoutsByDate: liveWorkoutsByDate,
+                                        activeGoals: activeWorkoutGoals,
+                                        onWorkoutTap: { activeSheet = .workoutDetail($0) },
+                                        onLiveWorkoutTap: openLiveWorkout,
+                                        onDelete: deleteWorkout,
+                                        onDeleteLiveWorkout: deleteLiveWorkout
+                                    )
+                                }
+                            }
+                            .padding(16)
+                            .padding(.leading, pageGeometry.safeAreaInsets.leading)
+                            .padding(.trailing, pageGeometry.safeAreaInsets.trailing)
+                            .padding(.top, section == .train ? 8 : 24)
+                            .padding(.bottom, 24)
+                        }.traiHorizontalOverflowViewport()
+                        .refreshable {
+                            await syncHealthKit()
+                            markHistoryRefreshNeeded(delayMilliseconds: 80)
+                            markRecoveryRefreshNeeded(forceRefresh: true, delayMilliseconds: 120)
+                        }
+                        .tag(section)
                         }
                     }
-
-                    WorkoutsQuickActionsRow(
-                        onPersonalRecords: { activeSheet = .personalRecords },
-                        onCustomExercises: { activeSheet = .customExercises },
-                        onRecovery: { activeSheet = .muscleRecoveryDetail }
-                    )
-
-                    StartWorkoutSection(
-                        templates: workoutPlan?.templates ?? [],
-                        recoveryScores: templateScores,
-                        recommendedTemplateId: recommendedTemplateId,
-                        onStartTemplate: startWorkoutFromTemplate,
-                        onStartCustomWorkout: { startCustomWorkout(type: .custom) },
-                        onCreatePlan: workoutPlan == nil ? { presentStandardWorkoutPlanSetup() } : nil,
-                        onEditPlan: workoutPlanEditAction
-                    )
-
-                    WorkoutGoalsOverviewSection(
-                        insights: visibleWorkoutGoalInsights,
-                        celebratedGoal: canAccessAIFeatures ? celebratedWorkoutGoal : nil,
-                        canCreateGoalsWithTrai: canAccessAIFeatures,
-                        completedGoalCount: completedWorkoutGoals.count,
-                        onCreateGoalWithTrai: startWorkoutGoalsWithTrai,
-                        onCompletedGoalsTap: {
-                            celebratedWorkoutGoal = nil
-                            activeSheet = .completedWorkoutGoals
-                        },
-                        onUnlockPro: {
-                            proUpsellCoordinator?.present(source: .workoutPlan)
-                        },
-                        staleCheckInGoal: staleWorkoutGoalNeedingCheckIn,
-                        onGoalTap: { activeSheet = .workoutGoalDetail($0) }
-                    )
-
-                    WorkoutHistorySection(
-                        workoutsByDate: workoutsByDate,
-                        liveWorkoutsByDate: liveWorkoutsByDate,
-                        activeGoals: activeWorkoutGoals,
-                        onWorkoutTap: { activeSheet = .workoutDetail($0) },
-                        onLiveWorkoutTap: openLiveWorkout,
-                        onDelete: deleteWorkout,
-                        onDeleteLiveWorkout: deleteLiveWorkout
-                    )
                 }
-                .padding()
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .safeAreaBar(edge: .top, spacing: 0) {
+                    sectionNavigation
+                        .padding(.leading, pageGeometry.safeAreaInsets.leading)
+                        .padding(.trailing, pageGeometry.safeAreaInsets.trailing)
+                }
+                .ignoresSafeArea(.container, edges: .bottom)
+                .zIndex(0)
             }
-            .navigationTitle("Workouts")
-            .toolbarTitleDisplayMode(.inlineLarge)
-            .refreshable {
-                await syncHealthKit()
-                markHistoryRefreshNeeded(delayMilliseconds: 80)
-                markRecoveryRefreshNeeded(
-                    forceRefresh: true,
-                    delayMilliseconds: 120
-                )
+            .ignoresSafeArea(.container, edges: .horizontal)
             }
+            .background(alignment: .top) { DashboardTopGradient() }
+            .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 if tabActivationPolicy.activeSince == nil {
                     tabActivationPolicy = TabActivationPolicy(

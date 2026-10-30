@@ -101,7 +101,7 @@ struct OnboardingSectionHeader: View {
     var body: some View {
         VStack(spacing: 12) {
             Text(title)
-                .font(.system(size: 32, weight: .bold, design: .rounded))
+                .font(.system(.largeTitle, design: .rounded, weight: .bold))
                 .multilineTextAlignment(.center)
 
             Text(subtitle)
@@ -124,7 +124,7 @@ struct GlassCard<Content: View>: View {
     var body: some View {
         content
             .padding()
-            .background(.ultraThinMaterial)
+            .background(Color(.secondarySystemGroupedBackground))
             .clipShape(.rect(cornerRadius: 20))
             .shadow(color: .black.opacity(0.05), radius: 10, y: 5)
     }
@@ -140,21 +140,11 @@ private struct OnboardingTintedGlassModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .glassEffect(
-                isInteractive
-                    ? .regular.tint(tint.opacity(isSelected ? 0.62 : 0.28)).interactive()
-                    : .regular.tint(tint.opacity(isSelected ? 0.46 : 0.18)),
-                in: .rect(cornerRadius: cornerRadius)
-            )
+            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: cornerRadius))
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(.white.opacity(isSelected ? 0.42 : 0.18), lineWidth: isSelected ? 1.5 : 1)
+                    .strokeBorder(isSelected ? tint : Color.clear, lineWidth: 1.5)
             }
-            .shadow(
-                color: isSelected ? tint.opacity(0.14) : .black.opacity(0.03),
-                radius: isSelected ? 10 : 5,
-                y: isSelected ? 5 : 3
-            )
     }
 }
 
@@ -177,11 +167,7 @@ extension View {
 
     func onboardingTraiResponseCard(cornerRadius: CGFloat = 18) -> some View {
         padding(14)
-            .glassEffect(
-                .regular,
-                in: .rect(cornerRadius: cornerRadius)
-            )
-            .shadow(color: .black.opacity(0.05), radius: 10, y: 5)
+            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: cornerRadius))
     }
 }
 
@@ -228,7 +214,7 @@ struct OnboardingSecondaryButtonStyle: ButtonStyle {
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
-            .background(.ultraThinMaterial)
+            .background(Color(.secondarySystemGroupedBackground))
             .clipShape(.rect(cornerRadius: 16))
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(.spring(response: 0.3), value: configuration.isPressed)
@@ -345,7 +331,7 @@ struct OnboardingChoiceCard: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(tint)
-                        .background(.thinMaterial, in: Circle())
+                        .background(Color(.secondarySystemGroupedBackground), in: Circle())
                         .padding(10)
                 }
             }

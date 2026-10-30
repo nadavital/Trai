@@ -291,7 +291,7 @@ private struct AnimatedTraiDemo: View {
             }
         }
         .padding(16)
-        .glassEffect(.regular.tint(TraiColors.brandAccent.opacity(0.12)), in: .rect(cornerRadius: 24))
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 24))
     }
 }
 

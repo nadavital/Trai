@@ -94,6 +94,18 @@ final class AccountSessionService {
         sessionSnapshot?.accessToken
     }
 
+    /// Synthetic UI-test tokens must never be refreshed against a real account server.
+    /// Live-backend tests and every non-fixture session retain normal authentication.
+    var usesOfflineUITestSession: Bool {
+        #if DEBUG
+        return AppLaunchArguments.isUITesting
+            && !AppLaunchArguments.shouldUseLiveAIBackendForUITest
+            && sessionSnapshot?.accessToken == "ui-test-access-token"
+        #else
+        return false
+        #endif
+    }
+
     var isSessionNearExpiry: Bool {
         guard let expiresAt = sessionSnapshot?.expiresAt else { return false }
         return expiresAt.timeIntervalSinceNow < (15 * 60)
@@ -184,6 +196,7 @@ final class AccountSessionService {
     }
 
     func refreshAccountFromBackend() async {
+        guard !usesOfflineUITestSession else { return }
         guard let sessionSnapshot else { return }
         guard !isSyncingAccount else { return }
 
@@ -243,6 +256,7 @@ final class AccountSessionService {
     }
 
     func refreshSessionIfNeeded() async -> Bool {
+        guard !usesOfflineUITestSession else { return false }
         guard let refreshToken = sessionSnapshot?.refreshToken else {
             return false
         }
@@ -296,6 +310,7 @@ final class AccountSessionService {
         userID: String = "ui-test-user",
         displayName: String = "UI Test User"
     ) {
+        invalidatePendingSessionOperations()
         sessionSnapshot = BackendSessionSnapshot(
             userID: userID,
             identityProvider: .anonymous,

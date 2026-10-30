@@ -61,6 +61,9 @@ final class UserProfile {
     /// Preferred workout days per week
     var preferredWorkoutDays: Int = 3
 
+    /// Explicit session-count goal; separate from the workout plan’s training-day schedule.
+    var weeklyWorkoutSessionGoal: Int? = nil
+
     /// Experience level: "beginner", "intermediate", "advanced"
     var workoutExperienceLevel: String = "beginner"
 

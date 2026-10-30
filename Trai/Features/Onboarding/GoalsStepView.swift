@@ -10,7 +10,7 @@ struct GoalsStepView: View {
     @Binding var additionalNotes: String
 
     private var availableGoals: [UserProfile.GoalType] {
-        [.loseWeight, .loseFat, .buildMuscle, .recomposition, .maintenance, .performance]
+        [.loseWeight, .loseFat, .buildMuscle, .recomposition, .maintenance, .performance, .health]
     }
 
     @State private var headerVisible = false
@@ -30,6 +30,9 @@ struct GoalsStepView: View {
                     selectedGoalResponse
                         .opacity(goalsVisible ? 1 : 0)
                 }
+
+                goalContextField
+                    .opacity(goalsVisible ? 1 : 0)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 140)
@@ -50,10 +53,15 @@ struct GoalsStepView: View {
     }
 
     private var headerSection: some View {
-        OnboardingTraiHeader(
-            title: "Choose your goal.",
-            lensSize: 52
-        )
+        VStack(alignment: .leading, spacing: 6) {
+            OnboardingTraiHeader(
+                title: "What would you like to focus on?",
+                lensSize: 52
+            )
+            Text("This shapes your nutrition starting point. You can set up workouts separately later.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
         .opacity(headerVisible ? 1 : 0)
         .offset(y: headerVisible ? 0 : -20)
     }
@@ -91,6 +99,21 @@ struct GoalsStepView: View {
         }
         .onboardingTraiResponseCard()
         .animation(.smooth(duration: 0.3), value: selectedGoal)
+    }
+
+    private var goalContextField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Anything else you want Trai to know? (Optional)")
+                .font(.subheadline.weight(.semibold))
+            TextField("For example: I want help with meals, workouts, or tracking weight", text: $additionalNotes, axis: .vertical)
+                .lineLimit(2...4)
+                .textInputAutocapitalization(.sentences)
+                .accessibilityIdentifier("onboardingGoalNotes")
+            Text("Trai uses this to tailor your plan and coaching.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .onboardingTraiResponseCard()
     }
 
     private func responseText(for goal: UserProfile.GoalType) -> String {

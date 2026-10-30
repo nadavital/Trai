@@ -638,6 +638,7 @@ final class BillingService {
         signedTransactions: [String]? = nil,
         reason: String
     ) async {
+        guard !AccountSessionService.shared.usesOfflineUITestSession else { return }
         guard let session = AccountSessionService.shared.sessionSnapshot else {
             return
         }

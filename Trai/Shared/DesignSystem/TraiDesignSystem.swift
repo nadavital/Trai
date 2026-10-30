@@ -164,7 +164,7 @@ struct TraiCardBackground: ViewModifier {
             .background(
                 ZStack {
                     RoundedRectangle(cornerRadius: cornerRadius)
-                        .fill(.ultraThinMaterial)
+                        .fill(Color(.secondarySystemGroupedBackground))
 
                     if let glow {
                         TraiCardGlowBackground(glow: glow)

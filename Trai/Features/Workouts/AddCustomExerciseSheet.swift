@@ -70,7 +70,7 @@ struct AddCustomExerciseSheet: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
-            }
+            }.traiHorizontalOverflowViewport()
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("New Exercise")
             .toolbarTitleDisplayMode(.inlineLarge)
@@ -180,7 +180,7 @@ struct AddCustomExerciseSheet: View {
                 .tint(.accentColor)
             }
 
-            ScrollView(.horizontal) {
+            TraiHorizontalScrollView() {
                 HStack(spacing: 8) {
                     ForEach(activityGroupOptions, id: \.self) { group in
                         TargetButton(

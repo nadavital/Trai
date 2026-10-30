@@ -16,7 +16,6 @@ struct StartWorkoutSection: View {
     let onStartTemplate: (WorkoutPlan.WorkoutTemplate) -> Void
     let onStartCustomWorkout: () -> Void
     var onCreatePlan: (() -> Void)?
-    var onEditPlan: (() -> Void)?
 
     private var featuredTemplateId: UUID? {
         recommendedTemplateId ?? templates.first?.id
@@ -27,11 +26,6 @@ struct StartWorkoutSection: View {
         return templates.first(where: { $0.id == featuredTemplateId })
     }
 
-    private var supportingTemplates: [WorkoutPlan.WorkoutTemplate] {
-        guard let featuredTemplateId else { return templates }
-        return templates.filter { $0.id != featuredTemplateId }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let featuredTemplate {
@@ -40,13 +34,6 @@ struct StartWorkoutSection: View {
                     recoveryInsight: recoveryScores[featuredTemplate.id],
                     isRecommended: recommendedTemplateId == featuredTemplate.id,
                     onStart: { onStartTemplate(featuredTemplate) }
-                )
-                MoreSessionsCard(
-                    templates: Array(supportingTemplates.prefix(6)),
-                    recoveryScores: recoveryScores,
-                    onStartTemplate: onStartTemplate,
-                    onStartCustomWorkout: onStartCustomWorkout,
-                    onEditPlan: onEditPlan
                 )
             } else if let onCreatePlan {
                 StartWorkoutCreatePlanCard(
@@ -65,213 +52,238 @@ private struct FeaturedStartWorkoutCard: View {
     let recoveryInsight: (score: Double, reason: String)?
     let isRecommended: Bool
     let onStart: () -> Void
-
-    private var recoveryLabel: String? {
-        guard let score = recoveryInsight?.score else { return nil }
-        if score >= 0.9 { return "Ready" }
-        if score >= 0.5 { return "Recovering" }
-        return "Rest"
+    @Environment(\.dynamicTypeSize) private var typeSize
+    private var sessionSummary: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(isRecommended ? "Suggested session" : "Up next")
+                .font(.subheadline).foregroundStyle(.secondary)
+            Text(template.name).font(.system(.title2, design: .rounded, weight: .bold))
+                .fixedSize(horizontal: false, vertical: true)
+            Text(template.muscleGroupsDisplay).font(.subheadline).foregroundStyle(.secondary)
+            if template.estimatedDurationMinutes > 0 {
+                Text("About \(template.estimatedDurationMinutes) min")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            }
+        }
     }
 
-    private var recoveryColor: Color? {
-        guard let score = recoveryInsight?.score else { return nil }
-        if score >= 0.9 { return .green }
-        if score >= 0.5 { return .orange }
-        return .red
+    private var startAction: some View {
+        Button("Start workout", systemImage: "play.fill", action: onStart)
+            .buttonStyle(.traiPrimary()).fixedSize()
+            .accessibilityIdentifier("workoutHeroStart")
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [template.displayAccentColor, template.displayAccentColor.opacity(0.7)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                    Image(systemName: template.sessionType.iconName)
-                        .font(.title3)
-                        .foregroundStyle(.white)
+        ViewThatFits(in: .horizontal) {
+            if !typeSize.isAccessibilitySize {
+                HStack(spacing: 24) {
+                    WorkoutTemplateArtwork(template: template, role: .hero)
+                        .frame(width: 144, height: 156)
+                    sessionSummary.frame(minWidth: 260, maxWidth: .infinity, alignment: .leading)
+                    startAction
                 }
-                .frame(width: 52, height: 52)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(template.name)
-                        .font(.traiHeadline(17))
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.leading)
-
-                    if isRecommended || recoveryLabel != nil {
-                        HStack(spacing: 6) {
-                            if isRecommended {
-                                Label("Recommended", systemImage: "star.fill")
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.orange)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
-                                    .background(.orange.opacity(0.12), in: Capsule())
-                            }
-                            if let recoveryLabel, let recoveryColor {
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(recoveryColor)
-                                        .frame(width: 6, height: 6)
-                                    Text(recoveryLabel)
-                                        .font(.caption2.weight(.medium))
-                                        .foregroundStyle(recoveryColor)
-                                }
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(recoveryColor.opacity(0.12), in: Capsule())
-                            }
-                        }
-                    }
-
-                    Text(template.displaySubtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-
-                    if !template.primaryBlockSummary.isEmpty {
-                        Text(template.primaryBlockSummary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer(minLength: 0)
             }
-
-            Button("Start Workout", systemImage: "play.fill", action: onStart)
-                .buttonStyle(.traiPrimary(fullWidth: true))
-        }
-        .padding(16)
-        .traiCard(glow: .workout, cornerRadius: 20, contentPadding: 0)
+            let compactLayout = typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: 16))
+            compactLayout {
+                WorkoutTemplateArtwork(template: template, role: .hero)
+                    .frame(width: 120, height: 142)
+                VStack(alignment: .leading, spacing: 12) {
+                    sessionSummary
+                    startAction
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }.padding(.vertical, 12)
     }
 }
 
-private struct MoreSessionsCard: View {
+struct WorkoutAlternativeSessions: View {
     let templates: [WorkoutPlan.WorkoutTemplate]
-    let recoveryScores: [UUID: (score: Double, reason: String)]
-    let onStartTemplate: (WorkoutPlan.WorkoutTemplate) -> Void
-    let onStartCustomWorkout: () -> Void
-    var onEditPlan: (() -> Void)?
-
+    let featuredID: UUID?
+    let onSelect: (WorkoutPlan.WorkoutTemplate) -> Void
+    let onCustom: () -> Void
+    let onChooseAnother: () -> Void
+    private var alternatives: [WorkoutPlan.WorkoutTemplate] {
+        Array(templates.filter { $0.id != (featuredID ?? templates.first?.id) }.prefix(2))
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TraiSectionHeader("More Workouts", icon: "calendar") {
-                HStack(spacing: 6) {
-                    if let onEditPlan {
-                        Button("Edit Plan", systemImage: "pencil", action: onEditPlan)
-                            .buttonStyle(.traiTertiary(size: .compact, height: 28))
+            HStack(spacing: 12) {
+                Text("Other sessions").font(.headline)
+                Spacer(minLength: 8)
+                Button("Choose another", action: onChooseAnother)
+                    .buttonStyle(.traiSecondary(size: .compact))
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("workoutChooseAnother")
+            }
+            TraiHorizontalScrollView(identifier: "workoutAlternativesScroll") {
+                HStack(spacing: 12) {
+                    Button(action: onCustom) {
+                        alternativeLabel(title: "Custom workout", subtitle: "Choose as you go", color: .pink) {
+                            WorkoutRenderedActivityAsset(key: "Custom")
+                        }
+                    }.buttonStyle(.plain)
+                    ForEach(alternatives) { template in
+                        Button { onSelect(template) } label: {
+                            alternativeLabel(title: template.name, subtitle: template.muscleGroupsDisplay, color: .teal) {
+                                WorkoutTemplateArtwork(template: template)
+                            }
+                        }.buttonStyle(.plain)
                     }
                 }
-            }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    CustomSessionCard(onTap: onStartCustomWorkout)
-
-                    ForEach(templates) { template in
-                        SessionCard(
-                            name: template.name,
-                            icon: template.sessionType.iconName,
-                            accentColor: template.displayAccentColor,
-                            recoveryColor: recoveryColor(for: recoveryScores[template.id]?.score),
-                            onTap: { onStartTemplate(template) }
-                        )
-                    }
-                }
-                .padding(.vertical, 2)
-            }
+            }.scrollIndicators(.hidden).scrollBounceBehavior(.basedOnSize)
         }
-        .traiCard(cornerRadius: 20)
     }
-
-    private func recoveryColor(for score: Double?) -> Color? {
-        guard let score else { return nil }
-        if score >= 0.9 { return .green }
-        if score >= 0.5 { return .orange }
-        return .red
+    private func alternativeLabel<Artwork: View>(title: String, subtitle: String, color: Color,
+                                                 @ViewBuilder artwork: () -> Artwork) -> some View {
+        HStack(spacing: 10) {
+            artwork().frame(width: 56, height: 64)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.subheadline.weight(.semibold)).lineLimit(2)
+                Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }.frame(width: 230, height: 80).padding(12)
+            .background(color.opacity(0.09), in: .rect(cornerRadius: TraiRadius.large))
+            .foregroundStyle(.primary)
     }
 }
 
-private struct SessionCard: View {
-    let name: String
-    let icon: String
-    let accentColor: Color
-    let recoveryColor: Color?
-    let onTap: () -> Void
-
+struct TrainingRecoveryOverview: View {
+    let recoveryInfo: [MuscleRecoveryService.MuscleRecoveryInfo]
+    let onDetails: () -> Void
     var body: some View {
-        let indicatorColor = recoveryColor ?? accentColor
-
-        Button(action: onTap) {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.caption.bold())
-                    .foregroundStyle(indicatorColor)
-                    .frame(width: 30, height: 30)
-                    .background(indicatorColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
-
-                Text(name)
-                    .font(.traiLabel(13))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(width: 128, height: 62)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(.tertiarySystemFill))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(indicatorColor.opacity(recoveryColor == nil ? 0 : 0.06))
-                    )
-            )
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Your muscle history")
+                .font(.system(.title3, design: .rounded, weight: .bold))
+            RecordedMuscleMap(recoveryInfo: recoveryInfo)
+            Button("Recovery details", action: onDetails)
+                .buttonStyle(.traiSecondary(size: .compact))
+                .frame(minHeight: 44)
         }
-        .buttonStyle(TraiPressStyle())
     }
 }
 
-private struct CustomSessionCard: View {
-    let onTap: () -> Void
+struct WorkoutPlanSessionsSection: View {
+    let plan: WorkoutPlan
+    let onStartTemplate: (WorkoutPlan.WorkoutTemplate) -> Void
+    let onStartCustomWorkout: () -> Void
+    let onEditPlan: () -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var expandedTemplates: Set<UUID> = []
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(spacing: 6) {
-                Image(systemName: "plus")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.accent)
-                    .frame(width: 28, height: 28)
-                    .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
-
-                Text("Quick Start")
-                    .font(.traiLabel(12))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
+        VStack(alignment: .leading, spacing: 16) {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+            layout {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(plan.splitType.displayName).font(.title3.weight(.semibold))
+                    Text("\(plan.daysPerWeek) days a week")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Button("Edit plan", systemImage: "pencil", action: onEditPlan)
+                    .font(.subheadline.weight(.semibold))
+                    .buttonStyle(.traiTertiary(color: .primary))
             }
-            .frame(width: 84, height: 62)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(
-                        Color.secondary.opacity(0.45),
-                        style: StrokeStyle(lineWidth: 1, dash: [4, 4])
-                    )
-            )
+
+            ForEach(plan.templates.sorted { $0.order < $1.order }) { template in
+                sessionCard(template)
+            }
+            Button("Start custom workout", systemImage: "plus", action: onStartCustomWorkout)
+                .buttonStyle(.traiSecondary(fullWidth: true))
         }
-        .buttonStyle(TraiPressStyle())
-        .accessibilityLabel("Start custom workout")
     }
+
+    private func sessionCard(_ template: WorkoutPlan.WorkoutTemplate) -> some View {
+        let isExpanded = expandedTemplates.contains(template.id)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+        return VStack(alignment: .leading, spacing: 14) {
+            layout {
+                Button {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                        if isExpanded {
+                            expandedTemplates.remove(template.id)
+                        } else {
+                            expandedTemplates.insert(template.id)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        WorkoutTemplateArtwork(template: template, role: .row)
+                            .frame(width: 48, height: 48)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(template.name)
+                                .font(.system(.headline, design: .rounded))
+                                .foregroundStyle(.primary)
+                            Text(template.displaySubtitle)
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(template.name), session details")
+                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+                .accessibilityHint("Inspect exercises and training blocks")
+
+                Button("Start", systemImage: "play.fill") { onStartTemplate(template) }
+                    .buttonStyle(.traiSecondary(color: .red))
+                    .accessibilityLabel("Start \(template.name)")
+            }
+
+            if isExpanded {
+                Divider()
+                VStack(alignment: .leading, spacing: 12) {
+                    if template.estimatedDurationMinutes > 0 {
+                        Label("About \(template.estimatedDurationMinutes) min", systemImage: "clock")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    ForEach(template.displayBlocks) { block in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(block.shortSummary)
+                                .font(.subheadline.weight(.semibold))
+                            let targets = [block.intensity, block.target]
+                                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                                .filter { !$0.isEmpty }
+                                .joined(separator: " · ")
+                            if !targets.isEmpty {
+                                Text(targets).font(.caption).foregroundStyle(.secondary)
+                            }
+                            if !block.detail.isEmpty {
+                                Text(block.detail)
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            ForEach(block.exercises.sorted { $0.order < $1.order }) { exercise in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(exercise.exerciseName).font(.subheadline)
+                                    Text("\(exercise.defaultSets) sets · \(exercise.repRange ?? String(exercise.defaultReps)) reps")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            if let notes = block.notes, !notes.isEmpty, notes != block.detail {
+                                Text(notes).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .traiCard(contentPadding: 14)
+    }
+
 }
 
 private struct StartWorkoutCreatePlanCard: View {
@@ -287,10 +299,10 @@ private struct StartWorkoutCreatePlanCard: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Build your workout plan")
-                        .font(.traiHeadline(16))
+                        .font(.system(.headline, design: .rounded))
                         .foregroundStyle(.primary)
 
-                    Text("Set your training days and focus areas so planned sessions are ready when you open Workouts.")
+                    Text("Choose your days. Make the plan yours.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)
@@ -301,12 +313,12 @@ private struct StartWorkoutCreatePlanCard: View {
 
             HStack(spacing: 10) {
                 Button("Create Plan", action: onCreatePlan)
-                    .buttonStyle(.traiPrimary(size: .compact, fullWidth: true, height: 36))
+                    .buttonStyle(.traiPrimary(fullWidth: true))
 
                 Button("Quick Start") {
                     onStartCustomWorkout()
                 }
-                .buttonStyle(.traiTertiary(size: .compact, fullWidth: true, height: 36))
+                .buttonStyle(.traiTertiary(color: .primary, fullWidth: true))
             }
         }
         .padding(16)
@@ -346,13 +358,16 @@ struct WorkoutsQuickActionsRow: View {
     let onCustomExercises: () -> Void
     let onRecovery: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        GlassEffectContainer(spacing: 10) {
-            HStack(spacing: 10) {
-                WorkoutsQuickActionChip("PR", systemImage: "trophy.fill", color: TraiColors.blaze, action: onPersonalRecords)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 10))
+            : AnyLayout(HStackLayout(spacing: 10))
+        layout {
+                WorkoutsQuickActionChip("Records", systemImage: "trophy.fill", color: TraiColors.blaze, action: onPersonalRecords)
                 WorkoutsQuickActionChip("Exercises", systemImage: "figure.strengthtraining.traditional", color: .blue, action: onCustomExercises)
                 WorkoutsQuickActionChip("Recovery", systemImage: "waveform.path.ecg", color: .green, action: onRecovery)
-            }
         }
     }
 }
@@ -374,23 +389,18 @@ private struct WorkoutsQuickActionChip: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: systemImage)
-                    .font(.traiLabel(13))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(color)
 
                 Text(label)
-                    .font(.traiLabel(13))
-                    .foregroundStyle(color)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .glassEffect(
-                    .regular.tint(color.opacity(0.12)).interactive(),
-                    in: .capsule
-                )
-                .overlay {
-                    Capsule()
-                        .strokeBorder(.white.opacity(0.18), lineWidth: 1)
-                }
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(color.opacity(0.10), in: .capsule)
         }
         .buttonStyle(TraiPressStyle())
     }

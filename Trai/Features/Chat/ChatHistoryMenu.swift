@@ -42,6 +42,7 @@ struct ChatHistoryMenu: View {
             } label: {
                 Image(systemName: "clock.arrow.circlepath")
             }
+            .accessibilityLabel("Chat history")
 
             Button("New Chat", systemImage: "square.and.pencil") {
                 onNewChat()

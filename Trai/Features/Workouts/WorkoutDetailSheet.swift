@@ -204,7 +204,7 @@ struct WorkoutDetailSheet: View {
                     }
                 }
                 .padding()
-            }
+            }.traiHorizontalOverflowViewport()
             .navigationTitle("Session Details")
             .toolbarTitleDisplayMode(.inlineLarge)
             .onAppear {
@@ -592,7 +592,7 @@ struct WorkoutDetailHeaderCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 titleCluster
                 if !stats.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
+                    TraiHorizontalScrollView() {
                         statRow(stats)
                     }
                 }

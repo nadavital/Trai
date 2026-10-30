@@ -111,9 +111,7 @@ struct NutritionTrendChart: View {
 
                 Spacer()
 
-                if daysWithData.count >= 4 {
-                    TrendBadge(direction: trend.direction, change: trend.percentChange)
-                }
+                Text(unit).font(.caption).foregroundStyle(.secondary)
             }
 
             // Chart
@@ -126,7 +124,8 @@ struct NutritionTrendChart: View {
                                 y: .value(title, day[keyPath: valueKeyPath])
                             )
                             .foregroundStyle(color)
-                            .interpolationMethod(.catmullRom)
+                            .interpolationMethod(.monotone)
+                            .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
 
                             PointMark(
                                 x: .value("Date", day.date),
@@ -151,8 +150,8 @@ struct NutritionTrendChart: View {
                 }
                 .frame(height: 150)
                 .chartYAxis {
-                    AxisMarks(position: .leading) { value in
-                        AxisGridLine()
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 4])).foregroundStyle(Color.secondary.opacity(0.14))
                         AxisValueLabel {
                             if let intValue = value.as(Int.self) {
                                 Text("\(intValue)")
@@ -196,9 +195,7 @@ struct NutritionTrendChart: View {
                     .bold()
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(contentPadding: 18)
     }
 }
 

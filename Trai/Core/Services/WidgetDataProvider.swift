@@ -201,7 +201,7 @@ nonisolated struct WidgetDataSnapshotBuilder {
         }
     }
 
-    nonisolated private func lastTrainedDates(modelContext: ModelContext) -> [LiveWorkout.MuscleGroup: Date] {
+    nonisolated func lastTrainedDates(modelContext: ModelContext) -> [LiveWorkout.MuscleGroup: Date] {
         var lastTrained: [LiveWorkout.MuscleGroup: Date] = [:]
         let trackedMuscleGroups = Set(LiveWorkout.MuscleGroup.allCases.filter { $0 != .fullBody })
         let trackedCount = trackedMuscleGroups.count
@@ -209,14 +209,9 @@ nonisolated struct WidgetDataSnapshotBuilder {
 
         let exerciseDescriptor = FetchDescriptor<Exercise>()
         let exercises = (try? modelContext.fetch(exerciseDescriptor)) ?? []
-        let exerciseById: [UUID: String] = Dictionary(uniqueKeysWithValues: exercises.compactMap { exercise in
-            guard let muscleGroup = exercise.muscleGroup else { return nil }
-            return (exercise.id, muscleGroup)
-        })
-        let exerciseByName: [String: String] = Dictionary(uniqueKeysWithValues: exercises.compactMap { exercise in
-            guard let muscleGroup = exercise.muscleGroup else { return nil }
-            return (exercise.name.lowercased(), muscleGroup)
-        })
+        // Synced records can share IDs or case-insensitive names. Use the same
+        // deterministic, non-destructive conflict policy as in-app recovery.
+        let (exerciseById, exerciseByName) = MuscleRecoveryService.makeExerciseLookup(exercises)
 
         var workoutDescriptor = FetchDescriptor<LiveWorkout>(
             predicate: #Predicate<LiveWorkout> { workout in

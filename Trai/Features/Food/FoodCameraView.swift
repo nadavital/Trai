@@ -35,6 +35,7 @@ struct FoodCameraView: View {
     /// Session ID to add this food entry to (for grouping related entries)
     var sessionId: UUID?
     var targetDate: Date?
+    var compactPresentation = true
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -70,6 +71,27 @@ struct FoodCameraView: View {
                     .ignoresSafeArea()
             } else if requiresAuthenticatedAccountForFoodAI {
                 AccountSetupView(context: .aiFeatures)
+            } else if compactPresentation {
+                Group {
+                    if draft != nil {
+                        FoodLogReviewStepView(
+                            draft: draftBinding, enabledMacros: enabledMacros,
+                            onManualEntry: { showingManualEntry = true },
+                            onFinish: { dismiss() }, targetDate: targetDate,
+                            compactPresentation: true,
+                            onRetake: { draft = nil }
+                        )
+                    } else {
+                        FoodLogCaptureStepView(
+                            sessionId: sessionId, targetDate: targetDate,
+                            onDraftReady: { draft = $0 },
+                            onManualEntryRequested: { showingManualEntry = true },
+                            onCancel: { dismiss() }, compactPresentation: true
+                        )
+                    }
+                }
+                .presentationDetents([.height(draft == nil ? 470 : 410), .large])
+                .presentationDragIndicator(.hidden)
             } else {
                 NavigationStack(path: $navigationPath) {
                     FoodLogCaptureStepView(
@@ -94,11 +116,11 @@ struct FoodCameraView: View {
                             )
                         }
                     }
-                    .task {
-                        seedAppStoreScreenshotReviewIfNeeded()
-                    }
                 }
             }
+        }
+        .task {
+            seedAppStoreScreenshotReviewIfNeeded()
         }
         .sheet(isPresented: $showingManualEntry) {
             ManualFoodEntrySheet(sessionId: sessionId, targetDate: targetDate) { entry in
@@ -172,7 +194,9 @@ struct FoodCameraView: View {
             schemaVersion: 2
         )
         draft = seededDraft
-        navigationPath = [.review]
+        if !compactPresentation {
+            navigationPath = [.review]
+        }
     }
 
     private var draftBinding: Binding<FoodLogDraft> {
@@ -227,6 +251,7 @@ private struct FoodLogCaptureStepView: View {
     let onDraftReady: (FoodLogDraft) -> Void
     let onManualEntryRequested: () -> Void
     let onCancel: () -> Void
+    var compactPresentation = false
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openURL) private var openURL
@@ -239,10 +264,23 @@ private struct FoodLogCaptureStepView: View {
     @State private var suggestionLoadTask: Task<Void, Never>?
     @State private var didRecordShownSuggestions = false
     @State private var hasResolvedCameraAvailability = false
+    @State private var isCaptureVisible = false
+    @State private var photoLoadTask: Task<Void, Never>?
+    @State private var captureError: String?
 
     var body: some View {
         Group {
-            if shouldShowNoCameraFallback {
+            if compactPresentation {
+                FoodCaptureSheetView(
+                    cameraService: cameraService, isCapturing: isCapturingPhoto,
+                    cameraUnavailable: compactCameraUnavailable,
+                    description: $foodDescription, selectedPhoto: $selectedPhotoItem,
+                    suggestions: memorySuggestions, onSelectSuggestion: applyMemorySuggestion,
+                    onCapture: capturePhoto, onDescribe: submitTextDescription,
+                    onEnableCamera: enableCamera, onManualEntry: onManualEntryRequested,
+                    onCancel: { recordIgnoredSuggestionsIfNeeded(); onCancel() }
+                )
+            } else if shouldShowNoCameraFallback {
                 FoodCameraNoCameraFallbackView(
                     description: $foodDescription,
                     suggestions: memorySuggestions,
@@ -296,34 +334,44 @@ private struct FoodLogCaptureStepView: View {
             }
         }
         .toolbarBackground(shouldShowNoCameraFallback ? .visible : .hidden, for: .navigationBar)
+        .alert("Couldn’t Open Photo", isPresented: Binding(
+            get: { captureError != nil }, set: { if !$0 { captureError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(captureError ?? "Please try again.") }
         .onChange(of: selectedPhotoItem) { _, newValue in
-            Task { @MainActor in
-                guard let data = try? await newValue?.loadTransferable(type: Data.self),
-                      let image = UIImage(data: data) else {
-                    return
+            guard let newValue else { return }
+            photoLoadTask?.cancel()
+            photoLoadTask = Task { @MainActor in
+                do {
+                    guard let data = try await newValue.loadTransferable(type: Data.self),
+                          let image = UIImage(data: data) else {
+                        if isCaptureVisible { captureError = "Choose another photo or try taking one with the camera." }
+                        return
+                    }
+                    guard !Task.isCancelled, isCaptureVisible else { return }
+                    recordShownSuggestionsIfNeeded()
+                    var nextDraft = FoodLogDraft(
+                        sessionId: sessionId, image: image,
+                        description: trimmedDescription, inputSource: .photo
+                    )
+                    nextDraft.shownSuggestionIDs = memorySuggestions.map(\.memoryID)
+                    selectedPhotoItem = nil
+                    onDraftReady(nextDraft)
+                } catch {
+                    guard !Task.isCancelled, isCaptureVisible else { return }
+                    captureError = "This photo couldn’t be loaded. Please choose it again."
+                    selectedPhotoItem = nil
                 }
-
-                onDraftReady(
-                    {
-                        recordShownSuggestionsIfNeeded()
-                        var draft = FoodLogDraft(
-                            sessionId: sessionId,
-                            image: image,
-                            description: trimmedDescription,
-                            inputSource: .photo
-                        )
-                        draft.shownSuggestionIDs = memorySuggestions.map(\.memoryID)
-                        return draft
-                    }()
-                )
-                selectedPhotoItem = nil
             }
         }
         .task {
+            isCaptureVisible = true
             suggestionLoadTask?.cancel()
             suggestionLoadTask = Task {
                 await loadSuggestions()
             }
+            guard !AppLaunchArguments.shouldUseFoodCaptureFixture else { return }
             guard !AppLaunchArguments.shouldForceFoodCameraPermissionFallback else {
                 hasResolvedCameraAvailability = true
                 return
@@ -333,6 +381,7 @@ private struct FoodLogCaptureStepView: View {
             hasResolvedCameraAvailability = true
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            guard !AppLaunchArguments.shouldUseFoodCaptureFixture else { return }
             guard !AppLaunchArguments.isUITesting else { return }
             Task { @MainActor in
                 await cameraService.requestPermission()
@@ -340,10 +389,20 @@ private struct FoodLogCaptureStepView: View {
             }
         }
         .onDisappear {
+            isCaptureVisible = false
+            photoLoadTask?.cancel()
+            photoLoadTask = nil
             suggestionLoadTask?.cancel()
             suggestionLoadTask = nil
             cameraService.stopSession()
         }
+    }
+
+    private var compactCameraUnavailable: Bool {
+        if AppLaunchArguments.shouldUseFoodCaptureFixture { return false }
+        if AppLaunchArguments.isUITesting && AppLaunchArguments.shouldUseMockFoodAIResponses,
+           !AppLaunchArguments.shouldForceFoodCameraPermissionFallback { return false }
+        return shouldShowNoCameraFallback || (hasResolvedCameraAvailability && !cameraService.isSessionReady)
     }
 
     private var shouldShowNoCameraFallback: Bool {
@@ -375,14 +434,42 @@ private struct FoodLogCaptureStepView: View {
             isCapturingPhoto = true
             defer { isCapturingPhoto = false }
 
-            guard let image = await cameraService.capturePhoto() else { return }
+            let reviewImage: UIImage
+            if AppLaunchArguments.shouldUseFoodCaptureFixture {
+                let fixtureImage: UIImage?
+                if let path = AppLaunchArguments.foodCaptureFixturePath {
+                    fixtureImage = UIImage(contentsOfFile: path)
+                } else {
+                    fixtureImage = UIImage(named: "AppStoreFoodCameraSample")
+                }
+                guard let fixtureImage else {
+                    captureError = "The test meal image could not be opened. Check the fixture path."
+                    return
+                }
+                reviewImage = fixtureImage
+            } else if AppLaunchArguments.isUITesting,
+               AppLaunchArguments.shouldUseMockFoodAIResponses,
+               let fixtureImage = UIImage(named: "AppStoreFoodCameraSample") {
+                // The simulator camera has no reliable shutter surface. Keep the
+                // capture interaction real while supplying a stable review image
+                // for the mock-AI UI test path only.
+                reviewImage = fixtureImage
+            } else {
+                let capturedImage = await cameraService.capturePhoto()
+                guard isCaptureVisible else { return }
+                guard let capturedImage else {
+                    captureError = "The camera couldn’t capture this photo. Try again or choose a photo from your library."
+                    return
+                }
+                reviewImage = capturedImage
+            }
             HapticManager.mediumTap()
             onDraftReady(
                 {
                     recordShownSuggestionsIfNeeded()
                     var draft = FoodLogDraft(
                         sessionId: sessionId,
-                        image: image,
+                        image: reviewImage,
                         description: trimmedDescription,
                         inputSource: .camera
                     )
@@ -456,7 +543,8 @@ private struct FoodLogCaptureStepView: View {
     private func loadSuggestions() async {
         let startedAt = LatencyProbe.timerStart()
 
-        if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {
+        if AppLaunchArguments.shouldUseAppStoreScreenshotSeed ||
+            (AppLaunchArguments.isUITesting && ProcessInfo.processInfo.arguments.contains("--ui-test-food-suggestions")) {
             memorySuggestions = [
                 FoodSuggestion(
                     memoryID: UUID(uuidString: "2F6D93DF-6762-4C2A-A3C2-BC7A9E48C101") ?? UUID(),
@@ -588,6 +676,8 @@ private struct FoodLogReviewStepView: View {
     let onManualEntry: () -> Void
     let onFinish: () -> Void
     var targetDate: Date?
+    var compactPresentation = false
+    var onRetake: () -> Void = {}
 
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
@@ -601,9 +691,30 @@ private struct FoodLogReviewStepView: View {
     @State private var refinementErrorMessage: String?
     @State private var isSaving = false
     @State private var analyzedDescription: String?
+    @State private var didAutoAnalyzeOnArrival = false
+    @State private var activeRefinementRequestID: UUID?
+    @State private var activeAnalysisRequestID: UUID?
+    @State private var suggestionRevision = 0
+    @State private var acceptedLocalEditedFields: Set<String> = []
     @Query private var profiles: [UserProfile]
 
     var body: some View {
+        Group {
+            if compactPresentation {
+                FoodCaptureSheetReview(
+                    image: draft.image, suggestion: currentSuggestion, suggestionRevision: suggestionRevision,
+                    enabledMacros: enabledMacros, isAnalyzing: isAnalyzing,
+                    isSaving: isSaving, isRefining: isLoadingRefinement,
+                    error: analysisErrorMessage ?? refinementErrorMessage,
+                    onRetry: analyzeFood, onRetake: onRetake, onClose: onFinish,
+                    onManualEntry: onManualEntry, onRefine: { correction, adjusted in
+                        refineFood(correction, baseSuggestion: adjusted)
+                    },
+                    onSave: { suggestion, editedFields in
+                        saveEntry(suggestion, isRefined: draft.refinedSuggestion != nil, editedFields: editedFields)
+                    }
+                )
+            } else {
         FoodCameraReviewView(
             image: draft.image,
             inputSource: draft.inputSource,
@@ -617,34 +728,46 @@ private struct FoodLogReviewStepView: View {
             isLoadingRefinement: isLoadingRefinement,
             isSaving: isSaving,
             onAnalyze: analyzeFood,
-            onSave: saveEntry,
-            onRefine: refineFood,
+            onSave: { saveEntry($0, isRefined: $1) },
+            onRefine: { refineFood($0) },
             onManualEntry: onManualEntry
         )
+        }
+        }
         .toolbarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
-        .task(id: autoAnalyzeKey) {
-            guard shouldAutoAnalyzeDescription else { return }
-            analyzeFood()
+        .task {
+            autoAnalyzeOnArrivalIfNeeded()
+        }
+        .onDisappear {
+            activeAnalysisRequestID = nil
+            activeRefinementRequestID = nil
+            isAnalyzing = false
+            isLoadingRefinement = false
         }
         .onChange(of: draft.description) { _, newValue in
             resetAnalysisIfNotesChanged(to: newValue)
         }
     }
 
-    private var autoAnalyzeKey: String {
-        "\(draft.inputSource.rawValue)|\(draft.description)|\(draft.analysisResult == nil)"
-    }
-
-    private var shouldAutoAnalyzeDescription: Bool {
-        draft.inputSource == .description &&
-        draft.analysisResult == nil &&
-        !trimmedDescription.isEmpty &&
-        !isAnalyzing
-    }
-
     private var trimmedDescription: String {
         draft.description.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func autoAnalyzeOnArrivalIfNeeded() {
+        guard !didAutoAnalyzeOnArrival,
+              draft.inputSource != .memorySuggestion,
+              draft.analysisResult == nil,
+              draft.refinedSuggestion == nil,
+              !isAnalyzing,
+              draft.image != nil || !trimmedDescription.isEmpty else {
+            return
+        }
+
+        // This is deliberately a one-shot arrival action. Failed requests stay
+        // retryable through the review UI instead of creating an automatic loop.
+        didAutoAnalyzeOnArrival = true
+        analyzeFood()
     }
 
     private var currentSuggestion: SuggestedFoodEntry? {
@@ -683,46 +806,71 @@ private struct FoodLogReviewStepView: View {
         analysisErrorMessage = nil
         refinementErrorMessage = nil
         draft.refinedSuggestion = nil
+        let requestID = UUID()
+        activeAnalysisRequestID = requestID
+        let imageData = draft.image?.jpegData(compressionQuality: 0.8)
+        let requestDescription = trimmedDescription
 
         Task { @MainActor in
-            defer { isAnalyzing = false }
-
             do {
                 let result = try await aiService.analyzeFoodImage(
-                    draft.image?.jpegData(compressionQuality: 0.8),
-                    description: trimmedDescription.isEmpty ? nil : trimmedDescription
+                    imageData,
+                    description: requestDescription.isEmpty ? nil : requestDescription
                 )
+                guard activeAnalysisRequestID == requestID else { return }
                 draft.analysisResult = result
-                analyzedDescription = trimmedDescription
+                suggestionRevision += 1
+                analyzedDescription = requestDescription
                 HapticManager.success()
             } catch {
+                guard activeAnalysisRequestID == requestID else { return }
                 analysisErrorMessage = error.aiUserFacingMessage(
                     fallback: "We couldn’t analyze this food right now. Please try again or enter it manually."
                 )
                 HapticManager.error()
             }
+            guard activeAnalysisRequestID == requestID else { return }
+            activeAnalysisRequestID = nil
+            isAnalyzing = false
         }
     }
 
     private func resetAnalysisIfNotesChanged(to description: String) {
-        guard draft.inputSource != .memorySuggestion,
-              !isAnalyzing,
-              draft.analysisResult != nil || draft.refinedSuggestion != nil else {
+        guard draft.inputSource != .memorySuggestion else {
             return
         }
 
         let nextDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
         guard nextDescription != analyzedDescription else { return }
+        guard isAnalyzing || draft.analysisResult != nil || draft.refinedSuggestion != nil else {
+            return
+        }
 
+        // Editing notes while a request is in flight invalidates that request;
+        // its eventual response must not be allowed to populate this draft.
+        if isAnalyzing {
+            activeAnalysisRequestID = nil
+            isAnalyzing = false
+        }
+        activeRefinementRequestID = nil
+        isLoadingRefinement = false
+        acceptedLocalEditedFields = []
         draft.analysisResult = nil
         draft.refinedSuggestion = nil
         analysisErrorMessage = nil
         refinementErrorMessage = nil
         analyzedDescription = nil
+        activeAnalysisRequestID = nil
     }
 
-    private func refineFood(_ correction: String) {
-        guard !isLoadingRefinement, let currentSuggestion else { return }
+    private func refineFood(_ correction: String, baseSuggestion: SuggestedFoodEntry? = nil) {
+        let originalSuggestion = currentSuggestion
+        guard !isLoadingRefinement, let currentSuggestion = baseSuggestion ?? originalSuggestion else { return }
+        var requestEditedFields = Set<String>()
+        if let baseSuggestion, let originalSuggestion {
+            if baseSuggestion.name != originalSuggestion.name { requestEditedFields.insert("name") }
+            if baseSuggestion.servingSize != originalSuggestion.servingSize { requestEditedFields.insert("portion") }
+        }
         guard monetizationService?.canAccessAIFeatures ?? true else {
             proUpsellCoordinator?.present(source: .foodAnalysis)
             return
@@ -730,19 +878,31 @@ private struct FoodLogReviewStepView: View {
 
         isLoadingRefinement = true
         refinementErrorMessage = nil
+        let requestID = UUID()
+        activeRefinementRequestID = requestID
+        let imageData = draft.image?.jpegData(compressionQuality: 0.8)
 
         Task { @MainActor in
-            defer { isLoadingRefinement = false }
+            defer {
+                if activeRefinementRequestID == requestID {
+                    isLoadingRefinement = false
+                    activeRefinementRequestID = nil
+                }
+            }
 
             do {
                 let refinedSuggestion = try await aiService.refineFoodAnalysis(
                     correction: correction,
                     currentSuggestion: currentSuggestion,
-                    imageData: draft.image?.jpegData(compressionQuality: 0.8)
+                    imageData: imageData
                 )
+                guard activeRefinementRequestID == requestID else { return }
                 draft.refinedSuggestion = refinedSuggestion
+                acceptedLocalEditedFields.formUnion(requestEditedFields)
+                suggestionRevision += 1
                 HapticManager.success()
             } catch {
+                guard activeRefinementRequestID == requestID else { return }
                 refinementErrorMessage = error.aiUserFacingMessage(
                     fallback: "We couldn’t update this suggestion right now. Please try again."
                 )
@@ -751,7 +911,7 @@ private struct FoodLogReviewStepView: View {
         }
     }
 
-    private func saveEntry(_ suggestion: SuggestedFoodEntry, isRefined: Bool) {
+    private func saveEntry(_ suggestion: SuggestedFoodEntry, isRefined: Bool, editedFields: [String] = []) {
         guard !isSaving else { return }
         isSaving = true
 
@@ -783,7 +943,7 @@ private struct FoodLogReviewStepView: View {
             from: suggestion,
             source: acceptedSource(for: draft.inputSource),
             loggedAt: entry.loggedAt,
-            userEditedFields: isRefined ? ["refinement"] : []
+            userEditedFields: acceptedLocalEditedFields.union(editedFields).union(Set(isRefined ? ["refinement"] : []))
         )
         entry.setAcceptedSnapshot(acceptedSnapshot)
 

@@ -27,6 +27,7 @@ struct ContentView: View {
         case waitingForCloudProfile
         case ready
         case needsOnboarding
+        case awaitingProfileChoice
     }
 
     private static let cloudProfileGracePeriodSeconds: TimeInterval = 3.0
@@ -37,7 +38,8 @@ struct ContentView: View {
     private var cachedOnboardingReady = false
     @Environment(\.modelContext) private var modelContext
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
-    @State private var didRunStartupFlow = false
+    @State private var showsReturningAccountSignIn = false
+    @State private var startupAttempt = 0
     @State private var startupResolutionState: StartupResolutionState = .determining
     @StateObject private var activeWorkoutRuntimeState = ActiveWorkoutRuntimeState()
     @Binding var deepLinkDestination: AppRoute?
@@ -100,14 +102,37 @@ struct ContentView: View {
                     statusText: "Syncing your profile...",
                     lensState: .thinking
                 )
+            } else if startupResolutionState == .awaitingProfileChoice {
+                ContentUnavailableView {
+                    Label("Find Your Trai Profile", systemImage: "person.crop.circle.badge.clock")
+                } description: {
+                    Text("Your profile hasn't arrived from iCloud yet. If you've used Trai before, check again before creating a new profile.")
+                } actions: {
+                    Button("Check iCloud Again") {
+                        startupResolutionState = .determining
+                        startupAttempt += 1
+                    }
+                    .buttonStyle(.borderedProminent)
+                    if accountSessionService?.isAuthenticated != true {
+                        Button("Sign In to Existing Account") {
+                            showsReturningAccountSignIn = true
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    Button("I'm New — Create a Profile") {
+                        startupResolutionState = .needsOnboarding
+                    }
+                    .disabled(isCheckingAccountState)
+                }
             } else {
                 OnboardingView()
             }
         }
+        .sheet(isPresented: $showsReturningAccountSignIn) {
+            AccountSetupView(context: .secureExistingData)
+        }
         .environmentObject(activeWorkoutRuntimeState)
-        .task {
-            guard !didRunStartupFlow else { return }
-            didRunStartupFlow = true
+        .task(id: startupAttempt) {
             await runStartupFlow()
         }
         .onChange(of: !completedProfiles.isEmpty) { _, hasCompleted in
@@ -161,6 +186,7 @@ struct ContentView: View {
         let deadline = Date().addingTimeInterval(Self.cloudProfileGracePeriodSeconds)
         while Date() < deadline {
             try? await Task.sleep(for: .milliseconds(Self.cloudProfilePollIntervalMilliseconds))
+            guard !Task.isCancelled else { return }
             if hasCompletedOnboarding {
                 cachedOnboardingReady = true
                 startupResolutionState = .ready
@@ -174,9 +200,10 @@ struct ContentView: View {
             }
         }
 
-        startupResolutionState = .needsOnboarding
-        cachedOnboardingReady = false
-        PerformanceTrace.event("content_startup_no_local_profile", category: .launch)
+        guard !Task.isCancelled else { return }
+        // A timed-out cloud fetch is not evidence of a new user.
+        startupResolutionState = .awaitingProfileChoice
+        PerformanceTrace.event("content_startup_profile_unresolved", category: .launch)
     }
 
     @MainActor
@@ -287,8 +314,7 @@ struct MainTabView: View {
         Binding(
             get: { selectedTabState },
             set: { newValue in
-                _ = loadedTabs.insert(newValue)
-                selectedTabState = newValue
+                selectTab(newValue)
             }
         )
     }
@@ -297,6 +323,7 @@ struct MainTabView: View {
     @State private var liveWorkoutPresentation: LiveWorkoutPresentation?
     @State private var showingEndConfirmation = false
     @State private var showingReminders = false
+    @State private var showingAccount = false
 
     // App Intent / Deep link triggered states
     @State private var foodCameraPresentation: FoodCameraPresentation?
@@ -349,13 +376,17 @@ struct MainTabView: View {
             .environment(\.appTabSelection, selectedTab)
             .onAppear(perform: handleTabViewAppear)
             .onChange(of: selectedTabState) { _, tab in
-                persistedSelectedTabRaw = tab.rawValue
+                // Persistence is an output after initial restoration, not a second
+                // live selection source. Replaying its onChange during a cold route
+                // can bounce the TabView between the restored and requested tabs.
+                if persistedSelectedTabRaw != tab.rawValue {
+                    persistedSelectedTabRaw = tab.rawValue
+                }
                 scheduleTabPrewarmIfNeeded()
             }
-            .onChange(of: persistedSelectedTabRaw) { _, newValue in
-                guard let tab = AppTab(rawValue: newValue) else { return }
-                guard tab != selectedTabState else { return }
-                selectedTabState = tab
+            .sheet(isPresented: $showingAccount) {
+                ProfileView(mode: .account, onSelectTab: selectTab)
+                    .traiSheetBranding()
             }
             .onChange(of: showRemindersFromNotification.wrappedValue) { _, shouldShow in
                 guard shouldShow else { return }
@@ -395,7 +426,7 @@ struct MainTabView: View {
             } message: {
                 Text("Are you sure you want to end this workout?")
             }
-            .fullScreenCover(item: $foodCameraPresentation) { presentation in
+            .sheet(item: $foodCameraPresentation) { presentation in
                 FoodCameraView(sessionId: presentation.sessionId, targetDate: presentation.targetDate)
                     .traiSheetBranding()
             }
@@ -454,11 +485,6 @@ struct MainTabView: View {
                 }
             }
 
-            Tab("Profile", systemImage: "person.fill", value: .profile) {
-                cachedTabContent(for: .profile) {
-                    ProfileView(onSelectTab: selectTab)
-                }
-            }
         }
     }
 
@@ -468,13 +494,15 @@ struct MainTabView: View {
             if (AppLaunchArguments.shouldUseAppStoreScreenshotSeed || AppLaunchArguments.shouldSeedGoalPreviewData),
                let rawTab = AppLaunchArguments.appStoreScreenshotInitialTabRawValue,
                let screenshotTab = AppTab(rawValue: rawTab) {
-                selectedTabState = screenshotTab
-                persistedSelectedTabRaw = screenshotTab.rawValue
+                selectedTabState = screenshotTab == .profile ? .dashboard : screenshotTab
+                persistedSelectedTabRaw = selectedTabState.rawValue
             } else if AppLaunchArguments.isUITesting {
                 selectedTabState = .dashboard
                 persistedSelectedTabRaw = AppTab.dashboard.rawValue
             } else {
-                selectedTabState = AppTab(rawValue: persistedSelectedTabRaw) ?? .dashboard
+                let restored = AppTab(rawValue: persistedSelectedTabRaw) ?? .dashboard
+                selectedTabState = restored == .profile ? .dashboard : restored
+                persistedSelectedTabRaw = selectedTabState.rawValue
             }
         }
         if loadedTabs.isEmpty {
@@ -586,6 +614,12 @@ struct MainTabView: View {
     }
 
     private func selectTab(_ tab: AppTab) {
+        // Preserve old profile requests without retaining a fourth tab.
+        guard tab != .profile else {
+            persistedSelectedTabRaw = selectedTabState.rawValue
+            showingAccount = true
+            return
+        }
         _ = loadedTabs.insert(tab)
         selectedTabState = tab
     }

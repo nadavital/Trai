@@ -452,6 +452,7 @@ struct SuggestionCard: View {
     let title: String
     let color: Color
     let action: () -> Void
+    @ScaledMetric(relativeTo: .subheadline) private var cardWidth: CGFloat = 180
 
     var body: some View {
         Button(action: action) {
@@ -472,7 +473,7 @@ struct SuggestionCard: View {
                 Spacer(minLength: 0)
             }
             .padding(14)
-            .frame(width: 180, alignment: .leading)
+            .frame(width: cardWidth, alignment: .leading)
             .frame(minHeight: 60, alignment: .leading)
             .background(Color(.secondarySystemBackground))
             .clipShape(.rect(cornerRadius: 14))
@@ -484,6 +485,7 @@ struct SuggestionCard: View {
 // MARK: - Empty Chat View
 
 struct EmptyChatView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     var isLoading: Bool = false
     var isTemporary: Bool = false
     var context: SmartStarterContext = SmartStarterContext()
@@ -494,8 +496,6 @@ struct EmptyChatView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Spacer(minLength: 40)
-
             if isTemporary {
                 incognitoContent
                     .transition(.opacity)
@@ -504,8 +504,8 @@ struct EmptyChatView: View {
                     .transition(.opacity)
             }
 
-            Spacer()
         }
+        .padding(.vertical, 24)
         .animation(.easeInOut(duration: 0.25), value: isTemporary)
     }
 
@@ -549,17 +549,23 @@ struct EmptyChatView: View {
     // MARK: - Greeting Content
 
     private var greetingContent: some View {
-        VStack(spacing: 20) {
-            TraiLensView(size: 100, state: lensState, palette: .energy)
-
-            Text(context.generateGreeting())
-                .font(.title2)
-                .bold()
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
+        HStack(alignment: .top, spacing: 16) {
+            if !dynamicTypeSize.isAccessibilitySize {
+                TraiLensView(size: 56, state: lensState, palette: .energy)
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("What would help today?")
+                    .font(.title2.bold())
+                Text("Ask about your meals, training, or plan.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal)
+        .padding(.horizontal, 20)
     }
+
 }
 
 // MARK: - Suggestion Rows View
@@ -572,46 +578,45 @@ struct SuggestionRowsView: View {
     var onTrackTap: ((String) -> Void)?
 
     private var allStarters: [SmartStarter] {
-        SmartStarter.generate(from: context, usage: suggestionUsage)
+        let loggingActions = Set([
+            SuggestionType.startWorkout, SuggestionType.snapMeal, SuggestionType.logWeight,
+            SuggestionType.logBreakfast, SuggestionType.logLunch, SuggestionType.logDinner
+        ])
+        return SmartStarter.generate(from: context, usage: suggestionUsage)
+            .filter { !loggingActions.contains($0.type) }
     }
 
     var body: some View {
-        VStack(spacing: 10) {
-            // Row 1: first half of suggestions (independently scrollable)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(allStarters.prefix(allStarters.count / 2)) { starter in
-                        SuggestionCard(
-                            icon: starter.icon,
-                            title: starter.title,
-                            color: starter.color
-                        ) {
-                            onSuggestionTapped(starter.prompt)
-                            onTrackTap?(starter.type)
-                        }
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(allStarters.prefix(3)), id: \.type) { starter in
+                Button {
+                    onSuggestionTapped(starter.prompt)
+                    onTrackTap?(starter.type)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: starter.icon)
+                            .font(.system(size: 22))
+                            .foregroundStyle(starter.color)
+                            .frame(width: 24)
+                        Text(starter.title)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
+                        Spacer(minLength: 8)
+                        Image(systemName: "arrow.up.left")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.tertiary)
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .frame(minHeight: 44)
+                    .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
                 }
-                .padding(.horizontal)
-            }
-
-            // Row 2: second half of suggestions (independently scrollable)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(allStarters.suffix(allStarters.count - allStarters.count / 2)) { starter in
-                        SuggestionCard(
-                            icon: starter.icon,
-                            title: starter.title,
-                            color: starter.color
-                        ) {
-                            onSuggestionTapped(starter.prompt)
-                            onTrackTap?(starter.type)
-                        }
-                    }
-                }
-                .padding(.horizontal)
+                .buttonStyle(.plain)
+                .accessibilityHint("Ask Trai this question")
             }
         }
-        .padding(.vertical, 8)
+        .padding(.horizontal, 20)
     }
 }
 

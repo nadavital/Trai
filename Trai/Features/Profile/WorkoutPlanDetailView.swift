@@ -39,7 +39,7 @@ struct WorkoutPlanDetailView: View {
                 progressionCard
             }
             .padding()
-        }
+        }.traiHorizontalOverflowViewport()
         .navigationTitle("Workout Plan")
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {

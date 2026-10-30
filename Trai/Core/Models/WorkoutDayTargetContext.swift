@@ -37,7 +37,7 @@ enum WorkoutDayTargetContext {
         var liveDescriptor = FetchDescriptor<LiveWorkout>(
             predicate: #Predicate { workout in
                 (workout.startedAt >= startDate && workout.startedAt < endDate)
-                    || (workout.completedAt != nil && workout.completedAt! >= startDate && workout.completedAt! < endDate)
+                    || ((workout.completedAt ?? workout.startedAt) >= startDate && (workout.completedAt ?? workout.startedAt) < endDate)
             }
         )
         liveDescriptor.fetchLimit = 1

@@ -2650,6 +2650,56 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertFalse(summary.contains("7 counts"))
     }
 
+    func testExplicitEarlierExerciseFocusRoutesLiveActivityAddSetToSelection() {
+        let (workout, bench) = makeWorkout(initialReps: 8)
+        let squat = LiveWorkoutEntry(exerciseName: "Squat", orderIndex: 1)
+        squat.addSet(LiveWorkoutEntry.SetData(reps: 10, completed: false))
+        squat.workout = workout
+        workout.entries = [bench, squat]
+        context.insert(workout)
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        viewModel.selectEntry(id: squat.id)
+        viewModel.selectEntry(id: bench.id)
+        XCTAssertEqual(viewModel.focusedEntryID, bench.id)
+        XCTAssertTrue(viewModel.liveActivityProgressSummary.supportsSetShortcut)
+
+        viewModel.handleAddSetFromLiveActivity()
+        XCTAssertEqual(bench.sets.count, 2)
+        XCTAssertEqual(squat.sets.count, 1)
+        XCTAssertEqual(viewModel.focusedEntryID, bench.id)
+    }
+
+    func testExplicitCompletedStrengthFocusKeepsSetShortcutInsteadOfCardioFallback() {
+        let workout = LiveWorkout(name: "Mixed session", workoutType: .mixed)
+        let bench = LiveWorkoutEntry(exerciseName: "Bench", orderIndex: 0)
+        bench.addSet(LiveWorkoutEntry.SetData(reps: 8, completed: true))
+        let cycling = LiveWorkoutEntry(exerciseName: "Cycling", orderIndex: 1, exerciseType: "cardio")
+        cycling.durationSeconds = 600
+        bench.workout = workout
+        cycling.workout = workout
+        workout.entries = [bench, cycling]
+        context.insert(workout)
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        XCTAssertFalse(viewModel.liveActivityProgressSummary.supportsSetShortcut)
+        viewModel.selectEntry(id: bench.id)
+        XCTAssertTrue(viewModel.liveActivityProgressSummary.supportsSetShortcut)
+        XCTAssertEqual(viewModel.focusedEntryID, bench.id)
+        viewModel.handleAddSetFromLiveActivity()
+        XCTAssertEqual(bench.sets.count, 2)
+        XCTAssertEqual(viewModel.focusedEntryID, bench.id)
+    }
+
+    func testSelectingUnknownEntryPreservesExplicitFocus() {
+        let (workout, bench) = makeWorkout(initialReps: 8)
+        context.insert(workout)
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+        viewModel.selectEntry(id: bench.id)
+        viewModel.selectEntry(id: UUID())
+        XCTAssertEqual(viewModel.focusedEntryID, bench.id)
+    }
+
     private func makeWorkout(initialReps: Int) -> (LiveWorkout, LiveWorkoutEntry) {
         let workout = LiveWorkout(name: "Push Day", workoutType: .strength)
         let entry = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)

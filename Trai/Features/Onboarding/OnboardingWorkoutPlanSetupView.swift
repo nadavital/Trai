@@ -1131,7 +1131,7 @@ struct OnboardingWorkoutPlanSetupView: View {
                         .padding(.horizontal, 20)
                         .padding(.top, 22)
                         .padding(.bottom, isProTuningChatStep ? 158 : 148)
-                    }
+                    }.traiHorizontalOverflowViewport()
                     .scrollIndicators(.hidden)
 
                     bottomBar
@@ -2269,7 +2269,7 @@ struct OnboardingWorkoutPlanSetupView: View {
                 .frame(minHeight: minHeight)
                 .padding(10)
                 .scrollContentBackground(.hidden)
-                .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
+                .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
                 .overlay {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
@@ -2942,7 +2942,7 @@ struct OnboardingWorkoutPlanSetupView: View {
     }
 
     private var proPersonalizationSuggestionRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        TraiHorizontalScrollView() {
             HStack(spacing: 8) {
                 ForEach(proPersonalizationSuggestions, id: \.title) { suggestion in
                     TraiSelectableChip(text: suggestion.title, isSelected: false) {
@@ -3285,7 +3285,7 @@ struct OnboardingWorkoutPlanSetupView: View {
 
     private var summaryStrip: some View {
         HStack(alignment: .top) {
-            ScrollView(.horizontal, showsIndicators: false) {
+            TraiHorizontalScrollView() {
                 HStack(spacing: 8) {
                     setupSummaryChip(icon: "calendar", text: draft.schedule.title)
                     setupSummaryChip(icon: "clock", text: draft.duration.title)

@@ -863,7 +863,7 @@ struct ExerciseListView: View {
         let activityTypes = activityTypesForFilterChips
 
         return VStack(spacing: 0) {
-            ScrollView(.horizontal, showsIndicators: false) {
+            TraiHorizontalScrollView() {
                 HStack(spacing: 8) {
                     FilterChip(
                         label: "All",
@@ -895,7 +895,7 @@ struct ExerciseListView: View {
             }
 
             if !activityTypes.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
+                TraiHorizontalScrollView() {
                     HStack(spacing: 8) {
                         ForEach(activityTypes, id: \.self) { activityType in
                             FilterChip(
@@ -920,7 +920,7 @@ struct ExerciseListView: View {
 
             // Row 3: Muscle group filters (only for strength or all)
             if selectedCategory == .strength || selectedCategory == nil {
-                ScrollView(.horizontal, showsIndicators: false) {
+                TraiHorizontalScrollView() {
                     HStack(spacing: 8) {
                         ForEach(muscleGroups) { muscleGroup in
                             FilterChip(

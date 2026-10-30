@@ -290,14 +290,7 @@ final class MuscleRecoveryService {
 
         let exerciseDescriptor = FetchDescriptor<Exercise>()
         let exercises = (try? modelContext.fetch(exerciseDescriptor)) ?? []
-        let byId: [UUID: String] = Dictionary(uniqueKeysWithValues: exercises.compactMap { exercise -> (UUID, String)? in
-            guard let muscleGroup = exercise.muscleGroup else { return nil }
-            return (exercise.id, muscleGroup)
-        })
-        let byName: [String: String] = Dictionary(uniqueKeysWithValues: exercises.compactMap { exercise -> (String, String)? in
-            guard let muscleGroup = exercise.muscleGroup else { return nil }
-            return (exercise.name.lowercased(), muscleGroup)
-        })
+        let (byId, byName) = Self.makeExerciseLookup(exercises)
 #if DEBUG
         debugExerciseLookupBuildCount += 1
 #endif
@@ -306,6 +299,28 @@ final class MuscleRecoveryService {
         exerciseLookupById = byId
         exerciseLookupByName = byName
 
+        return (byId, byName)
+    }
+
+    /// Names and IDs may repeat after sync. Resolve lookups without changing stored records.
+    /// Prefer the oldest non-nil classification, then stable value tie-breakers, so fetch
+    /// order does not change recovery recommendations when conflicting records arrive.
+    // Call with models owned by the caller’s context; no models cross actor boundaries.
+    nonisolated static func makeExerciseLookup(_ exercises: [Exercise]) -> (byId: [UUID: String], byName: [String: String]) {
+        let ordered = exercises.filter { $0.muscleGroup != nil }.sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+            if lhs.id != rhs.id { return lhs.id.uuidString < rhs.id.uuidString }
+            if lhs.name != rhs.name { return lhs.name < rhs.name }
+            return (lhs.muscleGroup ?? "") < (rhs.muscleGroup ?? "")
+        }
+        var byId: [UUID: String] = [:]
+        var byName: [String: String] = [:]
+        for exercise in ordered {
+            guard let group = exercise.muscleGroup else { continue }
+            if byId[exercise.id] == nil { byId[exercise.id] = group }
+            let name = exercise.name.lowercased()
+            if byName[name] == nil { byName[name] = group }
+        }
         return (byId, byName)
     }
 

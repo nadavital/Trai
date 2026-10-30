@@ -30,23 +30,11 @@ struct EmptyMealsView: View {
     var onAddFood: (() -> Void)?
 
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "fork.knife.circle")
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
-
-            Text(onAddFood != nil ? "No meals logged yet" : "No meals logged")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            if let addAction = onAddFood {
-                Button("Log Your First Meal", action: addAction)
-                    .font(.subheadline)
-                    .buttonStyle(.traiTertiary())
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
+        Text("No meals logged")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 12)
     }
 }
 
@@ -59,82 +47,44 @@ struct FoodSessionCard: View {
     let onEditEntry: (FoodEntry) -> Void
     let onDeleteEntry: (FoodEntry) -> Void
 
-    @State private var isExpanded = true
+    @State private var isExpanded = false
 
-    private var totalCalories: Int {
-        entries.reduce(0) { $0 + $1.calories }
-    }
-
-    /// First enabled macro for subtitle display
-    private var firstEnabledMacro: MacroType? {
-        MacroType.displayOrder.first { enabledMacros.contains($0) }
-    }
-
-    private func totalFor(_ macro: MacroType) -> Double {
-        entries.reduce(0) { total, entry in
-            switch macro {
-            case .protein: total + entry.proteinGrams
-            case .carbs: total + entry.carbsGrams
-            case .fat: total + entry.fatGrams
-            case .fiber: total + (entry.fiberGrams ?? 0)
-            case .sugar: total + (entry.sugarGrams ?? 0)
-            }
-        }
-    }
-
-    private var sessionTime: Date {
-        entries.first?.loggedAt ?? Date()
-    }
+    private var totalCalories: Int { entries.reduce(0) { $0 + $1.calories } }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 4) {
             Button {
-                withAnimation(.snappy) {
-                    isExpanded.toggle()
-                }
+                withAnimation(.snappy) { isExpanded.toggle() }
                 HapticManager.selectionChanged()
             } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "square.stack.fill")
-                        .font(.title3)
-                        .foregroundStyle(.tint)
-                        .frame(width: 32)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Meal (\(entries.count) items)")
-                            .font(.subheadline)
-                            .bold()
-                            .foregroundStyle(.primary)
-
-                        Text(sessionTime, format: .dateTime.hour().minute())
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                HStack(spacing: 14) {
+                    if let first = entries.first {
+                        MealTimelineThumbnail(entry: first)
                     }
-
-                    Spacer()
-
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(totalCalories) kcal")
-                            .font(.subheadline)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Meal · \(entries.count) items")
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
-
-                        if let macro = firstEnabledMacro {
-                            Text("\(Int(totalFor(macro)))g \(macro.displayName.lowercased())")
+                        if let first = entries.first {
+                            Text(first.loggedAt, format: .dateTime.hour().minute())
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
-
+                    Spacer(minLength: 8)
+                    Text("\(totalCalories) kcal")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                     Image(systemName: "chevron.right")
-                        .font(.caption)
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
-                .padding(12)
-                .background(Color(.tertiarySystemBackground))
-                .clipShape(.rect(cornerRadius: 12))
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
 
             if isExpanded {
                 VStack(spacing: 4) {
@@ -145,21 +95,13 @@ struct FoodSessionCard: View {
                             onDelete: { onDeleteEntry(entry) }
                         )
                     }
-
                     if let addAction = onAddMore {
-                        Button(action: addAction) {
-                            HStack {
-                                Image(systemName: "plus.circle.fill")
-                                Text("Add to this meal")
-                            }
-                            .font(.caption)
-                            .foregroundStyle(.tint)
-                            .padding(.vertical, 8)
-                        }
+                        Button("Add to this meal", systemImage: "plus", action: addAction)
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }
                 }
-                .padding(.top, 4)
-                .padding(.leading, 24)
+                .padding(.leading, 16)
             }
         }
     }
@@ -172,58 +114,8 @@ struct SessionEntryRow: View {
     let onTap: () -> Void
     let onDelete: () -> Void
 
-    @State private var showingDeleteConfirm = false
-
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 8) {
-                Group {
-                    if let imageData = entry.imageData,
-                       let uiImage = UIImage(data: imageData) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        Text(entry.displayEmoji)
-                            .font(.system(size: 16))
-                    }
-                }
-                .frame(width: 28, height: 28)
-                .background(Color(.quaternarySystemFill))
-                .clipShape(.rect(cornerRadius: 4))
-
-                Text(entry.name)
-                    .font(.caption)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                Spacer()
-
-                Text("\(entry.calories)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Button(action: { showingDeleteConfirm = true }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(Color(.quaternarySystemFill))
-            .clipShape(.rect(cornerRadius: 6))
-        }
-        .buttonStyle(.plain)
-        .confirmationDialog(
-            "Delete \(entry.name)?",
-            isPresented: $showingDeleteConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive, action: onDelete)
-            Button("Cancel", role: .cancel) {}
-        }
+        FoodEntryTimelineRow(entry: entry, onTap: onTap, onDelete: onDelete)
     }
 }
 
@@ -236,88 +128,49 @@ struct FoodEntryTimelineRow: View {
     let onDelete: () -> Void
 
     @State private var showingDeleteConfirm = false
-
-    /// First enabled macro for subtitle display
-    private var firstEnabledMacro: MacroType? {
-        MacroType.displayOrder.first { enabledMacros.contains($0) }
-    }
-
-    private func valueFor(_ macro: MacroType) -> Double {
-        switch macro {
-        case .protein: entry.proteinGrams
-        case .carbs: entry.carbsGrams
-        case .fat: entry.fatGrams
-        case .fiber: entry.fiberGrams ?? 0
-        case .sugar: entry.sugarGrams ?? 0
-        }
-    }
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 10) {
-                Group {
-                    if let imageData = entry.imageData,
-                       let uiImage = UIImage(data: imageData) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        Text(entry.displayEmoji)
-                            .font(.system(size: 24))
-                    }
-                }
-                .frame(width: 44, height: 44)
-                .background(Color(.quaternarySystemFill))
-                .clipShape(.rect(cornerRadius: 8))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.name)
-                        .font(.subheadline)
-                        .bold()
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    HStack(spacing: 8) {
-                        if let serving = entry.servingSize {
-                            Text(serving)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-
+        HStack(spacing: 4) {
+            Button(action: onTap) {
+                HStack(spacing: 14) {
+                    MealTimelineThumbnail(entry: entry)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(entry.name)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
                         Text(entry.loggedAt, format: .dateTime.hour().minute())
                             .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(entry.calories) kcal")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-
-                    if let macro = firstEnabledMacro {
-                        Text("\(Int(valueFor(macro)))g \(macro.displayName.lowercased())")
-                            .font(.caption)
                             .foregroundStyle(.secondary)
+                        if dynamicTypeSize.isAccessibilitySize {
+                            calorieLabel
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        calorieLabel
                     }
                 }
-
-                Button(action: { showingDeleteConfirm = true }) {
-                    Image(systemName: "trash")
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.7))
-                        .padding(8)
-                }
-                .buttonStyle(.plain)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
             }
-            .padding(12)
-            .background(Color(.tertiarySystemBackground))
-            .clipShape(.rect(cornerRadius: 12))
+            .buttonStyle(.plain)
+            .accessibilityHint("Edit meal")
+
+            Menu {
+                Button("Edit meal", systemImage: "pencil", action: onTap)
+                Button("Delete meal", systemImage: "trash", role: .destructive) {
+                    showingDeleteConfirm = true
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Options for \(entry.name)")
         }
-        .buttonStyle(.plain)
         .confirmationDialog(
             "Delete \(entry.name)?",
             isPresented: $showingDeleteConfirm,
@@ -326,5 +179,33 @@ struct FoodEntryTimelineRow: View {
             Button("Delete", role: .destructive, action: onDelete)
             Button("Cancel", role: .cancel) {}
         }
+    }
+
+    private var calorieLabel: some View {
+        Text("\(entry.calories) kcal")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+private struct MealTimelineThumbnail: View {
+    let entry: FoodEntry
+
+    var body: some View {
+        Group {
+            if let data = entry.imageData, let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Text(entry.displayEmoji)
+                    .font(.system(size: 24))
+            }
+        }
+        .frame(width: 52, height: 52)
+        .background(.quaternary, in: .rect(cornerRadius: 14))
+        .clipShape(.rect(cornerRadius: 14))
+        .accessibilityHidden(true)
     }
 }

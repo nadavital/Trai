@@ -27,33 +27,38 @@ struct TodaysRemindersCard: View {
 
     /// Track which reminders are in the completing animation state
     @State private var completingIds: Set<UUID> = []
+    @State private var isExpanded = false
+
+    private var orderedReminders: [ReminderItem] {
+        reminders.sorted { ($0.hour, $0.minute) < ($1.hour, $1.minute) }
+    }
+
+    private var visibleReminders: [ReminderItem] {
+        isExpanded ? orderedReminders : Array(orderedReminders.prefix(2))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Today's Reminders")
+                Text("Reminders")
                     .font(.traiHeadline())
 
                 Spacer()
 
-                Button("Add", systemImage: "plus", action: onAdd)
+                if reminders.isEmpty {
+                    emptyState
+                }
+
+                Button("Add reminder", systemImage: "plus", action: onAdd)
                     .labelStyle(.iconOnly)
-                    .buttonStyle(
-                        .traiSecondary(
-                            color: .accentColor,
-                            size: .compact,
-                            width: 32,
-                            height: 32,
-                            fillOpacity: 0.18
-                        )
-                    )
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
             }
 
-            if reminders.isEmpty {
-                emptyState
-            } else {
+            if !reminders.isEmpty {
                 VStack(spacing: 8) {
-                    ForEach(reminders.prefix(3)) { reminder in
+                    ForEach(visibleReminders) { reminder in
                         ReminderRow(
                             reminder: reminder,
                             isCompleting: completingIds.contains(reminder.id),
@@ -70,42 +75,35 @@ struct TodaysRemindersCard: View {
                         ))
                     }
 
-                    if reminders.count > 3 {
-                        Text("+\(reminders.count - 3) more")
-                            .font(.caption)
+                    if reminders.count > 2 {
+                        Button {
+                            withAnimation(.snappy) { isExpanded.toggle() }
+                        } label: {
+                            HStack {
+                                Text(isExpanded ? "Show less" : "\(reminders.count - 2) more")
+                                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            }
+                            .font(.caption.weight(.medium))
                             .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: reminders.map(\.id))
             }
         }
-        .traiCard()
+        .padding(.horizontal, 4)
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: hasActiveReminderSetup ? "checkmark.circle.fill" : "bell.badge")
-                    .font(.headline)
-                    .foregroundStyle(hasActiveReminderSetup ? .green : Color.accentColor)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        (hasActiveReminderSetup ? Color.green : Color.accentColor).opacity(0.12),
-                        in: Circle()
-                    )
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(hasActiveReminderSetup ? "All caught up today" : "Make Trai easier to stick with")
-                        .font(.subheadline.weight(.semibold))
-                    Text(hasActiveReminderSetup ? "You have no open reminders right now." : "Add meal, workout, or habit reminders in a few taps.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
+        Text(hasActiveReminderSetup ? "All caught up" : "No reminders set")
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 
     private func completeWithAnimation(_ reminder: ReminderItem) {
+        guard !completingIds.contains(reminder.id) else { return }
         // Show completing state with checkmark
         _ = withAnimation(.easeInOut(duration: 0.2)) {
             completingIds.insert(reminder.id)
@@ -151,23 +149,19 @@ private struct ReminderRow: View {
                 .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isCompleting)
             }
             .buttonStyle(.plain)
+            .frame(width: 44, height: 44)
+            .accessibilityLabel("Complete \(reminder.title)")
             .disabled(isCompleting)
 
             Button {
                 onTap()
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: reminder.isCustom ? "bell.badge" : "bell")
-                        .font(.body)
-                        .foregroundStyle(.orange)
-                        .frame(width: 28, height: 28)
-                        .background(.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
-
                     VStack(alignment: .leading, spacing: 2) {
                         Text(reminder.title)
                             .font(.subheadline)
                             .foregroundStyle(isCompleting ? .secondary : .primary)
-                            .lineLimit(1)
+                            .lineLimit(2)
                             .strikethrough(isCompleting)
 
                         Text(reminder.time)
@@ -183,6 +177,8 @@ private struct ReminderRow: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(isCompleting)
@@ -269,7 +265,7 @@ extension TodaysRemindersCard {
         }
 
         // Sort by time
-        return items.sorted { $0.time < $1.time }
+        return items.sorted { ($0.hour, $0.minute) < ($1.hour, $1.minute) }
     }
 
     private static func formatTime(hour: Int, minute: Int) -> String {

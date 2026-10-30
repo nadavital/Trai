@@ -133,7 +133,7 @@ struct MuscleGroupSelector: View {
                         Text("Targeting")
                             .foregroundStyle(.secondary)
 
-                        ScrollView(.horizontal, showsIndicators: false) {
+                        TraiHorizontalScrollView(allowsHorizontalOverflow: false) {
                             HStack(spacing: 6) {
                                 ForEach(Array(selectedMuscles).sorted { $0.displayName < $1.displayName }) { muscle in
                                     SelectedTargetChip(title: muscle.displayName)
@@ -304,7 +304,7 @@ struct MuscleGroupSelector: View {
     }
 
     private func horizontalTargetRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        TraiHorizontalScrollView() {
             HStack(spacing: 8) {
                 content()
             }

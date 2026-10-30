@@ -9,6 +9,7 @@ import SwiftUI
 import SwiftData
 
 struct CustomExercisesView: View {
+    var embeddedInWorkouts = false
     @Environment(\.modelContext) private var modelContext
 
     // Use @State + manual fetch instead of @Query to avoid navigation freeze
@@ -46,6 +47,19 @@ struct CustomExercisesView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
+                if embeddedInWorkouts {
+                    HStack(spacing: 16) {
+                        Image("PrototypeBlenderExercisesSectionCard228").resizable().scaledToFit()
+                            .frame(width: 64, height: 64).accessibilityHidden(true)
+                        Text("Exercise library").font(.title2.bold())
+                        Spacer()
+                        Button("Add", systemImage: "plus") { showingAddCustomExercise = true }
+                            .buttonStyle(.traiSecondary())
+                    }
+                    TextField("Search exercises and activities", text: $searchText)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("workoutExerciseSearch")
+                }
                 if customExercises.isEmpty {
                     emptyState
                         .padding(.top, 48)
@@ -66,7 +80,7 @@ struct CustomExercisesView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-        }
+        }.traiHorizontalOverflowViewport()
         .searchable(text: $searchText, prompt: "Search exercises and activities")
         .navigationTitle("Exercise Library")
         .toolbarTitleDisplayMode(.inlineLarge)
@@ -418,7 +432,7 @@ private struct ExerciseLibrarySectionCard: View {
                     .foregroundStyle(.secondary)
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
+            TraiHorizontalScrollView() {
                 HStack(spacing: 10) {
                     ForEach(section.exercises) { exercise in
                         ExerciseManagementCard(
@@ -432,7 +446,7 @@ private struct ExerciseLibrarySectionCard: View {
                 .scrollTargetLayout()
             }
             .scrollTargetBehavior(.viewAligned)
-            .contentMargins(.horizontal, 1, for: .scrollContent)
+            .contentMargins(.leading, 1, for: .scrollContent)
         }
         .padding(.vertical, 4)
     }
@@ -460,9 +474,10 @@ private struct ExerciseManagementCard: View {
                     Image(systemName: "ellipsis")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Options for \(exercise.name)")
             }
 
             VStack(alignment: .leading, spacing: 5) {
@@ -490,7 +505,7 @@ private struct ExerciseManagementCard: View {
             }
         }
         .padding(12)
-        .frame(height: 136, alignment: .topLeading)
+        .frame(minHeight: 136, alignment: .topLeading)
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
         .contentShape(RoundedRectangle(cornerRadius: 14))
     }

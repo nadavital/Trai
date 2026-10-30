@@ -145,19 +145,10 @@ struct LiveWorkoutHistoryRow: View {
                         hasSignalNote: workout.hasHistorySignalNote
                     )
 
-                    HStack(spacing: 6) {
-                        ForEach(Array(workout.historySummarySegments.enumerated()), id: \.offset) { index, segment in
-                            if index > 0 {
-                                Text("•")
-                                    .foregroundStyle(.tertiary)
-                            }
-
-                            Text(segment)
-                                .foregroundStyle(segment.hasSuffix("kcal") ? .red : .secondary)
-                        }
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    Text(workout.historySummarySegments.joined(separator: " · "))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()
@@ -242,20 +233,13 @@ struct WorkoutHistoryRow: View {
                         hasSignalNote: workout.hasSignalNote
                     )
 
-                    HStack(spacing: 6) {
-                        ForEach(Array(workout.historyDetailSegments.enumerated()), id: \.offset) { index, segment in
-                            if index > 0 {
-                                Text("•")
-                                    .foregroundStyle(.tertiary)
-                            }
-
-                            Text(segment)
-                                .foregroundStyle(segment.hasSuffix("kcal") ? .red : .secondary)
-                        }
-
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(workout.historyDetailSegments.joined(separator: " · "))
+                            .fixedSize(horizontal: false, vertical: true)
                         if workout.sourceIsHealthKit {
                             Image(systemName: "heart.fill")
                                 .foregroundStyle(.red)
+                                .accessibilityLabel("From Apple Health")
                         }
                     }
                     .font(.caption2)

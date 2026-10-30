@@ -136,6 +136,21 @@ struct FoodCameraReviewView: View {
             .padding(.top, TraiSpacing.xs)
             .padding(.bottom, TraiSpacing.md)
         }
+        .safeAreaInset(edge: .bottom) {
+            if let suggestion = currentSuggestion, !isRefining {
+                FoodReviewActions(
+                    isSaving: isSaving,
+                    onSave: { onSave(suggestion, refinedSuggestion != nil) },
+                    onStartRefine: {
+                        withAnimation(.spring(response: 0.3)) { isRefining = true }
+                        isRefinementFocused = true
+                    }
+                )
+                .padding(.horizontal, TraiSpacing.md)
+                .padding(.vertical, TraiSpacing.sm)
+                .background(.regularMaterial)
+            }
+        }
         .traiBackground(intensity: 0.45)
         .animation(TraiAnimation.standard, value: isAnalyzing)
         .onChange(of: refinedSuggestion) { _, newValue in
@@ -433,43 +448,6 @@ struct FoodCameraSuggestionCard: View {
                 }
             }
 
-            // Action buttons
-            if !isRefining {
-                HStack(spacing: 10) {
-                    Button(action: onStartRefine) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "bubble.left.and.text.bubble.right")
-                                .font(.subheadline)
-                            Text("Refine")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.traiTertiary())
-                    .disabled(isSaving)
-                    .accessibilityIdentifier("foodCameraReviewRefineButton")
-
-                    Button(action: onSave) {
-                        HStack(spacing: 6) {
-                            if isSaving {
-                                ProgressView()
-                                    .controlSize(.small)
-                            } else {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.subheadline)
-                            }
-                            Text(isSaving ? "Saving" : "Save")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.traiPrimary())
-                    .disabled(isSaving)
-                    .accessibilityIdentifier("foodCameraReviewSaveButton")
-                }
-            }
             }
             .traiCard(tint: .green)
     }
@@ -723,5 +701,47 @@ struct FoodCameraErrorCard: View {
         }
         .frame(maxWidth: .infinity)
         .traiCard()
+    }
+}
+
+private struct FoodReviewActions: View {
+    let isSaving: Bool
+    let onSave: () -> Void
+    let onStartRefine: () -> Void
+    var body: some View {
+                HStack(spacing: 10) {
+                    Button(action: onStartRefine) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "bubble.left.and.text.bubble.right")
+                                .font(.subheadline)
+                            Text("Refine")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.traiTertiary())
+                    .disabled(isSaving)
+                    .accessibilityIdentifier("foodCameraReviewRefineButton")
+
+                    Button(action: onSave) {
+                        HStack(spacing: 6) {
+                            if isSaving {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.subheadline)
+                            }
+                            Text(isSaving ? "Saving" : "Save")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.traiPrimary())
+                    .disabled(isSaving)
+                    .accessibilityIdentifier("foodCameraReviewSaveButton")
+                }
     }
 }

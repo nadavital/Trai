@@ -43,6 +43,7 @@ final class LiveWorkoutViewModel {
     private var backgroundFlushObserver: NSObjectProtocol?
     private var isSetupActive = false
     private var liveActivityFocusedEntryID: UUID?
+    private var hasExplicitEntryFocus = false
 
     // Timer state - use date calculation for accuracy
     private(set) var pausedDuration: TimeInterval = 0
@@ -789,7 +790,7 @@ final class LiveWorkoutViewModel {
     }
     
     /// Handle "Add Set" button tap from Live Activity
-    private func handleAddSetFromLiveActivity() {
+    func handleAddSetFromLiveActivity() {
         let targetEntry = liveActivityEntryForAddSet()
         guard let targetEntry else { return }
 
@@ -819,6 +820,8 @@ final class LiveWorkoutViewModel {
             return
         }
 
+        // Advancing ends the user's explicit selection; resume the existing next-entry policy.
+        hasExplicitEntryFocus = false
         if currentEntry.isStrength {
             var sets = currentEntry.sets
             for index in sets.indices where !sets[index].isWarmup && hasLoggedSetData(sets[index]) {
@@ -2253,17 +2256,39 @@ final class LiveWorkoutViewModel {
         isEntryComplete(entry)
     }
 
+    /// Explicit selection is shared by the phone workspace and Live Activity shortcuts.
+    /// A completed exercise can be selected to add another set without being redirected.
+    func selectEntry(id: UUID) {
+        guard entries.contains(where: { $0.id == id }) else { return }
+        guard liveActivityFocusedEntryID != id || !hasExplicitEntryFocus else { return }
+        liveActivityFocusedEntryID = id
+        hasExplicitEntryFocus = true
+        if isSetupActive { updateLiveActivity() }
+    }
+
+    var focusedEntryID: UUID? {
+        // View reads must not mutate the fallback focus while SwiftUI is rendering.
+        if let id = liveActivityFocusedEntryID,
+           let entry = entries.first(where: { $0.id == id }),
+           hasExplicitEntryFocus || !isEntryCompleteForLiveActivity(entry) {
+            return id
+        }
+        return entries.last(where: isEntryStartedForLiveActivity)?.id ?? entries.last?.id
+    }
+
     private func markLiveActivityFocusedEntry(_ entry: LiveWorkoutEntry) {
+        if liveActivityFocusedEntryID != entry.id { hasExplicitEntryFocus = false }
         liveActivityFocusedEntryID = entry.id
     }
 
     private func liveActivityCurrentEntry() -> LiveWorkoutEntry? {
         if let liveActivityFocusedEntryID,
            let focusedEntry = entries.first(where: { $0.id == liveActivityFocusedEntryID }) {
-            if !isEntryCompleteForLiveActivity(focusedEntry) {
+            if hasExplicitEntryFocus || !isEntryCompleteForLiveActivity(focusedEntry) {
                 return focusedEntry
             }
             self.liveActivityFocusedEntryID = nil
+            hasExplicitEntryFocus = false
         }
 
         return entries.last(where: isEntryStartedForLiveActivity)

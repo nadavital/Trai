@@ -208,7 +208,7 @@ struct OnboardingView: View {
                 // Floating navigation button at bottom
                 VStack {
                     Spacer()
-                    if currentStepID != .welcome {
+                    if currentStepID != .welcome && (currentStepID != .workoutSetup || generatedWorkoutPlan != nil) {
                         floatingNavigationSection
                     }
                 }

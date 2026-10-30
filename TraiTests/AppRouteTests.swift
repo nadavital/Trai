@@ -172,7 +172,16 @@ final class TabPrewarmPolicyTests: XCTestCase {
         let policy = TabPrewarmPolicy(initialDelayMilliseconds: 900, interTabDelayMilliseconds: 700)
         let order = policy.preloadOrder(for: .dashboard, loadedTabs: [.dashboard])
 
-        XCTAssertEqual(order, [.workouts, .trai, .profile])
+        XCTAssertEqual(order, [.workouts, .trai])
+    }
+
+    func testPrewarmNeverLoadsAccountSheetAsATab() {
+        let policy = TabPrewarmPolicy(initialDelayMilliseconds: 900, interTabDelayMilliseconds: 700)
+        for selectedTab in [AppTab.dashboard, .workouts, .trai, .profile] {
+            let order = policy.preloadOrder(for: selectedTab, loadedTabs: [selectedTab])
+            XCTAssertFalse(order.contains(.profile))
+            XCTAssertFalse(order.contains(selectedTab))
+        }
     }
 
     func testPrewarmOrderSkipsAlreadyLoadedTabsAndClampsDelays() {

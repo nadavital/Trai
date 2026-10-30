@@ -162,17 +162,10 @@ struct TraiProWordmark: View {
 struct TraiProValueList: View {
     let modules: [ProUpsellModule]
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10)
-    ]
-
     var body: some View {
-        GlassEffectContainer(spacing: 10) {
-            LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(modules) { module in
-                    TraiProModuleTile(module: module)
-                }
+        VStack(spacing: 8) {
+            ForEach(modules) { module in
+                TraiProModuleTile(module: module)
             }
         }
     }
@@ -182,31 +175,26 @@ struct TraiProModuleTile: View {
     let module: ProUpsellModule
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: module.iconName)
-                .font(.title2.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(width: 52, height: 52)
-                .glassEffect(.clear.tint(.white.opacity(0.18)), in: .circle)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 36, height: 36)
+                .background(Color.accentColor.opacity(0.10), in: .rect(cornerRadius: 10))
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(module.title)
-                    .font(.subheadline.weight(.heavy))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.86)
-                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .bottomLeading)
-
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
                 Text(module.subtitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.68))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.86)
-                    .frame(maxWidth: .infinity, minHeight: 32, alignment: .topLeading)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, minHeight: 138, alignment: .topLeading)
         .padding(14)
-        .glassEffect(.clear.tint(.black.opacity(0.18)), in: .rect(cornerRadius: 18))
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 18))
     }
 }

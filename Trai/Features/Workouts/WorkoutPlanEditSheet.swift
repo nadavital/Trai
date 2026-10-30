@@ -175,7 +175,7 @@ struct WorkoutPlanEditSheet: View {
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 18)
-                    .fill(.ultraThinMaterial)
+                    .fill(Color(.secondarySystemGroupedBackground))
             )
             .listRowInsets(.init(top: 10, leading: 0, bottom: 10, trailing: 0))
             .listRowBackground(Color.clear)

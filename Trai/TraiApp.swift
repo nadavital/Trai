@@ -85,14 +85,45 @@ struct TraiApp: App {
 
         #if DEBUG
         if isUITesting {
+            let testPersona = AppLaunchArguments.activeTestPersona
             if AppLaunchArguments.shouldRunOnboardingFlowUITest {
                 UserDefaults.standard.set(false, forKey: AppLaunchArguments.onboardingCompletedCacheKey)
                 UserDefaults.standard.removeObject(forKey: "onboardingDraft")
             }
-            if AppLaunchArguments.shouldUseLiveAIBackendForUITest {
+            if AppLaunchArguments.shouldUseHostedAIForTestPersona {
+                // A real hosted session must come from normal Sign in with Apple.
+                // Never carry an offline UI-test token into this path.
+                let wasUsingStaging = appAccountService.backendEnvironment == .staging
+                appAccountService.setCustomBackendBaseURL("")
+                appAccountService.setDebugBackendEnvironment(.staging)
+                if !wasUsingStaging || accountSessionService.usesOfflineUITestSession {
+                    accountSessionService.signOut()
+                }
+            } else if AppLaunchArguments.shouldUseLiveAIBackendForUITest {
+                if AppLaunchArguments.shouldUseLocalLiveAIForTestPersona {
+                    appAccountService.setCustomBackendBaseURL("")
+                    accountSessionService.signOut()
+                }
                 appAccountService.setDebugBackendEnvironment(.localDevelopment)
             }
-            if AppLaunchArguments.shouldUseFreePlanForUITest {
+            if let testPersona, AppLaunchArguments.testPersonaAIMode == .deterministic {
+                monetizationService.setDebugPlan(.developer)
+                accountSessionService.setDebugAuthenticatedSession(
+                    userID: "test-persona-\(testPersona.rawValue)",
+                    displayName: "Sample Persona"
+                )
+                monetizationService.resetQuotaForDebug()
+            } else if AppLaunchArguments.shouldUseLocalLiveAIForTestPersona {
+                // The local developer entitlement is applied by the existing
+                // backend bootstrap below, never by a client-side quota reset.
+            } else if testPersona != nil {
+                // Preserve the hosted account's real entitlement and quota.
+                if accountSessionService.isAuthenticated {
+                    Task { @MainActor in
+                        await accountSessionService.refreshAccountFromBackend()
+                    }
+                }
+            } else if AppLaunchArguments.shouldUseFreePlanForUITest {
                 monetizationService.setDebugPlan(.free)
                 if AppLaunchArguments.shouldUseAuthenticatedFreePlanForUITest {
                     accountSessionService.setDebugAuthenticatedSession()
@@ -105,7 +136,9 @@ struct TraiApp: App {
                     accountSessionService.setDebugAuthenticatedSession()
                 }
             }
-            monetizationService.resetQuotaForDebug()
+            if testPersona == nil {
+                monetizationService.resetQuotaForDebug()
+            }
         }
 
         if isUITesting && AppLaunchArguments.shouldUseLiveAIBackendForUITest {
@@ -187,12 +220,16 @@ struct TraiApp: App {
                 TraiApp.sharedModelContainer = container
 
                 if isUITesting && !AppLaunchArguments.shouldRunOnboardingFlowUITest {
-                    seedUITestProfileIfNeeded(modelContainer: container)
-                    if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {
-                        seedAppStoreScreenshotDataIfNeeded(modelContainer: container)
-                    }
-                    if AppLaunchArguments.shouldSeedGoalPreviewData {
-                        seedGoalPreviewDataIfNeeded(modelContainer: container)
+                    if let persona = AppLaunchArguments.activeTestPersona {
+                        TestPersonaSeeder.seed(persona, in: container)
+                    } else {
+                        seedUITestProfileIfNeeded(modelContainer: container)
+                        if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {
+                            seedAppStoreScreenshotDataIfNeeded(modelContainer: container)
+                        }
+                        if AppLaunchArguments.shouldSeedGoalPreviewData {
+                            seedGoalPreviewDataIfNeeded(modelContainer: container)
+                        }
                     }
                 }
 
@@ -270,10 +307,35 @@ struct TraiApp: App {
     }
     #endif
 
+    @ViewBuilder
+    private var launchContent: some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--scale-study") {
+            WeightScaleStudy()
+        } else if ProcessInfo.processInfo.arguments.contains("--ribbon-study") {
+            WeightRibbonStudy()
+        } else if ProcessInfo.processInfo.arguments.contains("--rhythm-study") {
+            RoutineRhythmStudy()
+        } else if ProcessInfo.processInfo.arguments.contains("--routine-study") {
+            RoutineStudy()
+        } else if ProcessInfo.processInfo.arguments.contains("--weight-mark-study") {
+            WeightMarkStudy()
+        } else if ProcessInfo.processInfo.arguments.contains("--activity-disc-study") {
+            ActivityDiscStudy()
+        } else if ProcessInfo.processInfo.arguments.contains("--symbol-exploration") {
+            SymbolExplorationView()
+        } else {
+            ContentView(deepLinkDestination: $deepLinkDestination)
+        }
+        #else
+        ContentView(deepLinkDestination: $deepLinkDestination)
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             if isRunningTests {
-                ContentView(deepLinkDestination: $deepLinkDestination)
+                launchContent
                     .tint(brandAccent)
                     .accentColor(brandAccent)
                     .environment(notificationService)
@@ -288,7 +350,7 @@ struct TraiApp: App {
                         handleDeepLink(url)
                     }
             } else {
-                ContentView(deepLinkDestination: $deepLinkDestination)
+                launchContent
                     .tint(brandAccent)
                     .accentColor(brandAccent)
                     .environment(notificationService)
@@ -1332,6 +1394,22 @@ private func seedScreenshotWeightEntries(context: ModelContext, calendar: Calend
 }
 
 private func seedScreenshotWorkouts(context: ModelContext, calendar: Calendar, today: Date) {
+    if ProcessInfo.processInfo.arguments.contains("--ui-test-dial-sessions") {
+        let first = LiveWorkout(name: "Morning strength", workoutType: .strength)
+        first.startedAt = today.addingTimeInterval(3600)
+        first.completedAt = today.addingTimeInterval(5400)
+        first.mergedHealthKitWorkoutID = "dial-merged-watch"
+        context.insert(first)
+        let second = LiveWorkout(name: "Morning walk", workoutType: .cardio)
+        second.startedAt = today.addingTimeInterval(7200)
+        second.completedAt = today.addingTimeInterval(9000)
+        context.insert(second)
+        let unfinished = LiveWorkout(name: "Unfinished workout", workoutType: .strength)
+        unfinished.startedAt = today.addingTimeInterval(10800)
+        context.insert(unfinished)
+        context.insert(WorkoutSession(healthKitWorkoutID: "dial-merged-watch", workoutType: "traditionalStrengthTraining", durationMinutes: 30, caloriesBurned: nil, distanceMeters: nil, loggedAt: first.startedAt))
+        return
+    }
     let workouts: [(String, LiveWorkout.WorkoutType, [String], Int, Int)] = [
         ("Upper Strength", .strength, ["Chest", "Back", "Shoulders"], -1, 58),
         ("Zone 2 Run", .cardio, ["Conditioning"], -3, 36),

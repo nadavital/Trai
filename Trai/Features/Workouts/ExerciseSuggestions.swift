@@ -39,7 +39,7 @@ struct UpNextSuggestionCard: View {
 
                         if let lastSummary = lastPerformance?.suggestionSummary(usesMetricWeight: usesMetricWeight) {
                             Text("•")
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                             Text("Last: \(lastSummary)")
                                 .font(.caption)
                                 .foregroundStyle(.blue)
@@ -148,7 +148,7 @@ struct SuggestionsByMuscleSection: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(muscle.capitalized)
                             .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
 
                         FlowLayout(spacing: 8) {
                             ForEach(suggestions) { suggestion in

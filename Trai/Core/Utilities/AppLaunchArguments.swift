@@ -34,6 +34,9 @@ enum AppLaunchArguments {
     static let traiLensLab = "--trai-lens-lab"
     static let useInMemoryStore = "--use-in-memory-store"
     static let usePersistentStore = "--use-persistent-store"
+    static let testPersona = "--test-persona"
+    static let testPersonaAI = "--test-persona-ai"
+    static let testFoodImagePath = "--test-food-image-path"
     static let runFoodRecommendationReplayEvaluation = "--run-food-recommendation-replay-evaluation"
     static let foodRecommendationReplayCases = "--food-recommendation-replay-cases"
     static let onboardingCompletedCacheKey = "hasCompletedOnboardingCached"
@@ -41,11 +44,52 @@ enum AppLaunchArguments {
     private static let startupSuppressedAnimationWindowSeconds: TimeInterval = 4
 
     static var isUITesting: Bool {
-        ProcessInfo.processInfo.arguments.contains(uiTestMode)
+        ProcessInfo.processInfo.arguments.contains(uiTestMode) || activeTestPersona != nil
+    }
+
+    enum TestPersona: String {
+        case new, consistent, returning
+    }
+
+    enum TestPersonaAIMode: String {
+        case deterministic, live
+        case localLive = "local-live"
+    }
+
+    /// Test personas cannot be activated on a physical device or in release builds.
+    static var activeTestPersona: TestPersona? {
+        #if DEBUG && targetEnvironment(simulator)
+        guard let rawValue = value(after: testPersona) else { return nil }
+        return TestPersona(rawValue: rawValue)
+        #else
+        return nil
+        #endif
+    }
+
+    static var testPersonaAIMode: TestPersonaAIMode? {
+        guard activeTestPersona != nil else { return nil }
+        return value(after: testPersonaAI).flatMap(TestPersonaAIMode.init(rawValue:)) ?? .live
+    }
+
+    static var shouldUseHostedAIForTestPersona: Bool {
+        activeTestPersona != nil && testPersonaAIMode == .live
+    }
+
+    static var shouldUseLocalLiveAIForTestPersona: Bool {
+        activeTestPersona != nil && testPersonaAIMode == .localLive
+    }
+
+    static var shouldUseFoodCaptureFixture: Bool {
+        activeTestPersona != nil
+    }
+
+    static var foodCaptureFixturePath: String? {
+        guard shouldUseFoodCaptureFixture else { return nil }
+        return value(after: testFoodImagePath)
     }
 
     static var shouldRunOnboardingFlowUITest: Bool {
-        ProcessInfo.processInfo.arguments.contains(uiTestOnboardingFlow)
+        ProcessInfo.processInfo.arguments.contains(uiTestOnboardingFlow) || activeTestPersona == .new
     }
 
     static var shouldUseFreePlanForUITest: Bool {
@@ -61,7 +105,9 @@ enum AppLaunchArguments {
     }
 
     static var shouldUseLiveAIBackendForUITest: Bool {
-        ProcessInfo.processInfo.arguments.contains(uiTestLiveAIBackend)
+        if activeTestPersona != nil { return shouldUseLocalLiveAIForTestPersona }
+        return ProcessInfo.processInfo.arguments.contains(uiTestLiveAIBackend)
+            || shouldUseLocalLiveAIForTestPersona
     }
 
     static var isRunningUnitTests: Bool {
@@ -76,6 +122,7 @@ enum AppLaunchArguments {
     }
 
     static var shouldUseInMemoryStore: Bool {
+        if activeTestPersona != nil { return true }
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains(usePersistentStore) {
             return false
@@ -103,7 +150,10 @@ enum AppLaunchArguments {
     }
 
     static var shouldUseMockFoodAIResponses: Bool {
-        ProcessInfo.processInfo.arguments.contains(mockFoodAIResponses)
+        if activeTestPersona != nil {
+            return testPersonaAIMode == .deterministic
+        }
+        return ProcessInfo.processInfo.arguments.contains(mockFoodAIResponses)
     }
 
     static var shouldUseAppStoreScreenshotSeed: Bool {
@@ -213,5 +263,13 @@ enum AppLaunchArguments {
             return nil
         }
         return AppRoute(urlString: arguments[valueIndex])
+    }
+
+    private static func value(after flag: String) -> String? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: flag),
+              arguments.indices.contains(index + 1) else { return nil }
+        let value = arguments[index + 1]
+        return value.hasPrefix("--") ? nil : value
     }
 }

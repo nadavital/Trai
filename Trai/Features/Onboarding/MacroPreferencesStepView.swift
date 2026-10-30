@@ -77,7 +77,7 @@ struct MacroPreferencesStepView: View {
             .scaleEffect(headerVisible ? 1 : 0.8)
 
             Text("Track What Matters")
-                .font(.traiBold(28))
+                .font(.system(.title, design: .rounded, weight: .bold))
 
             Text("Choose which nutrients to monitor")
                 .font(.subheadline)
@@ -114,12 +114,12 @@ struct MacroPreferencesStepView: View {
 
     private var previewSection: some View {
         VStack(spacing: 12) {
-            Text("Your Dashboard Preview")
+            Text("Your nutrients")
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
 
-            MacroRingsPreview(enabledMacros: enabledMacros)
+            MacroSelectionPreview(enabledMacros: enabledMacros)
         }
     }
 }
@@ -200,6 +200,7 @@ private struct MacroToggleCard: View {
             .scaleEffect(isPressed ? 0.98 : 1)
         }
         .buttonStyle(.plain)
+        .accessibilityValue(isEnabled ? "On" : "Off")
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isEnabled)
         .pressEvents {
             withAnimation(.easeInOut(duration: 0.1)) { isPressed = true }
@@ -211,7 +212,7 @@ private struct MacroToggleCard: View {
 
 // MARK: - Macro Rings Preview
 
-private struct MacroRingsPreview: View {
+private struct MacroSelectionPreview: View {
     let enabledMacros: Set<MacroType>
 
     private var orderedMacros: [MacroType] {
@@ -223,9 +224,9 @@ private struct MacroRingsPreview: View {
             if orderedMacros.isEmpty {
                 emptyState
             } else {
-                HStack(spacing: 16) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
                     ForEach(orderedMacros) { macro in
-                        PreviewRingItem(macro: macro)
+                        SelectedMacroChip(macro: macro)
                     }
                 }
             }
@@ -253,36 +254,24 @@ private struct MacroRingsPreview: View {
 
 // MARK: - Preview Ring Item
 
-private struct PreviewRingItem: View {
+private struct SelectedMacroChip: View {
     let macro: MacroType
 
     var body: some View {
-        VStack(spacing: 6) {
-            ZStack {
-                Circle()
-                    .stroke(macro.color.opacity(0.2), lineWidth: 6)
-                    .frame(width: 44, height: 44)
-
-                Circle()
-                    .trim(from: 0, to: 0.65)
-                    .stroke(
-                        macro.color,
-                        style: StrokeStyle(lineWidth: 6, lineCap: .round)
-                    )
-                    .frame(width: 44, height: 44)
-                    .rotationEffect(.degrees(-90))
-
-                Text(macro.shortName)
-                    .font(.caption2)
-                    .fontWeight(.bold)
-                    .foregroundStyle(macro.color)
-            }
-
+        HStack(spacing: 6) {
+            Circle()
+                .fill(macro.color)
+                .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
             Text(macro.displayName)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 36)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(macro.color.opacity(0.10), in: .rect(cornerRadius: 12))
     }
 }
 

@@ -14,7 +14,6 @@ struct WorkoutTimerHeader: View {
     let isTimerRunning: Bool
     let totalPauseDuration: TimeInterval
     let pausedElapsedTime: TimeInterval?
-    let totalVolume: Double
     let onTogglePause: () -> Void
     var showsWatchSyncButton: Bool = false
     var isWatchSyncing: Bool = false
@@ -24,108 +23,90 @@ struct WorkoutTimerHeader: View {
     // Optional Apple Watch data - only shown when available
     var heartRate: Double?
     var calories: Double?
+    @State private var showsWatchDetails = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        VStack(spacing: 16) {
-            // Timer (centered)
-            TimelineView(.periodic(from: .now, by: 1.0)) { context in
-                let elapsed = calculateElapsed(at: context.date)
-                Text(formatTime(elapsed))
-                    .font(.system(size: 48, weight: .light, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .contentTransition(.numericText())
-            }
-
-            HStack(spacing: 10) {
-                // Pill-shaped pause/resume button
-                Button(action: onTogglePause) {
-                    HStack(spacing: 6) {
-                        Image(systemName: isTimerRunning ? "pause.fill" : "play.fill")
-                        Text(isTimerRunning ? "Pause" : "Resume")
+        VStack(alignment: .leading, spacing: 12) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        sessionState
+                        elapsedTime
                     }
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .frame(minWidth: 112)
-                    .background(Color.accentColor.opacity(0.15))
-                    .foregroundStyle(Color.accentColor)
-                    .clipShape(.capsule)
+                    Spacer(minLength: 0)
+                    sessionControls
                 }
-                .buttonStyle(.plain)
-
-                if showsWatchSyncButton, let onRetryWatchSync {
-                    Button(action: onRetryWatchSync) {
-                        HStack(spacing: 6) {
-                            if isWatchSyncing {
-                                ProgressView()
-                                    .controlSize(.small)
-                            } else {
-                                Image(systemName: "applewatch.side.right")
-                            }
-                            Text(isWatchSyncing ? "Syncing" : "Sync")
-                        }
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .frame(minWidth: 112)
-                        .background(Color.accentColor.opacity(0.15))
-                        .foregroundStyle(Color.accentColor)
-                        .clipShape(.capsule)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isWatchSyncing)
+                VStack(alignment: .leading, spacing: 12) {
+                    sessionState
+                    elapsedTime
+                    sessionControls
                 }
             }
-
-            if showsWatchSyncButton,
-               let watchConnectionHint,
-               !watchConnectionHint.isEmpty {
-                Label(watchConnectionHint, systemImage: "applewatch")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+            if showsWatchDetails {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(watchConnectionHint ?? "Connect your Apple Watch to see live heart rate and energy.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    if let onRetryWatchSync {
+                        Button(isWatchSyncing ? "Connecting…" : "Connect Apple Watch", action: onRetryWatchSync)
+                            .buttonStyle(.traiTertiary(size: .compact))
+                            .disabled(isWatchSyncing)
+                    }
+                }.padding(.vertical, 4)
             }
-
-            // Stats row - volume and optional watch data
-            let hasWatchData = heartRate != nil || (calories ?? 0) > 0
-            if totalVolume > 0 || hasWatchData {
-                HStack(spacing: 24) {
-                    if totalVolume > 0 {
-                        TimerStat(
-                            value: formatVolume(totalVolume),
-                            label: "Volume"
-                        )
+            if heartRate != nil || (calories ?? 0) > 0 {
+                HStack(spacing: 20) {
+                    if let heartRate {
+                        Label("\(Int(heartRate)) BPM", systemImage: "heart.fill")
+                            .foregroundStyle(.pink)
                     }
-
-                    if let hr = heartRate {
-                        TimerStat(
-                            value: "\(Int(hr))",
-                            label: "BPM",
-                            icon: "heart.fill",
-                            iconColor: .red
-                        )
+                    if let calories, calories > 0 {
+                        Label("\(Int(calories)) kcal", systemImage: "flame.fill")
+                            .foregroundStyle(.orange)
                     }
-
-                    if let cal = calories, cal > 0 {
-                        TimerStat(
-                            value: "\(Int(cal))",
-                            label: "kcal",
-                            icon: "flame.fill",
-                            iconColor: .orange
-                        )
-                    }
-                }
+                }.font(.subheadline.weight(.medium)).monospacedDigit()
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .padding(.horizontal, 8).padding(.bottom, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var sessionState: some View {
+        Label(isTimerRunning ? "In session" : "Paused", systemImage: isTimerRunning ? "waveform.path" : "pause.circle.fill")
+            .font(.subheadline.weight(.medium)).foregroundStyle(.indigo)
+    }
+
+    private var sessionControls: some View {
+        HStack(spacing: 8) {
+            timerControls
+            if showsWatchSyncButton {
+                Button { showsWatchDetails.toggle() } label: {
+                    Image(systemName: "applewatch").frame(width: 24, height: 28)
+                }
+                .buttonStyle(.glass).buttonBorderShape(.circle).tint(.primary)
+                .accessibilityLabel("Apple Watch connection")
+            }
+        }
+    }
+
+    private var elapsedTime: some View {
+        TimelineView(.animation(minimumInterval: 1, paused: !isTimerRunning || scenePhase != .active)) { context in
+            Text(formatTime(calculateElapsed(at: context.date)))
+                .font(.system(.largeTitle, design: .rounded, weight: .medium))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .contentTransition(.numericText())
+                .accessibilityLabel("Elapsed time")
+                .accessibilityValue(formatTime(calculateElapsed(at: context.date)))
+        }
+    }
+
+    private var timerControls: some View {
+        Button(action: onTogglePause) {
+            Label(isTimerRunning ? "Pause" : "Resume", systemImage: isTimerRunning ? "pause.fill" : "play.fill")
+        }
+        .buttonStyle(.traiTertiary(color: .primary, height: 44))
     }
 
     private func calculateElapsed(at date: Date) -> TimeInterval {
@@ -152,60 +133,6 @@ struct WorkoutTimerHeader: View {
         return String(format: "%02d:%02d", minutes, seconds)
     }
 
-    private func formatVolume(_ volume: Double) -> String {
-        if volume >= 1000 {
-            return String(format: "%.1fk", volume / 1000)
-        }
-        return "\(Int(volume))"
-    }
-}
-
-// MARK: - Timer Stat
-
-struct TimerStat: View {
-    let value: String
-    let label: String
-    var icon: String?
-    var iconColor: Color?
-
-    var body: some View {
-        VStack(spacing: 2) {
-            HStack(spacing: 4) {
-                if let icon {
-                    Image(systemName: icon)
-                        .font(.caption)
-                        .foregroundStyle(iconColor ?? .primary)
-                }
-                Text(value)
-                    .font(.title3)
-                    .bold()
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-            }
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-// MARK: - Add Exercise Button
-
-struct AddExerciseButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title2)
-                Text("Add Exercise")
-                    .font(.headline)
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.traiSecondary())
-    }
 }
 
 // MARK: - Workout Bottom Bar
@@ -213,102 +140,31 @@ struct AddExerciseButton: View {
 struct WorkoutBottomBar: View {
     let onAddExercise: () -> Void
     let onAskTrai: () -> Void
-    var addLabel: String = "Add Exercise"
-    var addSystemImage: String = "plus.circle.fill"
+    var addLabel: String = "Add exercise"
+    var addSystemImage: String = "plus"
 
-    @ViewBuilder
     var body: some View {
-        if #available(iOS 26.0, *) {
-            glassBody
-        } else {
-            fallbackBody
-        }
-    }
-
-    @available(iOS 26.0, *)
-    private var glassBody: some View {
-        GlassEffectContainer(spacing: 14) {
+        GlassEffectContainer(spacing: 12) {
             HStack(spacing: 12) {
-                tintedGlassButton(
-                    title: "Ask Trai",
-                    systemImage: "circle.hexagongrid.circle",
-                    tint: TraiColors.brandAccent,
-                    foreground: TraiColors.brandAccent,
-                    tintOpacity: 0.24,
-                    strokeOpacity: 0.32,
-                    action: onAskTrai
-                )
+                Button(action: onAskTrai) {
+                    TraiLensSymbolIcon(size: 24, variant: .nodes, color: TraiColors.brandAccent)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.glass).buttonBorderShape(.circle)
+                .accessibilityLabel("Ask Trai")
 
-                tintedGlassButton(
-                    title: addLabel,
-                    systemImage: addSystemImage,
-                    tint: .primary,
-                    foreground: .primary,
-                    tintOpacity: 0.10,
-                    strokeOpacity: 0.14,
-                    action: onAddExercise
-                )
+                Button(action: onAddExercise) {
+                    Label(addLabel, systemImage: addSystemImage)
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.glass).buttonBorderShape(.capsule)
+                .tint(.primary)
                 .accessibilityIdentifier("liveWorkoutAddExerciseButton")
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("liveWorkoutBottomBar")
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-    }
-
-    private var fallbackBody: some View {
-        HStack(spacing: 16) {
-            Button(action: onAskTrai) {
-                HStack {
-                    TraiLensSymbolIcon(size: 16, variant: .nodes, color: TraiColors.brandAccent)
-                    Text("Ask Trai")
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.traiSecondary(color: TraiColors.brandAccent))
-
-            Button(action: onAddExercise) {
-                HStack {
-                    Image(systemName: addSystemImage)
-                    Text(addLabel)
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .accessibilityIdentifier("liveWorkoutAddExerciseButton")
-            .buttonStyle(.traiTertiary(color: .accentColor))
-        }
-        .accessibilityIdentifier("liveWorkoutBottomBar")
-        .padding()
-        .background(.ultraThinMaterial)
-    }
-
-    @available(iOS 26.0, *)
-    private func tintedGlassButton(
-        title: String,
-        systemImage: String,
-        tint: Color,
-        foreground: Color,
-        tintOpacity: Double,
-        strokeOpacity: Double,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .labelStyle(.titleAndIcon)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(foreground)
-                .frame(maxWidth: .infinity)
-                .frame(height: 40)
-                .glassEffect(
-                    .regular.tint(tint.opacity(tintOpacity)).interactive(),
-                    in: .capsule
-                )
-                .overlay {
-                    Capsule()
-                        .strokeBorder(tint.opacity(strokeOpacity), lineWidth: 1)
-                }
-        }
-        .controlSize(.regular)
-        .buttonStyle(.plain)
+        .padding(.horizontal, 20).padding(.vertical, 12)
     }
 }

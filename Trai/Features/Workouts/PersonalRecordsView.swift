@@ -499,7 +499,7 @@ private struct StatBox: View {
         .frame(minWidth: 0, maxWidth: .infinity)
         .frame(minHeight: 96)
         .padding()
-        .background(.ultraThinMaterial)
+        .background(Color(.secondarySystemGroupedBackground))
         .clipShape(.rect(cornerRadius: 14))
     }
 }
@@ -525,7 +525,7 @@ private struct PRCardRow: View {
     let onSelect: (ExercisePR) -> Void
 
     var body: some View {
-        ScrollView(.horizontal) {
+        TraiHorizontalScrollView() {
             LazyHStack(spacing: 12) {
                 ForEach(prs) { pr in
                     ExercisePRCard(pr: pr, useLbs: useLbs, volumePRMode: volumePRMode) {

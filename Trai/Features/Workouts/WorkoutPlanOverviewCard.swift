@@ -74,7 +74,7 @@ struct WorkoutPlanOverviewCard: View {
             }
 
             // Template chips
-            ScrollView(.horizontal, showsIndicators: false) {
+            TraiHorizontalScrollView() {
                 HStack(spacing: 8) {
                     ForEach(plan.templates) { template in
                         TemplateChip(template: template)
